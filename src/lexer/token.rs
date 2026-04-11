@@ -5,11 +5,14 @@ pub struct Position {
     pub pos: usize,
     pub line: usize,
     pub col: usize,
+    pub len: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
     Keyword { keyword: KeywordType },
+    Separator { separator: SeparatorType },
+    Operator { operator: OperatorType },
     Integer { value: u64 },
     Decimal { value: f64 },
 }
@@ -17,6 +20,24 @@ pub enum TokenType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeywordType {
     Let,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SeparatorType {
+    OpenParen,
+    CloseParen,
+    OpenBracket,
+    CloseBracket,
+    OpenBrace,
+    CloseBrace,
+    Colon,
+    SemiColon,
+    Comma,
+    At,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OperatorType {
+    QuestionMark,
 }
 
 pub struct Token {

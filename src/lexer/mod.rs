@@ -2,7 +2,7 @@ pub mod token;
 
 use std::rc::Rc;
 
-use token::{Position, Token, TokenType};
+use token::{OperatorType, Position, SeparatorType, Token, TokenType};
 
 pub struct CharStream {
     chars: Vec<char>,
@@ -27,6 +27,7 @@ impl CharStream {
             pos: self.pos,
             line: self.line,
             col: self.col,
+            len: 1,
         }
     }
     #[inline]
@@ -83,8 +84,17 @@ impl Lexer {
             c = self.input.peek();
         }
     }
+    fn get_position_with_begin(&self, begin: Position) -> Position {
+        Position {
+            pos: begin.pos,
+            line: begin.line,
+            col: begin.col,
+            len: self.input.get_current_position().pos - begin.pos,
+        }
+    }
     fn parse_number(&mut self) -> Token {
         let mut c = self.input.peek();
+        let begin_pos = self.input.get_current_position();
         self.input.pos += 1;
         self.input.col += 1;
         let mut literal = String::new();
@@ -108,7 +118,7 @@ impl Lexer {
                     TokenType::Integer {
                         value: u64::from_str_radix(&literal, 16).unwrap(),
                     },
-                    self.input.get_current_position(),
+                    self.get_position_with_begin(begin_pos),
                     self.input.file.clone(),
                 );
             } else if c == 'b' || c == 'B' {
@@ -129,7 +139,7 @@ impl Lexer {
                     TokenType::Integer {
                         value: u64::from_str_radix(&literal, 2).unwrap(),
                     },
-                    self.input.get_current_position(),
+                    self.get_position_with_begin(begin_pos),
                     self.input.file.clone(),
                 );
             } else if c.is_digit(8) {
@@ -151,7 +161,7 @@ impl Lexer {
                     TokenType::Integer {
                         value: u64::from_str_radix(&literal, 8).unwrap(),
                     },
-                    self.input.get_current_position(),
+                    self.get_position_with_begin(begin_pos),
                     self.input.file.clone(),
                 );
             } else {
@@ -205,7 +215,7 @@ impl Lexer {
                 TokenType::Decimal {
                     value: literal.parse::<f64>().unwrap(),
                 },
-                self.input.get_current_position(),
+                self.get_position_with_begin(begin_pos),
                 self.input.file.clone(),
             )
         } else if c == 'e' || c == 'E' {
@@ -227,7 +237,7 @@ impl Lexer {
                 TokenType::Decimal {
                     value: literal.parse::<f64>().unwrap(),
                 },
-                self.input.get_current_position(),
+                self.get_position_with_begin(begin_pos),
                 self.input.file.clone(),
             )
         } else {
@@ -236,7 +246,7 @@ impl Lexer {
                 TokenType::Integer {
                     value: literal.parse::<u64>().unwrap(),
                 },
-                self.input.get_current_position(),
+                self.get_position_with_begin(begin_pos),
                 self.input.file.clone(),
             )
         }
@@ -249,6 +259,138 @@ impl Iterator for Lexer {
         let c = self.input.peek();
         if c.is_ascii_digit() {
             Some(self.parse_number())
+        } else if c == '(' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                '('.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::OpenParen,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == ')' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                ')'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::CloseParen,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == '[' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                '['.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::OpenBracket,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == ']' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                ']'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::CloseBracket,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == '{' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                '{'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::OpenBrace,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == '}' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                '}'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::CloseBrace,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == ':' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                ':'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::Colon,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == ';' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                ';'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::SemiColon,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == ',' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                ','.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::Comma,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == '@' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                '@'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::At,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == '?' {
+            let position = self.input.get_current_position();
+            self.input.pos += 1;
+            self.input.col += 1;
+            Some(Token::new(
+                '?'.to_string(),
+                TokenType::Operator {
+                    operator: OperatorType::QuestionMark,
+                },
+                position,
+                self.input.file.clone(),
+            ))
         } else {
             None
         }
