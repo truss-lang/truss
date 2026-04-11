@@ -38,6 +38,32 @@ pub enum SeparatorType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OperatorType {
     QuestionMark,
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+    Modulus,
+    PlusAssign,
+    MinusAssign,
+    MultiplyAssign,
+    DivideAssign,
+    ModulusAssign,
+    Inc,
+    Dec,
+    Assign,
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    And,
+    Or,
+    Not,
+    BitAnd,
+    BitOr,
+    BitAndAssign,
+    BitOrAssign,
 }
 
 pub struct Token {
