@@ -32,7 +32,11 @@ impl CharStream {
     }
     #[inline]
     pub fn peek(&self) -> char {
-        self.chars[self.pos]
+        if self.pos < self.chars.len() {
+            self.chars[self.pos]
+        } else {
+            '\0'
+        }
     }
     pub fn len(&self) -> usize {
         self.chars.len()
@@ -44,6 +48,7 @@ impl CharStream {
 impl Iterator for CharStream {
     type Item = char;
     fn next(&mut self) -> Option<char> {
+        println!("{}-{}", self.pos, self.chars.len());
         if self.pos < self.chars.len() {
             let c = self.chars[self.pos];
             self.pos += 1;
@@ -89,12 +94,12 @@ impl Lexer {
         }
     }
     #[inline]
-    fn get_position_with_begin(&self, begin: Position) -> Position {
+    fn get_position_with_begin(&self, begin: Position, offset: Option<usize>) -> Position {
         Position {
             pos: begin.pos,
             line: begin.line,
             col: begin.col,
-            len: self.input.get_current_position().pos - begin.pos,
+            len: self.input.get_current_position().pos - begin.pos + 1 - offset.unwrap_or(0),
         }
     }
     fn parse_number(&mut self) -> Token {
@@ -123,7 +128,7 @@ impl Lexer {
                     TokenType::Integer {
                         value: u64::from_str_radix(&literal, 16).unwrap(),
                     },
-                    self.get_position_with_begin(begin_pos),
+                    self.get_position_with_begin(begin_pos, Some(1)),
                     self.input.file.clone(),
                 );
             } else if c == 'b' || c == 'B' {
@@ -144,7 +149,7 @@ impl Lexer {
                     TokenType::Integer {
                         value: u64::from_str_radix(&literal, 2).unwrap(),
                     },
-                    self.get_position_with_begin(begin_pos),
+                    self.get_position_with_begin(begin_pos, Some(1)),
                     self.input.file.clone(),
                 );
             } else if c.is_digit(8) {
@@ -166,7 +171,7 @@ impl Lexer {
                     TokenType::Integer {
                         value: u64::from_str_radix(&literal, 8).unwrap(),
                     },
-                    self.get_position_with_begin(begin_pos),
+                    self.get_position_with_begin(begin_pos, Some(1)),
                     self.input.file.clone(),
                 );
             } else {
@@ -220,7 +225,7 @@ impl Lexer {
                 TokenType::Decimal {
                     value: literal.parse::<f64>().unwrap(),
                 },
-                self.get_position_with_begin(begin_pos),
+                self.get_position_with_begin(begin_pos, Some(1)),
                 self.input.file.clone(),
             )
         } else if c == 'e' || c == 'E' {
@@ -242,7 +247,7 @@ impl Lexer {
                 TokenType::Decimal {
                     value: literal.parse::<f64>().unwrap(),
                 },
-                self.get_position_with_begin(begin_pos),
+                self.get_position_with_begin(begin_pos, Some(1)),
                 self.input.file.clone(),
             )
         } else {
@@ -251,10 +256,55 @@ impl Lexer {
                 TokenType::Integer {
                     value: literal.parse::<u64>().unwrap(),
                 },
-                self.get_position_with_begin(begin_pos),
+                self.get_position_with_begin(begin_pos, Some(1)),
                 self.input.file.clone(),
             )
         }
+    }
+    fn parse_identifier(&mut self) -> Token {
+        let begin_pos = self.input.get_current_position();
+        let mut value = self.input.next().unwrap().to_string();
+        while !self.is_empty() && Self::is_identifier(self.input.peek()) {
+            value += self.input.next().unwrap().to_string().as_str();
+        }
+        self.input.pos -= 1;
+        self.input.col -= 1;
+        let position = self.get_position_with_begin(begin_pos, Some(1));
+        Token::new(
+            value,
+            TokenType::Identifier,
+            self.input.get_current_position(),
+            self.input.file.clone(),
+        )
+    }
+    fn is_identifier(ch: char) -> bool {
+        !ch.is_whitespace()
+            && ch != '"'
+            && ch != '\''
+            && ch != '('
+            && ch != ')'
+            && ch != '{'
+            && ch != '}'
+            && ch != '['
+            && ch != ']'
+            && ch != ':'
+            && ch != ';'
+            && ch != ','
+            && ch != '?'
+            && ch != '@'
+            && ch != '+'
+            && ch != '-'
+            && ch != '*'
+            && ch != '%'
+            && ch != '<'
+            && ch != '>'
+            && ch != '='
+            && ch != '!'
+            && ch != '&'
+            && ch != '^'
+            && ch != '~'
+            && ch != '|'
+            && ch != '.'
     }
 }
 impl Iterator for Lexer {
@@ -407,7 +457,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -419,7 +469,7 @@ impl Iterator for Lexer {
                     self.input.file.clone(),
                 ))
             } else if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -445,7 +495,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '-' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -457,7 +507,7 @@ impl Iterator for Lexer {
                     self.input.file.clone(),
                 ))
             } else if self.input.peek() == '>' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -469,7 +519,7 @@ impl Iterator for Lexer {
                     self.input.file.clone(),
                 ))
             } else if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -495,7 +545,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -521,7 +571,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -547,7 +597,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -573,7 +623,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -599,7 +649,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -625,11 +675,11 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '<' {
-                let pos = self.get_position_with_begin(begin_pos);
+                let pos = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 if self.input.peek() == '=' {
-                    let position = self.get_position_with_begin(begin_pos);
+                    let position = self.get_position_with_begin(begin_pos, None);
                     self.input.pos += 1;
                     self.input.col += 1;
                     Some(Token::new(
@@ -651,7 +701,7 @@ impl Iterator for Lexer {
                     ))
                 }
             } else if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -677,11 +727,10 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '>' {
-                let pos = self.get_position_with_begin(begin_pos);
                 self.input.pos += 1;
                 self.input.col += 1;
                 if self.input.peek() == '=' {
-                    let position = self.get_position_with_begin(begin_pos);
+                    let position = self.get_position_with_begin(begin_pos, None);
                     self.input.pos += 1;
                     self.input.col += 1;
                     Some(Token::new(
@@ -698,12 +747,12 @@ impl Iterator for Lexer {
                         TokenType::Operator {
                             operator: OperatorType::RightShift,
                         },
-                        pos,
+                        self.get_position_with_begin(begin_pos, Some(1)),
                         self.input.file.clone(),
                     ))
                 }
             } else if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -729,7 +778,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '&' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -741,7 +790,7 @@ impl Iterator for Lexer {
                     self.input.file.clone(),
                 ))
             } else if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -767,7 +816,7 @@ impl Iterator for Lexer {
             self.input.pos += 1;
             self.input.col += 1;
             if self.input.peek() == '|' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -779,7 +828,7 @@ impl Iterator for Lexer {
                     self.input.file.clone(),
                 ))
             } else if self.input.peek() == '=' {
-                let position = self.get_position_with_begin(begin_pos);
+                let position = self.get_position_with_begin(begin_pos, None);
                 self.input.pos += 1;
                 self.input.col += 1;
                 Some(Token::new(
@@ -801,7 +850,7 @@ impl Iterator for Lexer {
                 ))
             }
         } else {
-            None
+            Some(self.parse_identifier())
         }
     }
 }

@@ -8,9 +8,10 @@ pub struct Position {
     pub len: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     Keyword { keyword: KeywordType },
+    Identifier,
     Separator { separator: SeparatorType },
     Operator { operator: OperatorType },
     Integer { value: u64 },
