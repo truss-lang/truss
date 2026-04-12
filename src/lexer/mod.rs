@@ -51,6 +51,11 @@ impl CharStream {
             '\0'
         }
     }
+    #[inline]
+    pub fn inc_pos(&mut self) {
+        self.pos += 1;
+        self.col += 1;
+    }
     pub fn len(&self) -> usize {
         self.chars.len()
     }
@@ -114,21 +119,37 @@ impl Lexer {
             len: self.input.get_current_position().pos - begin.pos + 1 - offset.unwrap_or(0),
         }
     }
+    fn parse_string_literal(&mut self) -> Token {
+        let begin_pos = self.input.get_current_position();
+        self.input.inc_pos();
+        let value = String::new();
+        Token::new(
+            "".to_string(),
+            TokenType::Identifier,
+            self.input.get_current_position(),
+            self.input.file.clone(),
+        )
+    }
+    fn parse_char_literal(&mut self) -> Token {
+        Token::new(
+            "".to_string(),
+            TokenType::Identifier,
+            self.input.get_current_position(),
+            self.input.file.clone(),
+        )
+    }
     fn parse_number(&mut self) -> Token {
         let mut c = self.input.peek();
         let begin_pos = self.input.get_current_position();
-        self.input.pos += 1;
-        self.input.col += 1;
+        self.input.inc_pos();
         let mut literal = String::new();
         if c == '0' {
             c = self.input.peek();
             if c == 'x' || c == 'X' {
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 let mut n = self.input.peek();
                 while n.is_ascii_hexdigit() {
-                    self.input.pos += 1;
-                    self.input.col += 1;
+                    self.input.inc_pos();
                     literal.push(n);
                     if self.input.is_empty() {
                         break;
@@ -144,12 +165,10 @@ impl Lexer {
                     self.input.file.clone(),
                 );
             } else if c == 'b' || c == 'B' {
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 let mut n = self.input.peek();
                 while n == '0' || n == '1' {
-                    self.input.pos += 1;
-                    self.input.col += 1;
+                    self.input.inc_pos();
                     literal.push(n);
                     if self.input.is_empty() {
                         break;
@@ -165,13 +184,11 @@ impl Lexer {
                     self.input.file.clone(),
                 );
             } else if c.is_digit(8) {
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 literal.push(c);
                 let mut n = self.input.peek();
                 while n.is_digit(8) {
-                    self.input.pos += 1;
-                    self.input.col += 1;
+                    self.input.inc_pos();
                     literal.push(n);
                     if self.input.is_empty() {
                         break;
@@ -193,8 +210,7 @@ impl Lexer {
             literal.push(c);
             c = self.input.peek();
             while c.is_ascii_digit() {
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 literal.push(c);
                 if self.input.is_empty() {
                     break;
@@ -204,13 +220,11 @@ impl Lexer {
         }
         c = self.input.peek();
         if c == '.' {
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             literal.push(c);
             c = self.input.peek();
             while c.is_ascii_digit() {
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 literal.push(c);
                 if self.input.is_empty() {
                     break;
@@ -218,13 +232,11 @@ impl Lexer {
                 c = self.input.peek();
             }
             if c == 'e' || c == 'E' {
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 literal.push(c);
                 c = self.input.peek();
                 while c.is_ascii_digit() {
-                    self.input.pos += 1;
-                    self.input.col += 1;
+                    self.input.inc_pos();
                     literal.push(c);
                     if self.input.is_empty() {
                         break;
@@ -241,13 +253,11 @@ impl Lexer {
                 self.input.file.clone(),
             )
         } else if c == 'e' || c == 'E' {
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             literal.push(c);
             c = self.input.peek();
             while c.is_ascii_digit() {
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 literal.push(c);
                 if self.input.is_empty() {
                     break;
@@ -361,12 +371,15 @@ impl Iterator for Lexer {
             return None;
         }
         let c = self.input.peek();
-        if c.is_ascii_digit() {
+        if c == '"' {
+            Some(self.parse_string_literal())
+        } else if c == '\'' {
+            Some(self.parse_char_literal())
+        } else if c.is_ascii_digit() {
             Some(self.parse_number())
         } else if c == '(' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 '('.to_string(),
                 TokenType::Separator {
@@ -377,8 +390,7 @@ impl Iterator for Lexer {
             ))
         } else if c == ')' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 ')'.to_string(),
                 TokenType::Separator {
@@ -389,8 +401,7 @@ impl Iterator for Lexer {
             ))
         } else if c == '[' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 '['.to_string(),
                 TokenType::Separator {
@@ -401,8 +412,7 @@ impl Iterator for Lexer {
             ))
         } else if c == ']' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 ']'.to_string(),
                 TokenType::Separator {
@@ -413,8 +423,7 @@ impl Iterator for Lexer {
             ))
         } else if c == '{' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 '{'.to_string(),
                 TokenType::Separator {
@@ -425,8 +434,7 @@ impl Iterator for Lexer {
             ))
         } else if c == '}' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 '}'.to_string(),
                 TokenType::Separator {
@@ -437,8 +445,7 @@ impl Iterator for Lexer {
             ))
         } else if c == ':' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 ':'.to_string(),
                 TokenType::Separator {
@@ -449,8 +456,7 @@ impl Iterator for Lexer {
             ))
         } else if c == ';' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 ';'.to_string(),
                 TokenType::Separator {
@@ -461,8 +467,7 @@ impl Iterator for Lexer {
             ))
         } else if c == ',' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 ','.to_string(),
                 TokenType::Separator {
@@ -473,8 +478,7 @@ impl Iterator for Lexer {
             ))
         } else if c == '@' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 '@'.to_string(),
                 TokenType::Separator {
@@ -485,8 +489,7 @@ impl Iterator for Lexer {
             ))
         } else if c == '?' {
             let position = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             Some(Token::new(
                 '?'.to_string(),
                 TokenType::Operator {
@@ -497,12 +500,10 @@ impl Iterator for Lexer {
             ))
         } else if c == '+' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "++".to_string(),
                     TokenType::Operator {
@@ -513,8 +514,7 @@ impl Iterator for Lexer {
                 ))
             } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "+=".to_string(),
                     TokenType::Operator {
@@ -535,12 +535,10 @@ impl Iterator for Lexer {
             }
         } else if c == '-' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '-' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "--".to_string(),
                     TokenType::Operator {
@@ -551,8 +549,7 @@ impl Iterator for Lexer {
                 ))
             } else if self.input.peek() == '>' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "->".to_string(),
                     TokenType::Operator {
@@ -563,8 +560,7 @@ impl Iterator for Lexer {
                 ))
             } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "-=".to_string(),
                     TokenType::Operator {
@@ -585,12 +581,10 @@ impl Iterator for Lexer {
             }
         } else if c == '*' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "*=".to_string(),
                     TokenType::Operator {
@@ -611,12 +605,10 @@ impl Iterator for Lexer {
             }
         } else if c == '/' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "/=".to_string(),
                     TokenType::Operator {
@@ -637,12 +629,10 @@ impl Iterator for Lexer {
             }
         } else if c == '%' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "%=".to_string(),
                     TokenType::Operator {
@@ -663,12 +653,10 @@ impl Iterator for Lexer {
             }
         } else if c == '=' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "==".to_string(),
                     TokenType::Operator {
@@ -689,12 +677,10 @@ impl Iterator for Lexer {
             }
         } else if c == '!' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "!=".to_string(),
                     TokenType::Operator {
@@ -715,16 +701,13 @@ impl Iterator for Lexer {
             }
         } else if c == '<' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '<' {
                 let pos = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 if self.input.peek() == '=' {
                     let position = self.get_position_with_begin(begin_pos, None);
-                    self.input.pos += 1;
-                    self.input.col += 1;
+                    self.input.inc_pos();
                     Some(Token::new(
                         "<<=".to_string(),
                         TokenType::Operator {
@@ -745,8 +728,7 @@ impl Iterator for Lexer {
                 }
             } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "<=".to_string(),
                     TokenType::Operator {
@@ -767,15 +749,12 @@ impl Iterator for Lexer {
             }
         } else if c == '>' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '>' {
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 if self.input.peek() == '=' {
                     let position = self.get_position_with_begin(begin_pos, None);
-                    self.input.pos += 1;
-                    self.input.col += 1;
+                    self.input.inc_pos();
                     Some(Token::new(
                         ">>=".to_string(),
                         TokenType::Operator {
@@ -796,8 +775,7 @@ impl Iterator for Lexer {
                 }
             } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     ">=".to_string(),
                     TokenType::Operator {
@@ -818,12 +796,10 @@ impl Iterator for Lexer {
             }
         } else if c == '&' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '&' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "&&".to_string(),
                     TokenType::Operator {
@@ -834,8 +810,7 @@ impl Iterator for Lexer {
                 ))
             } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "&=".to_string(),
                     TokenType::Operator {
@@ -856,12 +831,10 @@ impl Iterator for Lexer {
             }
         } else if c == '|' {
             let begin_pos = self.input.get_current_position();
-            self.input.pos += 1;
-            self.input.col += 1;
+            self.input.inc_pos();
             if self.input.peek() == '|' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "||".to_string(),
                     TokenType::Operator {
@@ -872,8 +845,7 @@ impl Iterator for Lexer {
                 ))
             } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
-                self.input.pos += 1;
-                self.input.col += 1;
+                self.input.inc_pos();
                 Some(Token::new(
                     "|=".to_string(),
                     TokenType::Operator {

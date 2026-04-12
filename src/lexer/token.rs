@@ -16,6 +16,8 @@ pub enum TokenType {
     Identifier,
     Separator { separator: SeparatorType },
     Operator { operator: OperatorType },
+    StringLiteral { value: String },
+    CharLiteral { value: char },
     IntegerLiteral { value: u64 },
     DecimalLiteral { value: f64 },
     BooleanLiteral { value: bool },
