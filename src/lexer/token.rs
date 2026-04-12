@@ -90,6 +90,17 @@ pub enum OperatorType {
     RightShiftAssign,
     Arrow,
 }
+impl SeparatorType {
+    pub fn is_separator(token: &Token, sep: SeparatorType) -> bool {
+        if let TokenType::Separator { separator } = token.ty
+            && sep == separator
+        {
+            true
+        } else {
+            false
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {

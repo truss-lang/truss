@@ -17,6 +17,7 @@ pub fn get_keyword_map() -> &'static HashMap<String, KeywordType> {
     })
 }
 
+#[derive(Debug)]
 pub struct CharStream {
     chars: Vec<char>,
     pub file: Rc<String>,
@@ -82,6 +83,7 @@ impl Iterator for CharStream {
     }
 }
 
+#[derive(Debug)]
 pub struct Lexer {
     input: CharStream,
     peek_token: Option<Token>,
