@@ -84,366 +84,35 @@ impl Iterator for CharStream {
 
 pub struct Lexer {
     input: CharStream,
+    peek_token: Option<Token>,
 }
 
 impl Lexer {
     pub fn new(input: CharStream) -> Self {
-        Self { input }
+        Self {
+            input,
+            peek_token: None,
+        }
     }
     pub fn get_file(&self) -> Rc<String> {
         self.input.file.clone()
     }
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.input.is_empty()
-    }
-    fn skip_whitechars(&mut self) {
-        if self.is_empty() {
-            return;
-        }
-        let mut c = self.input.peek();
-        while !self.is_empty() && c.is_whitespace() {
-            self.input.pos += 1;
-            if c == '\n' {
-                self.input.line += 1;
-                self.input.col = 0;
-            } else {
-                self.input.col += 1;
-            }
-            if self.input.pos >= self.input.len() {
-                break;
-            }
-            c = self.input.peek();
-        }
-    }
-    #[inline]
-    fn get_position_with_begin(&self, begin: Position, offset: Option<usize>) -> Position {
-        Position {
-            pos: begin.pos,
-            line: begin.line,
-            col: begin.col,
-            len: self.input.get_current_position().pos - begin.pos + 1 - offset.unwrap_or(0),
-        }
-    }
-    fn parse_a_char(&mut self) -> Option<char> {
-        let mut ch = self.input.next().unwrap();
-        if ch == '\\' {
-            ch = self.input.next().unwrap();
-            match ch {
-                'b' => Some('\x08'),
-                't' => Some('\t'),
-                'n' => Some('\n'),
-                'f' => Some('\x0C'),
-                'r' => Some('\r'),
-                '"' => Some('\"'),
-                '\'' => Some('\''),
-                '\\' => Some('\\'),
-
-                c if c.is_ascii_digit() && c != '8' && c != '9' => {
-                    let mut octal_str = String::from(c);
-
-                    ch = self.input.peek();
-                    if ch.is_digit(8) {
-                        self.input.inc_pos();
-                        octal_str.push(ch);
-
-                        ch = self.input.peek();
-                        if ch.is_digit(8) {
-                            self.input.inc_pos();
-                            octal_str.push(ch);
-                        }
-                    }
-
-                    if let Some(parsed_char) = u32::from_str_radix(&octal_str, 8)
-                        .ok()
-                        .and_then(char::from_u32)
-                    {
-                        return Some(parsed_char);
-                    }
-                    None
-                }
-
-                'u' => {
-                    let mut hex_str = String::with_capacity(4);
-                    for _ in 0..4 {
-                        let hex_char = self.input.next().unwrap();
-                        if hex_char.is_ascii_hexdigit() {
-                            hex_str.push(hex_char);
-                        } else {
-                            return None;
-                        }
-                    }
-
-                    if let Some(unicode_char) = u32::from_str_radix(&hex_str, 16)
-                        .ok()
-                        .and_then(char::from_u32)
-                    {
-                        return Some(unicode_char);
-                    }
-                    None
-                }
-                _ => None,
-            }
+    pub fn peek(&mut self) -> Token {
+        if let Some(token) = &self.peek_token {
+            token.clone()
         } else {
-            Some(ch)
+            let old_pos = self.input.pos;
+            let old_line = self.input.line;
+            let old_col = self.input.col;
+            let token = self.parse_a_token().unwrap();
+            self.input.pos = old_pos;
+            self.input.line = old_line;
+            self.input.col = old_col;
+            self.peek_token = Some(token.clone());
+            token
         }
     }
-    fn parse_string_literal(&mut self) -> Token {
-        let begin_pos = self.input.get_current_position();
-        self.input.inc_pos();
-        let mut value = String::new();
-        while !self.is_empty() && self.input.peek() != '"' {
-            value += self.input.next().unwrap().to_string().as_str();
-        }
-        if self.input.peek() == '"' {
-            self.input.inc_pos();
-        }
-        Token::new(
-            format!("\"{}\"", value),
-            TokenType::StringLiteral { value },
-            self.get_position_with_begin(begin_pos, Some(1)),
-            self.input.file.clone(),
-        )
-    }
-    fn parse_char_literal(&mut self) -> Token {
-        let begin_pos = self.input.get_current_position();
-        self.input.inc_pos();
-        let value = self.parse_a_char().unwrap();
-        if self.input.peek() == '\'' {
-            self.input.inc_pos();
-        }
-        Token::new(
-            format!("'{}'", value),
-            TokenType::CharLiteral { value },
-            self.get_position_with_begin(begin_pos, Some(1)),
-            self.input.file.clone(),
-        )
-    }
-    fn parse_number(&mut self) -> Token {
-        let mut c = self.input.peek();
-        let begin_pos = self.input.get_current_position();
-        self.input.inc_pos();
-        let mut literal = String::new();
-        if c == '0' {
-            c = self.input.peek();
-            if c == 'x' || c == 'X' {
-                self.input.inc_pos();
-                let mut n = self.input.peek();
-                while n.is_ascii_hexdigit() {
-                    self.input.inc_pos();
-                    literal.push(n);
-                    if self.input.is_empty() {
-                        break;
-                    }
-                    n = self.input.peek();
-                }
-                return Token::new(
-                    format!("0{}{}", c, literal.clone()),
-                    TokenType::IntegerLiteral {
-                        value: u64::from_str_radix(&literal, 16).unwrap(),
-                    },
-                    self.get_position_with_begin(begin_pos, Some(1)),
-                    self.input.file.clone(),
-                );
-            } else if c == 'b' || c == 'B' {
-                self.input.inc_pos();
-                let mut n = self.input.peek();
-                while n == '0' || n == '1' {
-                    self.input.inc_pos();
-                    literal.push(n);
-                    if self.input.is_empty() {
-                        break;
-                    }
-                    n = self.input.peek();
-                }
-                return Token::new(
-                    format!("0{}{}", c, literal.clone()),
-                    TokenType::IntegerLiteral {
-                        value: u64::from_str_radix(&literal, 2).unwrap(),
-                    },
-                    self.get_position_with_begin(begin_pos, Some(1)),
-                    self.input.file.clone(),
-                );
-            } else if c.is_digit(8) {
-                self.input.inc_pos();
-                literal.push(c);
-                let mut n = self.input.peek();
-                while n.is_digit(8) {
-                    self.input.inc_pos();
-                    literal.push(n);
-                    if self.input.is_empty() {
-                        break;
-                    }
-                    n = self.input.peek();
-                }
-                return Token::new(
-                    format!("0{}", literal.clone()),
-                    TokenType::IntegerLiteral {
-                        value: u64::from_str_radix(&literal, 8).unwrap(),
-                    },
-                    self.get_position_with_begin(begin_pos, Some(1)),
-                    self.input.file.clone(),
-                );
-            } else {
-                literal.push('0');
-            }
-        } else {
-            literal.push(c);
-            c = self.input.peek();
-            while c.is_ascii_digit() {
-                self.input.inc_pos();
-                literal.push(c);
-                if self.input.is_empty() {
-                    break;
-                }
-                c = self.input.peek();
-            }
-        }
-        c = self.input.peek();
-        if c == '.' {
-            self.input.inc_pos();
-            literal.push(c);
-            c = self.input.peek();
-            while c.is_ascii_digit() {
-                self.input.inc_pos();
-                literal.push(c);
-                if self.input.is_empty() {
-                    break;
-                }
-                c = self.input.peek();
-            }
-            if c == 'e' || c == 'E' {
-                self.input.inc_pos();
-                literal.push(c);
-                c = self.input.peek();
-                while c.is_ascii_digit() {
-                    self.input.inc_pos();
-                    literal.push(c);
-                    if self.input.is_empty() {
-                        break;
-                    }
-                    c = self.input.peek();
-                }
-            }
-            Token::new(
-                literal.clone(),
-                TokenType::DecimalLiteral {
-                    value: literal.parse::<f64>().unwrap(),
-                },
-                self.get_position_with_begin(begin_pos, Some(1)),
-                self.input.file.clone(),
-            )
-        } else if c == 'e' || c == 'E' {
-            self.input.inc_pos();
-            literal.push(c);
-            c = self.input.peek();
-            while c.is_ascii_digit() {
-                self.input.inc_pos();
-                literal.push(c);
-                if self.input.is_empty() {
-                    break;
-                }
-                c = self.input.peek();
-            }
-            Token::new(
-                literal.clone(),
-                TokenType::DecimalLiteral {
-                    value: literal.parse::<f64>().unwrap(),
-                },
-                self.get_position_with_begin(begin_pos, Some(1)),
-                self.input.file.clone(),
-            )
-        } else {
-            Token::new(
-                literal.clone(),
-                TokenType::IntegerLiteral {
-                    value: literal.parse::<u64>().unwrap(),
-                },
-                self.get_position_with_begin(begin_pos, Some(1)),
-                self.input.file.clone(),
-            )
-        }
-    }
-    fn parse_identifier(&mut self) -> Token {
-        let begin_pos = self.input.get_current_position();
-        let mut value = self.input.next().unwrap().to_string();
-        while !self.is_empty() && Self::is_identifier(self.input.peek()) {
-            value += self.input.next().unwrap().to_string().as_str();
-        }
-        let position = self.get_position_with_begin(begin_pos, Some(1));
-        println!("{}", value);
-        if value == "true" || value == "false" {
-            Token::new(
-                value.clone(),
-                TokenType::BooleanLiteral {
-                    value: value == "true",
-                },
-                position,
-                self.input.file.clone(),
-            )
-        } else if value == "null" {
-            Token::new(
-                value,
-                TokenType::NullLiteral,
-                position,
-                self.input.file.clone(),
-            )
-        } else if value == "nullptr" {
-            Token::new(
-                value,
-                TokenType::NullptrLiteral,
-                position,
-                self.input.file.clone(),
-            )
-        } else if let Some(keyword) = get_keyword_map().get(&value).cloned() {
-            Token::new(
-                value,
-                TokenType::Keyword { keyword },
-                position,
-                self.input.file.clone(),
-            )
-        } else {
-            Token::new(
-                value,
-                TokenType::Identifier,
-                position,
-                self.input.file.clone(),
-            )
-        }
-    }
-    fn is_identifier(ch: char) -> bool {
-        !ch.is_whitespace()
-            && ch != '"'
-            && ch != '\''
-            && ch != '('
-            && ch != ')'
-            && ch != '{'
-            && ch != '}'
-            && ch != '['
-            && ch != ']'
-            && ch != ':'
-            && ch != ';'
-            && ch != ','
-            && ch != '?'
-            && ch != '@'
-            && ch != '+'
-            && ch != '-'
-            && ch != '*'
-            && ch != '%'
-            && ch != '<'
-            && ch != '>'
-            && ch != '='
-            && ch != '!'
-            && ch != '&'
-            && ch != '^'
-            && ch != '~'
-            && ch != '|'
-            && ch != '.'
-    }
-}
-impl Iterator for Lexer {
-    type Item = Token;
-    fn next(&mut self) -> Option<Token> {
+    fn parse_a_token(&mut self) -> Option<Token> {
         self.skip_whitechars();
         if self.is_empty() {
             return None;
@@ -945,5 +614,360 @@ impl Iterator for Lexer {
         } else {
             Some(self.parse_identifier())
         }
+    }
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.input.is_empty()
+    }
+    fn skip_whitechars(&mut self) {
+        if self.is_empty() {
+            return;
+        }
+        let mut c = self.input.peek();
+        while !self.is_empty() && c.is_whitespace() {
+            self.input.pos += 1;
+            if c == '\n' {
+                self.input.line += 1;
+                self.input.col = 0;
+            } else {
+                self.input.col += 1;
+            }
+            if self.input.pos >= self.input.len() {
+                break;
+            }
+            c = self.input.peek();
+        }
+    }
+    #[inline]
+    fn get_position_with_begin(&self, begin: Position, offset: Option<usize>) -> Position {
+        Position {
+            pos: begin.pos,
+            line: begin.line,
+            col: begin.col,
+            len: self.input.get_current_position().pos - begin.pos + 1 - offset.unwrap_or(0),
+        }
+    }
+    fn parse_a_char(&mut self) -> Option<char> {
+        let mut ch = self.input.next().unwrap();
+        if ch == '\\' {
+            ch = self.input.next().unwrap();
+            match ch {
+                'b' => Some('\x08'),
+                't' => Some('\t'),
+                'n' => Some('\n'),
+                'f' => Some('\x0C'),
+                'r' => Some('\r'),
+                '"' => Some('\"'),
+                '\'' => Some('\''),
+                '\\' => Some('\\'),
+
+                c if c.is_ascii_digit() && c != '8' && c != '9' => {
+                    let mut octal_str = String::from(c);
+
+                    ch = self.input.peek();
+                    if ch.is_digit(8) {
+                        self.input.inc_pos();
+                        octal_str.push(ch);
+
+                        ch = self.input.peek();
+                        if ch.is_digit(8) {
+                            self.input.inc_pos();
+                            octal_str.push(ch);
+                        }
+                    }
+
+                    if let Some(parsed_char) = u32::from_str_radix(&octal_str, 8)
+                        .ok()
+                        .and_then(char::from_u32)
+                    {
+                        return Some(parsed_char);
+                    }
+                    None
+                }
+
+                'u' => {
+                    let mut hex_str = String::with_capacity(4);
+                    for _ in 0..4 {
+                        let hex_char = self.input.next().unwrap();
+                        if hex_char.is_ascii_hexdigit() {
+                            hex_str.push(hex_char);
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    if let Some(unicode_char) = u32::from_str_radix(&hex_str, 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                    {
+                        return Some(unicode_char);
+                    }
+                    None
+                }
+                _ => None,
+            }
+        } else {
+            Some(ch)
+        }
+    }
+    fn parse_string_literal(&mut self) -> Token {
+        let begin_pos = self.input.get_current_position();
+        self.input.inc_pos();
+        let mut value = String::new();
+        while !self.is_empty() && self.input.peek() != '"' {
+            value += self.input.next().unwrap().to_string().as_str();
+        }
+        if self.input.peek() == '"' {
+            self.input.inc_pos();
+        }
+        Token::new(
+            format!("\"{}\"", value),
+            TokenType::StringLiteral { value },
+            self.get_position_with_begin(begin_pos, Some(1)),
+            self.input.file.clone(),
+        )
+    }
+    fn parse_char_literal(&mut self) -> Token {
+        let begin_pos = self.input.get_current_position();
+        self.input.inc_pos();
+        let value = self.parse_a_char().unwrap();
+        if self.input.peek() == '\'' {
+            self.input.inc_pos();
+        }
+        Token::new(
+            format!("'{}'", value),
+            TokenType::CharLiteral { value },
+            self.get_position_with_begin(begin_pos, Some(1)),
+            self.input.file.clone(),
+        )
+    }
+    fn parse_number(&mut self) -> Token {
+        let mut c = self.input.peek();
+        let begin_pos = self.input.get_current_position();
+        self.input.inc_pos();
+        let mut literal = String::new();
+        if c == '0' {
+            c = self.input.peek();
+            if c == 'x' || c == 'X' {
+                self.input.inc_pos();
+                let mut n = self.input.peek();
+                while n.is_ascii_hexdigit() {
+                    self.input.inc_pos();
+                    literal.push(n);
+                    if self.input.is_empty() {
+                        break;
+                    }
+                    n = self.input.peek();
+                }
+                return Token::new(
+                    format!("0{}{}", c, literal.clone()),
+                    TokenType::IntegerLiteral {
+                        value: u64::from_str_radix(&literal, 16).unwrap(),
+                    },
+                    self.get_position_with_begin(begin_pos, Some(1)),
+                    self.input.file.clone(),
+                );
+            } else if c == 'b' || c == 'B' {
+                self.input.inc_pos();
+                let mut n = self.input.peek();
+                while n == '0' || n == '1' {
+                    self.input.inc_pos();
+                    literal.push(n);
+                    if self.input.is_empty() {
+                        break;
+                    }
+                    n = self.input.peek();
+                }
+                return Token::new(
+                    format!("0{}{}", c, literal.clone()),
+                    TokenType::IntegerLiteral {
+                        value: u64::from_str_radix(&literal, 2).unwrap(),
+                    },
+                    self.get_position_with_begin(begin_pos, Some(1)),
+                    self.input.file.clone(),
+                );
+            } else if c.is_digit(8) {
+                self.input.inc_pos();
+                literal.push(c);
+                let mut n = self.input.peek();
+                while n.is_digit(8) {
+                    self.input.inc_pos();
+                    literal.push(n);
+                    if self.input.is_empty() {
+                        break;
+                    }
+                    n = self.input.peek();
+                }
+                return Token::new(
+                    format!("0{}", literal.clone()),
+                    TokenType::IntegerLiteral {
+                        value: u64::from_str_radix(&literal, 8).unwrap(),
+                    },
+                    self.get_position_with_begin(begin_pos, Some(1)),
+                    self.input.file.clone(),
+                );
+            } else {
+                literal.push('0');
+            }
+        } else {
+            literal.push(c);
+            c = self.input.peek();
+            while c.is_ascii_digit() {
+                self.input.inc_pos();
+                literal.push(c);
+                if self.input.is_empty() {
+                    break;
+                }
+                c = self.input.peek();
+            }
+        }
+        c = self.input.peek();
+        if c == '.' {
+            self.input.inc_pos();
+            literal.push(c);
+            c = self.input.peek();
+            while c.is_ascii_digit() {
+                self.input.inc_pos();
+                literal.push(c);
+                if self.input.is_empty() {
+                    break;
+                }
+                c = self.input.peek();
+            }
+            if c == 'e' || c == 'E' {
+                self.input.inc_pos();
+                literal.push(c);
+                c = self.input.peek();
+                while c.is_ascii_digit() {
+                    self.input.inc_pos();
+                    literal.push(c);
+                    if self.input.is_empty() {
+                        break;
+                    }
+                    c = self.input.peek();
+                }
+            }
+            Token::new(
+                literal.clone(),
+                TokenType::DecimalLiteral {
+                    value: literal.parse::<f64>().unwrap(),
+                },
+                self.get_position_with_begin(begin_pos, Some(1)),
+                self.input.file.clone(),
+            )
+        } else if c == 'e' || c == 'E' {
+            self.input.inc_pos();
+            literal.push(c);
+            c = self.input.peek();
+            while c.is_ascii_digit() {
+                self.input.inc_pos();
+                literal.push(c);
+                if self.input.is_empty() {
+                    break;
+                }
+                c = self.input.peek();
+            }
+            Token::new(
+                literal.clone(),
+                TokenType::DecimalLiteral {
+                    value: literal.parse::<f64>().unwrap(),
+                },
+                self.get_position_with_begin(begin_pos, Some(1)),
+                self.input.file.clone(),
+            )
+        } else {
+            Token::new(
+                literal.clone(),
+                TokenType::IntegerLiteral {
+                    value: literal.parse::<u64>().unwrap(),
+                },
+                self.get_position_with_begin(begin_pos, Some(1)),
+                self.input.file.clone(),
+            )
+        }
+    }
+    fn parse_identifier(&mut self) -> Token {
+        let begin_pos = self.input.get_current_position();
+        let mut value = self.input.next().unwrap().to_string();
+        while !self.is_empty() && Self::is_identifier(self.input.peek()) {
+            value += self.input.next().unwrap().to_string().as_str();
+        }
+        let position = self.get_position_with_begin(begin_pos, Some(1));
+        println!("{}", value);
+        if value == "true" || value == "false" {
+            Token::new(
+                value.clone(),
+                TokenType::BooleanLiteral {
+                    value: value == "true",
+                },
+                position,
+                self.input.file.clone(),
+            )
+        } else if value == "null" {
+            Token::new(
+                value,
+                TokenType::NullLiteral,
+                position,
+                self.input.file.clone(),
+            )
+        } else if value == "nullptr" {
+            Token::new(
+                value,
+                TokenType::NullptrLiteral,
+                position,
+                self.input.file.clone(),
+            )
+        } else if let Some(keyword) = get_keyword_map().get(&value).cloned() {
+            Token::new(
+                value,
+                TokenType::Keyword { keyword },
+                position,
+                self.input.file.clone(),
+            )
+        } else {
+            Token::new(
+                value,
+                TokenType::Identifier,
+                position,
+                self.input.file.clone(),
+            )
+        }
+    }
+    fn is_identifier(ch: char) -> bool {
+        !ch.is_whitespace()
+            && ch != '"'
+            && ch != '\''
+            && ch != '('
+            && ch != ')'
+            && ch != '{'
+            && ch != '}'
+            && ch != '['
+            && ch != ']'
+            && ch != ':'
+            && ch != ';'
+            && ch != ','
+            && ch != '?'
+            && ch != '@'
+            && ch != '+'
+            && ch != '-'
+            && ch != '*'
+            && ch != '%'
+            && ch != '<'
+            && ch != '>'
+            && ch != '='
+            && ch != '!'
+            && ch != '&'
+            && ch != '^'
+            && ch != '~'
+            && ch != '|'
+            && ch != '.'
+    }
+}
+impl Iterator for Lexer {
+    type Item = Token;
+    fn next(&mut self) -> Option<Token> {
+        let token = self.parse_a_token().unwrap();
+        self.peek_token = Some(token.clone());
+        Some(token)
     }
 }

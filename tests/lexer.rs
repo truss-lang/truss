@@ -11,6 +11,7 @@ fn test_parse_integer() {
         "0x1f 0b11 012 12 0.5 1.5e3 1".to_string(),
         Rc::new("".to_string()),
     ));
+    assert_eq!(lexer.peek().value, "0x1f".to_string());
     assert_eq!(
         lexer.next().unwrap().ty,
         TokenType::IntegerLiteral { value: 31 }
