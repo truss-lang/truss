@@ -91,6 +91,7 @@ pub enum OperatorType {
     Arrow,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub value: String,
     pub ty: TokenType,

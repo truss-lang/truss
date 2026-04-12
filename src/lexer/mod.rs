@@ -1,6 +1,6 @@
 pub mod token;
 
-use std::{collections::HashMap, rc::Rc, sync::OnceLock};
+use std::{char, collections::HashMap, rc::Rc, sync::OnceLock};
 
 use strum::IntoEnumIterator;
 use token::{KeywordType, OperatorType, Position, SeparatorType, Token, TokenType};
@@ -90,13 +90,19 @@ impl Lexer {
     pub fn new(input: CharStream) -> Self {
         Self { input }
     }
+    pub fn get_file(&self) -> Rc<String> {
+        self.input.file.clone()
+    }
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.input.is_empty()
     }
     fn skip_whitechars(&mut self) {
+        if self.is_empty() {
+            return;
+        }
         let mut c = self.input.peek();
-        while c.is_whitespace() {
+        while !self.is_empty() && c.is_whitespace() {
             self.input.pos += 1;
             if c == '\n' {
                 self.input.line += 1;
@@ -119,22 +125,97 @@ impl Lexer {
             len: self.input.get_current_position().pos - begin.pos + 1 - offset.unwrap_or(0),
         }
     }
+    fn parse_a_char(&mut self) -> Option<char> {
+        let mut ch = self.input.next().unwrap();
+        if ch == '\\' {
+            ch = self.input.next().unwrap();
+            match ch {
+                'b' => Some('\x08'),
+                't' => Some('\t'),
+                'n' => Some('\n'),
+                'f' => Some('\x0C'),
+                'r' => Some('\r'),
+                '"' => Some('\"'),
+                '\'' => Some('\''),
+                '\\' => Some('\\'),
+
+                c if c.is_ascii_digit() && c != '8' && c != '9' => {
+                    let mut octal_str = String::from(c);
+
+                    ch = self.input.peek();
+                    if ch.is_digit(8) {
+                        self.input.inc_pos();
+                        octal_str.push(ch);
+
+                        ch = self.input.peek();
+                        if ch.is_digit(8) {
+                            self.input.inc_pos();
+                            octal_str.push(ch);
+                        }
+                    }
+
+                    if let Some(parsed_char) = u32::from_str_radix(&octal_str, 8)
+                        .ok()
+                        .and_then(char::from_u32)
+                    {
+                        return Some(parsed_char);
+                    }
+                    None
+                }
+
+                'u' => {
+                    let mut hex_str = String::with_capacity(4);
+                    for _ in 0..4 {
+                        let hex_char = self.input.next().unwrap();
+                        if hex_char.is_ascii_hexdigit() {
+                            hex_str.push(hex_char);
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    if let Some(unicode_char) = u32::from_str_radix(&hex_str, 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                    {
+                        return Some(unicode_char);
+                    }
+                    None
+                }
+                _ => None,
+            }
+        } else {
+            Some(ch)
+        }
+    }
     fn parse_string_literal(&mut self) -> Token {
         let begin_pos = self.input.get_current_position();
         self.input.inc_pos();
-        let value = String::new();
+        let mut value = String::new();
+        while !self.is_empty() && self.input.peek() != '"' {
+            value += self.input.next().unwrap().to_string().as_str();
+        }
+        if self.input.peek() == '"' {
+            self.input.inc_pos();
+        }
         Token::new(
-            "".to_string(),
-            TokenType::Identifier,
-            self.input.get_current_position(),
+            format!("\"{}\"", value),
+            TokenType::StringLiteral { value },
+            self.get_position_with_begin(begin_pos, Some(1)),
             self.input.file.clone(),
         )
     }
     fn parse_char_literal(&mut self) -> Token {
+        let begin_pos = self.input.get_current_position();
+        self.input.inc_pos();
+        let value = self.parse_a_char().unwrap();
+        if self.input.peek() == '\'' {
+            self.input.inc_pos();
+        }
         Token::new(
-            "".to_string(),
-            TokenType::Identifier,
-            self.input.get_current_position(),
+            format!("'{}'", value),
+            TokenType::CharLiteral { value },
+            self.get_position_with_begin(begin_pos, Some(1)),
             self.input.file.clone(),
         )
     }
@@ -363,9 +444,6 @@ impl Lexer {
 impl Iterator for Lexer {
     type Item = Token;
     fn next(&mut self) -> Option<Token> {
-        if self.is_empty() {
-            return None;
-        }
         self.skip_whitechars();
         if self.is_empty() {
             return None;

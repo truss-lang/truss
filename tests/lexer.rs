@@ -66,3 +66,19 @@ fn test_parse_keyword() {
         }
     );
 }
+
+#[test]
+fn test_parse_char_literal() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "'a' '\\n'".to_string(),
+        Rc::new("".to_string()),
+    ));
+    assert_eq!(
+        lexer.next().unwrap().ty,
+        TokenType::CharLiteral { value: 'a' }
+    );
+    assert_eq!(
+        lexer.next().unwrap().ty,
+        TokenType::CharLiteral { value: '\n' }
+    );
+}
