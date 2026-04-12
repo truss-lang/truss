@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use strum::EnumIter;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Position {
     pub pos: usize,
@@ -14,13 +16,28 @@ pub enum TokenType {
     Identifier,
     Separator { separator: SeparatorType },
     Operator { operator: OperatorType },
-    Integer { value: u64 },
-    Decimal { value: f64 },
+    IntegerLiteral { value: u64 },
+    DecimalLiteral { value: f64 },
+    BooleanLiteral { value: bool },
+    NullLiteral,
+    NullptrLiteral,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
 pub enum KeywordType {
+    Func,
     Let,
+}
+
+impl KeywordType {
+    pub fn code(&self) -> String {
+        match self {
+            KeywordType::Func => "func",
+            KeywordType::Let => "let",
+            _ => "unknown",
+        }
+        .to_string()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

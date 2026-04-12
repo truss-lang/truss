@@ -1,8 +1,21 @@
 pub mod token;
 
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc, sync::OnceLock};
 
-use token::{OperatorType, Position, SeparatorType, Token, TokenType};
+use strum::IntoEnumIterator;
+use token::{KeywordType, OperatorType, Position, SeparatorType, Token, TokenType};
+
+static KEYWORD_MAP: OnceLock<HashMap<String, KeywordType>> = OnceLock::new();
+
+pub fn get_keyword_map() -> &'static HashMap<String, KeywordType> {
+    KEYWORD_MAP.get_or_init(|| {
+        let mut map = HashMap::new();
+        for keyword in KeywordType::iter() {
+            map.insert(keyword.code(), keyword);
+        }
+        map
+    })
+}
 
 pub struct CharStream {
     chars: Vec<char>,
@@ -48,7 +61,6 @@ impl CharStream {
 impl Iterator for CharStream {
     type Item = char;
     fn next(&mut self) -> Option<char> {
-        println!("{}-{}", self.pos, self.chars.len());
         if self.pos < self.chars.len() {
             let c = self.chars[self.pos];
             self.pos += 1;
@@ -125,7 +137,7 @@ impl Lexer {
                 }
                 return Token::new(
                     format!("0{}{}", c, literal.clone()),
-                    TokenType::Integer {
+                    TokenType::IntegerLiteral {
                         value: u64::from_str_radix(&literal, 16).unwrap(),
                     },
                     self.get_position_with_begin(begin_pos, Some(1)),
@@ -146,7 +158,7 @@ impl Lexer {
                 }
                 return Token::new(
                     format!("0{}{}", c, literal.clone()),
-                    TokenType::Integer {
+                    TokenType::IntegerLiteral {
                         value: u64::from_str_radix(&literal, 2).unwrap(),
                     },
                     self.get_position_with_begin(begin_pos, Some(1)),
@@ -168,7 +180,7 @@ impl Lexer {
                 }
                 return Token::new(
                     format!("0{}", literal.clone()),
-                    TokenType::Integer {
+                    TokenType::IntegerLiteral {
                         value: u64::from_str_radix(&literal, 8).unwrap(),
                     },
                     self.get_position_with_begin(begin_pos, Some(1)),
@@ -222,7 +234,7 @@ impl Lexer {
             }
             Token::new(
                 literal.clone(),
-                TokenType::Decimal {
+                TokenType::DecimalLiteral {
                     value: literal.parse::<f64>().unwrap(),
                 },
                 self.get_position_with_begin(begin_pos, Some(1)),
@@ -244,7 +256,7 @@ impl Lexer {
             }
             Token::new(
                 literal.clone(),
-                TokenType::Decimal {
+                TokenType::DecimalLiteral {
                     value: literal.parse::<f64>().unwrap(),
                 },
                 self.get_position_with_begin(begin_pos, Some(1)),
@@ -253,7 +265,7 @@ impl Lexer {
         } else {
             Token::new(
                 literal.clone(),
-                TokenType::Integer {
+                TokenType::IntegerLiteral {
                     value: literal.parse::<u64>().unwrap(),
                 },
                 self.get_position_with_begin(begin_pos, Some(1)),
@@ -267,15 +279,46 @@ impl Lexer {
         while !self.is_empty() && Self::is_identifier(self.input.peek()) {
             value += self.input.next().unwrap().to_string().as_str();
         }
-        self.input.pos -= 1;
-        self.input.col -= 1;
         let position = self.get_position_with_begin(begin_pos, Some(1));
-        Token::new(
-            value,
-            TokenType::Identifier,
-            self.input.get_current_position(),
-            self.input.file.clone(),
-        )
+        println!("{}", value);
+        if value == "true" || value == "false" {
+            Token::new(
+                value.clone(),
+                TokenType::BooleanLiteral {
+                    value: value == "true",
+                },
+                position,
+                self.input.file.clone(),
+            )
+        } else if value == "null" {
+            Token::new(
+                value,
+                TokenType::NullLiteral,
+                position,
+                self.input.file.clone(),
+            )
+        } else if value == "nullptr" {
+            Token::new(
+                value,
+                TokenType::NullptrLiteral,
+                position,
+                self.input.file.clone(),
+            )
+        } else if let Some(keyword) = get_keyword_map().get(&value).cloned() {
+            Token::new(
+                value,
+                TokenType::Keyword { keyword },
+                position,
+                self.input.file.clone(),
+            )
+        } else {
+            Token::new(
+                value,
+                TokenType::Identifier,
+                position,
+                self.input.file.clone(),
+            )
+        }
     }
     fn is_identifier(ch: char) -> bool {
         !ch.is_whitespace()
