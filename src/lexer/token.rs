@@ -64,6 +64,11 @@ pub enum OperatorType {
     BitOr,
     BitAndAssign,
     BitOrAssign,
+    LeftShift,
+    RightShift,
+    LeftShiftAssign,
+    RightShiftAssign,
+    Arrow,
 }
 
 pub struct Token {

@@ -456,6 +456,18 @@ impl Iterator for Lexer {
                     position,
                     self.input.file.clone(),
                 ))
+            } else if self.input.peek() == '>' {
+                let position = self.get_position_with_begin(begin_pos);
+                self.input.pos += 1;
+                self.input.col += 1;
+                Some(Token::new(
+                    "->".to_string(),
+                    TokenType::Operator {
+                        operator: OperatorType::Arrow,
+                    },
+                    position,
+                    self.input.file.clone(),
+                ))
             } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos);
                 self.input.pos += 1;
@@ -612,7 +624,33 @@ impl Iterator for Lexer {
             let begin_pos = self.input.get_current_position();
             self.input.pos += 1;
             self.input.col += 1;
-            if self.input.peek() == '=' {
+            if self.input.peek() == '<' {
+                let pos = self.get_position_with_begin(begin_pos);
+                self.input.pos += 1;
+                self.input.col += 1;
+                if self.input.peek() == '=' {
+                    let position = self.get_position_with_begin(begin_pos);
+                    self.input.pos += 1;
+                    self.input.col += 1;
+                    Some(Token::new(
+                        "<<=".to_string(),
+                        TokenType::Operator {
+                            operator: OperatorType::LeftShiftAssign,
+                        },
+                        position,
+                        self.input.file.clone(),
+                    ))
+                } else {
+                    Some(Token::new(
+                        "<<".to_string(),
+                        TokenType::Operator {
+                            operator: OperatorType::LeftShift,
+                        },
+                        pos,
+                        self.input.file.clone(),
+                    ))
+                }
+            } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos);
                 self.input.pos += 1;
                 self.input.col += 1;
@@ -638,7 +676,33 @@ impl Iterator for Lexer {
             let begin_pos = self.input.get_current_position();
             self.input.pos += 1;
             self.input.col += 1;
-            if self.input.peek() == '=' {
+            if self.input.peek() == '>' {
+                let pos = self.get_position_with_begin(begin_pos);
+                self.input.pos += 1;
+                self.input.col += 1;
+                if self.input.peek() == '=' {
+                    let position = self.get_position_with_begin(begin_pos);
+                    self.input.pos += 1;
+                    self.input.col += 1;
+                    Some(Token::new(
+                        ">>=".to_string(),
+                        TokenType::Operator {
+                            operator: OperatorType::RightShiftAssign,
+                        },
+                        position,
+                        self.input.file.clone(),
+                    ))
+                } else {
+                    Some(Token::new(
+                        ">>".to_string(),
+                        TokenType::Operator {
+                            operator: OperatorType::RightShift,
+                        },
+                        pos,
+                        self.input.file.clone(),
+                    ))
+                }
+            } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos);
                 self.input.pos += 1;
                 self.input.col += 1;
