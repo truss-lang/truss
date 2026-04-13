@@ -86,33 +86,23 @@ impl Iterator for CharStream {
 #[derive(Debug)]
 pub struct Lexer {
     input: CharStream,
-    peek_token: Option<Token>,
 }
 
 impl Lexer {
     pub fn new(input: CharStream) -> Self {
-        Self {
-            input,
-            peek_token: None,
-        }
+        Self { input }
     }
     pub fn get_file(&self) -> Rc<String> {
         self.input.file.clone()
     }
-    pub fn peek(&mut self) -> Token {
-        if let Some(token) = &self.peek_token {
-            token.clone()
-        } else {
-            let old_pos = self.input.pos;
-            let old_line = self.input.line;
-            let old_col = self.input.col;
-            let token = self.parse_a_token().unwrap();
-            self.input.pos = old_pos;
-            self.input.line = old_line;
-            self.input.col = old_col;
-            self.peek_token = Some(token.clone());
-            token
+    pub fn parse(&mut self) -> Vec<Token> {
+        let mut tokens: Vec<Token> = Vec::new();
+        while !self.is_empty() {
+            if let Some(token) = self.parse_a_token() {
+                tokens.push(token);
+            }
         }
+        tokens
     }
     fn parse_a_token(&mut self) -> Option<Token> {
         self.skip_whitechars();
@@ -613,6 +603,17 @@ impl Lexer {
                     self.input.file.clone(),
                 ))
             }
+        } else if c == '`' {
+            let pos = self.input.get_current_position();
+            self.input.inc_pos();
+            Some(Token::new(
+                '`'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::Backtick,
+                },
+                pos,
+                self.input.file.clone(),
+            ))
         } else {
             Some(self.parse_identifier())
         }
@@ -895,7 +896,6 @@ impl Lexer {
             value += self.input.next().unwrap().to_string().as_str();
         }
         let position = self.get_position_with_begin(begin_pos, Some(1));
-        println!("{}", value);
         if value == "true" || value == "false" {
             Token::new(
                 value.clone(),
@@ -963,13 +963,5 @@ impl Lexer {
             && ch != '~'
             && ch != '|'
             && ch != '.'
-    }
-}
-impl Iterator for Lexer {
-    type Item = Token;
-    fn next(&mut self) -> Option<Token> {
-        let token = self.parse_a_token().unwrap();
-        self.peek_token = Some(token.clone());
-        Some(token)
     }
 }

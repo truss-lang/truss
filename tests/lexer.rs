@@ -11,32 +11,14 @@ fn test_parse_integer() {
         "0x1f 0b11 012 12 0.5 1.5e3 1".to_string(),
         Rc::new("".to_string()),
     ));
-    assert_eq!(lexer.peek().value, "0x1f".to_string());
-    assert_eq!(
-        lexer.next().unwrap().ty,
-        TokenType::IntegerLiteral { value: 31 }
-    );
-    assert_eq!(
-        lexer.next().unwrap().ty,
-        TokenType::IntegerLiteral { value: 3 }
-    );
-    assert_eq!(
-        lexer.next().unwrap().ty,
-        TokenType::IntegerLiteral { value: 10 }
-    );
-    assert_eq!(
-        lexer.next().unwrap().ty,
-        TokenType::IntegerLiteral { value: 12 }
-    );
-    assert_eq!(
-        lexer.next().unwrap().ty,
-        TokenType::DecimalLiteral { value: 0.5 }
-    );
-    assert_eq!(
-        lexer.next().unwrap().ty,
-        TokenType::DecimalLiteral { value: 1.5e3 }
-    );
-    assert_eq!(lexer.next().unwrap().position.len, 1);
+    let tokens = lexer.parse();
+    assert_eq!(tokens[0].value, "0x1f".to_string());
+    assert_eq!(tokens[1].ty, TokenType::IntegerLiteral { value: 3 });
+    assert_eq!(tokens[2].ty, TokenType::IntegerLiteral { value: 10 });
+    assert_eq!(tokens[3].ty, TokenType::IntegerLiteral { value: 12 });
+    assert_eq!(tokens[4].ty, TokenType::DecimalLiteral { value: 0.5 });
+    assert_eq!(tokens[5].ty, TokenType::DecimalLiteral { value: 1.5e3 });
+    assert_eq!(tokens[6].position.len, 1);
 }
 
 #[test]
@@ -45,8 +27,9 @@ fn test_parse_identifier() {
         "abc a_".to_string(),
         Rc::new("".to_string()),
     ));
-    assert_eq!(lexer.next().unwrap().ty, TokenType::Identifier);
-    assert_eq!(lexer.next().unwrap().ty, TokenType::Identifier);
+    let tokens = lexer.parse();
+    assert_eq!(tokens[0].ty, TokenType::Identifier);
+    assert_eq!(tokens[1].ty, TokenType::Identifier);
 }
 #[test]
 fn test_parse_keyword() {
@@ -54,14 +37,15 @@ fn test_parse_keyword() {
         "func let".to_string(),
         Rc::new("".to_string()),
     ));
+    let tokens = lexer.parse();
     assert_eq!(
-        lexer.next().unwrap().ty,
+        tokens[0].ty,
         TokenType::Keyword {
             keyword: KeywordType::Func
         }
     );
     assert_eq!(
-        lexer.next().unwrap().ty,
+        tokens[1].ty,
         TokenType::Keyword {
             keyword: KeywordType::Let
         }
@@ -74,12 +58,7 @@ fn test_parse_char_literal() {
         "'a' '\\n'".to_string(),
         Rc::new("".to_string()),
     ));
-    assert_eq!(
-        lexer.next().unwrap().ty,
-        TokenType::CharLiteral { value: 'a' }
-    );
-    assert_eq!(
-        lexer.next().unwrap().ty,
-        TokenType::CharLiteral { value: '\n' }
-    );
+    let tokens = lexer.parse();
+    assert_eq!(tokens[0].ty, TokenType::CharLiteral { value: 'a' });
+    assert_eq!(tokens[1].ty, TokenType::CharLiteral { value: '\n' });
 }

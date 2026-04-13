@@ -44,51 +44,52 @@ impl KeywordType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SeparatorType {
-    OpenParen,
-    CloseParen,
-    OpenBracket,
-    CloseBracket,
-    OpenBrace,
-    CloseBrace,
-    Colon,
-    SemiColon,
-    Comma,
-    At,
+    OpenParen,    // (
+    CloseParen,   // )
+    OpenBracket,  // [
+    CloseBracket, // ]
+    OpenBrace,    // {
+    CloseBrace,   // }
+    Colon,        // :
+    SemiColon,    // ;
+    Comma,        // ,
+    At,           // @
+    Backtick,     // ~
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OperatorType {
-    QuestionMark,
-    Plus,
-    Minus,
-    Multiply,
-    Divide,
-    Modulus,
-    PlusAssign,
-    MinusAssign,
-    MultiplyAssign,
-    DivideAssign,
-    ModulusAssign,
-    Inc,
-    Dec,
-    Assign,
-    Equal,
-    NotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    And,
-    Or,
-    Not,
-    BitAnd,
-    BitOr,
-    BitAndAssign,
-    BitOrAssign,
-    LeftShift,
-    RightShift,
-    LeftShiftAssign,
-    RightShiftAssign,
-    Arrow,
+    QuestionMark,     // ?
+    Plus,             // +
+    Minus,            // -
+    Multiply,         // *
+    Divide,           // /
+    Modulus,          // %
+    PlusAssign,       // +=
+    MinusAssign,      // -=
+    MultiplyAssign,   // *=
+    DivideAssign,     // /=
+    ModulusAssign,    // %=
+    Inc,              // ++
+    Dec,              // --
+    Assign,           // =
+    Equal,            // ==
+    NotEqual,         // !=
+    Less,             // <
+    LessEqual,        // <=
+    Greater,          // >
+    GreaterEqual,     // >=
+    And,              // &&
+    Or,               // ||
+    Not,              // !
+    BitAnd,           // &
+    BitOr,            // |
+    BitAndAssign,     // &=
+    BitOrAssign,      // |=
+    LeftShift,        // <<
+    RightShift,       // >>
+    LeftShiftAssign,  // <<=
+    RightShiftAssign, // >>=
+    Arrow,            // ->
 }
 impl SeparatorType {
     pub fn is_separator(token: &Token, sep: SeparatorType) -> bool {
