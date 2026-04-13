@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::lexer::token::Token;
 
 use super::statement::Statement;
@@ -5,7 +7,7 @@ use super::statement::Statement;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Block {
-        statements: Vec<Statement>,
+        statements: Vec<Rc<Statement>>,
     },
     IntegerLiteral {
         token: Token,
@@ -24,6 +26,6 @@ pub enum Expression {
     },
     Type {
         name: Token,
-        generic_parameters: Vec<Expression>,
+        generic_parameters: Vec<Rc<Expression>>,
     },
 }

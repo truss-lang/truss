@@ -9,16 +9,15 @@ use truss::{
 #[test]
 fn test_parse_function_decl() {
     let mut lexer = Lexer::new(CharStream::new(
-        "func test() -> UnsafeMutablePointer<UInt> { 1 } func test2() {}".to_string(),
+        "func test() -> UInt { 1 } func test2() {}".to_string(),
         Rc::new("".to_string()),
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
-    println!("{:?}", program.statements[0]);
-    if let Statement::FunctionDecl { name, .. } = &program.statements[0] {
+    if let Statement::FunctionDecl { name, .. } = &*program.statements[0] {
         assert_eq!(name.value, "test");
     }
-    if let Statement::FunctionDecl { name, .. } = &program.statements[1] {
+    if let Statement::FunctionDecl { name, .. } = &*program.statements[1] {
         assert_eq!(name.value, "test2");
     }
 }

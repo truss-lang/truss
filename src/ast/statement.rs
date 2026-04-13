@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::{expression::Expression, node::GenericParameter};
 use crate::lexer::token::Token;
 
@@ -7,11 +9,11 @@ pub enum Statement {
         token: Box<Token>,
         name: Box<Token>,
         generic_parameters: Vec<GenericParameter>,
-        parameters: Vec<Expression>,
-        return_type: Option<Expression>,
-        body: Box<Expression>,
+        parameters: Vec<Rc<Expression>>,
+        return_type: Option<Rc<Expression>>,
+        body: Rc<Expression>,
     },
     ExpressionStatement {
-        expression: Box<Expression>,
+        expression: Rc<Expression>,
     },
 }

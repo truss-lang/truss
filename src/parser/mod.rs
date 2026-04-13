@@ -39,7 +39,7 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Program> {
         let mut program = Program::new(self.file.clone());
         while !self.is_empty() {
-            program.statements.push(self.parse_statement()?);
+            program.statements.push(Rc::new(self.parse_statement()?));
         }
         Ok(program)
     }
@@ -50,7 +50,7 @@ impl Parser {
                 _ => todo!(),
             },
             _ => Ok(Statement::ExpressionStatement {
-                expression: Box::new(self.parse_expression()?),
+                expression: Rc::new(self.parse_expression()?),
             }),
         }
     }
@@ -71,13 +71,13 @@ impl Parser {
     }
     fn parse_type_expression(&mut self) -> Result<Expression> {
         let name = self.next();
-        let mut generic_parameters: Vec<Expression> = Vec::new();
+        let mut generic_parameters = Vec::new();
         if OperatorType::is_operator(&self.peek(), OperatorType::Less) {
             self.index += 1;
             while !self.is_empty()
                 && !OperatorType::is_operator(&self.peek(), OperatorType::Greater)
             {
-                generic_parameters.push(self.parse_type_expression()?);
+                generic_parameters.push(Rc::new(self.parse_type_expression()?));
                 let t = self.peek();
                 if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                     self.index += 1;
@@ -118,17 +118,17 @@ impl Parser {
             name: Box::new(name),
             generic_parameters: vec![],
             parameters: vec![],
-            return_type,
-            body: Box::new(body),
+            return_type: return_type.map(Rc::new),
+            body: Rc::new(body),
         })
     }
     fn parse_block(&mut self) -> Result<Expression> {
         self.index += 1;
-        let mut statements: Vec<Statement> = Vec::new();
+        let mut statements = Vec::new();
         while !self.is_empty()
             && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseBrace)
         {
-            statements.push(self.parse_statement()?);
+            statements.push(Rc::new(self.parse_statement()?));
         }
         if SeparatorType::is_separator(&self.next(), SeparatorType::CloseBrace) {
             Ok(Expression::Block { statements })

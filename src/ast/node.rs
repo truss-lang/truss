@@ -5,7 +5,7 @@ use super::statement::Statement;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub file: Rc<String>,
-    pub statements: Vec<Statement>,
+    pub statements: Vec<Rc<Statement>>,
 }
 
 impl Program {
