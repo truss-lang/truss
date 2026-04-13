@@ -4,10 +4,7 @@ use anyhow::{Result, anyhow};
 
 use crate::{
     ast::{expression::Expression, node::Program, statement::Statement},
-    lexer::{
-        Lexer,
-        token::{KeywordType, SeparatorType, Token, TokenType},
-    },
+    lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType},
 };
 
 #[derive(Debug)]
@@ -72,6 +69,31 @@ impl Parser {
             _ => todo!(),
         }
     }
+    fn parse_type_expression(&mut self) -> Result<Expression> {
+        let name = self.next();
+        let mut generic_parameters: Vec<Expression> = Vec::new();
+        if OperatorType::is_operator(&self.peek(), OperatorType::Less) {
+            self.index += 1;
+            while !self.is_empty()
+                && !OperatorType::is_operator(&self.peek(), OperatorType::Greater)
+            {
+                generic_parameters.push(self.parse_type_expression()?);
+                let t = self.peek();
+                if SeparatorType::is_separator(&t, SeparatorType::Comma) {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+            if !OperatorType::is_operator(&self.next(), OperatorType::Greater) {
+                return Err(anyhow!(""));
+            }
+        }
+        Ok(Expression::Type {
+            name,
+            generic_parameters,
+        })
+    }
     fn parse_function_decl(&mut self) -> Result<Statement> {
         let token = self.next();
         let name = self.next();
@@ -81,7 +103,12 @@ impl Parser {
         if !SeparatorType::is_separator(&self.next(), SeparatorType::CloseParen) {
             return Err(anyhow!(""));
         }
-
+        let return_type = if OperatorType::is_operator(&self.peek(), OperatorType::Arrow) {
+            self.index += 1;
+            Some(self.parse_type_expression()?)
+        } else {
+            None
+        };
         if !SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
             return Err(anyhow!(""));
         }
@@ -89,8 +116,9 @@ impl Parser {
         Ok(Statement::FunctionDecl {
             token: Box::new(token),
             name: Box::new(name),
-            parameters: vec![],
             generic_parameters: vec![],
+            parameters: vec![],
+            return_type,
             body: Box::new(body),
         })
     }

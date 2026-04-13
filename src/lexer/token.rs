@@ -102,6 +102,17 @@ impl SeparatorType {
         }
     }
 }
+impl OperatorType {
+    pub fn is_operator(token: &Token, op: OperatorType) -> bool {
+        if let TokenType::Operator { operator } = token.ty
+            && op == operator
+        {
+            true
+        } else {
+            false
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {

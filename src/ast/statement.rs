@@ -6,8 +6,9 @@ pub enum Statement {
     FunctionDecl {
         token: Box<Token>,
         name: Box<Token>,
-        parameters: Vec<Expression>,
         generic_parameters: Vec<GenericParameter>,
+        parameters: Vec<Expression>,
+        return_type: Option<Expression>,
         body: Box<Expression>,
     },
     ExpressionStatement {
