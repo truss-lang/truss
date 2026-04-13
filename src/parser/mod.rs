@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{Result, anyhow};
 
@@ -22,6 +22,9 @@ impl Parser {
             index: 0,
         }
     }
+    pub fn get_file(&mut self) -> Rc<String> {
+        self.file.clone()
+    }
     fn is_empty(&self) -> bool {
         self.index >= self.tokens.len()
     }
@@ -39,7 +42,9 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Program> {
         let mut program = Program::new(self.file.clone());
         while !self.is_empty() {
-            program.statements.push(Rc::new(self.parse_statement()?));
+            program
+                .statements
+                .push(Rc::new(RefCell::new(self.parse_statement()?)));
         }
         Ok(program)
     }
@@ -50,7 +55,7 @@ impl Parser {
                 _ => todo!(),
             },
             _ => Ok(Statement::ExpressionStatement {
-                expression: Rc::new(self.parse_expression()?),
+                expression: Rc::new(RefCell::new(self.parse_expression()?)),
             }),
         }
     }
@@ -77,7 +82,7 @@ impl Parser {
             while !self.is_empty()
                 && !OperatorType::is_operator(&self.peek(), OperatorType::Greater)
             {
-                generic_parameters.push(Rc::new(self.parse_type_expression()?));
+                generic_parameters.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
                 let t = self.peek();
                 if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                     self.index += 1;
@@ -92,6 +97,7 @@ impl Parser {
         Ok(Expression::Type {
             name,
             generic_parameters,
+            ty: None,
         })
     }
     fn parse_function_decl(&mut self) -> Result<Statement> {
@@ -118,8 +124,8 @@ impl Parser {
             name: Box::new(name),
             generic_parameters: vec![],
             parameters: vec![],
-            return_type: return_type.map(Rc::new),
-            body: Rc::new(body),
+            return_type: return_type.map(RefCell::new).map(Rc::new),
+            body: Rc::new(RefCell::new(body)),
         })
     }
     fn parse_block(&mut self) -> Result<Expression> {
@@ -128,7 +134,7 @@ impl Parser {
         while !self.is_empty()
             && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseBrace)
         {
-            statements.push(Rc::new(self.parse_statement()?));
+            statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
         }
         if SeparatorType::is_separator(&self.next(), SeparatorType::CloseBrace) {
             Ok(Expression::Block { statements })

@@ -1,13 +1,13 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
-use crate::lexer::token::Token;
+use crate::{lexer::token::Token, types::Type};
 
 use super::statement::Statement;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Block {
-        statements: Vec<Rc<Statement>>,
+        statements: Vec<Rc<RefCell<Statement>>>,
     },
     IntegerLiteral {
         token: Token,
@@ -26,6 +26,7 @@ pub enum Expression {
     },
     Type {
         name: Token,
-        generic_parameters: Vec<Rc<Expression>>,
+        generic_parameters: Vec<Rc<RefCell<Expression>>>,
+        ty: Option<Type>,
     },
 }

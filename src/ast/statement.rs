@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use super::{expression::Expression, node::GenericParameter};
 use crate::lexer::token::Token;
@@ -9,11 +9,11 @@ pub enum Statement {
         token: Box<Token>,
         name: Box<Token>,
         generic_parameters: Vec<GenericParameter>,
-        parameters: Vec<Rc<Expression>>,
-        return_type: Option<Rc<Expression>>,
-        body: Rc<Expression>,
+        parameters: Vec<Rc<RefCell<Expression>>>,
+        return_type: Option<Rc<RefCell<Expression>>>,
+        body: Rc<RefCell<Expression>>,
     },
     ExpressionStatement {
-        expression: Rc<Expression>,
+        expression: Rc<RefCell<Expression>>,
     },
 }

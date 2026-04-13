@@ -36,7 +36,6 @@ impl KeywordType {
         match self {
             KeywordType::Func => "func",
             KeywordType::Let => "let",
-            _ => "unknown",
         }
         .to_string()
     }

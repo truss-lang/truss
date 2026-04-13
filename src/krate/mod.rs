@@ -11,6 +11,15 @@ pub struct Crate {
     pub id: CrateId,
     pub modules: HashMap<ModuleId, Rc<RefCell<Module>>>,
 }
+impl Crate {
+    pub fn new(name: String, id: CrateId) -> Self {
+        Self {
+            name,
+            id,
+            modules: HashMap::new(),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Module {

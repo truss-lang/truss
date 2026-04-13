@@ -7,6 +7,7 @@ use crate::{
     id::{ModuleId, SymbolId},
     krate::{Crate, Module},
     symbol::Symbol,
+    types::Type,
 };
 
 #[derive(Debug)]
@@ -28,20 +29,18 @@ impl Scope {
 #[derive(Debug)]
 pub struct SymbolResolver {
     pub krate: Crate,
-    file: Rc<String>,
     current_module: Option<Rc<RefCell<Module>>>,
     current_scope: Option<Rc<RefCell<Scope>>>,
 }
 impl SymbolResolver {
-    pub fn new(krate: Crate, file: Rc<String>) -> Self {
+    pub fn new(krate: Crate) -> Self {
         Self {
             krate,
-            file,
             current_module: None,
             current_scope: None,
         }
     }
-    pub fn resolve(&mut self, program: Program, module_name: String) -> Result<()> {
+    pub fn resolve(&mut self, program: &Program, module_name: String) -> Result<()> {
         let module = Rc::new(RefCell::new(Module::new(
             module_name,
             ModuleId {
@@ -52,14 +51,16 @@ impl SymbolResolver {
             .modules
             .insert(module.borrow().id, module.clone());
         self.current_module = Some(module.clone());
-        for stmt in program.statements {
-            self.resolve_statement(stmt)?;
+        for stmt in &program.statements {
+            self.resolve_statement(stmt.clone())?;
         }
         Ok(())
     }
-    fn resolve_statement(&mut self, stmt: Rc<Statement>) -> Result<()> {
-        match &*stmt {
-            Statement::FunctionDecl { body, .. } => {
+    fn resolve_statement(&mut self, stmt: Rc<RefCell<Statement>>) -> Result<()> {
+        match &*stmt.borrow() {
+            Statement::FunctionDecl {
+                return_type, body, ..
+            } => {
                 let module = self.current_module.clone().unwrap();
                 let id = SymbolId {
                     id: module.borrow().symbol_count,
@@ -72,6 +73,9 @@ impl SymbolResolver {
                 self.enter(id, symbol)?;
                 self.enter_scope();
                 // TODO: enter parameters
+                if let Some(return_type) = return_type {
+                    self.resolve_expression(return_type.clone())?;
+                }
                 self.resolve_expression(body.clone())?;
                 self.leave_scope();
             }
@@ -81,14 +85,19 @@ impl SymbolResolver {
         }
         Ok(())
     }
-    fn resolve_expression(&mut self, expr: Rc<Expression>) -> Result<()> {
-        match &*expr {
+    fn resolve_expression(&mut self, expr: Rc<RefCell<Expression>>) -> Result<()> {
+        match &mut *expr.borrow_mut() {
             Expression::Block { statements } => {
                 self.enter_scope();
                 for stmt in statements {
                     self.resolve_statement(stmt.clone())?;
                 }
                 self.leave_scope();
+            }
+            Expression::Type { name, ty, .. } => {
+                if name.value == "Int32" {
+                    *ty = Some(Type::Int32);
+                }
             }
             _ => {}
         }
