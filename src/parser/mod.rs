@@ -49,10 +49,20 @@ impl Parser {
         Ok(program)
     }
     fn parse_statement(&mut self) -> Result<Statement> {
-        match self.peek().ty {
+        let token = self.peek();
+        match token.ty {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(),
+            },
+            TokenType::Separator { separator } => match separator {
+                SeparatorType::SemiColon => {
+                    self.index += 1;
+                    Ok(Statement::EmptyStatement {
+                        token: Box::new(token),
+                    })
+                }
+                _ => todo!(),
             },
             _ => Ok(Statement::ExpressionStatement {
                 expression: Rc::new(RefCell::new(self.parse_expression()?)),

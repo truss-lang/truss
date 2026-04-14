@@ -23,4 +23,7 @@ pub enum Statement {
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,
     },
+    EmptyStatement {
+        token: Box<Token>,
+    },
 }

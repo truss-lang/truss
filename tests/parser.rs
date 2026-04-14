@@ -56,6 +56,7 @@ fn test_parse_function_call() {
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
+    println!("{:?}", program.statements);
     assert!(
         if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
             && let Expression::Block { statements } = &*body.borrow()
