@@ -7,7 +7,6 @@ use truss::{
     lexer::{CharStream, Lexer},
     parser::Parser,
     symbol_resolver::SymbolResolver,
-    types::Type,
 };
 
 #[test]
@@ -20,12 +19,15 @@ fn test_variable_resolver() {
     let program = parser.parse().unwrap();
     let mut resolver = SymbolResolver::new(Crate::new("test".to_string(), CrateId { id: 0 }));
     resolver.resolve(&program, "test".to_string()).unwrap();
-    println!("{:?}", program.statements[0].borrow());
-    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let Expression::Block { statements, .. } = &*body.borrow()
-        && let Statement::ExpressionStatement { expression } = &*statements[1].borrow()
-        && let Expression::Variable { symbol, .. } = &*expression.borrow()
-    {
-        assert_ne!(*symbol, None);
-    }
+    assert!(
+        if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+            && let Expression::Block { statements, .. } = &*body.borrow()
+            && let Statement::ExpressionStatement { expression } = &*statements[1].borrow()
+            && let Expression::Variable { symbol, .. } = &*expression.borrow()
+        {
+            symbol.is_some()
+        } else {
+            false
+        }
+    );
 }

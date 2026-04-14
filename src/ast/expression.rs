@@ -32,7 +32,13 @@ pub enum Expression {
     },
     Type {
         name: Box<Token>,
-        generic_parameters: Vec<Rc<RefCell<Expression>>>,
+        type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
         ty: Option<Rc<RefCell<Type>>>,
+    },
+    Call {
+        expression: Rc<RefCell<Expression>>,
+        type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
+        parameters: Vec<Rc<RefCell<Expression>>>,
+        symbol: Option<Rc<Symbol>>,
     },
 }

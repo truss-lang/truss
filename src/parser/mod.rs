@@ -53,7 +53,6 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(),
-                _ => todo!(),
             },
             _ => Ok(Statement::ExpressionStatement {
                 expression: Rc::new(RefCell::new(self.parse_expression()?)),
@@ -61,59 +60,82 @@ impl Parser {
         }
     }
     fn parse_expression(&mut self) -> Result<Expression> {
-        let token = self.next();
-        match token.ty {
-            TokenType::IntegerLiteral { .. } => Ok(Expression::IntegerLiteral {
-                token: Box::new(token),
-            }),
-            TokenType::DecimalLiteral { .. } => Ok(Expression::DecimalLiteral {
-                token: Box::new(token),
-            }),
-            TokenType::BooleanLiteral { .. } => Ok(Expression::BooleanLiteral {
-                token: Box::new(token),
-            }),
-            TokenType::NullLiteral => Ok(Expression::NullLiteral {
-                token: Box::new(token),
-            }),
-            TokenType::NullptrLiteral => Ok(Expression::NullptrLiteral {
-                token: Box::new(token),
-            }),
+        self.parse_unary()
+    }
+    fn parse_unary(&mut self) -> Result<Expression> {
+        self.parse_primary()
+    }
+    fn parse_primary(&mut self) -> Result<Expression> {
+        let token = self.peek();
+        let mut expression = match token.ty {
+            TokenType::IntegerLiteral { .. } => {
+                self.index += 1;
+                Ok(Expression::IntegerLiteral {
+                    token: Box::new(token),
+                })
+            }
+            TokenType::DecimalLiteral { .. } => {
+                self.index += 1;
+                Ok(Expression::DecimalLiteral {
+                    token: Box::new(token),
+                })
+            }
+            TokenType::BooleanLiteral { .. } => {
+                self.index += 1;
+                Ok(Expression::BooleanLiteral {
+                    token: Box::new(token),
+                })
+            }
+            TokenType::NullLiteral => {
+                self.index += 1;
+                Ok(Expression::NullLiteral {
+                    token: Box::new(token),
+                })
+            }
+            TokenType::NullptrLiteral => {
+                self.index += 1;
+                Ok(Expression::NullptrLiteral {
+                    token: Box::new(token),
+                })
+            }
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenBrace => self.parse_block(),
                 _ => todo!(),
             },
-            TokenType::Identifier => Ok(Expression::Variable {
-                name: Some(Box::new(token)),
-                expression: None,
-                ty: None,
-                symbol: None,
-            }),
+            TokenType::Identifier => {
+                self.index += 1;
+                Ok(Expression::Variable {
+                    name: Some(Box::new(token)),
+                    expression: None,
+                    ty: None,
+                    symbol: None,
+                })
+            }
             _ => todo!(),
+        }?;
+        let mut token = self.peek();
+        loop {
+            match token.ty {
+                TokenType::Separator { separator } => match separator {
+                    SeparatorType::OpenParen => expression = self.parse_call(expression)?,
+                    _ => break,
+                },
+                TokenType::Operator { operator } => match operator {
+                    OperatorType::Less => expression = self.parse_call(expression)?,
+                    _ => break,
+                },
+                _ => break,
+            }
+            token = self.peek();
         }
+        Ok(expression)
     }
     fn parse_type_expression(&mut self) -> Result<Expression> {
         let name = self.next();
-        let mut generic_parameters = Vec::new();
-        if OperatorType::is_operator(&self.peek(), OperatorType::Less) {
-            self.index += 1;
-            while !self.is_empty()
-                && !OperatorType::is_operator(&self.peek(), OperatorType::Greater)
-            {
-                generic_parameters.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
-                let t = self.peek();
-                if SeparatorType::is_separator(&t, SeparatorType::Comma) {
-                    self.index += 1;
-                } else {
-                    break;
-                }
-            }
-            if !OperatorType::is_operator(&self.next(), OperatorType::Greater) {
-                return Err(anyhow!(""));
-            }
-        }
+        let type_parameters = self.parse_type_parameters()?;
         Ok(Expression::Type {
             name: Box::new(name),
-            generic_parameters,
+            type_parameters,
             ty: None,
         })
     }
@@ -180,6 +202,57 @@ impl Parser {
             Ok(Expression::Block { statements })
         } else {
             Err(anyhow!(""))
+        }
+    }
+    fn parse_call(&mut self, expression: Expression) -> Result<Expression> {
+        let type_parameters = self.parse_type_parameters()?;
+        let mut parameters = Vec::new();
+        if !SeparatorType::is_separator(&self.next(), SeparatorType::OpenParen) {
+            return Err(anyhow!(""));
+        }
+        while !self.is_empty()
+            && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseParen)
+        {
+            parameters.push(Rc::new(RefCell::new(self.parse_expression()?)));
+            let t = self.peek();
+            if SeparatorType::is_separator(&t, SeparatorType::Comma) {
+                self.index += 1;
+            } else {
+                break;
+            }
+        }
+        if SeparatorType::is_separator(&self.next(), SeparatorType::CloseParen) {
+            Ok(Expression::Call {
+                expression: Rc::new(RefCell::new(expression)),
+                type_parameters,
+                parameters,
+                symbol: None,
+            })
+        } else {
+            Err(anyhow!(""))
+        }
+    }
+    fn parse_type_parameters(&mut self) -> Result<Option<Vec<Rc<RefCell<Expression>>>>> {
+        if OperatorType::is_operator(&self.peek(), OperatorType::Less) {
+            self.index += 1;
+            let mut type_parameters = Vec::new();
+            while !self.is_empty()
+                && !OperatorType::is_operator(&self.peek(), OperatorType::Greater)
+            {
+                type_parameters.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                let t = self.peek();
+                if SeparatorType::is_separator(&t, SeparatorType::Comma) {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+            if !OperatorType::is_operator(&self.next(), OperatorType::Greater) {
+                return Err(anyhow!(""));
+            }
+            Ok(Some(type_parameters))
+        } else {
+            Ok(None)
         }
     }
 }
