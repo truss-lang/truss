@@ -83,9 +83,10 @@ impl Parser {
                 _ => todo!(),
             },
             TokenType::Identifier => Ok(Expression::Variable {
-                name: Box::new(token),
+                name: Some(Box::new(token)),
                 expression: None,
                 ty: None,
+                symbol: None,
             }),
             _ => todo!(),
         }

@@ -11,18 +11,21 @@ use truss::{
 };
 
 #[test]
-fn test_int32_type_resolver() {
+fn test_variable_resolver() {
     let mut lexer = Lexer::new(CharStream::new(
-        "func test() -> Int32 { 1 }".to_string(),
+        "func test() { let a = 1 a }".to_string(),
         Rc::new("".to_string()),
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
     let mut resolver = SymbolResolver::new(Crate::new("test".to_string(), CrateId { id: 0 }));
     resolver.resolve(&program, "test".to_string()).unwrap();
-    if let Statement::FunctionDecl { return_type, .. } = &*program.statements[0].borrow()
-        && let Expression::Type { ty, .. } = &*return_type.clone().unwrap().borrow()
+    println!("{:?}", program.statements[0].borrow());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let Expression::Block { statements, .. } = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[1].borrow()
+        && let Expression::Variable { symbol, .. } = &*expression.borrow()
     {
-        assert_eq!(*ty.clone().unwrap().borrow(), Type::Int32);
+        assert_ne!(*symbol, None);
     }
 }

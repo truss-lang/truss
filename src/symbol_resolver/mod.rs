@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use anyhow::Result;
+use anyhow::{Ok, Result, anyhow};
 
 use crate::{
     ast::{expression::Expression, node::Program, statement::Statement},
@@ -59,7 +59,10 @@ impl SymbolResolver {
     fn resolve_statement(&mut self, stmt: Rc<RefCell<Statement>>) -> Result<()> {
         match &*stmt.borrow() {
             Statement::FunctionDecl {
-                return_type, body, ..
+                name,
+                return_type,
+                body,
+                ..
             } => {
                 let module = self.current_module.clone().unwrap();
                 let id = SymbolId {
@@ -67,6 +70,7 @@ impl SymbolResolver {
                 };
                 module.borrow_mut().symbol_count += 1;
                 let symbol = Rc::new(Symbol::Function {
+                    name: name.value.clone(),
                     id,
                     decl: stmt.clone(),
                 });
@@ -79,10 +83,27 @@ impl SymbolResolver {
                 self.resolve_expression(body.clone())?;
                 self.leave_scope();
             }
+            Statement::VariableDecl {
+                name, initializer, ..
+            } => {
+                let module = self.current_module.clone().unwrap();
+                let id = SymbolId {
+                    id: module.borrow().symbol_count,
+                };
+                module.borrow_mut().symbol_count += 1;
+                let symbol = Rc::new(Symbol::Variable {
+                    name: name.value.clone(),
+                    id,
+                    decl: stmt.clone(),
+                });
+                self.enter(id, symbol)?;
+                if let Some(initializer) = initializer {
+                    self.resolve_expression(initializer.clone())?;
+                }
+            }
             Statement::ExpressionStatement { expression } => {
                 self.resolve_expression(expression.clone())?
             }
-            _ => todo!(),
         }
         Ok(())
     }
@@ -95,9 +116,14 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Expression::Type { name, ty, .. } => {
-                if name.value == "Int32" {
-                    *ty = Some(Rc::new(RefCell::new(Type::Int32)));
+            Expression::Variable {
+                name,
+                expression,
+                symbol,
+                ..
+            } => {
+                if let Some(name) = name {
+                    *symbol = Some(self.resolve_symbol(name.value.clone())?);
                 }
             }
             _ => {}
@@ -117,6 +143,34 @@ impl SymbolResolver {
                 .insert(symbol.name()?, symbol);
         }
         Ok(())
+    }
+    fn resolve_symbol(&mut self, name: String) -> Result<Rc<Symbol>> {
+        if let Some(current_scope) = self.current_scope.clone()
+            && let Some(symbol) = self.resolve_symbol_in_scope(name.clone(), current_scope)?
+        {
+            Ok(symbol)
+        } else {
+            let module = self.current_module.clone().unwrap();
+            module
+                .borrow()
+                .name_table
+                .get(&name)
+                .cloned()
+                .ok_or(anyhow!("symbol not found"))
+        }
+    }
+    fn resolve_symbol_in_scope(
+        &mut self,
+        name: String,
+        scope: Rc<RefCell<Scope>>,
+    ) -> Result<Option<Rc<Symbol>>> {
+        if let Some(symbol) = scope.borrow().name_table.get(&name).cloned() {
+            Ok(Some(symbol))
+        } else if let Some(parent) = scope.borrow().parent.clone() {
+            self.resolve_symbol_in_scope(name, parent)
+        } else {
+            Ok(None)
+        }
     }
     fn enter_scope(&mut self) {
         let scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));

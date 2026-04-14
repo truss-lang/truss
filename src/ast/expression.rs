@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{lexer::token::Token, types::Type};
+use crate::{lexer::token::Token, symbol::Symbol, types::Type};
 
 use super::statement::Statement;
 
@@ -25,9 +25,10 @@ pub enum Expression {
         token: Box<Token>,
     },
     Variable {
-        name: Box<Token>,
+        name: Option<Box<Token>>,
         expression: Option<Rc<RefCell<Expression>>>,
         ty: Option<Rc<RefCell<Type>>>,
+        symbol: Option<Rc<Symbol>>,
     },
     Type {
         name: Box<Token>,
