@@ -97,7 +97,7 @@ impl SymbolResolver {
             }
             Expression::Type { name, ty, .. } => {
                 if name.value == "Int32" {
-                    *ty = Some(Type::Int32);
+                    *ty = Some(Rc::new(RefCell::new(Type::Int32)));
                 }
             }
             _ => {}

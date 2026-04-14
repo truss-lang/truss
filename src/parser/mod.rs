@@ -63,15 +63,30 @@ impl Parser {
     fn parse_expression(&mut self) -> Result<Expression> {
         let token = self.next();
         match token.ty {
-            TokenType::IntegerLiteral { .. } => Ok(Expression::IntegerLiteral { token }),
-            TokenType::DecimalLiteral { .. } => Ok(Expression::DecimalLiteral { token }),
-            TokenType::BooleanLiteral { .. } => Ok(Expression::BooleanLiteral { token }),
-            TokenType::NullLiteral => Ok(Expression::NullLiteral { token }),
-            TokenType::NullptrLiteral => Ok(Expression::NullptrLiteral { token }),
+            TokenType::IntegerLiteral { .. } => Ok(Expression::IntegerLiteral {
+                token: Box::new(token),
+            }),
+            TokenType::DecimalLiteral { .. } => Ok(Expression::DecimalLiteral {
+                token: Box::new(token),
+            }),
+            TokenType::BooleanLiteral { .. } => Ok(Expression::BooleanLiteral {
+                token: Box::new(token),
+            }),
+            TokenType::NullLiteral => Ok(Expression::NullLiteral {
+                token: Box::new(token),
+            }),
+            TokenType::NullptrLiteral => Ok(Expression::NullptrLiteral {
+                token: Box::new(token),
+            }),
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenBrace => self.parse_block(),
                 _ => todo!(),
             },
+            TokenType::Identifier => Ok(Expression::Variable {
+                name: Box::new(token),
+                expression: None,
+                ty: None,
+            }),
             _ => todo!(),
         }
     }
@@ -96,7 +111,7 @@ impl Parser {
             }
         }
         Ok(Expression::Type {
-            name,
+            name: Box::new(name),
             generic_parameters,
             ty: None,
         })
@@ -149,6 +164,7 @@ impl Parser {
             name: Box::new(name),
             type_expression: type_expression.map(RefCell::new).map(Rc::new),
             initializer: initializer.map(RefCell::new).map(Rc::new),
+            ty: None,
         })
     }
     fn parse_block(&mut self) -> Result<Expression> {

@@ -10,23 +10,28 @@ pub enum Expression {
         statements: Vec<Rc<RefCell<Statement>>>,
     },
     IntegerLiteral {
-        token: Token,
+        token: Box<Token>,
     },
     DecimalLiteral {
-        token: Token,
+        token: Box<Token>,
     },
     BooleanLiteral {
-        token: Token,
+        token: Box<Token>,
     },
     NullLiteral {
-        token: Token,
+        token: Box<Token>,
     },
     NullptrLiteral {
-        token: Token,
+        token: Box<Token>,
+    },
+    Variable {
+        name: Box<Token>,
+        expression: Option<Rc<RefCell<Expression>>>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     Type {
-        name: Token,
+        name: Box<Token>,
         generic_parameters: Vec<Rc<RefCell<Expression>>>,
-        ty: Option<Type>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
 }

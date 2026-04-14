@@ -24,7 +24,7 @@ fn test_parse_function_decl() {
 #[test]
 fn test_parse_variable_decl() {
     let mut lexer = Lexer::new(CharStream::new(
-        "func test() -> Int32 { let a = 1 1 }".to_string(),
+        "func test() -> Int32 { let a = 1 a }".to_string(),
         Rc::new("".to_string()),
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());

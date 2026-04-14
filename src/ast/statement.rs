@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{expression::Expression, node::GenericParameter};
-use crate::lexer::token::Token;
+use crate::{lexer::token::Token, types::Type};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
@@ -18,6 +18,7 @@ pub enum Statement {
         name: Box<Token>,
         type_expression: Option<Rc<RefCell<Expression>>>,
         initializer: Option<Rc<RefCell<Expression>>>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,

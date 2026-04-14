@@ -23,6 +23,6 @@ fn test_int32_type_resolver() {
     if let Statement::FunctionDecl { return_type, .. } = &*program.statements[0].borrow()
         && let Expression::Type { ty, .. } = &*return_type.clone().unwrap().borrow()
     {
-        assert_eq!(ty.clone().unwrap(), Type::Int32);
+        assert_eq!(*ty.clone().unwrap().borrow(), Type::Int32);
     }
 }
