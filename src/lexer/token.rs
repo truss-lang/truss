@@ -29,6 +29,7 @@ pub enum TokenType {
 pub enum KeywordType {
     Func,
     Let,
+    Var,
 }
 
 impl KeywordType {
@@ -36,6 +37,7 @@ impl KeywordType {
         match self {
             KeywordType::Func => "func",
             KeywordType::Let => "let",
+            KeywordType::Var => "var",
         }
         .to_string()
     }

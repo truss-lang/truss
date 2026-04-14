@@ -82,6 +82,7 @@ impl SymbolResolver {
             Statement::ExpressionStatement { expression } => {
                 self.resolve_expression(expression.clone())?
             }
+            _ => todo!(),
         }
         Ok(())
     }

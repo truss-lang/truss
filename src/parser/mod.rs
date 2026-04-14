@@ -52,6 +52,7 @@ impl Parser {
         match self.peek().ty {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
+                KeywordType::Let | KeywordType::Var => self.parse_variable_decl(),
                 _ => todo!(),
             },
             _ => Ok(Statement::ExpressionStatement {
@@ -126,6 +127,28 @@ impl Parser {
             parameters: vec![],
             return_type: return_type.map(RefCell::new).map(Rc::new),
             body: Rc::new(RefCell::new(body)),
+        })
+    }
+    fn parse_variable_decl(&mut self) -> Result<Statement> {
+        let token = self.next();
+        let name = self.next();
+        let type_expression = if SeparatorType::is_separator(&self.peek(), SeparatorType::Colon) {
+            self.index += 1;
+            Some(self.parse_type_expression()?)
+        } else {
+            None
+        };
+        let initializer = if OperatorType::is_operator(&self.peek(), OperatorType::Assign) {
+            self.index += 1;
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+        Ok(Statement::VariableDecl {
+            token: Box::new(token),
+            name: Box::new(name),
+            type_expression: type_expression.map(RefCell::new).map(Rc::new),
+            initializer: initializer.map(RefCell::new).map(Rc::new),
         })
     }
     fn parse_block(&mut self) -> Result<Expression> {

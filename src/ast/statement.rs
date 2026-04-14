@@ -13,6 +13,12 @@ pub enum Statement {
         return_type: Option<Rc<RefCell<Expression>>>,
         body: Rc<RefCell<Expression>>,
     },
+    VariableDecl {
+        token: Box<Token>,
+        name: Box<Token>,
+        type_expression: Option<Rc<RefCell<Expression>>>,
+        initializer: Option<Rc<RefCell<Expression>>>,
+    },
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,
     },
