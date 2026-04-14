@@ -2,7 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::{Result, anyhow};
 
-use crate::{ast::statement::Statement, id::SymbolId};
+use crate::{
+    ast::statement::{Parameter, Statement},
+    id::SymbolId,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Symbol {
@@ -14,7 +17,8 @@ pub enum Symbol {
     Variable {
         name: String,
         id: SymbolId,
-        decl: Rc<RefCell<Statement>>,
+        decl: Option<Rc<RefCell<Statement>>>,
+        parameter: Option<Rc<RefCell<Parameter>>>,
     },
 }
 
@@ -34,9 +38,15 @@ impl Symbol {
                     Err(anyhow!(""))
                 }
             }
-            Self::Variable { decl, .. } => {
-                if let Statement::VariableDecl { name, .. } = &*decl.borrow() {
+            Self::Variable {
+                decl, parameter, ..
+            } => {
+                if let Some(decl) = decl.clone()
+                    && let Statement::VariableDecl { name, .. } = &*decl.borrow()
+                {
                     Ok(name.value.clone())
+                } else if let Some(parameter) = parameter {
+                    Ok(parameter.borrow().name.value.clone())
                 } else {
                     Err(anyhow!(""))
                 }

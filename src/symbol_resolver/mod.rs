@@ -60,15 +60,12 @@ impl SymbolResolver {
         match &*stmt.borrow() {
             Statement::FunctionDecl {
                 name,
+                parameters,
                 return_type,
                 body,
                 ..
             } => {
-                let module = self.current_module.clone().unwrap();
-                let id = SymbolId {
-                    id: module.borrow().symbol_count,
-                };
-                module.borrow_mut().symbol_count += 1;
+                let id = self.get_symbol_id();
                 let symbol = Rc::new(Symbol::Function {
                     name: name.value.clone(),
                     id,
@@ -76,7 +73,16 @@ impl SymbolResolver {
                 });
                 self.enter(id, symbol)?;
                 self.enter_scope();
-                // TODO: enter parameters
+                for parameter in parameters {
+                    let id = self.get_symbol_id();
+                    let symbol = Rc::new(Symbol::Variable {
+                        name: parameter.borrow().name.value.clone(),
+                        id,
+                        decl: None,
+                        parameter: Some(parameter.clone()),
+                    });
+                    self.enter(id, symbol)?;
+                }
                 if let Some(return_type) = return_type {
                     self.resolve_expression(return_type.clone())?;
                 }
@@ -86,15 +92,12 @@ impl SymbolResolver {
             Statement::VariableDecl {
                 name, initializer, ..
             } => {
-                let module = self.current_module.clone().unwrap();
-                let id = SymbolId {
-                    id: module.borrow().symbol_count,
-                };
-                module.borrow_mut().symbol_count += 1;
+                let id = self.get_symbol_id();
                 let symbol = Rc::new(Symbol::Variable {
                     name: name.value.clone(),
                     id,
-                    decl: stmt.clone(),
+                    decl: Some(stmt.clone()),
+                    parameter: None,
                 });
                 self.enter(id, symbol)?;
                 if let Some(initializer) = initializer {
@@ -172,6 +175,14 @@ impl SymbolResolver {
         } else {
             Ok(None)
         }
+    }
+    fn get_symbol_id(&mut self) -> SymbolId {
+        let module = self.current_module.clone().unwrap();
+        let id = SymbolId {
+            id: module.borrow().symbol_count,
+        };
+        module.borrow_mut().symbol_count += 1;
+        id
     }
     fn enter_scope(&mut self) {
         let scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));

@@ -9,7 +9,7 @@ pub enum Statement {
         token: Box<Token>,
         name: Box<Token>,
         generic_parameters: Vec<GenericParameter>,
-        parameters: Vec<Rc<RefCell<Expression>>>,
+        parameters: Vec<Rc<RefCell<Parameter>>>,
         return_type: Option<Rc<RefCell<Expression>>>,
         body: Rc<RefCell<Expression>>,
     },
@@ -26,4 +26,11 @@ pub enum Statement {
     EmptyStatement {
         token: Box<Token>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Parameter {
+    pub name: Box<Token>,
+    pub type_expression: Option<Rc<RefCell<Expression>>>,
+    pub ty: Option<Rc<RefCell<Type>>>,
 }
