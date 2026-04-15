@@ -110,13 +110,24 @@ impl Parser {
             }
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenBrace => self.parse_block(),
+                SeparatorType::OpenParen => {
+                    self.index += 1;
+                    let t = self.next();
+                    if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+                        Ok(Expression::UnitLiteral {
+                            left: Box::new(token),
+                            right: Box::new(t),
+                        })
+                    } else {
+                        Err(anyhow!(""))
+                    }
+                }
                 _ => todo!(),
             },
             TokenType::Identifier => {
                 self.index += 1;
                 Ok(Expression::Variable {
-                    name: Some(Box::new(token)),
-                    expression: None,
+                    name: Box::new(token),
                     ty: None,
                     symbol: None,
                 })
@@ -214,7 +225,7 @@ impl Parser {
             Err(anyhow!(""))
         }
     }
-    fn parse_call(&mut self, expression: Expression) -> Result<Expression> {
+    fn parse_call(&mut self, callee: Expression) -> Result<Expression> {
         let type_parameters = self.parse_type_parameters()?;
         let mut parameters = Vec::new();
         if !SeparatorType::is_separator(&self.next(), SeparatorType::OpenParen) {
@@ -233,10 +244,9 @@ impl Parser {
         }
         if SeparatorType::is_separator(&self.next(), SeparatorType::CloseParen) {
             Ok(Expression::Call {
-                expression: Rc::new(RefCell::new(expression)),
+                callee: Rc::new(RefCell::new(callee)),
                 type_parameters,
                 parameters,
-                symbol: None,
             })
         } else {
             Err(anyhow!(""))

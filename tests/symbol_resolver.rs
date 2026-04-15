@@ -31,3 +31,26 @@ fn test_variable_resolver() {
         }
     );
 }
+#[test]
+fn test_function_resolver() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test() {} func test2() { test() }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    let mut resolver = SymbolResolver::new(Crate::new("test".to_string(), CrateId { id: 0 }));
+    resolver.resolve(&program, "test".to_string()).unwrap();
+    assert!(
+        if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+            && let Expression::Block { statements, .. } = &*body.borrow()
+            && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+            && let Expression::Call { callee, .. } = &*expression.borrow()
+            && let Expression::Variable { symbol, .. } = &*callee.borrow()
+        {
+            symbol.is_some()
+        } else {
+            false
+        }
+    );
+}

@@ -56,15 +56,14 @@ fn test_parse_function_call() {
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
-    println!("{:?}", program.statements);
     assert!(
         if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
             && let Expression::Block { statements } = &*body.borrow()
             && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
-            && let Expression::Call { expression, .. } = &*expression.borrow()
-            && let Expression::Variable { name, .. } = &*expression.borrow()
+            && let Expression::Call { callee, .. } = &*expression.borrow()
+            && let Expression::Variable { name, .. } = &*callee.borrow()
         {
-            name.clone().unwrap().value == "test"
+            name.value == "test"
         } else {
             false
         }

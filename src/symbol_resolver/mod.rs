@@ -120,14 +120,22 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Expression::Variable {
-                name,
-                expression,
-                symbol,
-                ..
+            Expression::Variable { name, symbol, .. } => {
+                *symbol = Some(self.resolve_symbol(name.value.clone())?);
+            }
+            Expression::Call {
+                callee,
+                type_parameters,
+                parameters,
             } => {
-                if let Some(name) = name {
-                    *symbol = Some(self.resolve_symbol(name.value.clone())?);
+                self.resolve_expression(callee.clone())?;
+                if let Some(type_parameters) = type_parameters {
+                    for type_parameter in type_parameters {
+                        self.resolve_expression(type_parameter.clone())?
+                    }
+                }
+                for parameter in parameters {
+                    self.resolve_expression(parameter.clone())?
                 }
             }
             _ => {}

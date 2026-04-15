@@ -24,9 +24,12 @@ pub enum Expression {
     NullptrLiteral {
         token: Box<Token>,
     },
+    UnitLiteral {
+        left: Box<Token>,
+        right: Box<Token>,
+    },
     Variable {
-        name: Option<Box<Token>>,
-        expression: Option<Rc<RefCell<Expression>>>,
+        name: Box<Token>,
         ty: Option<Rc<RefCell<Type>>>,
         symbol: Option<Rc<Symbol>>,
     },
@@ -36,9 +39,8 @@ pub enum Expression {
         ty: Option<Rc<RefCell<Type>>>,
     },
     Call {
-        expression: Rc<RefCell<Expression>>,
+        callee: Rc<RefCell<Expression>>,
         type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
         parameters: Vec<Rc<RefCell<Expression>>>,
-        symbol: Option<Rc<Symbol>>,
     },
 }
