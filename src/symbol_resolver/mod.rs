@@ -138,6 +138,15 @@ impl SymbolResolver {
                     self.resolve_expression(parameter.clone())?
                 }
             }
+            Expression::Binary { left, right, .. } => {
+                self.resolve_expression(left.clone())?;
+                self.resolve_expression(right.clone())?
+            }
+            Expression::Unary { expression, .. } => self.resolve_expression(expression.clone())?,
+            Expression::Assignment { left, right, .. } => {
+                self.resolve_expression(left.clone())?;
+                self.resolve_expression(right.clone())?
+            }
             _ => {}
         }
         Ok(())
