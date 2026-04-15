@@ -245,18 +245,29 @@ impl Parser {
         } else {
             None
         };
-        if !SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
-            return Err(anyhow!(""));
+        if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+            let body = self.parse_block()?;
+            Ok(Statement::FunctionDecl {
+                token: Box::new(token),
+                name: Box::new(name),
+                generic_parameters: vec![],
+                parameters,
+                return_type: return_type.map(RefCell::new).map(Rc::new),
+                body: Rc::new(RefCell::new(body)),
+            })
+        } else if OperatorType::is_operator(&self.peek(), OperatorType::Assign) {
+            let expression = self.parse_expression()?;
+            Ok(Statement::FunctionDecl {
+                token: Box::new(token),
+                name: Box::new(name),
+                generic_parameters: vec![],
+                parameters,
+                return_type: return_type.map(RefCell::new).map(Rc::new),
+                body: Rc::new(RefCell::new(expression)),
+            })
+        } else {
+            Err(anyhow!(""))
         }
-        let body = self.parse_block()?;
-        Ok(Statement::FunctionDecl {
-            token: Box::new(token),
-            name: Box::new(name),
-            generic_parameters: vec![],
-            parameters,
-            return_type: return_type.map(RefCell::new).map(Rc::new),
-            body: Rc::new(RefCell::new(body)),
-        })
     }
     fn parse_variable_decl(&mut self) -> Result<Statement> {
         let token = self.next();
