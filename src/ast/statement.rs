@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use super::{expression::Expression, node::GenericParameter};
+use super::expression::Expression;
 use crate::{lexer::token::Token, types::Type};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +27,9 @@ pub enum Statement {
         token: Box<Token>,
     },
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenericParameter {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {

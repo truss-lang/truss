@@ -1,9 +1,15 @@
+pub mod precedence;
+
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Ok, Result, anyhow};
 
 use crate::{
-    ast::{expression::Expression, node::Program, statement::Statement},
+    ast::{
+        expression::{Expression, UnaryOperator},
+        node::Program,
+        statement::Statement,
+    },
     lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType},
 };
 
@@ -70,10 +76,53 @@ impl Parser {
         }
     }
     fn parse_expression(&mut self) -> Result<Expression> {
-        self.parse_unary()
+        let left = self.parse_unary()?;
+        Ok(left)
     }
     fn parse_unary(&mut self) -> Result<Expression> {
-        self.parse_primary()
+        if let TokenType::Operator { operator } = self.peek().ty
+            && let OperatorType::Plus | OperatorType::Minus | OperatorType::Inc | OperatorType::Dec =
+                operator
+        {
+            self.index += 1;
+            let expression = self.parse_unary()?;
+            Ok(Expression::Unary {
+                expression: Rc::new(RefCell::new(expression)),
+                operator: UnaryOperator::from_operator(operator)?,
+                is_prefix: true,
+            })
+        } else {
+            let expression = self.parse_primary()?;
+            if let TokenType::Operator { operator } = self.peek().ty {
+                match operator {
+                    OperatorType::Inc | OperatorType::Dec => {
+                        self.index += 1;
+                        Ok(Expression::Unary {
+                            expression: Rc::new(RefCell::new(expression)),
+                            operator: UnaryOperator::from_operator(operator)?,
+                            is_prefix: false,
+                        })
+                    }
+                    OperatorType::Not => {
+                        if let TokenType::Operator { operator } = self.peek2().ty
+                            && let OperatorType::Not = operator
+                        {
+                            self.index += 2;
+                            Ok(Expression::Unary {
+                                expression: Rc::new(RefCell::new(expression)),
+                                operator: UnaryOperator::NotNullAssertation,
+                                is_prefix: false,
+                            })
+                        } else {
+                            Err(anyhow!("Not an operator token"))
+                        }
+                    }
+                    _ => Err(anyhow!("Not an operator token")),
+                }
+            } else {
+                Ok(expression)
+            }
+        }
     }
     fn parse_primary(&mut self) -> Result<Expression> {
         let token = self.peek();

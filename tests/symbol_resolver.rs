@@ -19,17 +19,15 @@ fn test_variable_resolver() {
     let program = parser.parse().unwrap();
     let mut resolver = SymbolResolver::new(Crate::new("test".to_string(), CrateId { id: 0 }));
     resolver.resolve(&program, "test".to_string()).unwrap();
-    assert!(
-        if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-            && let Expression::Block { statements, .. } = &*body.borrow()
-            && let Statement::ExpressionStatement { expression } = &*statements[1].borrow()
-            && let Expression::Variable { symbol, .. } = &*expression.borrow()
-        {
-            symbol.is_some()
-        } else {
-            false
-        }
-    );
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let Expression::Block { statements, .. } = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[1].borrow()
+        && let Expression::Variable { symbol, .. } = &*expression.borrow()
+    {
+        assert_ne!(*symbol, None);
+    } else {
+        panic!();
+    }
 }
 #[test]
 fn test_function_resolver() {
@@ -41,16 +39,14 @@ fn test_function_resolver() {
     let program = parser.parse().unwrap();
     let mut resolver = SymbolResolver::new(Crate::new("test".to_string(), CrateId { id: 0 }));
     resolver.resolve(&program, "test".to_string()).unwrap();
-    assert!(
-        if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
-            && let Expression::Block { statements, .. } = &*body.borrow()
-            && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
-            && let Expression::Call { callee, .. } = &*expression.borrow()
-            && let Expression::Variable { symbol, .. } = &*callee.borrow()
-        {
-            symbol.is_some()
-        } else {
-            false
-        }
-    );
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let Expression::Block { statements, .. } = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Call { callee, .. } = &*expression.borrow()
+        && let Expression::Variable { symbol, .. } = &*callee.borrow()
+    {
+        assert_ne!(*symbol, None);
+    } else {
+        panic!();
+    }
 }

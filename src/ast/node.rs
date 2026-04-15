@@ -16,6 +16,3 @@ impl Program {
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct GenericParameter {}

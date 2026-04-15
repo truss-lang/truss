@@ -1,6 +1,12 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{lexer::token::Token, symbol::Symbol, types::Type};
+use anyhow::{Result, anyhow};
+
+use crate::{
+    lexer::token::{OperatorType, Token},
+    symbol::Symbol,
+    types::Type,
+};
 
 use super::statement::Statement;
 
@@ -43,4 +49,51 @@ pub enum Expression {
         type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
         parameters: Vec<Rc<RefCell<Expression>>>,
     },
+    Binary {
+        left: Rc<RefCell<Expression>>,
+        operator: BinaryOperator,
+        right: Rc<RefCell<Expression>>,
+    },
+    Unary {
+        expression: Rc<RefCell<Expression>>,
+        operator: UnaryOperator,
+        is_prefix: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BinaryOperator {
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+    Modulus,
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    And,
+    Or,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UnaryOperator {
+    Plus,
+    Minus,
+    Inc,
+    Dec,
+    NotNullAssertation,
+}
+impl UnaryOperator {
+    pub fn from_operator(operator: OperatorType) -> Result<UnaryOperator> {
+        match operator {
+            OperatorType::Plus => Ok(UnaryOperator::Plus),
+            OperatorType::Minus => Ok(UnaryOperator::Minus),
+            OperatorType::Inc => Ok(UnaryOperator::Inc),
+            OperatorType::Dec => Ok(UnaryOperator::Dec),
+            _ => Err(anyhow!("Not a unary operator")),
+        }
+    }
 }
