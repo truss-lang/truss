@@ -20,7 +20,7 @@ pub enum Precedence {
 }
 
 impl Precedence {
-    pub fn get_precedence(token: &Token) -> Result<Precedence> {
+    pub fn get_precedence(token: &Token) -> Option<Precedence> {
         match token.ty {
             TokenType::Operator { operator } => match operator {
                 OperatorType::Assign
@@ -32,31 +32,31 @@ impl Precedence {
                 | OperatorType::BitAndAssign
                 | OperatorType::BitOrAssign
                 | OperatorType::LeftShiftAssign
-                | OperatorType::RightShiftAssign => Ok(Precedence::Assignment),
-                OperatorType::Or => Ok(Precedence::Or),
-                OperatorType::And => Ok(Precedence::And),
-                OperatorType::BitOr => Ok(Precedence::BitOr),
-                OperatorType::BitAnd => Ok(Precedence::BitAnd),
-                OperatorType::Equal | OperatorType::NotEqual => Ok(Precedence::Equality),
+                | OperatorType::RightShiftAssign => Some(Precedence::Assignment),
+                OperatorType::Or => Some(Precedence::Or),
+                OperatorType::And => Some(Precedence::And),
+                OperatorType::BitOr => Some(Precedence::BitOr),
+                OperatorType::BitAnd => Some(Precedence::BitAnd),
+                OperatorType::Equal | OperatorType::NotEqual => Some(Precedence::Equality),
                 OperatorType::Less
                 | OperatorType::LessEqual
                 | OperatorType::Greater
-                | OperatorType::GreaterEqual => Ok(Precedence::Relational),
-                OperatorType::LeftShift | OperatorType::RightShift => Ok(Precedence::Shift),
-                OperatorType::Plus | OperatorType::Minus => Ok(Precedence::Additive),
+                | OperatorType::GreaterEqual => Some(Precedence::Relational),
+                OperatorType::LeftShift | OperatorType::RightShift => Some(Precedence::Shift),
+                OperatorType::Plus | OperatorType::Minus => Some(Precedence::Additive),
                 OperatorType::Multiply | OperatorType::Divide | OperatorType::Modulus => {
-                    Ok(Precedence::Multiplicative)
+                    Some(Precedence::Multiplicative)
                 }
-                _ => Err(anyhow!("Not an operator token")),
+                _ => None,
             },
             TokenType::Separator { separator } => {
                 if let SeparatorType::OpenBracket = separator {
-                    Ok(Precedence::Postfix)
+                    Some(Precedence::Postfix)
                 } else {
-                    Err(anyhow!("Not an operator token"))
+                    None
                 }
             }
-            _ => Err(anyhow!("Not an operator token")),
+            _ => None,
         }
     }
 }

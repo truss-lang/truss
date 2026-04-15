@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use truss::{
     ast::{
-        expression::{Expression, UnaryOperator},
+        expression::{BinaryOperator, Expression, UnaryOperator},
         statement::{Parameter, Statement},
     },
     lexer::{CharStream, Lexer},
@@ -104,6 +104,31 @@ fn test_parse_unary() {
             Expression::Unary {
                 operator: UnaryOperator::Dec,
                 is_prefix: false,
+                ..
+            }
+        ));
+    } else {
+        panic!();
+    }
+}
+#[test]
+fn test_parse_binary() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test() {let a = 1 a+1 }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let Expression::Block { statements } = &*body.borrow()
+    {
+        let Statement::ExpressionStatement { expression } = &*statements[1].borrow() else {
+            panic!();
+        };
+        assert!(matches!(
+            *expression.borrow(),
+            Expression::Binary {
+                operator: BinaryOperator::Plus,
                 ..
             }
         ));

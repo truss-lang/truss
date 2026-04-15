@@ -6,11 +6,12 @@ use anyhow::{Ok, Result, anyhow};
 
 use crate::{
     ast::{
-        expression::{Expression, UnaryOperator},
+        expression::{BinaryOperator, Expression, UnaryOperator},
         node::Program,
         statement::{Parameter, Statement},
     },
     lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType},
+    parser::precedence::Precedence,
 };
 
 #[derive(Debug)]
@@ -76,7 +77,30 @@ impl Parser {
         }
     }
     fn parse_expression(&mut self) -> Result<Expression> {
-        let left = self.parse_unary()?;
+        self.parse_binary(Precedence::None)
+    }
+    fn parse_binary(&mut self, precedence: Precedence) -> Result<Expression> {
+        let mut left = self.parse_unary()?;
+        let mut token = self.peek();
+        while !self.is_empty()
+            && let Some(prec) = Precedence::get_precedence(&token)
+            && prec > precedence
+        {
+            self.index += 1;
+            let right = self.parse_binary(prec)?;
+            if let TokenType::Operator { operator } = token.ty {
+                left = Expression::Binary {
+                    left: Rc::new(RefCell::new(left)),
+                    operator: BinaryOperator::from_operator(operator)?,
+                    right: Rc::new(RefCell::new(right)),
+                }
+            } else if let TokenType::Separator { .. } = token.ty {
+                todo!();
+            } else {
+                return Err(anyhow!("Not an operator token"));
+            }
+            token = self.peek();
+        }
         Ok(left)
     }
     fn parse_unary(&mut self) -> Result<Expression> {
@@ -117,7 +141,7 @@ impl Parser {
                             Err(anyhow!("Not an operator token"))
                         }
                     }
-                    _ => Err(anyhow!("Not an operator token")),
+                    _ => Ok(expression),
                 }
             } else {
                 Ok(expression)

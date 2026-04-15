@@ -77,7 +77,6 @@ pub enum BinaryOperator {
     And,
     Or,
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
     Plus,
@@ -85,6 +84,26 @@ pub enum UnaryOperator {
     Inc,
     Dec,
     NotNullAssertation,
+}
+impl BinaryOperator {
+    pub fn from_operator(operator: OperatorType) -> Result<BinaryOperator> {
+        match operator {
+            OperatorType::Plus => Ok(BinaryOperator::Plus),
+            OperatorType::Minus => Ok(BinaryOperator::Minus),
+            OperatorType::Multiply => Ok(BinaryOperator::Multiply),
+            OperatorType::Divide => Ok(BinaryOperator::Divide),
+            OperatorType::Modulus => Ok(BinaryOperator::Modulus),
+            OperatorType::Equal => Ok(BinaryOperator::Equal),
+            OperatorType::NotEqual => Ok(BinaryOperator::NotEqual),
+            OperatorType::Less => Ok(BinaryOperator::Less),
+            OperatorType::LessEqual => Ok(BinaryOperator::LessEqual),
+            OperatorType::Greater => Ok(BinaryOperator::Greater),
+            OperatorType::GreaterEqual => Ok(BinaryOperator::GreaterEqual),
+            OperatorType::And => Ok(BinaryOperator::And),
+            OperatorType::Or => Ok(BinaryOperator::Or),
+            _ => Err(anyhow!("Not a binary operator")),
+        }
+    }
 }
 impl UnaryOperator {
     pub fn from_operator(operator: OperatorType) -> Result<UnaryOperator> {
