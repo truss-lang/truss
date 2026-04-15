@@ -1,10 +1,7 @@
-use anyhow::{Result, anyhow};
-
 use crate::lexer::token::{OperatorType, SeparatorType, Token, TokenType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Precedence {
-    None,
     Assignment,
     Or,
     And,

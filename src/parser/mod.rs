@@ -6,7 +6,7 @@ use anyhow::{Ok, Result, anyhow};
 
 use crate::{
     ast::{
-        expression::{BinaryOperator, Expression, UnaryOperator},
+        expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
         node::Program,
         statement::{Parameter, Statement},
     },
@@ -77,7 +77,21 @@ impl Parser {
         }
     }
     fn parse_expression(&mut self) -> Result<Expression> {
-        self.parse_binary(Precedence::None)
+        let left = self.parse_binary(Precedence::Assignment)?;
+        if !self.is_empty()
+            && let TokenType::Operator { operator } = self.peek().ty
+            && let Some(operator) = AssignmentOperator::from_operator(operator)
+        {
+            self.index += 1;
+            let right = self.parse_expression()?;
+            Ok(Expression::Assignment {
+                left: Rc::new(RefCell::new(left)),
+                operator,
+                right: Rc::new(RefCell::new(right)),
+            })
+        } else {
+            Ok(left)
+        }
     }
     fn parse_binary(&mut self, precedence: Precedence) -> Result<Expression> {
         let mut left = self.parse_unary()?;
@@ -91,7 +105,7 @@ impl Parser {
             if let TokenType::Operator { operator } = token.ty {
                 left = Expression::Binary {
                     left: Rc::new(RefCell::new(left)),
-                    operator: BinaryOperator::from_operator(operator)?,
+                    operator: BinaryOperator::from_operator(operator).unwrap(),
                     right: Rc::new(RefCell::new(right)),
                 }
             } else if let TokenType::Separator { .. } = token.ty {
@@ -112,7 +126,7 @@ impl Parser {
             let expression = self.parse_unary()?;
             Ok(Expression::Unary {
                 expression: Rc::new(RefCell::new(expression)),
-                operator: UnaryOperator::from_operator(operator)?,
+                operator: UnaryOperator::from_operator(operator).unwrap(),
                 is_prefix: true,
             })
         } else {
@@ -123,7 +137,7 @@ impl Parser {
                         self.index += 1;
                         Ok(Expression::Unary {
                             expression: Rc::new(RefCell::new(expression)),
-                            operator: UnaryOperator::from_operator(operator)?,
+                            operator: UnaryOperator::from_operator(operator).unwrap(),
                             is_prefix: false,
                         })
                     }
