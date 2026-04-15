@@ -34,6 +34,6 @@ pub struct GenericParameter {}
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub name: Box<Token>,
-    pub type_expression: Option<Rc<RefCell<Expression>>>,
+    pub type_expression: Rc<RefCell<Expression>>,
     pub ty: Option<Rc<RefCell<Type>>>,
 }

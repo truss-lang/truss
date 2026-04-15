@@ -3,7 +3,7 @@ use std::rc::Rc;
 use truss::{
     ast::{
         expression::{Expression, UnaryOperator},
-        statement::Statement,
+        statement::{Parameter, Statement},
     },
     lexer::{CharStream, Lexer},
     parser::Parser,
@@ -12,7 +12,7 @@ use truss::{
 #[test]
 fn test_parse_function_decl() {
     let mut lexer = Lexer::new(CharStream::new(
-        "func test() -> Int32 { 1 } func test2() {}".to_string(),
+        "func test() -> Int32 { 1 } func test2(a: Int32) { a }".to_string(),
         Rc::new("".to_string()),
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
@@ -22,8 +22,15 @@ fn test_parse_function_decl() {
     } else {
         panic!();
     }
-    if let Statement::FunctionDecl { name, .. } = &*program.statements[1].borrow() {
+    if let Statement::FunctionDecl {
+        name, parameters, ..
+    } = &*program.statements[1].borrow()
+    {
         assert_eq!(name.value, "test2");
+        assert!(matches!(
+            &*parameters[0].borrow(),
+            Parameter { name:name2, .. } if name2.clone().value == "a"
+        ));
     } else {
         panic!();
     }

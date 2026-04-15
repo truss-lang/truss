@@ -8,7 +8,7 @@ use crate::{
     ast::{
         expression::{Expression, UnaryOperator},
         node::Program,
-        statement::Statement,
+        statement::{Parameter, Statement},
     },
     lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType},
 };
@@ -215,6 +215,27 @@ impl Parser {
         if !SeparatorType::is_separator(&self.next(), SeparatorType::OpenParen) {
             return Err(anyhow!(""));
         }
+        let mut parameters = Vec::new();
+        while !self.is_empty()
+            && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseParen)
+        {
+            let name = self.next();
+            if !SeparatorType::is_separator(&self.next(), SeparatorType::Colon) {
+                return Err(anyhow!(""));
+            }
+            let type_expression = self.parse_type_expression()?;
+            parameters.push(Rc::new(RefCell::new(Parameter {
+                name: Box::new(name),
+                type_expression: Rc::new(RefCell::new(type_expression)),
+                ty: None,
+            })));
+            let t = self.peek();
+            if SeparatorType::is_separator(&t, SeparatorType::Comma) {
+                self.index += 1;
+            } else {
+                break;
+            }
+        }
         if !SeparatorType::is_separator(&self.next(), SeparatorType::CloseParen) {
             return Err(anyhow!(""));
         }
@@ -232,7 +253,7 @@ impl Parser {
             token: Box::new(token),
             name: Box::new(name),
             generic_parameters: vec![],
-            parameters: vec![],
+            parameters,
             return_type: return_type.map(RefCell::new).map(Rc::new),
             body: Rc::new(RefCell::new(body)),
         })
