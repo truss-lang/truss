@@ -61,6 +61,7 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(),
+                KeywordType::Loop => self.parse_loop(),
                 KeywordType::While => self.parse_while(),
                 KeywordType::Repeat => self.parse_repeat_while(),
                 _ => Ok(Statement::ExpressionStatement {
@@ -338,6 +339,17 @@ impl Parser {
             initializer: initializer.map(RefCell::new).map(Rc::new),
             ty: None,
         })
+    }
+    fn parse_loop(&mut self) -> Result<Statement> {
+        self.index += 1;
+        if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+            let body = self.parse_block()?;
+            Ok(Statement::Loop {
+                body: Rc::new(RefCell::new(body)),
+            })
+        } else {
+            Err(anyhow!(""))
+        }
     }
     fn parse_while(&mut self) -> Result<Statement> {
         self.index += 1;

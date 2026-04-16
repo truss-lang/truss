@@ -23,6 +23,9 @@ pub enum Statement {
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,
     },
+    Loop {
+        body: Rc<RefCell<Expression>>,
+    },
     While {
         condition: Rc<RefCell<Expression>>,
         body: Rc<RefCell<Expression>>,
