@@ -23,6 +23,9 @@ pub enum Statement {
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,
     },
+    Return {
+        value: Option<Rc<RefCell<Expression>>>,
+    },
     Loop {
         body: Rc<RefCell<Expression>>,
     },

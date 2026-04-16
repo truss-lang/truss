@@ -61,6 +61,7 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(),
+                KeywordType::Return => self.parse_return(),
                 KeywordType::Loop => self.parse_loop(),
                 KeywordType::While => self.parse_while(),
                 KeywordType::Repeat => self.parse_repeat_while(),
@@ -339,6 +340,18 @@ impl Parser {
             type_expression: type_expression.map(RefCell::new).map(Rc::new),
             initializer: initializer.map(RefCell::new).map(Rc::new),
             ty: None,
+        })
+    }
+    fn parse_return(&mut self) -> Result<Statement> {
+        let current_line = self.peek().position.line;
+        self.index += 1;
+        let value = if !self.is_empty() && current_line == self.peek().position.line {
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+        Ok(Statement::Return {
+            value: value.map(RefCell::new).map(Rc::new),
         })
     }
     fn parse_loop(&mut self) -> Result<Statement> {

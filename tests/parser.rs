@@ -162,6 +162,29 @@ fn test_parse_assignment() {
     }
 }
 #[test]
+fn test_parse_return() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test() { return \n return 1 }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let Expression::Block { statements } = &*body.borrow()
+    {
+        assert!(matches!(
+            &*statements[0].borrow(),
+            Statement::Return { value: None }
+        ));
+        assert!(matches!(
+            &*statements[1].borrow(),
+            Statement::Return { value } if value.is_some()
+        ));
+    } else {
+        panic!();
+    }
+}
+#[test]
 fn test_parse_for() {
     let mut lexer = Lexer::new(CharStream::new(
         "func test() { for _ in 1..<3 {} for i in 0..2 {} }".to_string(),

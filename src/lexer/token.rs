@@ -37,33 +37,7 @@ pub enum KeywordType {
     Repeat,
     For,
     In,
-}
-
-impl KeywordType {
-    pub fn code(&self) -> String {
-        match self {
-            KeywordType::Func => "func",
-            KeywordType::Let => "let",
-            KeywordType::Var => "var",
-            KeywordType::If => "if",
-            KeywordType::Else => "else",
-            KeywordType::Loop => "loop",
-            KeywordType::While => "while",
-            KeywordType::Repeat => "repeat",
-            KeywordType::For => "for",
-            KeywordType::In => "in",
-        }
-        .to_string()
-    }
-    pub fn is_keyword(token: &Token, kw: KeywordType) -> bool {
-        if let TokenType::Keyword { keyword } = token.ty
-            && kw == keyword
-        {
-            true
-        } else {
-            false
-        }
-    }
+    Return,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -120,6 +94,34 @@ pub enum OperatorType {
     RangeTo,          // ..
     RangeUntil,       // ..<
     OpenRange,        // ...
+}
+
+impl KeywordType {
+    pub fn code(&self) -> String {
+        match self {
+            KeywordType::Func => "func",
+            KeywordType::Let => "let",
+            KeywordType::Var => "var",
+            KeywordType::If => "if",
+            KeywordType::Else => "else",
+            KeywordType::Loop => "loop",
+            KeywordType::While => "while",
+            KeywordType::Repeat => "repeat",
+            KeywordType::For => "for",
+            KeywordType::In => "in",
+            KeywordType::Return => "return",
+        }
+        .to_string()
+    }
+    pub fn is_keyword(token: &Token, kw: KeywordType) -> bool {
+        if let TokenType::Keyword { keyword } = token.ty
+            && kw == keyword
+        {
+            true
+        } else {
+            false
+        }
+    }
 }
 impl SeparatorType {
     pub fn is_separator(token: &Token, sep: SeparatorType) -> bool {
