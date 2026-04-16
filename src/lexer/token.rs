@@ -79,6 +79,7 @@ pub enum SeparatorType {
     Comma,        // ,
     At,           // @
     Backtick,     // ~
+    DoubleColon,  // ::
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OperatorType {
@@ -114,6 +115,10 @@ pub enum OperatorType {
     LeftShiftAssign,  // <<=
     RightShiftAssign, // >>=
     Arrow,            // ->
+    Dot,              // .
+    RangeTo,          // ..
+    RangeUntil,       // ..<
+    OpenRange,        // ...
 }
 impl SeparatorType {
     pub fn is_separator(token: &Token, sep: SeparatorType) -> bool {

@@ -183,16 +183,29 @@ impl Lexer {
                 self.input.file.clone(),
             ))
         } else if c == ':' {
-            let position = self.input.get_current_position();
+            let begin_pos = self.input.get_current_position();
             self.input.inc_pos();
-            Some(Token::new(
-                ':'.to_string(),
-                TokenType::Separator {
-                    separator: SeparatorType::Colon,
-                },
-                position,
-                self.input.file.clone(),
-            ))
+            if self.input.peek() == ':' {
+                let position = self.get_position_with_begin(begin_pos, None);
+                self.input.inc_pos();
+                Some(Token::new(
+                    "::".to_string(),
+                    TokenType::Separator {
+                        separator: SeparatorType::DoubleColon,
+                    },
+                    position,
+                    self.input.file.clone(),
+                ))
+            } else {
+                Some(Token::new(
+                    ':'.to_string(),
+                    TokenType::Separator {
+                        separator: SeparatorType::Colon,
+                    },
+                    begin_pos,
+                    self.input.file.clone(),
+                ))
+            }
         } else if c == ';' {
             let position = self.input.get_current_position();
             self.input.inc_pos();
@@ -237,6 +250,53 @@ impl Lexer {
                 position,
                 self.input.file.clone(),
             ))
+        } else if c == '.' {
+            let begin_pos = self.input.get_current_position();
+            self.input.inc_pos();
+            if self.input.peek() == '.' {
+                self.input.inc_pos();
+                if self.input.peek() == '.' {
+                    let position = self.get_position_with_begin(begin_pos, None);
+                    self.input.inc_pos();
+                    Some(Token::new(
+                        "...".to_string(),
+                        TokenType::Operator {
+                            operator: OperatorType::OpenRange,
+                        },
+                        position,
+                        self.input.file.clone(),
+                    ))
+                } else if self.input.peek() == '<' {
+                    let position = self.get_position_with_begin(begin_pos, None);
+                    self.input.inc_pos();
+                    Some(Token::new(
+                        "..<".to_string(),
+                        TokenType::Operator {
+                            operator: OperatorType::RangeUntil,
+                        },
+                        position,
+                        self.input.file.clone(),
+                    ))
+                } else {
+                    Some(Token::new(
+                        "..".to_string(),
+                        TokenType::Operator {
+                            operator: OperatorType::RangeTo,
+                        },
+                        self.get_position_with_begin(begin_pos, Some(1)),
+                        self.input.file.clone(),
+                    ))
+                }
+            } else {
+                Some(Token::new(
+                    '.'.to_string(),
+                    TokenType::Operator {
+                        operator: OperatorType::Dot,
+                    },
+                    begin_pos,
+                    self.input.file.clone(),
+                ))
+            }
         } else if c == '+' {
             let begin_pos = self.input.get_current_position();
             self.input.inc_pos();
