@@ -8,7 +8,7 @@ use crate::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
         node::Program,
-        statement::{Parameter, Statement},
+        statement::{Parameter, Pattern, Statement},
     },
     lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType},
     parser::precedence::Precedence,
@@ -64,6 +64,7 @@ impl Parser {
                 KeywordType::Loop => self.parse_loop(),
                 KeywordType::While => self.parse_while(),
                 KeywordType::Repeat => self.parse_repeat_while(),
+                KeywordType::For => self.parse_for(),
                 _ => Ok(Statement::ExpressionStatement {
                     expression: Rc::new(RefCell::new(self.parse_expression()?)),
                 }),
@@ -381,6 +382,24 @@ impl Parser {
             Err(anyhow!(""))
         }
     }
+    fn parse_for(&mut self) -> Result<Statement> {
+        self.index += 1;
+        let pattern = self.parse_pattern()?;
+        if !KeywordType::is_keyword(&self.next(), KeywordType::In) {
+            return Err(anyhow!(""));
+        }
+        let iterator = self.parse_expression()?;
+        if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+            let body = self.parse_block()?;
+            Ok(Statement::For {
+                pattern: Rc::new(pattern),
+                iterator: Rc::new(RefCell::new(iterator)),
+                body: Rc::new(RefCell::new(body)),
+            })
+        } else {
+            Err(anyhow!(""))
+        }
+    }
     fn parse_block(&mut self) -> Result<Expression> {
         self.index += 1;
         let mut statements = Vec::new();
@@ -468,6 +487,32 @@ impl Parser {
             Ok(Some(type_parameters))
         } else {
             Ok(None)
+        }
+    }
+    fn parse_pattern(&mut self) -> Result<Pattern> {
+        let token = self.next();
+        match token.ty {
+            TokenType::Identifier => Ok(Pattern::Identifier(Box::new(token))),
+            TokenType::Separator { separator } => match separator {
+                SeparatorType::OpenParen => {
+                    let mut patterns = Vec::new();
+                    while !self.is_empty()
+                        && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseParen)
+                    {
+                        patterns.push(self.parse_pattern()?);
+                        let t = self.peek();
+                        if SeparatorType::is_separator(&t, SeparatorType::Comma) {
+                            self.index += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Ok(Pattern::Tuple(patterns))
+                }
+                SeparatorType::Underscore => Ok(Pattern::Ignore),
+                _ => Err(anyhow!("")),
+            },
+            _ => Err(anyhow!("")),
         }
     }
 }

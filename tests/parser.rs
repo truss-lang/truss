@@ -3,7 +3,7 @@ use std::rc::Rc;
 use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
-        statement::{Parameter, Statement},
+        statement::{Parameter, Pattern, Statement},
     },
     lexer::{CharStream, Lexer},
     parser::Parser,
@@ -156,6 +156,28 @@ fn test_parse_assignment() {
                 operator: AssignmentOperator::PlusAssign,
                 ..
             }
+        ));
+    } else {
+        panic!();
+    }
+}
+#[test]
+fn test_parse_for() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test() { for _ in 1..<3 {} for i in 0..2 {} }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let Expression::Block { statements } = &*body.borrow()
+    {
+        assert!(matches!(
+            &*statements[0].borrow(),
+            Statement::For {
+                pattern,
+                ..
+            } if Pattern::Ignore == *pattern.clone()
         ));
     } else {
         panic!();

@@ -34,6 +34,11 @@ pub enum Statement {
         body: Rc<RefCell<Expression>>,
         condition: Rc<RefCell<Expression>>,
     },
+    For {
+        pattern: Rc<Pattern>,
+        iterator: Rc<RefCell<Expression>>,
+        body: Rc<RefCell<Expression>>,
+    },
     EmptyStatement {
         token: Box<Token>,
     },
@@ -47,4 +52,11 @@ pub struct Parameter {
     pub name: Box<Token>,
     pub type_expression: Rc<RefCell<Expression>>,
     pub ty: Option<Rc<RefCell<Type>>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Identifier(Box<Token>),
+    Tuple(Vec<Pattern>),
+    Ignore,
 }

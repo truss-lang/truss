@@ -53,6 +53,14 @@ impl CharStream {
         }
     }
     #[inline]
+    pub fn peek2(&self) -> char {
+        if self.pos + 1 < self.chars.len() {
+            self.chars[self.pos + 1]
+        } else {
+            '\0'
+        }
+    }
+    #[inline]
     pub fn inc_pos(&mut self) {
         self.pos += 1;
         self.col += 1;
@@ -235,6 +243,28 @@ impl Lexer {
                 '@'.to_string(),
                 TokenType::Separator {
                     separator: SeparatorType::At,
+                },
+                position,
+                self.input.file.clone(),
+            ))
+        } else if c == '`' {
+            let pos = self.input.get_current_position();
+            self.input.inc_pos();
+            Some(Token::new(
+                '`'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::Backtick,
+                },
+                pos,
+                self.input.file.clone(),
+            ))
+        } else if c == '_' {
+            let position = self.input.get_current_position();
+            self.input.inc_pos();
+            Some(Token::new(
+                '_'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::Underscore,
                 },
                 position,
                 self.input.file.clone(),
@@ -663,17 +693,6 @@ impl Lexer {
                     self.input.file.clone(),
                 ))
             }
-        } else if c == '`' {
-            let pos = self.input.get_current_position();
-            self.input.inc_pos();
-            Some(Token::new(
-                '`'.to_string(),
-                TokenType::Separator {
-                    separator: SeparatorType::Backtick,
-                },
-                pos,
-                self.input.file.clone(),
-            ))
         } else {
             Some(self.parse_identifier())
         }
@@ -885,7 +904,7 @@ impl Lexer {
             }
         }
         c = self.input.peek();
-        if c == '.' {
+        if c == '.' && self.input.peek2() != '.' {
             self.input.inc_pos();
             literal.push(c);
             c = self.input.peek();
