@@ -38,6 +38,7 @@ pub enum KeywordType {
     For,
     In,
     Return,
+    Throw,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -110,6 +111,7 @@ impl KeywordType {
             KeywordType::For => "for",
             KeywordType::In => "in",
             KeywordType::Return => "return",
+            KeywordType::Throw => "throw",
         }
         .to_string()
     }

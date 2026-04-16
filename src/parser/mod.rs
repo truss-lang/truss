@@ -66,6 +66,7 @@ impl Parser {
                 KeywordType::While => self.parse_while(),
                 KeywordType::Repeat => self.parse_repeat_while(),
                 KeywordType::For => self.parse_for(),
+                KeywordType::Throw => self.parse_throw(),
                 _ => Ok(Statement::ExpressionStatement {
                     expression: Rc::new(RefCell::new(self.parse_expression()?)),
                 }),
@@ -412,6 +413,13 @@ impl Parser {
         } else {
             Err(anyhow!(""))
         }
+    }
+    fn parse_throw(&mut self) -> Result<Statement> {
+        self.index += 1;
+        let exception = self.parse_expression()?;
+        Ok(Statement::Throw {
+            exception: Rc::new(RefCell::new(exception)),
+        })
     }
     fn parse_block(&mut self) -> Result<Expression> {
         self.index += 1;

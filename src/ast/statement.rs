@@ -42,6 +42,9 @@ pub enum Statement {
         iterator: Rc<RefCell<Expression>>,
         body: Rc<RefCell<Expression>>,
     },
+    Throw {
+        exception: Rc<RefCell<Expression>>,
+    },
     EmptyStatement {
         token: Box<Token>,
     },
