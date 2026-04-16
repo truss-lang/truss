@@ -61,6 +61,8 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(),
+                KeywordType::While => self.parse_while(),
+                KeywordType::Repeat => self.parse_repeat_while(),
                 _ => Ok(Statement::ExpressionStatement {
                     expression: Rc::new(RefCell::new(self.parse_expression()?)),
                 }),
@@ -336,6 +338,36 @@ impl Parser {
             initializer: initializer.map(RefCell::new).map(Rc::new),
             ty: None,
         })
+    }
+    fn parse_while(&mut self) -> Result<Statement> {
+        self.index += 1;
+        let condition = self.parse_expression()?;
+        if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+            let body = self.parse_block()?;
+            Ok(Statement::While {
+                condition: Rc::new(RefCell::new(condition)),
+                body: Rc::new(RefCell::new(body)),
+            })
+        } else {
+            Err(anyhow!(""))
+        }
+    }
+    fn parse_repeat_while(&mut self) -> Result<Statement> {
+        self.index += 1;
+        if !SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+            return Err(anyhow!(""));
+        }
+        let body = self.parse_block()?;
+        if KeywordType::is_keyword(&self.peek(), KeywordType::While) {
+            self.index += 1;
+            let condition = self.parse_expression()?;
+            Ok(Statement::RepeatWhile {
+                body: Rc::new(RefCell::new(body)),
+                condition: Rc::new(RefCell::new(condition)),
+            })
+        } else {
+            Err(anyhow!(""))
+        }
     }
     fn parse_block(&mut self) -> Result<Expression> {
         self.index += 1;

@@ -23,6 +23,14 @@ pub enum Statement {
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,
     },
+    While {
+        condition: Rc<RefCell<Expression>>,
+        body: Rc<RefCell<Expression>>,
+    },
+    RepeatWhile {
+        body: Rc<RefCell<Expression>>,
+        condition: Rc<RefCell<Expression>>,
+    },
     EmptyStatement {
         token: Box<Token>,
     },

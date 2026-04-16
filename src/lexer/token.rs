@@ -32,6 +32,10 @@ pub enum KeywordType {
     Var,
     If,
     Else,
+    While,
+    Repeat,
+    For,
+    In,
 }
 
 impl KeywordType {
@@ -42,6 +46,10 @@ impl KeywordType {
             KeywordType::Var => "var",
             KeywordType::If => "if",
             KeywordType::Else => "else",
+            KeywordType::While => "while",
+            KeywordType::Repeat => "repeat",
+            KeywordType::For => "for",
+            KeywordType::In => "in",
         }
         .to_string()
     }
