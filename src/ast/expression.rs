@@ -84,6 +84,8 @@ pub enum BinaryOperator {
     GreaterEqual,
     And,
     Or,
+    RangeTo,
+    RangeUntil,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
@@ -92,6 +94,7 @@ pub enum UnaryOperator {
     Inc,
     Dec,
     NotNullAssertation,
+    OpenRange,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssignmentOperator {
@@ -122,6 +125,8 @@ impl BinaryOperator {
             OperatorType::GreaterEqual => Some(BinaryOperator::GreaterEqual),
             OperatorType::And => Some(BinaryOperator::And),
             OperatorType::Or => Some(BinaryOperator::Or),
+            OperatorType::RangeTo => Some(BinaryOperator::RangeTo),
+            OperatorType::RangeUntil => Some(BinaryOperator::RangeUntil),
             _ => None,
         }
     }
@@ -133,6 +138,7 @@ impl UnaryOperator {
             OperatorType::Minus => Some(UnaryOperator::Minus),
             OperatorType::Inc => Some(UnaryOperator::Inc),
             OperatorType::Dec => Some(UnaryOperator::Dec),
+            OperatorType::OpenRange => Some(UnaryOperator::OpenRange),
             _ => None,
         }
     }
