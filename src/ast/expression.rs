@@ -62,6 +62,11 @@ pub enum Expression {
         operator: AssignmentOperator,
         right: Rc<RefCell<Expression>>,
     },
+    If {
+        condition: Rc<RefCell<Expression>>,
+        then: Rc<RefCell<Expression>>,
+        else_: Option<Rc<RefCell<Expression>>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

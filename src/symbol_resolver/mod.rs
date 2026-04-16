@@ -7,7 +7,6 @@ use crate::{
     id::{ModuleId, SymbolId},
     krate::{Crate, Module},
     symbol::Symbol,
-    types::Type,
 };
 
 #[derive(Debug)]

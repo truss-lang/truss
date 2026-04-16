@@ -61,6 +61,9 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(),
+                _ => Ok(Statement::ExpressionStatement {
+                    expression: Rc::new(RefCell::new(self.parse_expression()?)),
+                }),
             },
             TokenType::Separator { separator } => match separator {
                 SeparatorType::SemiColon => {
@@ -195,6 +198,10 @@ impl Parser {
                     token: Box::new(token),
                 })
             }
+            TokenType::Keyword { keyword } => match keyword {
+                KeywordType::If => self.parse_if(),
+                _ => todo!(),
+            },
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenBrace => self.parse_block(),
                 SeparatorType::OpenParen => {
@@ -370,6 +377,31 @@ impl Parser {
         } else {
             Err(anyhow!(""))
         }
+    }
+    fn parse_if(&mut self) -> Result<Expression> {
+        self.index += 1;
+        let condition = self.parse_expression()?;
+        if !SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+            return Err(anyhow!(""));
+        }
+        let then = self.parse_block()?;
+        let else_ = if KeywordType::is_keyword(&self.peek(), KeywordType::Else) {
+            self.index += 1;
+            if KeywordType::is_keyword(&self.peek(), KeywordType::If) {
+                Some(self.parse_if()?)
+            } else if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+                Some(self.parse_block()?)
+            } else {
+                return Err(anyhow!(""));
+            }
+        } else {
+            None
+        };
+        Ok(Expression::If {
+            condition: Rc::new(RefCell::new(condition)),
+            then: Rc::new(RefCell::new(then)),
+            else_: else_.map(RefCell::new).map(Rc::new),
+        })
     }
     fn parse_type_parameters(&mut self) -> Result<Option<Vec<Rc<RefCell<Expression>>>>> {
         if OperatorType::is_operator(&self.peek(), OperatorType::Less) {

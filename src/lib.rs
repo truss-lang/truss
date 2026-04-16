@@ -5,4 +5,5 @@ pub mod lexer;
 pub mod parser;
 pub mod symbol;
 pub mod symbol_resolver;
+pub mod type_resolver;
 pub mod types;

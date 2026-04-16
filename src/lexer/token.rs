@@ -30,6 +30,8 @@ pub enum KeywordType {
     Func,
     Let,
     Var,
+    If,
+    Else,
 }
 
 impl KeywordType {
@@ -38,8 +40,19 @@ impl KeywordType {
             KeywordType::Func => "func",
             KeywordType::Let => "let",
             KeywordType::Var => "var",
+            KeywordType::If => "if",
+            KeywordType::Else => "else",
         }
         .to_string()
+    }
+    pub fn is_keyword(token: &Token, kw: KeywordType) -> bool {
+        if let TokenType::Keyword { keyword } = token.ty
+            && kw == keyword
+        {
+            true
+        } else {
+            false
+        }
     }
 }
 
