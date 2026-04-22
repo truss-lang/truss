@@ -1,13 +1,17 @@
 use std::{cell::RefCell, rc::Rc};
 
 use truss::{
-    ast::{expression::Expression, statement::Statement},
+    ast::{
+        expression::Expression,
+        statement::{FunctionBody, Statement},
+    },
     id::CrateId,
     krate::Crate,
     lexer::{CharStream, Lexer},
     parser::Parser,
     symbol_resolver::SymbolResolver,
     type_resolver::{self, TypeResolver},
+    types::TypeKind,
 };
 
 #[test]
@@ -28,5 +32,13 @@ fn test_variable_resolver() {
         .unwrap();
     let mut type_resolver = TypeResolver::new(krate.clone());
     type_resolver.resolve(&program, module_id).unwrap();
-    println!("{:#?}", program);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().kind, Some(TypeKind::Int32));
+    } else {
+        panic!();
+    }
 }

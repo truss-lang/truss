@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Ok, Result, anyhow};
 
 use crate::{
     ast::{
@@ -33,9 +33,12 @@ impl TypeResolver {
         for stmt in &program.statements {
             self.parse_statement(stmt.clone())?;
         }
+        for stmt in &program.statements {
+            self.resolve_statement(stmt.clone())?;
+        }
         Ok(())
     }
-    pub fn parse_statement(&mut self, statement: Rc<RefCell<Statement>>) -> Result<()> {
+    fn parse_statement(&mut self, statement: Rc<RefCell<Statement>>) -> Result<()> {
         match &mut *statement.borrow_mut() {
             Statement::VariableDecl {
                 name,
@@ -106,7 +109,7 @@ impl TypeResolver {
         }
         Ok(())
     }
-    pub fn parse_expression(&mut self, expression: Rc<RefCell<Expression>>) -> Result<()> {
+    fn parse_expression(&mut self, expression: Rc<RefCell<Expression>>) -> Result<()> {
         match &mut *expression.borrow_mut() {
             Expression::Block { statements } => {
                 for stmt in statements {
@@ -136,6 +139,43 @@ impl TypeResolver {
             }
             _ => {}
         }
+        Ok(())
+    }
+    fn resolve_statement(&mut self, statement: Rc<RefCell<Statement>>) -> Result<()> {
+        match &mut *statement.borrow_mut() {
+            Statement::FunctionDecl { body, .. } => {
+                self.resolve_function_body(body.clone())?;
+            }
+            Statement::VariableDecl { ty: Some(ty), .. } => self.infer_type(ty.clone())?,
+            _ => {}
+        }
+        Ok(())
+    }
+    fn resolve_function_body(&mut self, body: Rc<RefCell<FunctionBody>>) -> Result<()> {
+        match &mut *body.borrow_mut() {
+            FunctionBody::Statements(statements) => {
+                for stmt in statements {
+                    self.resolve_statement(stmt.clone())?;
+                }
+            }
+            FunctionBody::Expression(expression) => self.resolve_expression(expression.clone())?,
+        }
+        Ok(())
+    }
+    fn resolve_expression(&mut self, expression: Rc<RefCell<Expression>>) -> Result<()> {
+        Ok(())
+    }
+    fn infer_type(&mut self, ty: Rc<RefCell<Type>>) -> Result<()> {
+        let mut infered_type_kind: Option<TypeKind> = None;
+        for constraint in &ty.borrow().constraints {
+            match constraint {
+                TypeConstraint::ShouldBeType(ty) => {
+                    infered_type_kind = ty.clone().borrow().kind.clone();
+                }
+                _ => {}
+            }
+        }
+        ty.borrow_mut().kind = infered_type_kind;
         Ok(())
     }
 }
