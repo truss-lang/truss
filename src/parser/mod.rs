@@ -8,7 +8,7 @@ use crate::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
         node::Program,
-        statement::{Parameter, Pattern, Statement},
+        statement::{FunctionBody, Parameter, Pattern, Statement},
     },
     lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType},
     parser::precedence::Precedence,
@@ -178,6 +178,7 @@ impl Parser {
                 self.index += 1;
                 Ok(Expression::IntegerLiteral {
                     token: Box::new(token),
+                    ty: None,
                 })
             }
             TokenType::DecimalLiteral { .. } => {
@@ -297,15 +298,25 @@ impl Parser {
             None
         };
         if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
-            let body = self.parse_block()?;
-            Ok(Statement::FunctionDecl {
-                token: Box::new(token),
-                name: Box::new(name),
-                generic_parameters: vec![],
-                parameters,
-                return_type: return_type.map(RefCell::new).map(Rc::new),
-                body: Rc::new(RefCell::new(body)),
-            })
+            self.index += 1;
+            let mut statements = Vec::new();
+            while !self.is_empty()
+                && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseBrace)
+            {
+                statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
+            }
+            if SeparatorType::is_separator(&self.next(), SeparatorType::CloseBrace) {
+                Ok(Statement::FunctionDecl {
+                    token: Box::new(token),
+                    name: Box::new(name),
+                    generic_parameters: vec![],
+                    parameters,
+                    return_type: return_type.map(RefCell::new).map(Rc::new),
+                    body: Rc::new(RefCell::new(FunctionBody::Statements(statements))),
+                })
+            } else {
+                Err(anyhow!(""))
+            }
         } else if OperatorType::is_operator(&self.peek(), OperatorType::Assign) {
             let expression = self.parse_expression()?;
             Ok(Statement::FunctionDecl {
@@ -314,7 +325,9 @@ impl Parser {
                 generic_parameters: vec![],
                 parameters,
                 return_type: return_type.map(RefCell::new).map(Rc::new),
-                body: Rc::new(RefCell::new(expression)),
+                body: Rc::new(RefCell::new(FunctionBody::Expression(Rc::new(
+                    RefCell::new(expression),
+                )))),
             })
         } else {
             Err(anyhow!(""))

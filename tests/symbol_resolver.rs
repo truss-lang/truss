@@ -1,7 +1,10 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use truss::{
-    ast::{expression::Expression, statement::Statement},
+    ast::{
+        expression::Expression,
+        statement::{FunctionBody, Statement},
+    },
     id::CrateId,
     krate::Crate,
     lexer::{CharStream, Lexer},
@@ -17,10 +20,13 @@ fn test_variable_resolver() {
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
-    let mut resolver = SymbolResolver::new(Crate::new("test".to_string(), CrateId { id: 0 }));
+    let mut resolver = SymbolResolver::new(Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    ))));
     resolver.resolve(&program, "test".to_string()).unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let Expression::Block { statements, .. } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[1].borrow()
         && let Expression::Variable { symbol, .. } = &*expression.borrow()
     {
@@ -37,10 +43,13 @@ fn test_function_resolver() {
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
-    let mut resolver = SymbolResolver::new(Crate::new("test".to_string(), CrateId { id: 0 }));
+    let mut resolver = SymbolResolver::new(Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    ))));
     resolver.resolve(&program, "test".to_string()).unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
-        && let Expression::Block { statements, .. } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::Call { callee, .. } = &*expression.borrow()
         && let Expression::Variable { symbol, .. } = &*callee.borrow()

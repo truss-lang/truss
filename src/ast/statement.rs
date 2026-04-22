@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
+use anyhow::{Result, anyhow};
+
 use super::expression::Expression;
 use crate::{lexer::token::Token, types::Type};
 
@@ -11,7 +13,7 @@ pub enum Statement {
         generic_parameters: Vec<GenericParameter>,
         parameters: Vec<Rc<RefCell<Parameter>>>,
         return_type: Option<Rc<RefCell<Expression>>>,
-        body: Rc<RefCell<Expression>>,
+        body: Rc<RefCell<FunctionBody>>,
     },
     VariableDecl {
         token: Box<Token>,
@@ -48,6 +50,27 @@ pub enum Statement {
     EmptyStatement {
         token: Box<Token>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FunctionBody {
+    Statements(Vec<Rc<RefCell<Statement>>>),
+    Expression(Rc<RefCell<Expression>>),
+}
+
+impl Statement {
+    pub fn get_ty(&self) -> Result<Option<Rc<RefCell<Type>>>> {
+        match self {
+            Self::VariableDecl { ty, .. } => Ok(ty.clone()),
+            _ => Err(anyhow!("")),
+        }
+    }
+    pub fn get_ty_ref(&self) -> Result<&Option<Rc<RefCell<Type>>>> {
+        match self {
+            Self::VariableDecl { ty, .. } => Ok(ty),
+            _ => Err(anyhow!("")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

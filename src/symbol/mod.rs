@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Ok, Result, anyhow};
 
 use crate::{
     ast::statement::{Parameter, Statement},
@@ -12,7 +12,7 @@ pub enum Symbol {
     Function {
         name: String,
         id: SymbolId,
-        decl: Rc<RefCell<Statement>>,
+        decl: Option<Rc<RefCell<Statement>>>,
     },
     Variable {
         name: String,
@@ -32,7 +32,9 @@ impl Symbol {
     pub fn name(&self) -> Result<String> {
         match self {
             Self::Function { decl, .. } => {
-                if let Statement::FunctionDecl { name, .. } = &*decl.borrow() {
+                if let Some(decl) = decl.clone()
+                    && let Statement::FunctionDecl { name, .. } = &*decl.borrow()
+                {
                     Ok(name.value.clone())
                 } else {
                     Err(anyhow!(""))
@@ -51,6 +53,12 @@ impl Symbol {
                     Err(anyhow!(""))
                 }
             }
+        }
+    }
+    pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
+        match self {
+            Self::Function { decl, .. } => Ok(decl.clone()),
+            Self::Variable { decl, .. } => Ok(decl.clone()),
         }
     }
 }

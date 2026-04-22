@@ -3,7 +3,11 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use anyhow::{Ok, Result, anyhow};
 
 use crate::{
-    ast::{expression::Expression, node::Program, statement::Statement},
+    ast::{
+        expression::Expression,
+        node::Program,
+        statement::{FunctionBody, Statement},
+    },
     id::{ModuleId, SymbolId},
     krate::{Crate, Module},
     symbol::Symbol,
@@ -27,33 +31,33 @@ impl Scope {
 
 #[derive(Debug)]
 pub struct SymbolResolver {
-    pub krate: Crate,
+    pub krate: Rc<RefCell<Crate>>,
     current_module: Option<Rc<RefCell<Module>>>,
     current_scope: Option<Rc<RefCell<Scope>>>,
 }
 impl SymbolResolver {
-    pub fn new(krate: Crate) -> Self {
+    pub fn new(krate: Rc<RefCell<Crate>>) -> Self {
         Self {
             krate,
             current_module: None,
             current_scope: None,
         }
     }
-    pub fn resolve(&mut self, program: &Program, module_name: String) -> Result<()> {
-        let module = Rc::new(RefCell::new(Module::new(
-            module_name,
-            ModuleId {
-                id: self.krate.modules.len(),
-            },
-        )));
+    pub fn resolve(&mut self, program: &Program, module_name: String) -> Result<ModuleId> {
+        let id = ModuleId {
+            id: self.krate.borrow().modules.len(),
+        };
+        let module = Rc::new(RefCell::new(Module::new(module_name.clone(), id)));
+        self.krate.borrow_mut().modules.insert(id, module.clone());
         self.krate
-            .modules
-            .insert(module.borrow().id, module.clone());
+            .borrow_mut()
+            .name_to_modules
+            .insert(module_name, module.clone());
         self.current_module = Some(module.clone());
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone())?;
         }
-        Ok(())
+        Ok(id)
     }
     fn resolve_statement(&mut self, stmt: Rc<RefCell<Statement>>) -> Result<()> {
         match &*stmt.borrow() {
@@ -68,7 +72,7 @@ impl SymbolResolver {
                 let symbol = Rc::new(Symbol::Function {
                     name: name.value.clone(),
                     id,
-                    decl: stmt.clone(),
+                    decl: Some(stmt.clone()),
                 });
                 self.enter(id, symbol)?;
                 self.enter_scope();
@@ -85,7 +89,7 @@ impl SymbolResolver {
                 if let Some(return_type) = return_type {
                     self.resolve_expression(return_type.clone())?;
                 }
-                self.resolve_expression(body.clone())?;
+                self.resolve_function_body(body.clone())?;
                 self.leave_scope();
             }
             Statement::VariableDecl {
@@ -106,7 +110,19 @@ impl SymbolResolver {
             Statement::ExpressionStatement { expression } => {
                 self.resolve_expression(expression.clone())?
             }
+            Statement::Return { value: Some(value) } => self.resolve_expression(value.clone())?,
             _ => {}
+        }
+        Ok(())
+    }
+    fn resolve_function_body(&mut self, body: Rc<RefCell<FunctionBody>>) -> Result<()> {
+        match &mut *body.borrow_mut() {
+            FunctionBody::Statements(statements) => {
+                for stmt in statements {
+                    self.resolve_statement(stmt.clone())?;
+                }
+            }
+            FunctionBody::Expression(expression) => self.resolve_expression(expression.clone())?,
         }
         Ok(())
     }

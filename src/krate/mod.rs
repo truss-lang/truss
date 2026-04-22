@@ -10,6 +10,7 @@ pub struct Crate {
     pub name: String,
     pub id: CrateId,
     pub modules: HashMap<ModuleId, Rc<RefCell<Module>>>,
+    pub name_to_modules: HashMap<String, Rc<RefCell<Module>>>,
 }
 impl Crate {
     pub fn new(name: String, id: CrateId) -> Self {
@@ -17,6 +18,7 @@ impl Crate {
             name,
             id,
             modules: HashMap::new(),
+            name_to_modules: HashMap::new(),
         }
     }
 }

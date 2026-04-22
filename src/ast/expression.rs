@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
+use anyhow::{Result, anyhow};
+
 use crate::{
     lexer::token::{OperatorType, Token},
     symbol::Symbol,
@@ -15,6 +17,7 @@ pub enum Expression {
     },
     IntegerLiteral {
         token: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     DecimalLiteral {
         token: Box<Token>,
@@ -67,6 +70,33 @@ pub enum Expression {
         then: Rc<RefCell<Expression>>,
         else_: Option<Rc<RefCell<Expression>>>,
     },
+}
+
+impl Expression {
+    pub fn get_ty(&self) -> Result<Option<Rc<RefCell<Type>>>> {
+        match self {
+            Self::IntegerLiteral { ty, .. } => Ok(ty.clone()),
+            Self::Variable { ty, .. } => Ok(ty.clone()),
+            Self::Type { ty, .. } => Ok(ty.clone()),
+            _ => Err(anyhow!("")),
+        }
+    }
+    pub fn get_ty_ref(&self) -> Result<&Option<Rc<RefCell<Type>>>> {
+        match self {
+            Self::IntegerLiteral { ty, .. } => Ok(ty),
+            Self::Variable { ty, .. } => Ok(ty),
+            Self::Type { ty, .. } => Ok(ty),
+            _ => Err(anyhow!("")),
+        }
+    }
+    pub fn get_ty_mut_ref(&mut self) -> Result<&mut Option<Rc<RefCell<Type>>>> {
+        match self {
+            Self::IntegerLiteral { ty, .. } => Ok(ty),
+            Self::Variable { ty, .. } => Ok(ty),
+            Self::Type { ty, .. } => Ok(ty),
+            _ => Err(anyhow!("")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

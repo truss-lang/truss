@@ -3,7 +3,7 @@ use std::rc::Rc;
 use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
-        statement::{Parameter, Pattern, Statement},
+        statement::{FunctionBody, Parameter, Pattern, Statement},
     },
     lexer::{CharStream, Lexer},
     parser::Parser,
@@ -44,7 +44,7 @@ fn test_parse_variable_decl() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let Expression::Block { statements } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { name, .. } = &*statements[0].borrow()
     {
         assert_eq!(name.value, "a");
@@ -61,7 +61,7 @@ fn test_parse_function_call() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
-        && let Expression::Block { statements } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::Call { callee, .. } = &*expression.borrow()
         && let Expression::Variable { name, .. } = &*callee.borrow()
@@ -80,7 +80,7 @@ fn test_parse_unary() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let Expression::Block { statements } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
     {
         let Statement::ExpressionStatement { expression } = &*statements[2].borrow() else {
             panic!();
@@ -120,7 +120,7 @@ fn test_parse_binary() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let Expression::Block { statements } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
     {
         let Statement::ExpressionStatement { expression } = &*statements[1].borrow() else {
             panic!();
@@ -145,7 +145,7 @@ fn test_parse_assignment() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let Expression::Block { statements } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
     {
         let Statement::ExpressionStatement { expression } = &*statements[1].borrow() else {
             panic!();
@@ -170,7 +170,7 @@ fn test_parse_return() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let Expression::Block { statements } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
     {
         assert!(matches!(
             &*statements[0].borrow(),
@@ -193,7 +193,7 @@ fn test_parse_for() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
     let program = parser.parse().unwrap();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let Expression::Block { statements } = &*body.borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
     {
         assert!(matches!(
             &*statements[0].borrow(),
