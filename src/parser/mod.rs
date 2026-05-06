@@ -500,6 +500,19 @@ impl Parser {
             else_: else_.map(RefCell::new).map(Rc::new),
         })
     }
+    fn parse_statements(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>> {
+        let mut statements = Vec::new();
+        while !self.is_empty()
+            && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseBrace)
+        {
+            statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
+        }
+        if SeparatorType::is_separator(&self.next(), SeparatorType::CloseBrace) {
+            Ok(statements)
+        } else {
+            Err(anyhow!(""))
+        }
+    }
     fn parse_type_parameters(&mut self) -> Result<Option<Vec<Rc<RefCell<Expression>>>>> {
         if OperatorType::is_operator(&self.peek(), OperatorType::Less) {
             self.index += 1;
