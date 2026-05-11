@@ -11,7 +11,7 @@ use truss::{
     parser::Parser,
     symbol_resolver::SymbolResolver,
     type_resolver::{self, TypeResolver},
-    types::TypeKind,
+    types::Type,
 };
 
 #[test]
@@ -32,12 +32,26 @@ fn test_variable_resolver() {
         .unwrap();
     let mut type_resolver = TypeResolver::new(krate.clone());
     type_resolver.resolve(&program, module_id).unwrap();
+    println!("{:#?}", program);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
-        && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().kind, Some(TypeKind::Int32));
+        if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+            && let Some(ty) = ty
+        {
+            assert_eq!(ty.borrow().clone(), Type::Int32);
+        } else {
+            panic!();
+        }
+        if let Statement::Return { value, .. } = &*statements[1].borrow()
+            && let Some(value) = value
+            && let Expression::Variable { ty, .. } = &*value.borrow()
+            && let Some(ty) = ty
+        {
+            assert_eq!(ty.borrow().clone(), Type::Int32);
+        } else {
+            panic!();
+        }
     } else {
         panic!();
     }
