@@ -6,5 +6,6 @@ use anyhow::{Ok, Result, anyhow};
 pub enum Type {
     Unit,
     Int32,
+    Bool,
     Function(Rc<RefCell<Type>>, Vec<Rc<RefCell<Type>>>),
 }

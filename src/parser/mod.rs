@@ -104,25 +104,27 @@ impl Parser {
     }
     fn parse_binary(&mut self, precedence: Precedence) -> Result<Expression> {
         let mut left = self.parse_unary()?;
-        let mut token = self.peek();
-        while !self.is_empty()
-            && let Some(prec) = Precedence::get_precedence(&token)
-            && prec > precedence
-        {
-            self.index += 1;
-            let right = self.parse_binary(prec)?;
-            if let TokenType::Operator { operator } = token.ty {
-                left = Expression::Binary {
-                    left: Rc::new(RefCell::new(left)),
-                    operator: BinaryOperator::from_operator(operator).unwrap(),
-                    right: Rc::new(RefCell::new(right)),
+        if !self.is_empty() {
+            let mut token = self.peek();
+            while !self.is_empty()
+                && let Some(prec) = Precedence::get_precedence(&token)
+                && prec > precedence
+            {
+                self.index += 1;
+                let right = self.parse_binary(prec)?;
+                if let TokenType::Operator { operator } = token.ty {
+                    left = Expression::Binary {
+                        left: Rc::new(RefCell::new(left)),
+                        operator: BinaryOperator::from_operator(operator).unwrap(),
+                        right: Rc::new(RefCell::new(right)),
+                    }
+                } else if let TokenType::Separator { .. } = token.ty {
+                    todo!();
+                } else {
+                    return Err(anyhow!("Not an operator token"));
                 }
-            } else if let TokenType::Separator { .. } = token.ty {
-                todo!();
-            } else {
-                return Err(anyhow!("Not an operator token"));
+                token = self.peek();
             }
-            token = self.peek();
         }
         Ok(left)
     }
@@ -140,7 +142,9 @@ impl Parser {
             })
         } else {
             let expression = self.parse_primary()?;
-            if let TokenType::Operator { operator } = self.peek().ty {
+            if !self.is_empty()
+                && let TokenType::Operator { operator } = self.peek().ty
+            {
                 match operator {
                     OperatorType::Inc | OperatorType::Dec => {
                         self.index += 1;
@@ -235,8 +239,8 @@ impl Parser {
             }
             _ => todo!(),
         }?;
-        let mut token = self.peek();
-        loop {
+        while !self.is_empty() {
+            let token = self.peek();
             match token.ty {
                 TokenType::Separator { separator } => match separator {
                     SeparatorType::OpenParen => expression = self.parse_call(expression)?,
@@ -248,7 +252,6 @@ impl Parser {
                 },
                 _ => break,
             }
-            token = self.peek();
         }
         Ok(expression)
     }
@@ -318,6 +321,7 @@ impl Parser {
                 Err(anyhow!(""))
             }
         } else if OperatorType::is_operator(&self.peek(), OperatorType::Assign) {
+            self.index += 1;
             let expression = self.parse_expression()?;
             Ok(Statement::FunctionDecl {
                 token: Box::new(token),

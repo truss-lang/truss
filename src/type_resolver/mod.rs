@@ -4,7 +4,7 @@ use anyhow::{Ok, Result, anyhow};
 
 use crate::{
     ast::{
-        expression::Expression,
+        expression::{BinaryOperator, Expression, UnaryOperator},
         node::Program,
         statement::{FunctionBody, Parameter, Statement},
     },
@@ -18,20 +18,14 @@ struct TypeEnv {
     vars: HashMap<String, Rc<RefCell<Type>>>,
 }
 impl TypeEnv {
-    fn get(&self, name: String) -> Result<Rc<RefCell<Type>>> {
+    fn get(&self, name: &str) -> Result<Rc<RefCell<Type>>> {
         self.vars
-            .get(&name)
+            .get(name)
             .cloned()
-            .ok_or(anyhow!(format!("Not found variable: {}", name)))
+            .ok_or(anyhow!("Not found variable: {}", name))
     }
-    fn set(&mut self, name: String, ty: Rc<RefCell<Type>>) -> Option<Rc<RefCell<Type>>> {
-        self.vars.insert(name.clone(), ty)
-    }
-    fn contains(&self, name: String) -> bool {
-        self.vars.contains_key(&name)
-    }
-    fn remove(&mut self, name: String) -> Result<Rc<RefCell<Type>>> {
-        self.vars.remove(&name).ok_or(anyhow!("Error"))
+    fn set(&mut self, name: String, ty: Rc<RefCell<Type>>) {
+        self.vars.insert(name, ty);
     }
 }
 
@@ -39,7 +33,7 @@ impl TypeEnv {
 pub struct TypeResolver {
     pub krate: Rc<RefCell<Crate>>,
     current_module: Option<Rc<RefCell<Module>>>,
-    current_function: Option<Rc<RefCell<Statement>>>,
+    current_return_type: Option<Rc<RefCell<Type>>>,
     type_env: Option<Rc<RefCell<TypeEnv>>>,
 }
 
@@ -48,10 +42,11 @@ impl TypeResolver {
         Self {
             krate,
             current_module: None,
-            current_function: None,
+            current_return_type: None,
             type_env: None,
         }
     }
+
     pub fn resolve(&mut self, program: &Program, id: ModuleId) -> Result<()> {
         self.current_module = self.krate.borrow().modules.get(&id).cloned();
         for stmt in &program.statements {
@@ -59,6 +54,7 @@ impl TypeResolver {
         }
         Ok(())
     }
+
     fn resolve_statement(&mut self, statement: Rc<RefCell<Statement>>) -> Result<()> {
         match &mut *statement.borrow_mut() {
             Statement::VariableDecl {
@@ -68,59 +64,79 @@ impl TypeResolver {
                 ty,
                 ..
             } => {
-                if let Some(type_expression) = type_expression {
-                    self.resolve_expression(type_expression.clone())?;
-                    *ty = type_expression.borrow().get_ty()?;
-                    self.type_env
-                        .as_ref()
-                        .unwrap()
-                        .borrow_mut()
-                        .set(name.value.clone(), ty.clone().unwrap());
-                } else if let Some(initializer) = initializer {
-                    *ty = Some(self.infer(initializer.clone())?);
-                    self.type_env
-                        .as_ref()
-                        .unwrap()
-                        .borrow_mut()
-                        .set(name.value.clone(), ty.clone().unwrap());
+                let var_type = if let Some(type_expr) = type_expression {
+                    let annotated = self.infer_type(type_expr.clone())?;
+                    if let Some(init) = initializer {
+                        self.check_type(init.clone(), annotated.clone())?;
+                    }
+                    annotated
+                } else if let Some(init) = initializer {
+                    self.infer_type(init.clone())?
                 } else {
-                    return Err(anyhow!(""));
-                }
+                    return Err(anyhow!(
+                        "Variable declaration requires type annotation or initializer"
+                    ));
+                };
+                *ty = Some(var_type.clone());
+                self.type_env
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set(name.value.clone(), var_type);
             }
             Statement::FunctionDecl {
-                name,
-                generic_parameters,
                 parameters,
                 return_type,
                 body,
                 ..
             } => {
                 let last_type_env = self.type_env.clone();
+                let last_return_type = self.current_return_type.clone();
+
                 self.type_env = Some(Rc::new(RefCell::new(TypeEnv::default())));
+
+                let ret_type = if let Some(return_type_expr) = return_type {
+                    self.infer_type(return_type_expr.clone())?
+                } else {
+                    Rc::new(RefCell::new(Type::Unit))
+                };
+                self.current_return_type = Some(ret_type.clone());
+
                 for param in parameters {
                     self.resolve_param(param.clone())?;
-                    self.type_env.as_ref().unwrap().borrow_mut().set(
-                        param.borrow().name.value.clone(),
-                        param.borrow().ty.clone().unwrap(),
-                    );
                 }
+
                 self.resolve_function_body(body.clone())?;
+
                 self.type_env = last_type_env;
+                self.current_return_type = last_return_type;
             }
-            Statement::ExpressionStatement { expression } => {}
             Statement::Return { value: Some(value) } => {
-                self.resolve_expression(value.clone())?;
+                let expected = self
+                    .current_return_type
+                    .clone()
+                    .ok_or(anyhow!("return outside function"))?;
+                self.check_type(value.clone(), expected)?;
+            }
+            Statement::ExpressionStatement { expression } => {
+                self.infer_type(expression.clone())?;
             }
             _ => {}
         }
         Ok(())
     }
+
     fn resolve_param(&mut self, param: Rc<RefCell<Parameter>>) -> Result<()> {
-        let type_expression = param.borrow().type_expression.clone();
-        self.resolve_expression(type_expression.clone())?;
-        param.borrow_mut().ty = type_expression.borrow().get_ty()?;
+        let param_type = self.infer_type(param.borrow().type_expression.clone())?;
+        param.borrow_mut().ty = Some(param_type.clone());
+        self.type_env
+            .as_ref()
+            .unwrap()
+            .borrow_mut()
+            .set(param.borrow().name.value.clone(), param_type);
         Ok(())
     }
+
     fn resolve_function_body(&mut self, body: Rc<RefCell<FunctionBody>>) -> Result<()> {
         match &mut *body.borrow_mut() {
             FunctionBody::Statements(statements) => {
@@ -128,55 +144,259 @@ impl TypeResolver {
                     self.resolve_statement(stmt.clone())?;
                 }
             }
-            FunctionBody::Expression(expression) => self.resolve_expression(expression.clone())?,
+            FunctionBody::Expression(expression) => {
+                let expected = self
+                    .current_return_type
+                    .clone()
+                    .ok_or(anyhow!("expression body outside function"))?;
+                self.check_type(expression.clone(), expected)?;
+            }
         }
         Ok(())
     }
-    fn resolve_expression(&mut self, expression: Rc<RefCell<Expression>>) -> Result<()> {
-        match &mut *expression.borrow_mut() {
-            Expression::Block { statements } => {
-                for stmt in statements {
-                    self.resolve_statement(stmt.clone())?;
-                }
+
+    fn resolve_type_name(&self, name: &str) -> Result<Rc<RefCell<Type>>> {
+        match name {
+            "Int32" => Ok(Rc::new(RefCell::new(Type::Int32))),
+            "Bool" => Ok(Rc::new(RefCell::new(Type::Bool))),
+            "Unit" => Ok(Rc::new(RefCell::new(Type::Unit))),
+            _ => Err(anyhow!("Unknown type: {}", name)),
+        }
+    }
+
+    fn infer_type(&mut self, expression: Rc<RefCell<Expression>>) -> Result<Rc<RefCell<Type>>> {
+        let result = match &mut *expression.borrow_mut() {
+            Expression::IntegerLiteral { ty, .. } => {
+                let t = Rc::new(RefCell::new(Type::Int32));
+                *ty = Some(t.clone());
+                t
             }
-            Expression::IntegerLiteral { token, ty } => {
-                *ty = Some(Rc::new(RefCell::new(Type::Int32)));
-            }
+            Expression::BooleanLiteral { .. } => Rc::new(RefCell::new(Type::Bool)),
             Expression::Variable { name, ty, .. } => {
-                *ty = Some(
-                    self.type_env
-                        .as_ref()
-                        .unwrap()
-                        .borrow()
-                        .get(name.value.clone())?,
-                )
+                let t = self
+                    .type_env
+                    .as_ref()
+                    .ok_or(anyhow!("No type environment"))?
+                    .borrow()
+                    .get(&name.value)?;
+                *ty = Some(t.clone());
+                t
             }
             Expression::Type { name, ty, .. } => {
-                if name.value == "Int32" {
-                    *ty = Some(Rc::new(RefCell::new(Type::Int32)));
+                let t = self.resolve_type_name(&name.value)?;
+                *ty = Some(t.clone());
+                t
+            }
+            Expression::Block { statements } => {
+                let mut last_ty = Rc::new(RefCell::new(Type::Unit));
+                for stmt in statements.iter() {
+                    last_ty = self.infer_statement_type(stmt.clone())?;
+                }
+                last_ty
+            }
+            Expression::Binary {
+                left,
+                operator,
+                right,
+                ..
+            } => {
+                let left_ty = self.infer_type(left.clone())?;
+                let right_ty = self.infer_type(right.clone())?;
+                self.check_binary(*operator, left_ty, right_ty)?
+            }
+            Expression::Unary {
+                expression,
+                operator,
+                ..
+            } => {
+                let operand_ty = self.infer_type(expression.clone())?;
+                self.check_unary(*operator, operand_ty)?
+            }
+            Expression::Call {
+                callee,
+                type_parameters: _,
+                parameters,
+                ..
+            } => {
+                let callee_type = self.infer_type(callee.clone())?;
+                match &*callee_type.borrow() {
+                    Type::Function(ret_ty, param_tys) => {
+                        for (i, param) in parameters.iter().enumerate() {
+                            if i < param_tys.len() {
+                                self.check_type(param.clone(), param_tys[i].clone())?;
+                            }
+                        }
+                        ret_ty.clone()
+                    }
+                    _ => return Err(anyhow!("Calling non-function type")),
                 }
             }
-            _ => {}
+            Expression::Assignment {
+                left,
+                operator: _,
+                right,
+                ..
+            } => {
+                let left_ty = self.infer_type(left.clone())?;
+                let right_ty = self.infer_type(right.clone())?;
+                if left_ty.borrow().clone() != right_ty.borrow().clone() {
+                    return Err(anyhow!(
+                        "Type mismatch in assignment: left is {:?}, right is {:?}",
+                        left_ty.borrow().clone(),
+                        right_ty.borrow().clone()
+                    ));
+                }
+                left_ty
+            }
+            Expression::If {
+                condition,
+                then,
+                else_,
+                ..
+            } => {
+                let cond_ty = self.infer_type(condition.clone())?;
+                if *cond_ty.borrow() != Type::Bool {
+                    return Err(anyhow!(
+                        "If condition must be Bool, got {:?}",
+                        cond_ty.borrow()
+                    ));
+                }
+                let then_ty = self.infer_type(then.clone())?;
+                if let Some(else_expr) = else_ {
+                    let else_ty = self.infer_type(else_expr.clone())?;
+                    if then_ty.borrow().clone() != else_ty.borrow().clone() {
+                        return Err(anyhow!(
+                            "If branches have different types: {:?} vs {:?}",
+                            then_ty.borrow().clone(),
+                            else_ty.borrow().clone()
+                        ));
+                    }
+                }
+                then_ty
+            }
+            Expression::UnitLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
+            Expression::NullLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
+            Expression::NullptrLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
+            Expression::DecimalLiteral { .. } => Rc::new(RefCell::new(Type::Int32)),
+        };
+        Ok(result)
+    }
+
+    fn infer_statement_type(
+        &mut self,
+        statement: Rc<RefCell<Statement>>,
+    ) -> Result<Rc<RefCell<Type>>> {
+        match &*statement.borrow() {
+            Statement::ExpressionStatement { expression } => self.infer_type(expression.clone()),
+            Statement::Return { value: Some(value) } => self.infer_type(value.clone()),
+            Statement::VariableDecl { ty, .. } => {
+                Ok(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Unit))))
+            }
+            _ => Ok(Rc::new(RefCell::new(Type::Unit))),
+        }
+    }
+
+    fn check_type(
+        &mut self,
+        expression: Rc<RefCell<Expression>>,
+        expected: Rc<RefCell<Type>>,
+    ) -> Result<()> {
+        let inferred = self.infer_type(expression)?;
+        if inferred.borrow().clone() != expected.borrow().clone() {
+            return Err(anyhow!(
+                "Type mismatch: expected {:?}, got {:?}",
+                expected.borrow().clone(),
+                inferred.borrow().clone()
+            ));
         }
         Ok(())
     }
-    fn infer(&mut self, expression: Rc<RefCell<Expression>>) -> Result<Rc<RefCell<Type>>> {
-        match &mut *expression.borrow_mut() {
-            Expression::IntegerLiteral { token, ty } => {
-                *ty = Some(Rc::new(RefCell::new(Type::Int32)));
-                Ok(ty.clone().unwrap())
+
+    fn check_binary(
+        &self,
+        operator: BinaryOperator,
+        left: Rc<RefCell<Type>>,
+        right: Rc<RefCell<Type>>,
+    ) -> Result<Rc<RefCell<Type>>> {
+        match operator {
+            BinaryOperator::Plus
+            | BinaryOperator::Minus
+            | BinaryOperator::Multiply
+            | BinaryOperator::Divide
+            | BinaryOperator::Modulus => {
+                if *left.borrow() != Type::Int32 {
+                    return Err(anyhow!(
+                        "Arithmetic operator requires Int32 left operand, got {:?}",
+                        left.borrow()
+                    ));
+                }
+                if *right.borrow() != Type::Int32 {
+                    return Err(anyhow!(
+                        "Arithmetic operator requires Int32 right operand, got {:?}",
+                        right.borrow()
+                    ));
+                }
+                Ok(Rc::new(RefCell::new(Type::Int32)))
             }
-            Expression::Variable { name, ty, .. } => {
-                *ty = Some(
-                    self.type_env
-                        .as_ref()
-                        .unwrap()
-                        .borrow()
-                        .get(name.value.clone())?,
-                );
-                Ok(ty.clone().unwrap())
+            BinaryOperator::Equal
+            | BinaryOperator::NotEqual
+            | BinaryOperator::Less
+            | BinaryOperator::LessEqual
+            | BinaryOperator::Greater
+            | BinaryOperator::GreaterEqual => {
+                if *left.borrow() != *right.borrow() {
+                    return Err(anyhow!(
+                        "Comparison operands must have same type: {:?} vs {:?}",
+                        left.borrow().clone(),
+                        right.borrow().clone()
+                    ));
+                }
+                Ok(Rc::new(RefCell::new(Type::Bool)))
             }
-            _ => Ok(Rc::new(RefCell::new(Type::Unit))),
+            BinaryOperator::And | BinaryOperator::Or => {
+                if *left.borrow() != Type::Bool {
+                    return Err(anyhow!(
+                        "Logical operator requires Bool left operand, got {:?}",
+                        left.borrow()
+                    ));
+                }
+                if *right.borrow() != Type::Bool {
+                    return Err(anyhow!(
+                        "Logical operator requires Bool right operand, got {:?}",
+                        right.borrow()
+                    ));
+                }
+                Ok(Rc::new(RefCell::new(Type::Bool)))
+            }
+            _ => Err(anyhow!("Unsupported binary operator")),
+        }
+    }
+
+    fn check_unary(
+        &self,
+        operator: UnaryOperator,
+        operand: Rc<RefCell<Type>>,
+    ) -> Result<Rc<RefCell<Type>>> {
+        match operator {
+            UnaryOperator::Plus | UnaryOperator::Minus => {
+                if *operand.borrow() != Type::Int32 {
+                    return Err(anyhow!(
+                        "Unary arithmetic requires Int32 operand, got {:?}",
+                        operand.borrow()
+                    ));
+                }
+                Ok(Rc::new(RefCell::new(Type::Int32)))
+            }
+            UnaryOperator::Inc | UnaryOperator::Dec => {
+                if *operand.borrow() != Type::Int32 {
+                    return Err(anyhow!(
+                        "Inc/Dec requires Int32 operand, got {:?}",
+                        operand.borrow()
+                    ));
+                }
+                Ok(Rc::new(RefCell::new(Type::Int32)))
+            }
+            _ => Err(anyhow!("Unsupported unary operator")),
         }
     }
 }
