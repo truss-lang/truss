@@ -77,14 +77,17 @@ impl SymbolResolver {
                 self.enter(id, symbol)?;
                 self.enter_scope();
                 for parameter in parameters {
-                    let id = self.get_symbol_id();
-                    let symbol = Rc::new(Symbol::Variable {
-                        name: parameter.borrow().name.value.clone(),
-                        id,
-                        decl: None,
-                        parameter: Some(parameter.clone()),
-                    });
-                    self.enter(id, symbol)?;
+                    let name = parameter.borrow().name.value.clone();
+                    if name != "_" {
+                        let id = self.get_symbol_id();
+                        let symbol = Rc::new(Symbol::Variable {
+                            name,
+                            id,
+                            decl: None,
+                            parameter: Some(parameter.clone()),
+                        });
+                        self.enter(id, symbol)?;
+                    }
                 }
                 if let Some(return_type) = return_type {
                     self.resolve_expression(return_type.clone())?;
@@ -95,14 +98,16 @@ impl SymbolResolver {
             Statement::VariableDecl {
                 name, initializer, ..
             } => {
-                let id = self.get_symbol_id();
-                let symbol = Rc::new(Symbol::Variable {
-                    name: name.value.clone(),
-                    id,
-                    decl: Some(stmt.clone()),
-                    parameter: None,
-                });
-                self.enter(id, symbol)?;
+                if name.value != "_" {
+                    let id = self.get_symbol_id();
+                    let symbol = Rc::new(Symbol::Variable {
+                        name: name.value.clone(),
+                        id,
+                        decl: Some(stmt.clone()),
+                        parameter: None,
+                    });
+                    self.enter(id, symbol)?;
+                }
                 if let Some(initializer) = initializer {
                     self.resolve_expression(initializer.clone())?;
                 }
@@ -150,7 +155,7 @@ impl SymbolResolver {
                     }
                 }
                 for parameter in parameters {
-                    self.resolve_expression(parameter.clone())?
+                    self.resolve_expression(parameter.expression.clone())?
                 }
             }
             Expression::Binary { left, right, .. } => {
@@ -192,7 +197,7 @@ impl SymbolResolver {
                 .name_table
                 .get(&name)
                 .cloned()
-                .ok_or(anyhow!("symbol not found"))
+                .ok_or(anyhow!("symbol not found: {}", name))
         }
     }
     fn resolve_symbol_in_scope(

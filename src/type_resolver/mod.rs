@@ -49,6 +49,7 @@ impl TypeResolver {
 
     pub fn resolve(&mut self, program: &Program, id: ModuleId) -> Result<()> {
         self.current_module = self.krate.borrow().modules.get(&id).cloned();
+        self.type_env = Some(Rc::new(RefCell::new(TypeEnv::default())));
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone())?;
         }
@@ -255,7 +256,7 @@ impl TypeResolver {
                     Type::Function(param_tys, ret_ty) => {
                         for (i, param) in parameters.iter().enumerate() {
                             if i < param_tys.len() {
-                                self.check_type(param.clone(), param_tys[i].clone())?;
+                                self.check_type(param.expression.clone(), param_tys[i].clone())?;
                             }
                         }
                         ret_ty.clone()

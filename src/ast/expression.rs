@@ -11,6 +11,12 @@ use crate::{
 use super::statement::Statement;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct CallParameter {
+    pub label: Option<Box<Token>>,
+    pub expression: Rc<RefCell<Expression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Block {
         statements: Vec<Rc<RefCell<Statement>>>,
@@ -54,7 +60,7 @@ pub enum Expression {
     Call {
         callee: Rc<RefCell<Expression>>,
         type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
-        parameters: Vec<Rc<RefCell<Expression>>>,
+        parameters: Vec<CallParameter>,
     },
     Binary {
         left: Rc<RefCell<Expression>>,

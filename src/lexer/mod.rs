@@ -258,17 +258,51 @@ impl Lexer {
                 pos,
                 self.input.file.clone(),
             ))
-        } else if c == '_' {
+        } else if c == '_' || c.is_alphabetic() {
             let position = self.input.get_current_position();
-            self.input.inc_pos();
-            Some(Token::new(
-                '_'.to_string(),
-                TokenType::Separator {
-                    separator: SeparatorType::Underscore,
-                },
-                position,
-                self.input.file.clone(),
-            ))
+            let mut value = String::new();
+            while !self.is_empty() && (self.input.peek().is_alphanumeric() || self.input.peek() == '_') {
+                value.push(self.input.peek());
+                self.input.inc_pos();
+            }
+            let len = value.len();
+            if value == "true" || value == "false" {
+                let is_true = value == "true";
+                Some(Token::new(
+                    value,
+                    TokenType::BooleanLiteral { value: is_true },
+                    self.get_position_with_begin(position, Some(len)),
+                    self.input.file.clone(),
+                ))
+            } else if value == "null" {
+                Some(Token::new(
+                    value,
+                    TokenType::NullLiteral,
+                    self.get_position_with_begin(position, Some(len)),
+                    self.input.file.clone(),
+                ))
+            } else if value == "nullptr" {
+                Some(Token::new(
+                    value,
+                    TokenType::NullptrLiteral,
+                    self.get_position_with_begin(position, Some(len)),
+                    self.input.file.clone(),
+                ))
+            } else if let Some(keyword) = get_keyword_map().get(&value) {
+                Some(Token::new(
+                    value,
+                    TokenType::Keyword { keyword: *keyword },
+                    self.get_position_with_begin(position, Some(len)),
+                    self.input.file.clone(),
+                ))
+            } else {
+                Some(Token::new(
+                    value,
+                    TokenType::Identifier,
+                    self.get_position_with_begin(position, Some(len)),
+                    self.input.file.clone(),
+                ))
+            }
         } else if c == '?' {
             let position = self.input.get_current_position();
             self.input.inc_pos();

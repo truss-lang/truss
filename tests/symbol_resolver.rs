@@ -35,6 +35,7 @@ fn test_variable_resolver() {
         panic!();
     }
 }
+
 #[test]
 fn test_function_resolver() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -58,4 +59,36 @@ fn test_function_resolver() {
     } else {
         panic!();
     }
+}
+
+#[test]
+fn test_underscore_variable_no_symbol() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test() { let _ = 1 let _ = 2 }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    let mut resolver = SymbolResolver::new(Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    ))));
+    let result = resolver.resolve(&program, "test".to_string());
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_underscore_parameter_no_symbol() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test(_ _: Int32) { }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    let mut resolver = SymbolResolver::new(Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    ))));
+    let result = resolver.resolve(&program, "test".to_string());
+    assert!(result.is_ok());
 }

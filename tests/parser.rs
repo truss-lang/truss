@@ -12,7 +12,7 @@ use truss::{
 #[test]
 fn test_parse_function_decl() {
     let mut lexer = Lexer::new(CharStream::new(
-        "func test() -> Int32 { 1 } func test2(a: Int32) { a }".to_string(),
+        "func test() -> Int32 { 1 } func test2(_ a: Int32) { a }".to_string(),
         Rc::new("".to_string()),
     ));
     let mut parser = Parser::new(lexer.get_file(), lexer.parse());
@@ -35,6 +35,115 @@ fn test_parse_function_decl() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_function_decl_with_label() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test(_ a: Int32) { a }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "_");
+        assert_eq!(parameters[0].borrow().name.value, "a");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_decl_with_custom_label() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test(label1 a: Int32, label2 b: String) { a }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "label1");
+        assert_eq!(parameters[0].borrow().name.value, "a");
+        assert_eq!(parameters[1].borrow().label.as_ref().unwrap().value, "label2");
+        assert_eq!(parameters[1].borrow().name.value, "b");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_decl_with_multiple_underscore_labels() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test(_ v1: Int32, _ v2: String) { v1 }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "_");
+        assert_eq!(parameters[0].borrow().name.value, "v1");
+        assert_eq!(parameters[1].borrow().label.as_ref().unwrap().value, "_");
+        assert_eq!(parameters[1].borrow().name.value, "v2");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_call_with_label() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test(label1 a: Int32) {} func test2() { test(label1: 42) }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Call { parameters, .. } = &*expression.borrow()
+    {
+        assert_eq!(parameters[0].label.as_ref().unwrap().value, "label1");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_call_without_label() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test(_ a: Int32) {} func test2() { test(42) }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Call { parameters, .. } = &*expression.borrow()
+    {
+        assert!(parameters[0].label.is_none());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_underscore_pattern() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test() { for _ in 1..<3 {} }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::For { pattern, .. } = &*statements[0].borrow()
+    {
+        assert!(matches!(*pattern.clone(), Pattern::Ignore));
+    } else {
+        panic!();
+    }
+}
+
 #[test]
 fn test_parse_variable_decl() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -52,6 +161,7 @@ fn test_parse_variable_decl() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_function_call() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -71,6 +181,7 @@ fn test_parse_function_call() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_unary() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -111,6 +222,7 @@ fn test_parse_unary() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_binary() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -136,6 +248,7 @@ fn test_parse_binary() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_assignment() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -161,6 +274,7 @@ fn test_parse_assignment() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_return() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -184,6 +298,7 @@ fn test_parse_return() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_for() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -206,6 +321,7 @@ fn test_parse_for() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_char_literal() {
     let mut lexer = Lexer::new(CharStream::new("'a'".to_string(), Rc::new("".to_string())));
@@ -219,6 +335,7 @@ fn test_parse_char_literal() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_variable_decl_at_eof() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -233,6 +350,7 @@ fn test_parse_variable_decl_at_eof() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_variable_decl_no_type_at_eof() {
     let mut lexer = Lexer::new(CharStream::new(
@@ -247,6 +365,7 @@ fn test_parse_variable_decl_no_type_at_eof() {
         panic!();
     }
 }
+
 #[test]
 fn test_parse_variable_decl_in_function_at_eof() {
     let mut lexer = Lexer::new(CharStream::new(

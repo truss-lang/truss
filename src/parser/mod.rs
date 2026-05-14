@@ -6,7 +6,9 @@ use anyhow::{Ok, Result, anyhow};
 
 use crate::{
     ast::{
-        expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
+        expression::{
+            AssignmentOperator, BinaryOperator, CallParameter, Expression, UnaryOperator,
+        },
         node::Program,
         statement::{FunctionBody, Parameter, Pattern, Statement},
     },
@@ -68,7 +70,9 @@ impl Parser {
         Ok(program)
     }
     fn parse_statement(&mut self) -> Result<Statement> {
-        let Some(token) = self.peek() else { return Err(anyhow!("")) };
+        let Some(token) = self.peek() else {
+            return Err(anyhow!(""));
+        };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
@@ -117,7 +121,9 @@ impl Parser {
     fn parse_binary(&mut self, precedence: Precedence) -> Result<Expression> {
         let mut left = self.parse_unary()?;
         if !self.is_empty() {
-            let Some(token) = self.peek() else { return Err(anyhow!("")) };
+            let Some(token) = self.peek() else {
+                return Err(anyhow!(""));
+            };
             let mut token = token;
             while !self.is_empty()
                 && let Some(prec) = Precedence::get_precedence(&token)
@@ -127,7 +133,7 @@ impl Parser {
                 let right = self.parse_binary(prec)?;
                 if let TokenType::Operator { operator } = token.ty {
                     let Some(op) = BinaryOperator::from_operator(operator) else {
-                        return Err(anyhow!("Invalid binary operator"))
+                        return Err(anyhow!("Invalid binary operator"));
                     };
                     left = Expression::Binary {
                         left: Rc::new(RefCell::new(left)),
@@ -154,7 +160,7 @@ impl Parser {
             self.index += 1;
             let expression = self.parse_unary()?;
             let Some(op) = UnaryOperator::from_operator(operator) else {
-                return Err(anyhow!("Invalid unary operator"))
+                return Err(anyhow!("Invalid unary operator"));
             };
             Ok(Expression::Unary {
                 expression: Rc::new(RefCell::new(expression)),
@@ -170,7 +176,7 @@ impl Parser {
                     OperatorType::Inc | OperatorType::Dec => {
                         self.index += 1;
                         let Some(op) = UnaryOperator::from_operator(operator) else {
-                            return Err(anyhow!("Invalid unary operator"))
+                            return Err(anyhow!("Invalid unary operator"));
                         };
                         Ok(Expression::Unary {
                             expression: Rc::new(RefCell::new(expression)),
@@ -201,7 +207,9 @@ impl Parser {
         }
     }
     fn parse_primary(&mut self) -> Result<Expression> {
-        let Some(token) = self.peek() else { return Err(anyhow!("")) };
+        let Some(token) = self.peek() else {
+            return Err(anyhow!(""));
+        };
         let mut expression = match token.ty {
             TokenType::IntegerLiteral { value } => {
                 self.index += 1;
@@ -251,7 +259,9 @@ impl Parser {
                 SeparatorType::OpenBrace => self.parse_block(),
                 SeparatorType::OpenParen => {
                     self.index += 1;
-                    let Some(t) = self.next() else { return Err(anyhow!("")) };
+                    let Some(t) = self.next() else {
+                        return Err(anyhow!(""));
+                    };
                     if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                         Ok(Expression::UnitLiteral {
                             left: Box::new(token),
@@ -290,7 +300,9 @@ impl Parser {
         Ok(expression)
     }
     fn parse_type_expression(&mut self) -> Result<Expression> {
-        let Some(name) = self.next() else { return Err(anyhow!("")) };
+        let Some(name) = self.next() else {
+            return Err(anyhow!(""));
+        };
         let type_parameters = self.parse_type_parameters()?;
         Ok(Expression::Type {
             name: Box::new(name),
@@ -299,9 +311,15 @@ impl Parser {
         })
     }
     fn parse_function_decl(&mut self) -> Result<Statement> {
-        let Some(token) = self.next() else { return Err(anyhow!("")) };
-        let Some(name) = self.next() else { return Err(anyhow!("")) };
-        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        let Some(_token) = self.next() else {
+            return Err(anyhow!(""));
+        };
+        let Some(name) = self.next() else {
+            return Err(anyhow!(""));
+        };
+        let Some(next) = self.next() else {
+            return Err(anyhow!(""));
+        };
         if !SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
             return Err(anyhow!(""));
         }
@@ -310,14 +328,30 @@ impl Parser {
             if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                 break;
             }
-            let Some(name) = self.next() else { return Err(anyhow!("")) };
-            let Some(colon) = self.next() else { return Err(anyhow!("")) };
+            let Some(label_token) = self.next() else {
+                return Err(anyhow!(""));
+            };
+            if TokenType::Identifier != label_token.ty {
+                return Err(anyhow!("Expected parameter label"));
+            }
+
+            let Some(name_token) = self.next() else {
+                return Err(anyhow!(""));
+            };
+            if TokenType::Identifier != name_token.ty {
+                return Err(anyhow!("Expected parameter name"));
+            }
+
+            let Some(colon) = self.next() else {
+                return Err(anyhow!(""));
+            };
             if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
                 return Err(anyhow!(""));
             }
             let type_expression = self.parse_type_expression()?;
             parameters.push(Rc::new(RefCell::new(Parameter {
-                name: Box::new(name),
+                label: Some(Box::new(label_token)),
+                name: Box::new(name_token),
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
             })));
@@ -328,7 +362,9 @@ impl Parser {
                 break;
             }
         }
-        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        let Some(next) = self.next() else {
+            return Err(anyhow!(""));
+        };
         if !SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
             return Err(anyhow!(""));
         }
@@ -351,7 +387,9 @@ impl Parser {
                 }
                 statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
             }
-            let Some(next) = self.next() else { return Err(anyhow!("")) };
+            let Some(next) = self.next() else {
+                return Err(anyhow!(""));
+            };
             if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
                 Ok(Statement::FunctionDecl {
                     token: Box::new(token),
@@ -386,17 +424,20 @@ impl Parser {
         }
     }
     fn parse_variable_decl(&mut self) -> Result<Statement> {
-        let Some(token) = self.next() else { return Err(anyhow!("")) };
-        let Some(name) = self.next() else { return Err(anyhow!("")) };
-        let type_expression =
-            if let Some(t) = self.peek()
-                && SeparatorType::is_separator(&t, SeparatorType::Colon)
-            {
-                self.index += 1;
-                Some(self.parse_type_expression()?)
-            } else {
-                None
-            };
+        let Some(token) = self.next() else {
+            return Err(anyhow!(""));
+        };
+        let Some(name) = self.next() else {
+            return Err(anyhow!(""));
+        };
+        let type_expression = if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::Colon)
+        {
+            self.index += 1;
+            Some(self.parse_type_expression()?)
+        } else {
+            None
+        };
         let initializer = if let Some(t) = self.peek()
             && OperatorType::is_operator(&t, OperatorType::Assign)
         {
@@ -414,7 +455,9 @@ impl Parser {
         })
     }
     fn parse_return(&mut self) -> Result<Statement> {
-        let Some(token) = self.peek() else { return Err(anyhow!("")) };
+        let Some(token) = self.peek() else {
+            return Err(anyhow!(""));
+        };
         let current_line = token.position.line;
         self.index += 1;
         let value = if let Some(token) = self.peek()
@@ -480,7 +523,9 @@ impl Parser {
     fn parse_for(&mut self) -> Result<Statement> {
         self.index += 1;
         let pattern = self.parse_pattern()?;
-        let Some(in_keyword) = self.next() else { return Err(anyhow!("")) };
+        let Some(in_keyword) = self.next() else {
+            return Err(anyhow!(""));
+        };
         if !KeywordType::is_keyword(&in_keyword, KeywordType::In) {
             return Err(anyhow!(""));
         }
@@ -514,7 +559,9 @@ impl Parser {
             }
             statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
         }
-        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        let Some(next) = self.next() else {
+            return Err(anyhow!(""));
+        };
         if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
             Ok(Expression::Block { statements })
         } else {
@@ -523,7 +570,9 @@ impl Parser {
     }
     fn parse_call(&mut self, callee: Expression) -> Result<Expression> {
         let type_parameters = self.parse_type_parameters()?;
-        let Some(open) = self.next() else { return Err(anyhow!("")) };
+        let Some(open) = self.next() else {
+            return Err(anyhow!(""));
+        };
         if !SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
             return Err(anyhow!(""));
         }
@@ -532,7 +581,21 @@ impl Parser {
             if SeparatorType::is_separator(&token, SeparatorType::CloseParen) {
                 break;
             }
-            parameters.push(Rc::new(RefCell::new(self.parse_expression()?)));
+            let label = if let Some(first) = self.peek()
+                && let TokenType::Identifier = first.ty
+                && let Some(second) = self.peek2()
+                && SeparatorType::is_separator(&second, SeparatorType::Colon)
+            {
+                self.index += 2;
+                Some(Box::new(first))
+            } else {
+                None
+            };
+            let expr = self.parse_expression()?;
+            parameters.push(CallParameter {
+                label,
+                expression: Rc::new(RefCell::new(expr)),
+            });
             let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                 self.index += 1;
@@ -540,7 +603,9 @@ impl Parser {
                 break;
             }
         }
-        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        let Some(next) = self.next() else {
+            return Err(anyhow!(""));
+        };
         if SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
             Ok(Expression::Call {
                 callee: Rc::new(RefCell::new(callee)),
@@ -592,7 +657,9 @@ impl Parser {
             }
             statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
         }
-        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        let Some(next) = self.next() else {
+            return Err(anyhow!(""));
+        };
         if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
             Ok(statements)
         } else {
@@ -617,7 +684,9 @@ impl Parser {
                     break;
                 }
             }
-            let Some(next) = self.next() else { return Err(anyhow!("")) };
+            let Some(next) = self.next() else {
+                return Err(anyhow!(""));
+            };
             if !OperatorType::is_operator(&next, OperatorType::Greater) {
                 return Err(anyhow!(""));
             }
@@ -627,9 +696,17 @@ impl Parser {
         }
     }
     fn parse_pattern(&mut self) -> Result<Pattern> {
-        let Some(token) = self.next() else { return Err(anyhow!("")) };
+        let Some(token) = self.next() else {
+            return Err(anyhow!(""));
+        };
         match token.ty {
-            TokenType::Identifier => Ok(Pattern::Identifier(Box::new(token))),
+            TokenType::Identifier => {
+                if token.value == "_" {
+                    Ok(Pattern::Ignore)
+                } else {
+                    Ok(Pattern::Identifier(Box::new(token)))
+                }
+            }
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenParen => {
                     let mut patterns = Vec::new();
@@ -647,7 +724,6 @@ impl Parser {
                     }
                     Ok(Pattern::Tuple(patterns))
                 }
-                SeparatorType::Underscore => Ok(Pattern::Ignore),
                 _ => Err(anyhow!("")),
             },
             _ => Err(anyhow!("")),
