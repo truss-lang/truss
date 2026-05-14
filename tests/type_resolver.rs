@@ -248,6 +248,35 @@ fn test_type_annotation_mismatch() {
 }
 
 #[test]
+fn test_never_type_annotation() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test()->Never { let a: Never return a }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone());
+    let module_id = symbol_resolver
+        .resolve(&program, "test".to_string())
+        .unwrap();
+    let mut type_resolver = TypeResolver::new(krate.clone());
+    type_resolver.resolve(&program, module_id).unwrap();
+    if let Statement::FunctionDecl { return_type, .. } = &*program.statements[0].borrow()
+        && let Some(return_type) = return_type
+        && let Expression::Type { ty, .. } = &*return_type.borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().clone(), Type::Never);
+    } else {
+        panic!("Function should have Never return type");
+    }
+}
+
+#[test]
 fn test_annotated_param_type() {
     let mut lexer = Lexer::new(CharStream::new(
         "func test(a: Int32)->Int32 { return a }".to_string(),

@@ -828,6 +828,7 @@ impl Lexer {
         let begin_pos = self.input.get_current_position();
         self.input.inc_pos();
         let mut literal = String::new();
+        
         if c == '0' {
             c = self.input.peek();
             if c == 'x' || c == 'X' {
@@ -841,11 +842,10 @@ impl Lexer {
                     }
                     n = self.input.peek();
                 }
+                let value = i128::from_str_radix(&literal, 16).unwrap();
                 return Token::new(
                     format!("0{}{}", c, literal.clone()),
-                    TokenType::IntegerLiteral {
-                        value: u64::from_str_radix(&literal, 16).unwrap(),
-                    },
+                    TokenType::IntegerLiteral { value },
                     self.get_position_with_begin(begin_pos, Some(1)),
                     self.input.file.clone(),
                 );
@@ -860,11 +860,10 @@ impl Lexer {
                     }
                     n = self.input.peek();
                 }
+                let value = i128::from_str_radix(&literal, 2).unwrap();
                 return Token::new(
                     format!("0{}{}", c, literal.clone()),
-                    TokenType::IntegerLiteral {
-                        value: u64::from_str_radix(&literal, 2).unwrap(),
-                    },
+                    TokenType::IntegerLiteral { value },
                     self.get_position_with_begin(begin_pos, Some(1)),
                     self.input.file.clone(),
                 );
@@ -880,11 +879,10 @@ impl Lexer {
                     }
                     n = self.input.peek();
                 }
+                let value = i128::from_str_radix(&literal, 8).unwrap();
                 return Token::new(
                     format!("0{}", literal.clone()),
-                    TokenType::IntegerLiteral {
-                        value: u64::from_str_radix(&literal, 8).unwrap(),
-                    },
+                    TokenType::IntegerLiteral { value },
                     self.get_position_with_begin(begin_pos, Some(1)),
                     self.input.file.clone(),
                 );
@@ -929,11 +927,10 @@ impl Lexer {
                     c = self.input.peek();
                 }
             }
+            let value = literal.parse::<f64>().unwrap();
             Token::new(
                 literal.clone(),
-                TokenType::DecimalLiteral {
-                    value: literal.parse::<f64>().unwrap(),
-                },
+                TokenType::DecimalLiteral { value },
                 self.get_position_with_begin(begin_pos, Some(1)),
                 self.input.file.clone(),
             )
@@ -949,20 +946,18 @@ impl Lexer {
                 }
                 c = self.input.peek();
             }
+            let value = literal.parse::<f64>().unwrap();
             Token::new(
                 literal.clone(),
-                TokenType::DecimalLiteral {
-                    value: literal.parse::<f64>().unwrap(),
-                },
+                TokenType::DecimalLiteral { value },
                 self.get_position_with_begin(begin_pos, Some(1)),
                 self.input.file.clone(),
             )
         } else {
+            let value = literal.parse::<i128>().unwrap();
             Token::new(
                 literal.clone(),
-                TokenType::IntegerLiteral {
-                    value: literal.parse::<u64>().unwrap(),
-                },
+                TokenType::IntegerLiteral { value },
                 self.get_position_with_begin(begin_pos, Some(1)),
                 self.input.file.clone(),
             )

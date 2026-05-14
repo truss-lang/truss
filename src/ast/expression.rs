@@ -17,10 +17,13 @@ pub enum Expression {
     },
     IntegerLiteral {
         token: Box<Token>,
+        value: i128,
         ty: Option<Rc<RefCell<Type>>>,
     },
     DecimalLiteral {
         token: Box<Token>,
+        value: f64,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     BooleanLiteral {
         token: Box<Token>,

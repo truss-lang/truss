@@ -203,17 +203,20 @@ impl Parser {
     fn parse_primary(&mut self) -> Result<Expression> {
         let Some(token) = self.peek() else { return Err(anyhow!("")) };
         let mut expression = match token.ty {
-            TokenType::IntegerLiteral { .. } => {
+            TokenType::IntegerLiteral { value } => {
                 self.index += 1;
                 Ok(Expression::IntegerLiteral {
                     token: Box::new(token),
+                    value,
                     ty: None,
                 })
             }
-            TokenType::DecimalLiteral { .. } => {
+            TokenType::DecimalLiteral { value } => {
                 self.index += 1;
                 Ok(Expression::DecimalLiteral {
                     token: Box::new(token),
+                    value,
+                    ty: None,
                 })
             }
             TokenType::BooleanLiteral { .. } => {

@@ -18,7 +18,7 @@ pub enum TokenType {
     Operator { operator: OperatorType },
     StringLiteral { value: String },
     CharLiteral { value: char },
-    IntegerLiteral { value: u64 },
+    IntegerLiteral { value: i128 },
     DecimalLiteral { value: f64 },
     BooleanLiteral { value: bool },
     NullLiteral,

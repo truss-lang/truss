@@ -64,30 +64,36 @@ impl TypeResolver {
                 ty,
                 ..
             } => {
-                let var_type = if let Some(type_expr) = type_expression {
+                if let Some(type_expr) = type_expression {
                     let annotated = self.infer_type(type_expr.clone())?;
                     if let Some(init) = initializer {
-                        self.check_type(init.clone(), annotated.clone())?;
+                        self.check_type_with_expected(init.clone(), annotated.clone())?;
                     }
-                    annotated
+                    *ty = Some(annotated.clone());
+                    self.type_env
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set(name.value.clone(), annotated);
                 } else if let Some(init) = initializer {
-                    self.infer_type(init.clone())?
+                    let init_ty = self.infer_type(init.clone())?;
+                    *ty = Some(init_ty.clone());
+                    self.type_env
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set(name.value.clone(), init_ty);
                 } else {
                     return Err(anyhow!(
                         "Variable declaration requires type annotation or initializer"
                     ));
                 };
-                *ty = Some(var_type.clone());
-                self.type_env
-                    .as_ref()
-                    .unwrap()
-                    .borrow_mut()
-                    .set(name.value.clone(), var_type);
             }
             Statement::FunctionDecl {
                 parameters,
                 return_type,
                 body,
+                ty,
                 ..
             } => {
                 let last_type_env = self.type_env.clone();
@@ -102,9 +108,15 @@ impl TypeResolver {
                 };
                 self.current_return_type = Some(ret_type.clone());
 
+                let mut parameter_types = Vec::new();
                 for param in parameters {
                     self.resolve_param(param.clone())?;
+                    parameter_types.push(param.borrow().ty.clone().unwrap());
                 }
+                *ty = Some(Rc::new(RefCell::new(Type::Function(
+                    parameter_types,
+                    ret_type,
+                ))));
 
                 self.resolve_function_body(body.clone())?;
 
@@ -116,7 +128,7 @@ impl TypeResolver {
                     .current_return_type
                     .clone()
                     .ok_or(anyhow!("return outside function"))?;
-                self.check_type(value.clone(), expected)?;
+                self.check_type_with_expected(value.clone(), expected)?;
             }
             Statement::ExpressionStatement { expression } => {
                 self.infer_type(expression.clone())?;
@@ -149,7 +161,7 @@ impl TypeResolver {
                     .current_return_type
                     .clone()
                     .ok_or(anyhow!("expression body outside function"))?;
-                self.check_type(expression.clone(), expected)?;
+                self.check_type_with_expected(expression.clone(), expected)?;
             }
         }
         Ok(())
@@ -157,9 +169,22 @@ impl TypeResolver {
 
     fn resolve_type_name(&self, name: &str) -> Result<Rc<RefCell<Type>>> {
         match name {
+            "Int8" => Ok(Rc::new(RefCell::new(Type::Int8))),
+            "Int16" => Ok(Rc::new(RefCell::new(Type::Int16))),
             "Int32" => Ok(Rc::new(RefCell::new(Type::Int32))),
+            "Int64" => Ok(Rc::new(RefCell::new(Type::Int64))),
+            "Int128" => Ok(Rc::new(RefCell::new(Type::Int128))),
+            "UInt8" => Ok(Rc::new(RefCell::new(Type::UInt8))),
+            "UInt16" => Ok(Rc::new(RefCell::new(Type::UInt16))),
+            "UInt32" => Ok(Rc::new(RefCell::new(Type::UInt32))),
+            "UInt64" => Ok(Rc::new(RefCell::new(Type::UInt64))),
+            "UInt128" => Ok(Rc::new(RefCell::new(Type::UInt128))),
+            "Float32" => Ok(Rc::new(RefCell::new(Type::Float32))),
+            "Float64" => Ok(Rc::new(RefCell::new(Type::Float64))),
             "Bool" => Ok(Rc::new(RefCell::new(Type::Bool))),
             "Unit" => Ok(Rc::new(RefCell::new(Type::Unit))),
+            "Char" => Ok(Rc::new(RefCell::new(Type::Char))),
+            "Never" => Ok(Rc::new(RefCell::new(Type::Never))),
             _ => Err(anyhow!("Unknown type: {}", name)),
         }
     }
@@ -167,9 +192,16 @@ impl TypeResolver {
     fn infer_type(&mut self, expression: Rc<RefCell<Expression>>) -> Result<Rc<RefCell<Type>>> {
         let result = match &mut *expression.borrow_mut() {
             Expression::IntegerLiteral { ty, .. } => {
-                let t = Rc::new(RefCell::new(Type::Int32));
-                *ty = Some(t.clone());
-                t
+                if ty.is_none() {
+                    *ty = Some(Rc::new(RefCell::new(Type::Int32)));
+                }
+                ty.clone().unwrap()
+            }
+            Expression::DecimalLiteral { ty, .. } => {
+                if ty.is_none() {
+                    *ty = Some(Rc::new(RefCell::new(Type::Float64)));
+                }
+                ty.clone().unwrap()
             }
             Expression::BooleanLiteral { .. } => Rc::new(RefCell::new(Type::Bool)),
             Expression::Variable { name, ty, .. } => {
@@ -220,7 +252,7 @@ impl TypeResolver {
             } => {
                 let callee_type = self.infer_type(callee.clone())?;
                 match &*callee_type.borrow() {
-                    Type::Function(ret_ty, param_tys) => {
+                    Type::Function(param_tys, ret_ty) => {
                         for (i, param) in parameters.iter().enumerate() {
                             if i < param_tys.len() {
                                 self.check_type(param.clone(), param_tys[i].clone())?;
@@ -277,7 +309,7 @@ impl TypeResolver {
             Expression::UnitLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
             Expression::NullLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
             Expression::NullptrLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
-            Expression::DecimalLiteral { .. } => Rc::new(RefCell::new(Type::Int32)),
+            Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
         };
         Ok(result)
     }
@@ -312,6 +344,42 @@ impl TypeResolver {
         Ok(())
     }
 
+    fn check_type_with_expected(
+        &mut self,
+        expression: Rc<RefCell<Expression>>,
+        expected: Rc<RefCell<Type>>,
+    ) -> Result<()> {
+        let is_literal = matches!(
+            &*expression.borrow(),
+            Expression::IntegerLiteral { .. } | Expression::DecimalLiteral { .. }
+        );
+
+        if is_literal {
+            let mut expr_mut = expression.borrow_mut();
+            match &mut *expr_mut {
+                Expression::IntegerLiteral { ty, .. } => {
+                    *ty = Some(expected.clone());
+                }
+                Expression::DecimalLiteral { ty, .. } => {
+                    *ty = Some(expected.clone());
+                }
+                _ => unreachable!(),
+            }
+            drop(expr_mut);
+            Ok(())
+        } else {
+            let inferred = self.infer_type(expression)?;
+            if inferred.borrow().clone() != expected.borrow().clone() {
+                return Err(anyhow!(
+                    "Type mismatch: expected {:?}, got {:?}",
+                    expected.borrow().clone(),
+                    inferred.borrow().clone()
+                ));
+            }
+            Ok(())
+        }
+    }
+
     fn check_binary(
         &self,
         operator: BinaryOperator,
@@ -324,19 +392,23 @@ impl TypeResolver {
             | BinaryOperator::Multiply
             | BinaryOperator::Divide
             | BinaryOperator::Modulus => {
-                if *left.borrow() != Type::Int32 {
+                let left_ty = left.borrow().clone();
+                let right_ty = right.borrow().clone();
+                
+                if !Self::is_numeric_type(&left_ty) {
                     return Err(anyhow!(
-                        "Arithmetic operator requires Int32 left operand, got {:?}",
-                        left.borrow()
+                        "Arithmetic operator requires numeric operand, got {:?}",
+                        left_ty
                     ));
                 }
-                if *right.borrow() != Type::Int32 {
+                if left_ty != right_ty {
                     return Err(anyhow!(
-                        "Arithmetic operator requires Int32 right operand, got {:?}",
-                        right.borrow()
+                        "Arithmetic operands must have same type: {:?} vs {:?}",
+                        left_ty,
+                        right_ty
                     ));
                 }
-                Ok(Rc::new(RefCell::new(Type::Int32)))
+                Ok(Rc::new(RefCell::new(left_ty)))
             }
             BinaryOperator::Equal
             | BinaryOperator::NotEqual
@@ -344,7 +416,7 @@ impl TypeResolver {
             | BinaryOperator::LessEqual
             | BinaryOperator::Greater
             | BinaryOperator::GreaterEqual => {
-                if *left.borrow() != *right.borrow() {
+                if left.borrow().clone() != right.borrow().clone() {
                     return Err(anyhow!(
                         "Comparison operands must have same type: {:?} vs {:?}",
                         left.borrow().clone(),
@@ -372,6 +444,24 @@ impl TypeResolver {
         }
     }
 
+    fn is_numeric_type(ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::Int8
+                | Type::Int16
+                | Type::Int32
+                | Type::Int64
+                | Type::Int128
+                | Type::UInt8
+                | Type::UInt16
+                | Type::UInt32
+                | Type::UInt64
+                | Type::UInt128
+                | Type::Float32
+                | Type::Float64
+        )
+    }
+
     fn check_unary(
         &self,
         operator: UnaryOperator,
@@ -379,22 +469,24 @@ impl TypeResolver {
     ) -> Result<Rc<RefCell<Type>>> {
         match operator {
             UnaryOperator::Plus | UnaryOperator::Minus => {
-                if *operand.borrow() != Type::Int32 {
+                let op_ty = operand.borrow().clone();
+                if !Self::is_numeric_type(&op_ty) {
                     return Err(anyhow!(
-                        "Unary arithmetic requires Int32 operand, got {:?}",
-                        operand.borrow()
+                        "Unary arithmetic requires numeric operand, got {:?}",
+                        op_ty
                     ));
                 }
-                Ok(Rc::new(RefCell::new(Type::Int32)))
+                Ok(Rc::new(RefCell::new(op_ty)))
             }
             UnaryOperator::Inc | UnaryOperator::Dec => {
-                if *operand.borrow() != Type::Int32 {
+                let op_ty = operand.borrow().clone();
+                if !Self::is_numeric_type(&op_ty) {
                     return Err(anyhow!(
-                        "Inc/Dec requires Int32 operand, got {:?}",
-                        operand.borrow()
+                        "Inc/Dec requires numeric operand, got {:?}",
+                        op_ty
                     ));
                 }
-                Ok(Rc::new(RefCell::new(Type::Int32)))
+                Ok(Rc::new(RefCell::new(op_ty)))
             }
             _ => Err(anyhow!("Unsupported unary operator")),
         }
