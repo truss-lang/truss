@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod id;
+pub mod ir_gen;
 pub mod krate;
 pub mod lexer;
 pub mod parser;
