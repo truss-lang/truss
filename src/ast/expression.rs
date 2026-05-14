@@ -31,6 +31,9 @@ pub enum Expression {
     NullptrLiteral {
         token: Box<Token>,
     },
+    CharLiteral {
+        token: Box<Token>,
+    },
     UnitLiteral {
         left: Box<Token>,
         right: Box<Token>,

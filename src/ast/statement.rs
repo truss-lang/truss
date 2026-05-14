@@ -14,6 +14,7 @@ pub enum Statement {
         parameters: Vec<Rc<RefCell<Parameter>>>,
         return_type: Option<Rc<RefCell<Expression>>>,
         body: Rc<RefCell<FunctionBody>>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     VariableDecl {
         token: Box<Token>,

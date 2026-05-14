@@ -35,16 +35,28 @@ impl Parser {
     fn is_empty(&self) -> bool {
         self.index >= self.tokens.len()
     }
-    fn peek(&self) -> Token {
-        self.tokens[self.index].clone()
+    fn peek(&self) -> Option<Token> {
+        if self.index < self.tokens.len() {
+            Some(self.tokens[self.index].clone())
+        } else {
+            None
+        }
     }
-    fn peek2(&self) -> Token {
-        self.tokens[self.index + 1].clone()
+    fn peek2(&self) -> Option<Token> {
+        if self.index + 1 < self.tokens.len() {
+            Some(self.tokens[self.index + 1].clone())
+        } else {
+            None
+        }
     }
-    fn next(&mut self) -> Token {
-        let token = self.tokens[self.index].clone();
-        self.index += 1;
-        token
+    fn next(&mut self) -> Option<Token> {
+        if self.index < self.tokens.len() {
+            let token = self.tokens[self.index].clone();
+            self.index += 1;
+            Some(token)
+        } else {
+            None
+        }
     }
     pub fn parse(&mut self) -> Result<Program> {
         let mut program = Program::new(self.file.clone());
@@ -56,7 +68,7 @@ impl Parser {
         Ok(program)
     }
     fn parse_statement(&mut self) -> Result<Statement> {
-        let token = self.peek();
+        let Some(token) = self.peek() else { return Err(anyhow!("")) };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(),
@@ -87,8 +99,8 @@ impl Parser {
     }
     fn parse_expression(&mut self) -> Result<Expression> {
         let left = self.parse_binary(Precedence::Assignment)?;
-        if !self.is_empty()
-            && let TokenType::Operator { operator } = self.peek().ty
+        if let Some(token) = self.peek()
+            && let TokenType::Operator { operator } = token.ty
             && let Some(operator) = AssignmentOperator::from_operator(operator)
         {
             self.index += 1;
@@ -105,7 +117,8 @@ impl Parser {
     fn parse_binary(&mut self, precedence: Precedence) -> Result<Expression> {
         let mut left = self.parse_unary()?;
         if !self.is_empty() {
-            let mut token = self.peek();
+            let Some(token) = self.peek() else { return Err(anyhow!("")) };
+            let mut token = token;
             while !self.is_empty()
                 && let Some(prec) = Precedence::get_precedence(&token)
                 && prec > precedence
@@ -113,9 +126,12 @@ impl Parser {
                 self.index += 1;
                 let right = self.parse_binary(prec)?;
                 if let TokenType::Operator { operator } = token.ty {
+                    let Some(op) = BinaryOperator::from_operator(operator) else {
+                        return Err(anyhow!("Invalid binary operator"))
+                    };
                     left = Expression::Binary {
                         left: Rc::new(RefCell::new(left)),
-                        operator: BinaryOperator::from_operator(operator).unwrap(),
+                        operator: op,
                         right: Rc::new(RefCell::new(right)),
                     }
                 } else if let TokenType::Separator { .. } = token.ty {
@@ -123,39 +139,48 @@ impl Parser {
                 } else {
                     return Err(anyhow!("Not an operator token"));
                 }
-                token = self.peek();
+                let Some(t) = self.peek() else { break };
+                token = t;
             }
         }
         Ok(left)
     }
     fn parse_unary(&mut self) -> Result<Expression> {
-        if let TokenType::Operator { operator } = self.peek().ty
+        if let Some(token) = self.peek()
+            && let TokenType::Operator { operator } = token.ty
             && let OperatorType::Plus | OperatorType::Minus | OperatorType::Inc | OperatorType::Dec =
                 operator
         {
             self.index += 1;
             let expression = self.parse_unary()?;
+            let Some(op) = UnaryOperator::from_operator(operator) else {
+                return Err(anyhow!("Invalid unary operator"))
+            };
             Ok(Expression::Unary {
                 expression: Rc::new(RefCell::new(expression)),
-                operator: UnaryOperator::from_operator(operator).unwrap(),
+                operator: op,
                 is_prefix: true,
             })
         } else {
             let expression = self.parse_primary()?;
-            if !self.is_empty()
-                && let TokenType::Operator { operator } = self.peek().ty
+            if let Some(token) = self.peek()
+                && let TokenType::Operator { operator } = token.ty
             {
                 match operator {
                     OperatorType::Inc | OperatorType::Dec => {
                         self.index += 1;
+                        let Some(op) = UnaryOperator::from_operator(operator) else {
+                            return Err(anyhow!("Invalid unary operator"))
+                        };
                         Ok(Expression::Unary {
                             expression: Rc::new(RefCell::new(expression)),
-                            operator: UnaryOperator::from_operator(operator).unwrap(),
+                            operator: op,
                             is_prefix: false,
                         })
                     }
                     OperatorType::Not => {
-                        if let TokenType::Operator { operator } = self.peek2().ty
+                        if let Some(token2) = self.peek2()
+                            && let TokenType::Operator { operator } = token2.ty
                             && let OperatorType::Not = operator
                         {
                             self.index += 2;
@@ -176,7 +201,7 @@ impl Parser {
         }
     }
     fn parse_primary(&mut self) -> Result<Expression> {
-        let token = self.peek();
+        let Some(token) = self.peek() else { return Err(anyhow!("")) };
         let mut expression = match token.ty {
             TokenType::IntegerLiteral { .. } => {
                 self.index += 1;
@@ -209,6 +234,12 @@ impl Parser {
                     token: Box::new(token),
                 })
             }
+            TokenType::CharLiteral { .. } => {
+                self.index += 1;
+                Ok(Expression::CharLiteral {
+                    token: Box::new(token),
+                })
+            }
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::If => self.parse_if(),
                 _ => todo!(),
@@ -217,7 +248,7 @@ impl Parser {
                 SeparatorType::OpenBrace => self.parse_block(),
                 SeparatorType::OpenParen => {
                     self.index += 1;
-                    let t = self.next();
+                    let Some(t) = self.next() else { return Err(anyhow!("")) };
                     if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                         Ok(Expression::UnitLiteral {
                             left: Box::new(token),
@@ -240,7 +271,7 @@ impl Parser {
             _ => todo!(),
         }?;
         while !self.is_empty() {
-            let token = self.peek();
+            let Some(token) = self.peek() else { break };
             match token.ty {
                 TokenType::Separator { separator } => match separator {
                     SeparatorType::OpenParen => expression = self.parse_call(expression)?,
@@ -256,7 +287,7 @@ impl Parser {
         Ok(expression)
     }
     fn parse_type_expression(&mut self) -> Result<Expression> {
-        let name = self.next();
+        let Some(name) = self.next() else { return Err(anyhow!("")) };
         let type_parameters = self.parse_type_parameters()?;
         Ok(Expression::Type {
             name: Box::new(name),
@@ -265,17 +296,20 @@ impl Parser {
         })
     }
     fn parse_function_decl(&mut self) -> Result<Statement> {
-        let token = self.next();
-        let name = self.next();
-        if !SeparatorType::is_separator(&self.next(), SeparatorType::OpenParen) {
+        let Some(token) = self.next() else { return Err(anyhow!("")) };
+        let Some(name) = self.next() else { return Err(anyhow!("")) };
+        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        if !SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
             return Err(anyhow!(""));
         }
         let mut parameters = Vec::new();
-        while !self.is_empty()
-            && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseParen)
-        {
-            let name = self.next();
-            if !SeparatorType::is_separator(&self.next(), SeparatorType::Colon) {
+        while let Some(t) = self.peek() {
+            if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+                break;
+            }
+            let Some(name) = self.next() else { return Err(anyhow!("")) };
+            let Some(colon) = self.next() else { return Err(anyhow!("")) };
+            if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
                 return Err(anyhow!(""));
             }
             let type_expression = self.parse_type_expression()?;
@@ -284,31 +318,38 @@ impl Parser {
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
             })));
-            let t = self.peek();
+            let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                 self.index += 1;
             } else {
                 break;
             }
         }
-        if !SeparatorType::is_separator(&self.next(), SeparatorType::CloseParen) {
+        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        if !SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
             return Err(anyhow!(""));
         }
-        let return_type = if OperatorType::is_operator(&self.peek(), OperatorType::Arrow) {
+        let return_type = if let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::Arrow)
+        {
             self.index += 1;
             Some(self.parse_type_expression()?)
         } else {
             None
         };
-        if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+        if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        {
             self.index += 1;
             let mut statements = Vec::new();
-            while !self.is_empty()
-                && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseBrace)
-            {
+            while let Some(t) = self.peek() {
+                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                    break;
+                }
                 statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
             }
-            if SeparatorType::is_separator(&self.next(), SeparatorType::CloseBrace) {
+            let Some(next) = self.next() else { return Err(anyhow!("")) };
+            if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
                 Ok(Statement::FunctionDecl {
                     token: Box::new(token),
                     name: Box::new(name),
@@ -316,11 +357,14 @@ impl Parser {
                     parameters,
                     return_type: return_type.map(RefCell::new).map(Rc::new),
                     body: Rc::new(RefCell::new(FunctionBody::Statements(statements))),
+                    ty: None,
                 })
             } else {
                 Err(anyhow!(""))
             }
-        } else if OperatorType::is_operator(&self.peek(), OperatorType::Assign) {
+        } else if let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::Assign)
+        {
             self.index += 1;
             let expression = self.parse_expression()?;
             Ok(Statement::FunctionDecl {
@@ -332,21 +376,27 @@ impl Parser {
                 body: Rc::new(RefCell::new(FunctionBody::Expression(Rc::new(
                     RefCell::new(expression),
                 )))),
+                ty: None,
             })
         } else {
             Err(anyhow!(""))
         }
     }
     fn parse_variable_decl(&mut self) -> Result<Statement> {
-        let token = self.next();
-        let name = self.next();
-        let type_expression = if SeparatorType::is_separator(&self.peek(), SeparatorType::Colon) {
-            self.index += 1;
-            Some(self.parse_type_expression()?)
-        } else {
-            None
-        };
-        let initializer = if OperatorType::is_operator(&self.peek(), OperatorType::Assign) {
+        let Some(token) = self.next() else { return Err(anyhow!("")) };
+        let Some(name) = self.next() else { return Err(anyhow!("")) };
+        let type_expression =
+            if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Colon)
+            {
+                self.index += 1;
+                Some(self.parse_type_expression()?)
+            } else {
+                None
+            };
+        let initializer = if let Some(t) = self.peek()
+            && OperatorType::is_operator(&t, OperatorType::Assign)
+        {
             self.index += 1;
             Some(self.parse_expression()?)
         } else {
@@ -361,9 +411,12 @@ impl Parser {
         })
     }
     fn parse_return(&mut self) -> Result<Statement> {
-        let current_line = self.peek().position.line;
+        let Some(token) = self.peek() else { return Err(anyhow!("")) };
+        let current_line = token.position.line;
         self.index += 1;
-        let value = if !self.is_empty() && current_line == self.peek().position.line {
+        let value = if let Some(token) = self.peek()
+            && current_line == token.position.line
+        {
             Some(self.parse_expression()?)
         } else {
             None
@@ -374,7 +427,9 @@ impl Parser {
     }
     fn parse_loop(&mut self) -> Result<Statement> {
         self.index += 1;
-        if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+        if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        {
             let body = self.parse_block()?;
             Ok(Statement::Loop {
                 body: Rc::new(RefCell::new(body)),
@@ -386,7 +441,9 @@ impl Parser {
     fn parse_while(&mut self) -> Result<Statement> {
         self.index += 1;
         let condition = self.parse_expression()?;
-        if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+        if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        {
             let body = self.parse_block()?;
             Ok(Statement::While {
                 condition: Rc::new(RefCell::new(condition)),
@@ -398,11 +455,15 @@ impl Parser {
     }
     fn parse_repeat_while(&mut self) -> Result<Statement> {
         self.index += 1;
-        if !SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+        if let Some(token) = self.peek()
+            && !SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        {
             return Err(anyhow!(""));
         }
         let body = self.parse_block()?;
-        if KeywordType::is_keyword(&self.peek(), KeywordType::While) {
+        if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::While)
+        {
             self.index += 1;
             let condition = self.parse_expression()?;
             Ok(Statement::RepeatWhile {
@@ -416,11 +477,14 @@ impl Parser {
     fn parse_for(&mut self) -> Result<Statement> {
         self.index += 1;
         let pattern = self.parse_pattern()?;
-        if !KeywordType::is_keyword(&self.next(), KeywordType::In) {
+        let Some(in_keyword) = self.next() else { return Err(anyhow!("")) };
+        if !KeywordType::is_keyword(&in_keyword, KeywordType::In) {
             return Err(anyhow!(""));
         }
         let iterator = self.parse_expression()?;
-        if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+        if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        {
             let body = self.parse_block()?;
             Ok(Statement::For {
                 pattern: Rc::new(pattern),
@@ -441,12 +505,14 @@ impl Parser {
     fn parse_block(&mut self) -> Result<Expression> {
         self.index += 1;
         let mut statements = Vec::new();
-        while !self.is_empty()
-            && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseBrace)
-        {
+        while let Some(token) = self.peek() {
+            if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
+                break;
+            }
             statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
         }
-        if SeparatorType::is_separator(&self.next(), SeparatorType::CloseBrace) {
+        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
             Ok(Expression::Block { statements })
         } else {
             Err(anyhow!(""))
@@ -454,22 +520,25 @@ impl Parser {
     }
     fn parse_call(&mut self, callee: Expression) -> Result<Expression> {
         let type_parameters = self.parse_type_parameters()?;
-        let mut parameters = Vec::new();
-        if !SeparatorType::is_separator(&self.next(), SeparatorType::OpenParen) {
+        let Some(open) = self.next() else { return Err(anyhow!("")) };
+        if !SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
             return Err(anyhow!(""));
         }
-        while !self.is_empty()
-            && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseParen)
-        {
+        let mut parameters = Vec::new();
+        while let Some(token) = self.peek() {
+            if SeparatorType::is_separator(&token, SeparatorType::CloseParen) {
+                break;
+            }
             parameters.push(Rc::new(RefCell::new(self.parse_expression()?)));
-            let t = self.peek();
+            let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                 self.index += 1;
             } else {
                 break;
             }
         }
-        if SeparatorType::is_separator(&self.next(), SeparatorType::CloseParen) {
+        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        if SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
             Ok(Expression::Call {
                 callee: Rc::new(RefCell::new(callee)),
                 type_parameters,
@@ -482,15 +551,23 @@ impl Parser {
     fn parse_if(&mut self) -> Result<Expression> {
         self.index += 1;
         let condition = self.parse_expression()?;
-        if !SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+        if let Some(token) = self.peek()
+            && !SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        {
             return Err(anyhow!(""));
         }
         let then = self.parse_block()?;
-        let else_ = if KeywordType::is_keyword(&self.peek(), KeywordType::Else) {
+        let else_ = if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::Else)
+        {
             self.index += 1;
-            if KeywordType::is_keyword(&self.peek(), KeywordType::If) {
+            if let Some(token) = self.peek()
+                && KeywordType::is_keyword(&token, KeywordType::If)
+            {
                 Some(self.parse_if()?)
-            } else if SeparatorType::is_separator(&self.peek(), SeparatorType::OpenBrace) {
+            } else if let Some(token) = self.peek()
+                && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+            {
                 Some(self.parse_block()?)
             } else {
                 return Err(anyhow!(""));
@@ -506,33 +583,39 @@ impl Parser {
     }
     fn parse_statements(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>> {
         let mut statements = Vec::new();
-        while !self.is_empty()
-            && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseBrace)
-        {
+        while let Some(token) = self.peek() {
+            if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
+                break;
+            }
             statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
         }
-        if SeparatorType::is_separator(&self.next(), SeparatorType::CloseBrace) {
+        let Some(next) = self.next() else { return Err(anyhow!("")) };
+        if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
             Ok(statements)
         } else {
             Err(anyhow!(""))
         }
     }
     fn parse_type_parameters(&mut self) -> Result<Option<Vec<Rc<RefCell<Expression>>>>> {
-        if OperatorType::is_operator(&self.peek(), OperatorType::Less) {
+        if let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::Less)
+        {
             self.index += 1;
             let mut type_parameters = Vec::new();
-            while !self.is_empty()
-                && !OperatorType::is_operator(&self.peek(), OperatorType::Greater)
-            {
+            while let Some(token) = self.peek() {
+                if OperatorType::is_operator(&token, OperatorType::Greater) {
+                    break;
+                }
                 type_parameters.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
-                let t = self.peek();
+                let Some(t) = self.peek() else { break };
                 if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                     self.index += 1;
                 } else {
                     break;
                 }
             }
-            if !OperatorType::is_operator(&self.next(), OperatorType::Greater) {
+            let Some(next) = self.next() else { return Err(anyhow!("")) };
+            if !OperatorType::is_operator(&next, OperatorType::Greater) {
                 return Err(anyhow!(""));
             }
             Ok(Some(type_parameters))
@@ -541,17 +624,18 @@ impl Parser {
         }
     }
     fn parse_pattern(&mut self) -> Result<Pattern> {
-        let token = self.next();
+        let Some(token) = self.next() else { return Err(anyhow!("")) };
         match token.ty {
             TokenType::Identifier => Ok(Pattern::Identifier(Box::new(token))),
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenParen => {
                     let mut patterns = Vec::new();
-                    while !self.is_empty()
-                        && !SeparatorType::is_separator(&self.peek(), SeparatorType::CloseParen)
-                    {
+                    while let Some(t) = self.peek() {
+                        if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+                            break;
+                        }
                         patterns.push(self.parse_pattern()?);
-                        let t = self.peek();
+                        let Some(t) = self.peek() else { break };
                         if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                             self.index += 1;
                         } else {

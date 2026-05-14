@@ -206,3 +206,61 @@ fn test_parse_for() {
         panic!();
     }
 }
+#[test]
+fn test_parse_char_literal() {
+    let mut lexer = Lexer::new(CharStream::new("'a'".to_string(), Rc::new("".to_string())));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow()
+        && let Expression::CharLiteral { token } = &*expression.borrow()
+    {
+        assert_eq!(token.value, "'a'");
+    } else {
+        panic!();
+    }
+}
+#[test]
+fn test_parse_variable_decl_at_eof() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "let a: Never".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "a");
+    } else {
+        panic!();
+    }
+}
+#[test]
+fn test_parse_variable_decl_no_type_at_eof() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "let a".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "a");
+    } else {
+        panic!();
+    }
+}
+#[test]
+fn test_parse_variable_decl_in_function_at_eof() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test() { let a: Never }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
+    let program = parser.parse().unwrap();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { name, .. } = &*statements[0].borrow()
+    {
+        assert_eq!(name.value, "a");
+    } else {
+        panic!();
+    }
+}
