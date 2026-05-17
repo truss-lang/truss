@@ -11,10 +11,10 @@ use crate::{
         statement::{FunctionBody, Parameter, Pattern, Statement},
     },
     diag::{
-        new_diagnostic, primary_label_from_token, token_to_span, TrussDiagnosticCode,
+        new_diagnostic, primary_label_from_token, TrussDiagnosticCode,
         TrussDiagnosticEngine,
     },
-    lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType},
+    lexer::token::{KeywordType, OperatorType, Position, SeparatorType, Token, TokenType},
     parser::precedence::Precedence,
 };
 
@@ -70,11 +70,19 @@ impl Parser {
         }
     }
 
+    fn skip(&mut self) {
+        if !self.is_empty() {
+            self.index += 1;
+        }
+    }
+
     pub fn parse(&mut self) -> Program {
         let mut program = Program::new(self.file.clone());
         while !self.is_empty() {
             if let Ok(statement) = self.parse_statement() {
                 program.statements.push(Rc::new(RefCell::new(statement)));
+            } else {
+                self.skip();
             }
         }
         program
@@ -439,39 +447,46 @@ impl Parser {
             if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                 break;
             }
-            let Some(label_token) = self.next() else {
+            let Some(first) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedIdentifier,
-                    "Expected parameter label",
+                    "Expected parameter name",
                     &t,
                 );
                 return Err(());
             };
-            if TokenType::Identifier != label_token.ty {
+            if TokenType::Identifier != first.ty {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedIdentifier,
-                    format!("Expected parameter label but found '{}'", label_token.value),
-                    &label_token,
+                    format!("Expected parameter name but found '{}'", first.value),
+                    &first,
                 );
                 return Err(());
             }
 
-            let Some(name_token) = self.next() else {
-                self.emit_error(
-                    TrussDiagnosticCode::ExpectedIdentifier,
-                    "Expected parameter name",
-                    &label_token,
-                );
-                return Err(());
+            let (label_token, name_token) = if let Some(peeked) = self.peek()
+                && SeparatorType::is_separator(&peeked, SeparatorType::Colon)
+            {
+                (None, first)
+            } else {
+                let Some(second) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        "Expected parameter name after label",
+                        &first,
+                    );
+                    return Err(());
+                };
+                if TokenType::Identifier != second.ty {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!("Expected parameter name but found '{}'", second.value),
+                        &second,
+                    );
+                    return Err(());
+                }
+                (Some(first), second)
             };
-            if TokenType::Identifier != name_token.ty {
-                self.emit_error(
-                    TrussDiagnosticCode::ExpectedIdentifier,
-                    format!("Expected parameter name but found '{}'", name_token.value),
-                    &name_token,
-                );
-                return Err(());
-            }
 
             let Some(colon) = self.next() else {
                 self.emit_error(
@@ -491,7 +506,7 @@ impl Parser {
             }
             let type_expression = self.parse_type_expression()?;
             parameters.push(Rc::new(RefCell::new(Parameter {
-                label: Some(Box::new(label_token)),
+                label: label_token.map(Box::new),
                 name: Box::new(name_token),
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
@@ -525,7 +540,18 @@ impl Parser {
             self.index += 1;
             Some(self.parse_type_expression()?)
         } else {
-            None
+            let current_token = self.peek().unwrap_or_else(|| self.tokens[self.index.saturating_sub(1)].clone());
+            let unit_token = Token::new(
+                "Unit".to_string(),
+                TokenType::Identifier,
+                Position { len: 1, ..current_token.position },
+                self.file.clone(),
+            );
+            Some(Expression::Type {
+                name: Box::new(unit_token),
+                type_parameters: None,
+                ty: None,
+            })
         };
         if let Some(token) = self.peek()
             && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
@@ -538,6 +564,8 @@ impl Parser {
                 }
                 if let Ok(stmt) = self.parse_statement() {
                     statements.push(Rc::new(RefCell::new(stmt)));
+                } else {
+                    self.skip();
                 }
             }
             let Some(next) = self.next() else {
@@ -775,6 +803,8 @@ impl Parser {
             }
             if let Ok(stmt) = self.parse_statement() {
                 statements.push(Rc::new(RefCell::new(stmt)));
+            } else {
+                self.skip();
             }
         }
         let Some(next) = self.next() else {
@@ -905,6 +935,7 @@ impl Parser {
         })
     }
 
+    #[allow(dead_code)]
     fn parse_statements(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>, ()> {
         let mut statements = Vec::new();
         while let Some(token) = self.peek() {
@@ -913,6 +944,8 @@ impl Parser {
             }
             if let Ok(stmt) = self.parse_statement() {
                 statements.push(Rc::new(RefCell::new(stmt)));
+            } else {
+                self.skip();
             }
         }
         let Some(next) = self.next() else {

@@ -193,7 +193,7 @@ impl SymbolResolver {
         };
         if let Some(scope) = self.current_scope.clone() {
             let mut scope_mut = scope.borrow_mut();
-            if let Some(existing) = scope_mut.name_table.get(&name) {
+            if let Some(_) = scope_mut.name_table.get(&name) {
                 self.emit_warning(
                     TrussDiagnosticCode::ShadowedVariable,
                     format!("Variable '{}' shadows existing variable", name),
@@ -205,7 +205,7 @@ impl SymbolResolver {
         } else {
             let module = self.current_module.clone().unwrap();
             let mut module_mut = module.borrow_mut();
-            if let Some(existing) = module_mut.name_table.get(&name) {
+            if let Some(_) = module_mut.name_table.get(&name) {
                 if matches!(*symbol, Symbol::Function { .. }) {
                     self.emit_error(
                         TrussDiagnosticCode::DuplicateFunction,

@@ -1,7 +1,5 @@
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Ok, Result, anyhow};
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Never,

@@ -10,7 +10,7 @@ use inkwell::{
 use crate::{
     ast::{node::Program, statement::Statement},
     diag::{
-        new_diagnostic, primary_label_from_token, TrussDiagnosticCode, TrussDiagnosticEngine,
+        new_diagnostic, TrussDiagnosticCode, TrussDiagnosticEngine,
     },
     types::Type,
 };

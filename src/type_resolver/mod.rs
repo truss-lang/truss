@@ -7,7 +7,7 @@ use crate::{
         statement::{FunctionBody, Parameter, Statement},
     },
     diag::{
-        new_diagnostic, primary_label_from_token, secondary_label_from_token, token_to_span,
+        new_diagnostic, primary_label_from_token, secondary_label_from_token,
         TrussDiagnosticCode, TrussDiagnosticEngine,
     },
     id::ModuleId,
@@ -264,8 +264,40 @@ impl TypeResolver {
                 ..
             } => {
                 let left_ty = self.infer_type(left.clone())?;
+                
+                {
+                    let mut right_mut = right.borrow_mut();
+                    match &mut *right_mut {
+                        Expression::IntegerLiteral { ty, .. } if ty.is_none() => {
+                            if Self::is_integer_type(&left_ty.borrow()) {
+                                *ty = Some(left_ty.clone());
+                            }
+                        }
+                        Expression::DecimalLiteral { ty, .. } if ty.is_none() => {
+                            if Self::is_float_type(&left_ty.borrow()) {
+                                *ty = Some(left_ty.clone());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 let right_ty = self.infer_type(right.clone())?;
-                self.check_binary(*operator, left_ty, right_ty)?
+                if let Some(result) = self.check_binary(*operator, left_ty.clone(), right_ty.clone()) {
+                    result
+                } else {
+                    let token = Self::get_token_from_expr(left);
+                    self.emit_error(
+                        TrussDiagnosticCode::InvalidOperand,
+                        format!(
+                            "Invalid operands for binary operator: {:?} and {:?}",
+                            left_ty.borrow().clone(),
+                            right_ty.borrow().clone()
+                        ),
+                        &token,
+                    );
+                    return None;
+                }
             }
             Expression::Unary {
                 expression,
@@ -273,7 +305,20 @@ impl TypeResolver {
                 ..
             } => {
                 let operand_ty = self.infer_type(expression.clone())?;
-                self.check_unary(*operator, operand_ty)?
+                if let Some(result) = self.check_unary(*operator, operand_ty.clone()) {
+                    result
+                } else {
+                    let token = Self::get_token_from_expr(expression);
+                    self.emit_error(
+                        TrussDiagnosticCode::InvalidOperand,
+                        format!(
+                            "Invalid operand for unary operator: {:?}",
+                            operand_ty.borrow().clone()
+                        ),
+                        &token,
+                    );
+                    return None;
+                }
             }
             Expression::Call {
                 callee,
@@ -422,6 +467,15 @@ impl TypeResolver {
                     token,
                 );
             }
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::TypeMismatch,
+                format!(
+                    "Type mismatch: expected {:?}",
+                    expected.borrow().clone()
+                ),
+                token,
+            );
         }
     }
 
@@ -431,23 +485,43 @@ impl TypeResolver {
         expected: Rc<RefCell<Type>>,
         token: &Token,
     ) {
-        let is_literal = matches!(
-            &*expression.borrow(),
-            Expression::IntegerLiteral { .. } | Expression::DecimalLiteral { .. }
-        );
+        let is_int_literal = matches!(&*expression.borrow(), Expression::IntegerLiteral { .. });
+        let is_float_literal = matches!(&*expression.borrow(), Expression::DecimalLiteral { .. });
 
-        if is_literal {
-            let mut expr_mut = expression.borrow_mut();
-            match &mut *expr_mut {
-                Expression::IntegerLiteral { ty, .. } => {
+        if is_int_literal {
+            if Self::is_integer_type(&expected.borrow()) {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::IntegerLiteral { ty, .. } = &mut *expr_mut {
                     *ty = Some(expected.clone());
                 }
-                Expression::DecimalLiteral { ty, .. } => {
-                    *ty = Some(expected.clone());
-                }
-                _ => unreachable!(),
+                drop(expr_mut);
+            } else {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!(
+                        "Type mismatch: expected {:?}, found integer literal",
+                        expected.borrow().clone()
+                    ),
+                    token,
+                );
             }
-            drop(expr_mut);
+        } else if is_float_literal {
+            if Self::is_float_type(&expected.borrow()) {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::DecimalLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+            } else {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!(
+                        "Type mismatch: expected {:?}, found float literal",
+                        expected.borrow().clone()
+                    ),
+                    token,
+                );
+            }
         } else if let Some(inferred) = self.infer_type(expression) {
             if inferred.borrow().clone() != expected.borrow().clone() {
                 self.emit_error(
@@ -460,7 +534,54 @@ impl TypeResolver {
                     token,
                 );
             }
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::TypeMismatch,
+                format!(
+                    "Type mismatch: expected {:?}",
+                    expected.borrow().clone()
+                ),
+                token,
+            );
         }
+    }
+
+    fn is_integer_type(ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::Int8
+                | Type::Int16
+                | Type::Int32
+                | Type::Int64
+                | Type::Int128
+                | Type::UInt8
+                | Type::UInt16
+                | Type::UInt32
+                | Type::UInt64
+                | Type::UInt128
+        )
+    }
+
+    fn is_float_type(ty: &Type) -> bool {
+        matches!(ty, Type::Float32 | Type::Float64)
+    }
+
+    fn is_numeric_type(ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::Int8
+                | Type::Int16
+                | Type::Int32
+                | Type::Int64
+                | Type::Int128
+                | Type::UInt8
+                | Type::UInt16
+                | Type::UInt32
+                | Type::UInt64
+                | Type::UInt128
+                | Type::Float32
+                | Type::Float64
+        )
     }
 
     fn check_binary(
@@ -508,24 +629,6 @@ impl TypeResolver {
             }
             _ => None,
         }
-    }
-
-    fn is_numeric_type(ty: &Type) -> bool {
-        matches!(
-            ty,
-            Type::Int8
-                | Type::Int16
-                | Type::Int32
-                | Type::Int64
-                | Type::Int128
-                | Type::UInt8
-                | Type::UInt16
-                | Type::UInt32
-                | Type::UInt64
-                | Type::UInt128
-                | Type::Float32
-                | Type::Float64
-        )
     }
 
     fn check_unary(
@@ -578,9 +681,6 @@ impl TypeResolver {
                 } else {
                     Token::new("".to_string(), crate::lexer::token::TokenType::Identifier, crate::lexer::token::Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new("".to_string()))
                 }
-            }
-            _ => {
-                Token::new("".to_string(), crate::lexer::token::TokenType::Identifier, crate::lexer::token::Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new("".to_string()))
             }
         }
     }
