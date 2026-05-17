@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod diag;
 pub mod id;
 pub mod ir_gen;
 pub mod krate;

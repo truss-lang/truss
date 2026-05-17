@@ -5,6 +5,7 @@ use truss::{
         expression::Expression,
         statement::{FunctionBody, Statement},
     },
+    diag::TrussDiagnosticEngine,
     id::CrateId,
     krate::Crate,
     lexer::{CharStream, Lexer},
@@ -12,19 +13,24 @@ use truss::{
     symbol_resolver::SymbolResolver,
 };
 
+fn create_engine() -> Rc<RefCell<TrussDiagnosticEngine>> {
+    Rc::new(RefCell::new(TrussDiagnosticEngine::new()))
+}
+
 #[test]
 fn test_variable_resolver() {
     let mut lexer = Lexer::new(CharStream::new(
         "func test() { let a = 1 a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
-    let mut resolver = SymbolResolver::new(Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    ))));
-    resolver.resolve(&program, "test".to_string()).unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[1].borrow()
@@ -42,13 +48,14 @@ fn test_function_resolver() {
         "func test() {} func test2() { test() }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
-    let mut resolver = SymbolResolver::new(Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    ))));
-    resolver.resolve(&program, "test".to_string()).unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
@@ -67,14 +74,14 @@ fn test_underscore_variable_no_symbol() {
         "func test() { let _ = 1 let _ = 2 }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
-    let mut resolver = SymbolResolver::new(Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    ))));
-    let result = resolver.resolve(&program, "test".to_string());
-    assert!(result.is_ok());
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
 }
 
 #[test]
@@ -83,12 +90,12 @@ fn test_underscore_parameter_no_symbol() {
         "func test(_ _: Int32) { }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
-    let mut resolver = SymbolResolver::new(Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    ))));
-    let result = resolver.resolve(&program, "test".to_string());
-    assert!(result.is_ok());
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
 }

@@ -8,3 +8,4 @@ strum = { version = "0.28.0", features = ["derive"] }
 anyhow = "1.0.102"
 paste = "1.0.14"
 inkwell = { version = "0.9.0", features = ["llvm22-1"] }
+duck-diagnostic = "0.7.1"

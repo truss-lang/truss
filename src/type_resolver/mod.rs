@@ -1,15 +1,18 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use anyhow::{Ok, Result, anyhow};
-
 use crate::{
     ast::{
         expression::{BinaryOperator, Expression, UnaryOperator},
         node::Program,
         statement::{FunctionBody, Parameter, Statement},
     },
+    diag::{
+        new_diagnostic, primary_label_from_token, secondary_label_from_token, token_to_span,
+        TrussDiagnosticCode, TrussDiagnosticEngine,
+    },
     id::ModuleId,
     krate::{Crate, Module},
+    lexer::token::Token,
     types::Type,
 };
 
@@ -18,11 +21,8 @@ struct TypeEnv {
     vars: HashMap<String, Rc<RefCell<Type>>>,
 }
 impl TypeEnv {
-    fn get(&self, name: &str) -> Result<Rc<RefCell<Type>>> {
-        self.vars
-            .get(name)
-            .cloned()
-            .ok_or(anyhow!("Not found variable: {}", name))
+    fn get(&self, name: &str) -> Option<Rc<RefCell<Type>>> {
+        self.vars.get(name).cloned()
     }
     fn set(&mut self, name: String, ty: Rc<RefCell<Type>>) {
         self.vars.insert(name, ty);
@@ -35,28 +35,29 @@ pub struct TypeResolver {
     current_module: Option<Rc<RefCell<Module>>>,
     current_return_type: Option<Rc<RefCell<Type>>>,
     type_env: Option<Rc<RefCell<TypeEnv>>>,
+    engine: Rc<RefCell<TrussDiagnosticEngine>>,
 }
 
 impl TypeResolver {
-    pub fn new(krate: Rc<RefCell<Crate>>) -> Self {
+    pub fn new(krate: Rc<RefCell<Crate>>, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
         Self {
             krate,
             current_module: None,
             current_return_type: None,
             type_env: None,
+            engine,
         }
     }
 
-    pub fn resolve(&mut self, program: &Program, id: ModuleId) -> Result<()> {
+    pub fn resolve(&mut self, program: &Program, id: ModuleId) {
         self.current_module = self.krate.borrow().modules.get(&id).cloned();
         self.type_env = Some(Rc::new(RefCell::new(TypeEnv::default())));
         for stmt in &program.statements {
-            self.resolve_statement(stmt.clone())?;
+            self.resolve_statement(stmt.clone());
         }
-        Ok(())
     }
 
-    fn resolve_statement(&mut self, statement: Rc<RefCell<Statement>>) -> Result<()> {
+    fn resolve_statement(&mut self, statement: Rc<RefCell<Statement>>) {
         match &mut *statement.borrow_mut() {
             Statement::VariableDecl {
                 name,
@@ -66,28 +67,34 @@ impl TypeResolver {
                 ..
             } => {
                 if let Some(type_expr) = type_expression {
-                    let annotated = self.infer_type(type_expr.clone())?;
-                    if let Some(init) = initializer {
-                        self.check_type_with_expected(init.clone(), annotated.clone())?;
+                    let annotated = self.infer_type(type_expr.clone());
+                    if let Some(annotated) = annotated {
+                        if let Some(init) = initializer {
+                            self.check_type_with_expected(init.clone(), annotated.clone(), name.as_ref());
+                        }
+                        *ty = Some(annotated.clone());
+                        self.type_env
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set(name.value.clone(), annotated);
                     }
-                    *ty = Some(annotated.clone());
-                    self.type_env
-                        .as_ref()
-                        .unwrap()
-                        .borrow_mut()
-                        .set(name.value.clone(), annotated);
                 } else if let Some(init) = initializer {
-                    let init_ty = self.infer_type(init.clone())?;
-                    *ty = Some(init_ty.clone());
-                    self.type_env
-                        .as_ref()
-                        .unwrap()
-                        .borrow_mut()
-                        .set(name.value.clone(), init_ty);
+                    let init_ty = self.infer_type(init.clone());
+                    if let Some(init_ty) = init_ty {
+                        *ty = Some(init_ty.clone());
+                        self.type_env
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set(name.value.clone(), init_ty);
+                    }
                 } else {
-                    return Err(anyhow!(
-                        "Variable declaration requires type annotation or initializer"
-                    ));
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingTypeAnnotation,
+                        "Variable declaration requires type annotation or initializer",
+                        name.as_ref(),
+                    );
                 };
             }
             Statement::FunctionDecl {
@@ -103,7 +110,8 @@ impl TypeResolver {
                 self.type_env = Some(Rc::new(RefCell::new(TypeEnv::default())));
 
                 let ret_type = if let Some(return_type_expr) = return_type {
-                    self.infer_type(return_type_expr.clone())?
+                    self.infer_type(return_type_expr.clone())
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Unit)))
                 } else {
                     Rc::new(RefCell::new(Type::Unit))
                 };
@@ -111,86 +119,98 @@ impl TypeResolver {
 
                 let mut parameter_types = Vec::new();
                 for param in parameters {
-                    self.resolve_param(param.clone())?;
-                    parameter_types.push(param.borrow().ty.clone().unwrap());
+                    if let Some(param_ty) = self.resolve_param(param.clone()) {
+                        parameter_types.push(param_ty);
+                    }
                 }
                 *ty = Some(Rc::new(RefCell::new(Type::Function(
                     parameter_types,
                     ret_type,
                 ))));
 
-                self.resolve_function_body(body.clone())?;
+                self.resolve_function_body(body.clone());
 
                 self.type_env = last_type_env;
                 self.current_return_type = last_return_type;
             }
             Statement::Return { value: Some(value) } => {
-                let expected = self
-                    .current_return_type
-                    .clone()
-                    .ok_or(anyhow!("return outside function"))?;
-                self.check_type_with_expected(value.clone(), expected)?;
+                let token = &Self::get_token_from_expr(value);
+                if let Some(expected) = self.current_return_type.clone() {
+                    self.check_type_with_expected(value.clone(), expected, token);
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ReturnTypeMismatch,
+                        "Return statement outside function",
+                        token,
+                    );
+                }
             }
             Statement::ExpressionStatement { expression } => {
-                self.infer_type(expression.clone())?;
+                self.infer_type(expression.clone());
             }
             _ => {}
         }
-        Ok(())
     }
 
-    fn resolve_param(&mut self, param: Rc<RefCell<Parameter>>) -> Result<()> {
-        let param_type = self.infer_type(param.borrow().type_expression.clone())?;
-        param.borrow_mut().ty = Some(param_type.clone());
-        self.type_env
-            .as_ref()
-            .unwrap()
-            .borrow_mut()
-            .set(param.borrow().name.value.clone(), param_type);
-        Ok(())
+    fn resolve_param(&mut self, param: Rc<RefCell<Parameter>>) -> Option<Rc<RefCell<Type>>> {
+        let param_type = self.infer_type(param.borrow().type_expression.clone());
+        if let Some(ref param_type) = param_type {
+            param.borrow_mut().ty = Some(param_type.clone());
+            self.type_env
+                .as_ref()
+                .unwrap()
+                .borrow_mut()
+                .set(param.borrow().name.value.clone(), param_type.clone());
+        }
+        param_type
     }
 
-    fn resolve_function_body(&mut self, body: Rc<RefCell<FunctionBody>>) -> Result<()> {
+    fn resolve_function_body(&mut self, body: Rc<RefCell<FunctionBody>>) {
         match &mut *body.borrow_mut() {
             FunctionBody::Statements(statements) => {
                 for stmt in statements {
-                    self.resolve_statement(stmt.clone())?;
+                    self.resolve_statement(stmt.clone());
                 }
             }
             FunctionBody::Expression(expression) => {
-                let expected = self
-                    .current_return_type
-                    .clone()
-                    .ok_or(anyhow!("expression body outside function"))?;
-                self.check_type_with_expected(expression.clone(), expected)?;
+                if let Some(expected) = self.current_return_type.clone() {
+                    let token = &Self::get_token_from_expr(expression);
+                    self.check_type_with_expected(expression.clone(), expected, token);
+                }
             }
         }
-        Ok(())
     }
 
-    fn resolve_type_name(&self, name: &str) -> Result<Rc<RefCell<Type>>> {
+    fn resolve_type_name(&self, name: &str, token: &Token) -> Option<Rc<RefCell<Type>>> {
         match name {
-            "Int8" => Ok(Rc::new(RefCell::new(Type::Int8))),
-            "Int16" => Ok(Rc::new(RefCell::new(Type::Int16))),
-            "Int32" => Ok(Rc::new(RefCell::new(Type::Int32))),
-            "Int64" => Ok(Rc::new(RefCell::new(Type::Int64))),
-            "Int128" => Ok(Rc::new(RefCell::new(Type::Int128))),
-            "UInt8" => Ok(Rc::new(RefCell::new(Type::UInt8))),
-            "UInt16" => Ok(Rc::new(RefCell::new(Type::UInt16))),
-            "UInt32" => Ok(Rc::new(RefCell::new(Type::UInt32))),
-            "UInt64" => Ok(Rc::new(RefCell::new(Type::UInt64))),
-            "UInt128" => Ok(Rc::new(RefCell::new(Type::UInt128))),
-            "Float32" => Ok(Rc::new(RefCell::new(Type::Float32))),
-            "Float64" => Ok(Rc::new(RefCell::new(Type::Float64))),
-            "Bool" => Ok(Rc::new(RefCell::new(Type::Bool))),
-            "Unit" => Ok(Rc::new(RefCell::new(Type::Unit))),
-            "Char" => Ok(Rc::new(RefCell::new(Type::Char))),
-            "Never" => Ok(Rc::new(RefCell::new(Type::Never))),
-            _ => Err(anyhow!("Unknown type: {}", name)),
+            "Int8" => Some(Rc::new(RefCell::new(Type::Int8))),
+            "Int16" => Some(Rc::new(RefCell::new(Type::Int16))),
+            "Int32" => Some(Rc::new(RefCell::new(Type::Int32))),
+            "Int64" => Some(Rc::new(RefCell::new(Type::Int64))),
+            "Int128" => Some(Rc::new(RefCell::new(Type::Int128))),
+            "UInt8" => Some(Rc::new(RefCell::new(Type::UInt8))),
+            "UInt16" => Some(Rc::new(RefCell::new(Type::UInt16))),
+            "UInt32" => Some(Rc::new(RefCell::new(Type::UInt32))),
+            "UInt64" => Some(Rc::new(RefCell::new(Type::UInt64))),
+            "UInt128" => Some(Rc::new(RefCell::new(Type::UInt128))),
+            "Float32" => Some(Rc::new(RefCell::new(Type::Float32))),
+            "Float64" => Some(Rc::new(RefCell::new(Type::Float64))),
+            "Bool" => Some(Rc::new(RefCell::new(Type::Bool))),
+            "Unit" => Some(Rc::new(RefCell::new(Type::Unit))),
+            "Char" => Some(Rc::new(RefCell::new(Type::Char))),
+            "Never" => Some(Rc::new(RefCell::new(Type::Never))),
+            _ => {
+                self.emit_error(
+                    TrussDiagnosticCode::UnknownType,
+                    format!("Unknown type '{}'", name),
+                    token,
+                );
+                None
+            }
         }
     }
 
-    fn infer_type(&mut self, expression: Rc<RefCell<Expression>>) -> Result<Rc<RefCell<Type>>> {
+    fn infer_type(&mut self, expression: Rc<RefCell<Expression>>) -> Option<Rc<RefCell<Type>>> {
         let result = match &mut *expression.borrow_mut() {
             Expression::IntegerLiteral { ty, .. } => {
                 if ty.is_none() {
@@ -209,21 +229,31 @@ impl TypeResolver {
                 let t = self
                     .type_env
                     .as_ref()
-                    .ok_or(anyhow!("No type environment"))?
+                    .ok_or_else(|| {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeError,
+                            "No type environment available",
+                            name.as_ref(),
+                        );
+                    })
+                    .ok()?
                     .borrow()
-                    .get(&name.value)?;
+                    .get(&name.value);
+                let t = t?;
                 *ty = Some(t.clone());
                 t
             }
             Expression::Type { name, ty, .. } => {
-                let t = self.resolve_type_name(&name.value)?;
+                let t = self.resolve_type_name(&name.value, name.as_ref())?;
                 *ty = Some(t.clone());
                 t
             }
             Expression::Block { statements } => {
                 let mut last_ty = Rc::new(RefCell::new(Type::Unit));
                 for stmt in statements.iter() {
-                    last_ty = self.infer_statement_type(stmt.clone())?;
+                    if let Some(ty) = self.infer_statement_type(stmt.clone()) {
+                        last_ty = ty;
+                    }
                 }
                 last_ty
             }
@@ -254,14 +284,38 @@ impl TypeResolver {
                 let callee_type = self.infer_type(callee.clone())?;
                 match &*callee_type.borrow() {
                     Type::Function(param_tys, ret_ty) => {
+                        if parameters.len() != param_tys.len() {
+                            let token = &Self::get_token_from_expr(callee);
+                            self.emit_error(
+                                TrussDiagnosticCode::ArgumentCountMismatch,
+                                format!(
+                                    "Expected {} arguments but found {}",
+                                    param_tys.len(),
+                                    parameters.len()
+                                ),
+                                token,
+                            );
+                        }
                         for (i, param) in parameters.iter().enumerate() {
                             if i < param_tys.len() {
-                                self.check_type(param.expression.clone(), param_tys[i].clone())?;
+                                let token = &Self::get_token_from_expr(&param.expression);
+                                self.check_type(
+                                    param.expression.clone(),
+                                    param_tys[i].clone(),
+                                    token,
+                                );
                             }
                         }
                         ret_ty.clone()
                     }
-                    _ => return Err(anyhow!("Calling non-function type")),
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::CallingNonFunction,
+                            format!("Cannot call non-function type {:?}", callee_type.borrow()),
+                            &Self::get_token_from_expr(callee),
+                        );
+                        return None;
+                    }
                 }
             }
             Expression::Assignment {
@@ -273,11 +327,24 @@ impl TypeResolver {
                 let left_ty = self.infer_type(left.clone())?;
                 let right_ty = self.infer_type(right.clone())?;
                 if left_ty.borrow().clone() != right_ty.borrow().clone() {
-                    return Err(anyhow!(
-                        "Type mismatch in assignment: left is {:?}, right is {:?}",
-                        left_ty.borrow().clone(),
-                        right_ty.borrow().clone()
-                    ));
+                    let expected_msg = format!("expected {:?}", left_ty.borrow().clone());
+                    let found_msg = format!("found {:?}", right_ty.borrow().clone());
+                    self.emit_error_with_labels(
+                        TrussDiagnosticCode::TypeMismatch,
+                        format!(
+                            "Type mismatch in assignment: {:?} vs {:?}",
+                            left_ty.borrow().clone(),
+                            right_ty.borrow().clone()
+                        ),
+                        primary_label_from_token(
+                            &Self::get_token_from_expr(left),
+                            &expected_msg,
+                        ),
+                        secondary_label_from_token(
+                            &Self::get_token_from_expr(right),
+                            &found_msg,
+                        ),
+                    );
                 }
                 left_ty
             }
@@ -289,20 +356,28 @@ impl TypeResolver {
             } => {
                 let cond_ty = self.infer_type(condition.clone())?;
                 if *cond_ty.borrow() != Type::Bool {
-                    return Err(anyhow!(
-                        "If condition must be Bool, got {:?}",
-                        cond_ty.borrow()
-                    ));
+                    self.emit_error(
+                        TrussDiagnosticCode::InvalidConditionType,
+                        format!(
+                            "If condition must be Bool, found {:?}",
+                            cond_ty.borrow()
+                        ),
+                        &Self::get_token_from_expr(condition),
+                    );
                 }
                 let then_ty = self.infer_type(then.clone())?;
                 if let Some(else_expr) = else_ {
                     let else_ty = self.infer_type(else_expr.clone())?;
                     if then_ty.borrow().clone() != else_ty.borrow().clone() {
-                        return Err(anyhow!(
-                            "If branches have different types: {:?} vs {:?}",
-                            then_ty.borrow().clone(),
-                            else_ty.borrow().clone()
-                        ));
+                        self.emit_error(
+                            TrussDiagnosticCode::BranchTypeMismatch,
+                            format!(
+                                "If branches have different types: {:?} vs {:?}",
+                                then_ty.borrow().clone(),
+                                else_ty.borrow().clone()
+                            ),
+                            &Self::get_token_from_expr(then),
+                        );
                     }
                 }
                 then_ty
@@ -312,20 +387,20 @@ impl TypeResolver {
             Expression::NullptrLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
             Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
         };
-        Ok(result)
+        Some(result)
     }
 
     fn infer_statement_type(
         &mut self,
         statement: Rc<RefCell<Statement>>,
-    ) -> Result<Rc<RefCell<Type>>> {
+    ) -> Option<Rc<RefCell<Type>>> {
         match &*statement.borrow() {
             Statement::ExpressionStatement { expression } => self.infer_type(expression.clone()),
             Statement::Return { value: Some(value) } => self.infer_type(value.clone()),
             Statement::VariableDecl { ty, .. } => {
-                Ok(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Unit))))
+                Some(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Unit))))
             }
-            _ => Ok(Rc::new(RefCell::new(Type::Unit))),
+            _ => Some(Rc::new(RefCell::new(Type::Unit))),
         }
     }
 
@@ -333,23 +408,29 @@ impl TypeResolver {
         &mut self,
         expression: Rc<RefCell<Expression>>,
         expected: Rc<RefCell<Type>>,
-    ) -> Result<()> {
-        let inferred = self.infer_type(expression)?;
-        if inferred.borrow().clone() != expected.borrow().clone() {
-            return Err(anyhow!(
-                "Type mismatch: expected {:?}, got {:?}",
-                expected.borrow().clone(),
-                inferred.borrow().clone()
-            ));
+        token: &Token,
+    ) {
+        if let Some(inferred) = self.infer_type(expression) {
+            if inferred.borrow().clone() != expected.borrow().clone() {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!(
+                        "Type mismatch: expected {:?}, found {:?}",
+                        expected.borrow().clone(),
+                        inferred.borrow().clone()
+                    ),
+                    token,
+                );
+            }
         }
-        Ok(())
     }
 
     fn check_type_with_expected(
         &mut self,
         expression: Rc<RefCell<Expression>>,
         expected: Rc<RefCell<Type>>,
-    ) -> Result<()> {
+        token: &Token,
+    ) {
         let is_literal = matches!(
             &*expression.borrow(),
             Expression::IntegerLiteral { .. } | Expression::DecimalLiteral { .. }
@@ -367,17 +448,18 @@ impl TypeResolver {
                 _ => unreachable!(),
             }
             drop(expr_mut);
-            Ok(())
-        } else {
-            let inferred = self.infer_type(expression)?;
+        } else if let Some(inferred) = self.infer_type(expression) {
             if inferred.borrow().clone() != expected.borrow().clone() {
-                return Err(anyhow!(
-                    "Type mismatch: expected {:?}, got {:?}",
-                    expected.borrow().clone(),
-                    inferred.borrow().clone()
-                ));
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!(
+                        "Type mismatch: expected {:?}, found {:?}",
+                        expected.borrow().clone(),
+                        inferred.borrow().clone()
+                    ),
+                    token,
+                );
             }
-            Ok(())
         }
     }
 
@@ -386,7 +468,7 @@ impl TypeResolver {
         operator: BinaryOperator,
         left: Rc<RefCell<Type>>,
         right: Rc<RefCell<Type>>,
-    ) -> Result<Rc<RefCell<Type>>> {
+    ) -> Option<Rc<RefCell<Type>>> {
         match operator {
             BinaryOperator::Plus
             | BinaryOperator::Minus
@@ -395,21 +477,14 @@ impl TypeResolver {
             | BinaryOperator::Modulus => {
                 let left_ty = left.borrow().clone();
                 let right_ty = right.borrow().clone();
-                
+
                 if !Self::is_numeric_type(&left_ty) {
-                    return Err(anyhow!(
-                        "Arithmetic operator requires numeric operand, got {:?}",
-                        left_ty
-                    ));
+                    return None;
                 }
                 if left_ty != right_ty {
-                    return Err(anyhow!(
-                        "Arithmetic operands must have same type: {:?} vs {:?}",
-                        left_ty,
-                        right_ty
-                    ));
+                    return None;
                 }
-                Ok(Rc::new(RefCell::new(left_ty)))
+                Some(Rc::new(RefCell::new(left_ty)))
             }
             BinaryOperator::Equal
             | BinaryOperator::NotEqual
@@ -418,30 +493,20 @@ impl TypeResolver {
             | BinaryOperator::Greater
             | BinaryOperator::GreaterEqual => {
                 if left.borrow().clone() != right.borrow().clone() {
-                    return Err(anyhow!(
-                        "Comparison operands must have same type: {:?} vs {:?}",
-                        left.borrow().clone(),
-                        right.borrow().clone()
-                    ));
+                    return None;
                 }
-                Ok(Rc::new(RefCell::new(Type::Bool)))
+                Some(Rc::new(RefCell::new(Type::Bool)))
             }
             BinaryOperator::And | BinaryOperator::Or => {
                 if *left.borrow() != Type::Bool {
-                    return Err(anyhow!(
-                        "Logical operator requires Bool left operand, got {:?}",
-                        left.borrow()
-                    ));
+                    return None;
                 }
                 if *right.borrow() != Type::Bool {
-                    return Err(anyhow!(
-                        "Logical operator requires Bool right operand, got {:?}",
-                        right.borrow()
-                    ));
+                    return None;
                 }
-                Ok(Rc::new(RefCell::new(Type::Bool)))
+                Some(Rc::new(RefCell::new(Type::Bool)))
             }
-            _ => Err(anyhow!("Unsupported binary operator")),
+            _ => None,
         }
     }
 
@@ -467,29 +532,77 @@ impl TypeResolver {
         &self,
         operator: UnaryOperator,
         operand: Rc<RefCell<Type>>,
-    ) -> Result<Rc<RefCell<Type>>> {
+    ) -> Option<Rc<RefCell<Type>>> {
         match operator {
             UnaryOperator::Plus | UnaryOperator::Minus => {
                 let op_ty = operand.borrow().clone();
                 if !Self::is_numeric_type(&op_ty) {
-                    return Err(anyhow!(
-                        "Unary arithmetic requires numeric operand, got {:?}",
-                        op_ty
-                    ));
+                    return None;
                 }
-                Ok(Rc::new(RefCell::new(op_ty)))
+                Some(Rc::new(RefCell::new(op_ty)))
             }
             UnaryOperator::Inc | UnaryOperator::Dec => {
                 let op_ty = operand.borrow().clone();
                 if !Self::is_numeric_type(&op_ty) {
-                    return Err(anyhow!(
-                        "Inc/Dec requires numeric operand, got {:?}",
-                        op_ty
-                    ));
+                    return None;
                 }
-                Ok(Rc::new(RefCell::new(op_ty)))
+                Some(Rc::new(RefCell::new(op_ty)))
             }
-            _ => Err(anyhow!("Unsupported unary operator")),
+            _ => None,
         }
+    }
+
+    fn get_token_from_expr(expr: &Rc<RefCell<Expression>>) -> Token {
+        match &*expr.borrow() {
+            Expression::IntegerLiteral { token, .. } => (**token).clone(),
+            Expression::DecimalLiteral { token, .. } => (**token).clone(),
+            Expression::BooleanLiteral { token } => (**token).clone(),
+            Expression::NullLiteral { token } => (**token).clone(),
+            Expression::NullptrLiteral { token } => (**token).clone(),
+            Expression::CharLiteral { token } => (**token).clone(),
+            Expression::UnitLiteral { left, .. } => (**left).clone(),
+            Expression::Variable { name, .. } => (**name).clone(),
+            Expression::Type { name, .. } => (**name).clone(),
+            Expression::Unary { expression, .. } => Self::get_token_from_expr(expression),
+            Expression::Binary { left, .. } => Self::get_token_from_expr(left),
+            Expression::Call { callee, .. } => Self::get_token_from_expr(callee),
+            Expression::Assignment { left, .. } => Self::get_token_from_expr(left),
+            Expression::If { condition, .. } => Self::get_token_from_expr(condition),
+            Expression::Block { statements } => {
+                if let Some(last) = statements.last() {
+                    match &*last.borrow() {
+                        Statement::ExpressionStatement { expression } => Self::get_token_from_expr(expression),
+                        Statement::Return { value: Some(value) } => Self::get_token_from_expr(value),
+                        _ => Token::new("".to_string(), crate::lexer::token::TokenType::Identifier, crate::lexer::token::Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new("".to_string())),
+                    }
+                } else {
+                    Token::new("".to_string(), crate::lexer::token::TokenType::Identifier, crate::lexer::token::Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new("".to_string()))
+                }
+            }
+            _ => {
+                Token::new("".to_string(), crate::lexer::token::TokenType::Identifier, crate::lexer::token::Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new("".to_string()))
+            }
+        }
+    }
+
+    fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
+        let msg = message.into();
+        let diag = new_diagnostic(code, &msg)
+            .with_label(primary_label_from_token(token, &msg));
+        self.engine.borrow_mut().emit(diag);
+    }
+
+    fn emit_error_with_labels(
+        &self,
+        code: TrussDiagnosticCode,
+        message: impl Into<String>,
+        primary: duck_diagnostic::Label,
+        secondary: duck_diagnostic::Label,
+    ) {
+        let msg = message.into();
+        let diag = new_diagnostic(code, &msg)
+            .with_label(primary)
+            .with_label(secondary);
+        self.engine.borrow_mut().emit(diag);
     }
 }

@@ -2,8 +2,6 @@ pub mod precedence;
 
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Ok, Result, anyhow};
-
 use crate::{
     ast::{
         expression::{
@@ -11,6 +9,10 @@ use crate::{
         },
         node::Program,
         statement::{FunctionBody, Parameter, Pattern, Statement},
+    },
+    diag::{
+        new_diagnostic, primary_label_from_token, token_to_span, TrussDiagnosticCode,
+        TrussDiagnosticEngine,
     },
     lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType},
     parser::precedence::Precedence,
@@ -21,22 +23,27 @@ pub struct Parser {
     file: Rc<String>,
     tokens: Vec<Token>,
     index: usize,
+    engine: Rc<RefCell<TrussDiagnosticEngine>>,
 }
 
 impl Parser {
-    pub fn new(file: Rc<String>, tokens: Vec<Token>) -> Self {
+    pub fn new(file: Rc<String>, tokens: Vec<Token>, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
         Self {
             file,
             tokens,
             index: 0,
+            engine,
         }
     }
+
     pub fn get_file(&mut self) -> Rc<String> {
         self.file.clone()
     }
+
     fn is_empty(&self) -> bool {
         self.index >= self.tokens.len()
     }
+
     fn peek(&self) -> Option<Token> {
         if self.index < self.tokens.len() {
             Some(self.tokens[self.index].clone())
@@ -44,6 +51,7 @@ impl Parser {
             None
         }
     }
+
     fn peek2(&self) -> Option<Token> {
         if self.index + 1 < self.tokens.len() {
             Some(self.tokens[self.index + 1].clone())
@@ -51,6 +59,7 @@ impl Parser {
             None
         }
     }
+
     fn next(&mut self) -> Option<Token> {
         if self.index < self.tokens.len() {
             let token = self.tokens[self.index].clone();
@@ -60,18 +69,20 @@ impl Parser {
             None
         }
     }
-    pub fn parse(&mut self) -> Result<Program> {
+
+    pub fn parse(&mut self) -> Program {
         let mut program = Program::new(self.file.clone());
         while !self.is_empty() {
-            program
-                .statements
-                .push(Rc::new(RefCell::new(self.parse_statement()?)));
+            if let Ok(statement) = self.parse_statement() {
+                program.statements.push(Rc::new(RefCell::new(statement)));
+            }
         }
-        Ok(program)
+        program
     }
-    fn parse_statement(&mut self) -> Result<Statement> {
+
+    fn parse_statement(&mut self) -> Result<Statement, ()> {
         let Some(token) = self.peek() else {
-            return Err(anyhow!(""));
+            return Err(());
         };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
@@ -94,14 +105,22 @@ impl Parser {
                         token: Box::new(token),
                     })
                 }
-                _ => todo!(),
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        format!("Unexpected token '{}'", token.value),
+                        &token,
+                    );
+                    Err(())
+                }
             },
             _ => Ok(Statement::ExpressionStatement {
                 expression: Rc::new(RefCell::new(self.parse_expression()?)),
             }),
         }
     }
-    fn parse_expression(&mut self) -> Result<Expression> {
+
+    fn parse_expression(&mut self) -> Result<Expression, ()> {
         let left = self.parse_binary(Precedence::Assignment)?;
         if let Some(token) = self.peek()
             && let TokenType::Operator { operator } = token.ty
@@ -118,11 +137,12 @@ impl Parser {
             Ok(left)
         }
     }
-    fn parse_binary(&mut self, precedence: Precedence) -> Result<Expression> {
+
+    fn parse_binary(&mut self, precedence: Precedence) -> Result<Expression, ()> {
         let mut left = self.parse_unary()?;
         if !self.is_empty() {
             let Some(token) = self.peek() else {
-                return Err(anyhow!(""));
+                return Err(());
             };
             let mut token = token;
             while !self.is_empty()
@@ -133,7 +153,12 @@ impl Parser {
                 let right = self.parse_binary(prec)?;
                 if let TokenType::Operator { operator } = token.ty {
                     let Some(op) = BinaryOperator::from_operator(operator) else {
-                        return Err(anyhow!("Invalid binary operator"));
+                        self.emit_error(
+                            TrussDiagnosticCode::InvalidOperator,
+                            format!("Invalid binary operator '{}'", token.value),
+                            &token,
+                        );
+                        return Err(());
                     };
                     left = Expression::Binary {
                         left: Rc::new(RefCell::new(left)),
@@ -141,9 +166,19 @@ impl Parser {
                         right: Rc::new(RefCell::new(right)),
                     }
                 } else if let TokenType::Separator { .. } = token.ty {
-                    todo!();
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        format!("Expected operator, found separator '{}'", token.value),
+                        &token,
+                    );
+                    return Err(());
                 } else {
-                    return Err(anyhow!("Not an operator token"));
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        format!("Not an operator token '{}'", token.value),
+                        &token,
+                    );
+                    return Err(());
                 }
                 let Some(t) = self.peek() else { break };
                 token = t;
@@ -151,7 +186,8 @@ impl Parser {
         }
         Ok(left)
     }
-    fn parse_unary(&mut self) -> Result<Expression> {
+
+    fn parse_unary(&mut self) -> Result<Expression, ()> {
         if let Some(token) = self.peek()
             && let TokenType::Operator { operator } = token.ty
             && let OperatorType::Plus | OperatorType::Minus | OperatorType::Inc | OperatorType::Dec =
@@ -160,7 +196,12 @@ impl Parser {
             self.index += 1;
             let expression = self.parse_unary()?;
             let Some(op) = UnaryOperator::from_operator(operator) else {
-                return Err(anyhow!("Invalid unary operator"));
+                self.emit_error(
+                    TrussDiagnosticCode::InvalidOperator,
+                    format!("Invalid unary operator '{}'", token.value),
+                    &token,
+                );
+                return Err(());
             };
             Ok(Expression::Unary {
                 expression: Rc::new(RefCell::new(expression)),
@@ -176,7 +217,12 @@ impl Parser {
                     OperatorType::Inc | OperatorType::Dec => {
                         self.index += 1;
                         let Some(op) = UnaryOperator::from_operator(operator) else {
-                            return Err(anyhow!("Invalid unary operator"));
+                            self.emit_error(
+                                TrussDiagnosticCode::InvalidOperator,
+                                format!("Invalid unary operator '{}'", token.value),
+                                &token,
+                            );
+                            return Err(());
                         };
                         Ok(Expression::Unary {
                             expression: Rc::new(RefCell::new(expression)),
@@ -196,7 +242,12 @@ impl Parser {
                                 is_prefix: false,
                             })
                         } else {
-                            Err(anyhow!("Not an operator token"))
+                            self.emit_error(
+                                TrussDiagnosticCode::UnexpectedToken,
+                                "Expected '!!' for not-null assertion",
+                                &token,
+                            );
+                            Err(())
                         }
                     }
                     _ => Ok(expression),
@@ -206,9 +257,16 @@ impl Parser {
             }
         }
     }
-    fn parse_primary(&mut self) -> Result<Expression> {
+
+    fn parse_primary(&mut self) -> Result<Expression, ()> {
         let Some(token) = self.peek() else {
-            return Err(anyhow!(""));
+            let last_token = &self.tokens[self.index.saturating_sub(1)];
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedExpression,
+                "Expected expression but reached end of input",
+                last_token,
+            );
+            return Err(());
         };
         let mut expression = match token.ty {
             TokenType::IntegerLiteral { value } => {
@@ -253,14 +311,26 @@ impl Parser {
             }
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::If => self.parse_if(),
-                _ => todo!(),
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        format!("Unexpected keyword '{}'", token.value),
+                        &token,
+                    );
+                    Err(())
+                }
             },
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenBrace => self.parse_block(),
                 SeparatorType::OpenParen => {
                     self.index += 1;
                     let Some(t) = self.next() else {
-                        return Err(anyhow!(""));
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            "Expected closing parenthesis",
+                            &token,
+                        );
+                        return Err(());
                     };
                     if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                         Ok(Expression::UnitLiteral {
@@ -268,10 +338,22 @@ impl Parser {
                             right: Box::new(t),
                         })
                     } else {
-                        Err(anyhow!(""))
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            format!("Expected ')' but found '{}'", t.value),
+                            &t,
+                        );
+                        Err(())
                     }
                 }
-                _ => todo!(),
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedExpression,
+                        format!("Unexpected separator '{}'", token.value),
+                        &token,
+                    );
+                    Err(())
+                }
             },
             TokenType::Identifier => {
                 self.index += 1;
@@ -281,7 +363,14 @@ impl Parser {
                     symbol: None,
                 })
             }
-            _ => todo!(),
+            _ => {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedExpression,
+                    format!("Unexpected token '{}'", token.value),
+                    &token,
+                );
+                Err(())
+            }
         }?;
         while !self.is_empty() {
             let Some(token) = self.peek() else { break };
@@ -299,9 +388,15 @@ impl Parser {
         }
         Ok(expression)
     }
-    fn parse_type_expression(&mut self) -> Result<Expression> {
+
+    fn parse_type_expression(&mut self) -> Result<Expression, ()> {
         let Some(name) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedType,
+                "Expected type name",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
         };
         let type_parameters = self.parse_type_parameters()?;
         Ok(Expression::Type {
@@ -310,18 +405,34 @@ impl Parser {
             ty: None,
         })
     }
-    fn parse_function_decl(&mut self) -> Result<Statement> {
+
+    fn parse_function_decl(&mut self) -> Result<Statement, ()> {
         let Some(_token) = self.next() else {
-            return Err(anyhow!(""));
+            return Err(());
         };
         let Some(name) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::InvalidFunctionName,
+                "Expected function name after 'func'",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
         };
         let Some(next) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '(' after function name",
+                &name,
+            );
+            return Err(());
         };
         if !SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '(' but found '{}'", next.value),
+                &next,
+            );
+            return Err(());
         }
         let mut parameters = Vec::new();
         while let Some(t) = self.peek() {
@@ -329,24 +440,54 @@ impl Parser {
                 break;
             }
             let Some(label_token) = self.next() else {
-                return Err(anyhow!(""));
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    "Expected parameter label",
+                    &t,
+                );
+                return Err(());
             };
             if TokenType::Identifier != label_token.ty {
-                return Err(anyhow!("Expected parameter label"));
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    format!("Expected parameter label but found '{}'", label_token.value),
+                    &label_token,
+                );
+                return Err(());
             }
 
             let Some(name_token) = self.next() else {
-                return Err(anyhow!(""));
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    "Expected parameter name",
+                    &label_token,
+                );
+                return Err(());
             };
             if TokenType::Identifier != name_token.ty {
-                return Err(anyhow!("Expected parameter name"));
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    format!("Expected parameter name but found '{}'", name_token.value),
+                    &name_token,
+                );
+                return Err(());
             }
 
             let Some(colon) = self.next() else {
-                return Err(anyhow!(""));
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected ':' after parameter name",
+                    &name_token,
+                );
+                return Err(());
             };
             if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
-                return Err(anyhow!(""));
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected ':' but found '{}'", colon.value),
+                    &colon,
+                );
+                return Err(());
             }
             let type_expression = self.parse_type_expression()?;
             parameters.push(Rc::new(RefCell::new(Parameter {
@@ -363,10 +504,20 @@ impl Parser {
             }
         }
         let Some(next) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected ')' to close parameter list",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
         };
         if !SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected ')' but found '{}'", next.value),
+                &next,
+            );
+            return Err(());
         }
         let return_type = if let Some(token) = self.peek()
             && OperatorType::is_operator(&token, OperatorType::Arrow)
@@ -385,10 +536,17 @@ impl Parser {
                 if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
                     break;
                 }
-                statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
+                if let Ok(stmt) = self.parse_statement() {
+                    statements.push(Rc::new(RefCell::new(stmt)));
+                }
             }
             let Some(next) = self.next() else {
-                return Err(anyhow!(""));
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '}' to close function body",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
             };
             if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
                 Ok(Statement::FunctionDecl {
@@ -401,7 +559,12 @@ impl Parser {
                     ty: None,
                 })
             } else {
-                Err(anyhow!(""))
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '}}' but found '{}'", next.value),
+                    &next,
+                );
+                Err(())
             }
         } else if let Some(token) = self.peek()
             && OperatorType::is_operator(&token, OperatorType::Assign)
@@ -420,15 +583,26 @@ impl Parser {
                 ty: None,
             })
         } else {
-            Err(anyhow!(""))
+            self.emit_error(
+                TrussDiagnosticCode::UnexpectedToken,
+                "Expected '{' or '=' to start function body",
+                &self.tokens[self.index],
+            );
+            Err(())
         }
     }
-    fn parse_variable_decl(&mut self) -> Result<Statement> {
+
+    fn parse_variable_decl(&mut self) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
-            return Err(anyhow!(""));
+            return Err(());
         };
         let Some(name) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::InvalidVariableName,
+                "Expected variable name after 'let' or 'var'",
+                &token,
+            );
+            return Err(());
         };
         let type_expression = if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::Colon)
@@ -454,9 +628,10 @@ impl Parser {
             ty: None,
         })
     }
-    fn parse_return(&mut self) -> Result<Statement> {
+
+    fn parse_return(&mut self) -> Result<Statement, ()> {
         let Some(token) = self.peek() else {
-            return Err(anyhow!(""));
+            return Err(());
         };
         let current_line = token.position.line;
         self.index += 1;
@@ -471,7 +646,8 @@ impl Parser {
             value: value.map(RefCell::new).map(Rc::new),
         })
     }
-    fn parse_loop(&mut self) -> Result<Statement> {
+
+    fn parse_loop(&mut self) -> Result<Statement, ()> {
         self.index += 1;
         if let Some(token) = self.peek()
             && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
@@ -481,10 +657,16 @@ impl Parser {
                 body: Rc::new(RefCell::new(body)),
             })
         } else {
-            Err(anyhow!(""))
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' after 'loop'",
+                &self.tokens[self.index],
+            );
+            Err(())
         }
     }
-    fn parse_while(&mut self) -> Result<Statement> {
+
+    fn parse_while(&mut self) -> Result<Statement, ()> {
         self.index += 1;
         let condition = self.parse_expression()?;
         if let Some(token) = self.peek()
@@ -496,15 +678,26 @@ impl Parser {
                 body: Rc::new(RefCell::new(body)),
             })
         } else {
-            Err(anyhow!(""))
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' after while condition",
+                &self.tokens[self.index],
+            );
+            Err(())
         }
     }
-    fn parse_repeat_while(&mut self) -> Result<Statement> {
+
+    fn parse_repeat_while(&mut self) -> Result<Statement, ()> {
         self.index += 1;
         if let Some(token) = self.peek()
             && !SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
         {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' after 'repeat'",
+                &token,
+            );
+            return Err(());
         }
         let body = self.parse_block()?;
         if let Some(token) = self.peek()
@@ -517,17 +710,33 @@ impl Parser {
                 condition: Rc::new(RefCell::new(condition)),
             })
         } else {
-            Err(anyhow!(""))
+            self.emit_error(
+                TrussDiagnosticCode::UnexpectedToken,
+                "Expected 'while' after repeat body",
+                &self.tokens[self.index],
+            );
+            Err(())
         }
     }
-    fn parse_for(&mut self) -> Result<Statement> {
+
+    fn parse_for(&mut self) -> Result<Statement, ()> {
         self.index += 1;
         let pattern = self.parse_pattern()?;
         let Some(in_keyword) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::UnexpectedToken,
+                "Expected 'in' after for pattern",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
         };
         if !KeywordType::is_keyword(&in_keyword, KeywordType::In) {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::UnexpectedToken,
+                format!("Expected 'in' but found '{}'", in_keyword.value),
+                &in_keyword,
+            );
+            return Err(());
         }
         let iterator = self.parse_expression()?;
         if let Some(token) = self.peek()
@@ -540,41 +749,66 @@ impl Parser {
                 body: Rc::new(RefCell::new(body)),
             })
         } else {
-            Err(anyhow!(""))
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' after for iterator",
+                &self.tokens[self.index],
+            );
+            Err(())
         }
     }
-    fn parse_throw(&mut self) -> Result<Statement> {
+
+    fn parse_throw(&mut self) -> Result<Statement, ()> {
         self.index += 1;
         let exception = self.parse_expression()?;
         Ok(Statement::Throw {
             exception: Rc::new(RefCell::new(exception)),
         })
     }
-    fn parse_block(&mut self) -> Result<Expression> {
+
+    fn parse_block(&mut self) -> Result<Expression, ()> {
         self.index += 1;
         let mut statements = Vec::new();
         while let Some(token) = self.peek() {
             if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
                 break;
             }
-            statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
+            if let Ok(stmt) = self.parse_statement() {
+                statements.push(Rc::new(RefCell::new(stmt)));
+            }
         }
         let Some(next) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '}' to close block",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
         };
         if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
             Ok(Expression::Block { statements })
         } else {
-            Err(anyhow!(""))
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '}}' but found '{}'", next.value),
+                &next,
+            );
+            Err(())
         }
     }
-    fn parse_call(&mut self, callee: Expression) -> Result<Expression> {
+
+    fn parse_call(&mut self, callee: Expression) -> Result<Expression, ()> {
         let type_parameters = self.parse_type_parameters()?;
         let Some(open) = self.next() else {
-            return Err(anyhow!(""));
+            return Err(());
         };
         if !SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '(' but found '{}'", open.value),
+                &open,
+            );
+            return Err(());
         }
         let mut parameters = Vec::new();
         while let Some(token) = self.peek() {
@@ -604,7 +838,12 @@ impl Parser {
             }
         }
         let Some(next) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected ')' to close call arguments",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
         };
         if SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
             Ok(Expression::Call {
@@ -613,16 +852,27 @@ impl Parser {
                 parameters,
             })
         } else {
-            Err(anyhow!(""))
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected ')' but found '{}'", next.value),
+                &next,
+            );
+            Err(())
         }
     }
-    fn parse_if(&mut self) -> Result<Expression> {
+
+    fn parse_if(&mut self) -> Result<Expression, ()> {
         self.index += 1;
         let condition = self.parse_expression()?;
         if let Some(token) = self.peek()
             && !SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
         {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' after if condition",
+                &token,
+            );
+            return Err(());
         }
         let then = self.parse_block()?;
         let else_ = if let Some(token) = self.peek()
@@ -638,7 +888,12 @@ impl Parser {
             {
                 Some(self.parse_block()?)
             } else {
-                return Err(anyhow!(""));
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    "Expected 'if' or '{' after 'else'",
+                    &self.tokens[self.index],
+                );
+                return Err(());
             }
         } else {
             None
@@ -649,24 +904,38 @@ impl Parser {
             else_: else_.map(RefCell::new).map(Rc::new),
         })
     }
-    fn parse_statements(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>> {
+
+    fn parse_statements(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>, ()> {
         let mut statements = Vec::new();
         while let Some(token) = self.peek() {
             if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
                 break;
             }
-            statements.push(Rc::new(RefCell::new(self.parse_statement()?)));
+            if let Ok(stmt) = self.parse_statement() {
+                statements.push(Rc::new(RefCell::new(stmt)));
+            }
         }
         let Some(next) = self.next() else {
-            return Err(anyhow!(""));
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '}' to close statements",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
         };
         if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
             Ok(statements)
         } else {
-            Err(anyhow!(""))
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '}}' but found '{}'", next.value),
+                &next,
+            );
+            Err(())
         }
     }
-    fn parse_type_parameters(&mut self) -> Result<Option<Vec<Rc<RefCell<Expression>>>>> {
+
+    fn parse_type_parameters(&mut self) -> Result<Option<Vec<Rc<RefCell<Expression>>>>, ()> {
         if let Some(token) = self.peek()
             && OperatorType::is_operator(&token, OperatorType::Less)
         {
@@ -685,19 +954,30 @@ impl Parser {
                 }
             }
             let Some(next) = self.next() else {
-                return Err(anyhow!(""));
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '>' to close type parameters",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
             };
             if !OperatorType::is_operator(&next, OperatorType::Greater) {
-                return Err(anyhow!(""));
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '>' but found '{}'", next.value),
+                    &next,
+                );
+                return Err(());
             }
             Ok(Some(type_parameters))
         } else {
             Ok(None)
         }
     }
-    fn parse_pattern(&mut self) -> Result<Pattern> {
+
+    fn parse_pattern(&mut self) -> Result<Pattern, ()> {
         let Some(token) = self.next() else {
-            return Err(anyhow!(""));
+            return Err(());
         };
         match token.ty {
             TokenType::Identifier => {
@@ -724,9 +1004,30 @@ impl Parser {
                     }
                     Ok(Pattern::Tuple(patterns))
                 }
-                _ => Err(anyhow!("")),
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        format!("Unexpected separator in pattern '{}'", token.value),
+                        &token,
+                    );
+                    Err(())
+                }
             },
-            _ => Err(anyhow!("")),
+            _ => {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    format!("Expected identifier in pattern but found '{}'", token.value),
+                    &token,
+                );
+                Err(())
+            }
         }
+    }
+
+    fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
+        let msg = message.into();
+        let diag = new_diagnostic(code, &msg)
+            .with_label(primary_label_from_token(token, &msg));
+        self.engine.borrow_mut().emit(diag);
     }
 }

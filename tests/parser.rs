@@ -1,13 +1,18 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
         statement::{FunctionBody, Parameter, Pattern, Statement},
     },
+    diag::TrussDiagnosticEngine,
     lexer::{CharStream, Lexer},
     parser::Parser,
 };
+
+fn create_engine() -> Rc<RefCell<TrussDiagnosticEngine>> {
+    Rc::new(RefCell::new(TrussDiagnosticEngine::new()))
+}
 
 #[test]
 fn test_parse_function_decl() {
@@ -15,8 +20,9 @@ fn test_parse_function_decl() {
         "func test() -> Int32 { 1 } func test2(_ a: Int32) { a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "test");
     } else {
@@ -42,8 +48,9 @@ fn test_parse_function_decl_with_label() {
         "func test(_ a: Int32) { a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "_");
         assert_eq!(parameters[0].borrow().name.value, "a");
@@ -58,8 +65,9 @@ fn test_parse_function_decl_with_custom_label() {
         "func test(label1 a: Int32, label2 b: String) { a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "label1");
         assert_eq!(parameters[0].borrow().name.value, "a");
@@ -76,8 +84,9 @@ fn test_parse_function_decl_with_multiple_underscore_labels() {
         "func test(_ v1: Int32, _ v2: String) { v1 }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "_");
         assert_eq!(parameters[0].borrow().name.value, "v1");
@@ -94,8 +103,9 @@ fn test_parse_function_call_with_label() {
         "func test(label1 a: Int32) {} func test2() { test(label1: 42) }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
@@ -113,8 +123,9 @@ fn test_parse_function_call_without_label() {
         "func test(_ a: Int32) {} func test2() { test(42) }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
@@ -132,8 +143,9 @@ fn test_parse_underscore_pattern() {
         "func test() { for _ in 1..<3 {} }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::For { pattern, .. } = &*statements[0].borrow()
@@ -150,8 +162,9 @@ fn test_parse_variable_decl() {
         "func test() -> Int32 { let a = 1 a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { name, .. } = &*statements[0].borrow()
@@ -168,8 +181,9 @@ fn test_parse_function_call() {
         "func test() {} func test2() { test() }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
@@ -188,8 +202,9 @@ fn test_parse_unary() {
         "func test() {let a = 1; ++a a-- }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -229,8 +244,9 @@ fn test_parse_binary() {
         "func test() {let a = 1 a+1 }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -255,8 +271,9 @@ fn test_parse_assignment() {
         "func test() {let a = 1 a += 2 }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -281,8 +298,9 @@ fn test_parse_return() {
         "func test() { return \n return 1 }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -305,8 +323,9 @@ fn test_parse_for() {
         "func test() { for _ in 1..<3 {} for i in 0..2 {} }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -325,8 +344,9 @@ fn test_parse_for() {
 #[test]
 fn test_parse_char_literal() {
     let mut lexer = Lexer::new(CharStream::new("'a'".to_string(), Rc::new("".to_string())));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow()
         && let Expression::CharLiteral { token } = &*expression.borrow()
     {
@@ -342,8 +362,9 @@ fn test_parse_variable_decl_at_eof() {
         "let a: Never".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "a");
     } else {
@@ -357,8 +378,9 @@ fn test_parse_variable_decl_no_type_at_eof() {
         "let a".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "a");
     } else {
@@ -372,8 +394,9 @@ fn test_parse_variable_decl_in_function_at_eof() {
         "func test() { let a: Never }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { name, .. } = &*statements[0].borrow()

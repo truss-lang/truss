@@ -5,6 +5,7 @@ use truss::{
         expression::Expression,
         statement::{FunctionBody, Statement},
     },
+    diag::TrussDiagnosticEngine,
     id::CrateId,
     krate::Crate,
     lexer::{CharStream, Lexer},
@@ -14,24 +15,27 @@ use truss::{
     types::Type,
 };
 
+fn create_engine() -> Rc<RefCell<TrussDiagnosticEngine>> {
+    Rc::new(RefCell::new(TrussDiagnosticEngine::new()))
+}
+
 #[test]
 fn test_infer_variable_decl() {
     let mut lexer = Lexer::new(CharStream::new(
         "func test()->Int32 { let a = 1 return a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -62,18 +66,17 @@ fn test_check_variable_decl_with_annotation() {
         "func test()->Int32 { let a: Int32 = 1 return a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -95,18 +98,17 @@ fn test_return_type_check() {
         "func test()->Bool { return true }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -128,18 +130,17 @@ fn test_binary_expression_infer() {
         "func test()->Int32 { let a = 1 let b = a + 1 return b }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -161,18 +162,17 @@ fn test_expression_body_function() {
         "func test()->Int32 = 42".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Expression(expr) = &*body.borrow()
         && let Expression::IntegerLiteral { ty, .. } = &*expr.borrow()
@@ -190,18 +190,17 @@ fn test_variable_decl_with_bool_annotation() {
         "func test()->Bool { let a: Bool = true return a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
@@ -227,24 +226,30 @@ fn test_variable_decl_with_bool_annotation() {
 }
 
 #[test]
-#[should_panic(expected = "Type mismatch")]
 fn test_type_annotation_mismatch() {
     let mut lexer = Lexer::new(CharStream::new(
         "func test()->Int32 { let a: Bool = 1 return a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, truss::diag::TrussDiagnosticCode::TypeMismatch);
+    assert!(errors[0].message.contains("Type mismatch"));
+    assert!(errors[0].message.contains("Bool"));
+    assert!(errors[0].message.contains("Int32"));
 }
 
 #[test]
@@ -253,18 +258,17 @@ fn test_never_type_annotation() {
         "func test()->Never { let a: Never return a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl { return_type, .. } = &*program.statements[0].borrow()
         && let Some(return_type) = return_type
         && let Expression::Type { ty, .. } = &*return_type.borrow()
@@ -282,18 +286,17 @@ fn test_annotated_param_type() {
         "func test(_ a: Int32)->Int32 { return a }".to_string(),
         Rc::new("".to_string()),
     ));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl {
         parameters, body, ..
     } = &*program.statements[0].borrow()
@@ -320,18 +323,17 @@ fn test_annotated_param_type() {
 
 fn run_type_check_with_return(code: &str) -> Type {
     let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
 
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -368,18 +370,17 @@ fn run_type_check_with_return(code: &str) -> Type {
 
 fn run_type_check_var(code: &str, var_name: &str) -> Type {
     let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
 
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -543,18 +544,17 @@ fn test_return_type_context_float64() {
 fn test_parameter_type_context() {
     let code = "func test(_ a: Int64) -> Int64 { return a }";
     let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
 
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         let param_ty = parameters[0].borrow().ty.as_ref().unwrap().borrow().clone();
@@ -614,39 +614,51 @@ fn test_u32_max() {
 }
 
 #[test]
-#[should_panic(expected = "Type mismatch")]
 fn test_type_mismatch_int_float() {
     let code = "func test() -> Int32 { let a: Float64 = 3.14 return a }";
     let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, truss::diag::TrussDiagnosticCode::TypeMismatch);
+    assert!(errors[0].message.contains("Type mismatch"));
+    assert!(errors[0].message.contains("Int32"));
+    assert!(errors[0].message.contains("Float64"));
 }
 
 #[test]
-#[should_panic(expected = "Type mismatch")]
 fn test_type_mismatch_different_int_sizes() {
     let code = "func test() -> Int32 { let a: Int64 = 42 return a }";
     let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse());
-    let program = parser.parse().unwrap();
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
         "test".to_string(),
         CrateId { id: 0 },
     )));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone());
-    let module_id = symbol_resolver
-        .resolve(&program, "test".to_string())
-        .unwrap();
-    let mut type_resolver = TypeResolver::new(krate.clone());
-    type_resolver.resolve(&program, module_id).unwrap();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, truss::diag::TrussDiagnosticCode::TypeMismatch);
+    assert!(errors[0].message.contains("Type mismatch"));
+    assert!(errors[0].message.contains("Int32"));
+    assert!(errors[0].message.contains("Int64"));
 }
