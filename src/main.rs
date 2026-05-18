@@ -4,6 +4,7 @@ use clap::Parser;
 use truss::{
     diag::TrussDiagnosticEngine,
     id::CrateId,
+    ir_gen::IRGenerator,
     krate::Crate,
     lexer::{CharStream, Lexer},
     parser::Parser as TrussParser,
@@ -24,6 +25,8 @@ struct Cli {
     ast: bool,
     #[arg(long, short, default_value_t = false)]
     inspect: bool,
+    #[arg(long, default_value_t = false)]
+    ir: bool,
 }
 
 fn emit_diagnostics(engine: &TrussDiagnosticEngine, content: &str) -> bool {
@@ -66,7 +69,10 @@ fn main() {
         println!("{:#?}", program);
     }
 
-    let krate = Rc::new(RefCell::new(Crate::new("main".to_string(), CrateId { id: 0 })));
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "main".to_string(),
+        CrateId { id: 0 },
+    )));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, file_rc.to_string());
 
@@ -89,5 +95,22 @@ fn main() {
     if cli.inspect || cli.ast {
         println!("=== AST (after type resolve) ===");
         println!("{:#?}", program);
+    }
+
+    let context = inkwell::context::Context::create();
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let ir_generator = IRGenerator::new(&context, engine.clone());
+    let module = ir_generator.generate(&program);
+
+    if emit_diagnostics(&engine.borrow(), &content) {
+        return;
+    }
+
+    if cli.ir || cli.inspect {
+        module.print_to_file("output.ll").expect("Failed to write LLVM IR file");
+        let ir_content = fs::read_to_string("output.ll").expect("Failed to read LLVM IR file");
+        println!("=== LLVM IR ===");
+        println!("{}", ir_content);
+        fs::remove_file("output.ll").ok();
     }
 }
