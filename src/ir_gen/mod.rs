@@ -79,15 +79,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Statement::Return { value, .. } => {
-                if let Some(value) = value {
-                    if matches!(&*value.borrow(), Expression::VoidLiteral { .. }) {
-                        self.builder.build_return(None)?;
-                    } else {
+                match value {
+                    Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
                         let value = self.resolve_expression(value.clone())?;
                         self.builder.build_return(Some(&value))?;
                     }
-                } else {
-                    self.builder.build_return(None)?;
+                    _ => {
+                        self.builder.build_return(None)?;
+                    }
                 }
             }
             Statement::ExpressionStatement { .. } => {}
