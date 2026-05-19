@@ -70,7 +70,7 @@ impl<'ctx> IRGenerator<'ctx> {
             if let Statement::VariableDecl {
                 name,
                 type_expression,
-                initializer: _,
+                initializer,
                 ty,
                 ..
             } = &*stmt.borrow()
@@ -79,6 +79,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.resolve_type(ty.clone())?
                 } else if let Some(type_expr) = type_expression {
                     self.infer_type_from_expression(type_expr.clone())?
+                } else if let Some(init) = initializer {
+                    self.infer_type_from_expression(init.clone())?
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::TypeInferenceFailed,
@@ -328,6 +330,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 Ok(true)
             }
+            Statement::ExpressionStatement { expression } => {
+                self.resolve_expression(expression.clone())?;
+                Ok(false)
+            }
             _ => Ok(false),
         }
     }
@@ -463,7 +469,227 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid types for division");
                         }
                     }
+                    BinaryOperator::Equal => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_int_compare(
+                                inkwell::IntPredicate::EQ,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else if let (
+                            BasicValueEnum::FloatValue(l),
+                            BasicValueEnum::FloatValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            Ok(self.builder.build_float_compare(
+                                inkwell::FloatPredicate::OEQ,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for equality comparison");
+                        }
+                    }
+                    BinaryOperator::NotEqual => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_int_compare(
+                                inkwell::IntPredicate::NE,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else if let (
+                            BasicValueEnum::FloatValue(l),
+                            BasicValueEnum::FloatValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            Ok(self.builder.build_float_compare(
+                                inkwell::FloatPredicate::ONE,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for inequality comparison");
+                        }
+                    }
+                    BinaryOperator::Less => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_int_compare(
+                                inkwell::IntPredicate::SLT,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else if let (
+                            BasicValueEnum::FloatValue(l),
+                            BasicValueEnum::FloatValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            Ok(self.builder.build_float_compare(
+                                inkwell::FloatPredicate::OLT,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for less than comparison");
+                        }
+                    }
+                    BinaryOperator::LessEqual => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_int_compare(
+                                inkwell::IntPredicate::SLE,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else if let (
+                            BasicValueEnum::FloatValue(l),
+                            BasicValueEnum::FloatValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            Ok(self.builder.build_float_compare(
+                                inkwell::FloatPredicate::OLE,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for less than or equal comparison");
+                        }
+                    }
+                    BinaryOperator::Greater => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_int_compare(
+                                inkwell::IntPredicate::SGT,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else if let (
+                            BasicValueEnum::FloatValue(l),
+                            BasicValueEnum::FloatValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            Ok(self.builder.build_float_compare(
+                                inkwell::FloatPredicate::OGT,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for greater than comparison");
+                        }
+                    }
+                    BinaryOperator::GreaterEqual => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_int_compare(
+                                inkwell::IntPredicate::SGE,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else if let (
+                            BasicValueEnum::FloatValue(l),
+                            BasicValueEnum::FloatValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            Ok(self.builder.build_float_compare(
+                                inkwell::FloatPredicate::OGE,
+                                l,
+                                r,
+                                "",
+                            )?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for greater than or equal comparison");
+                        }
+                    }
+                    BinaryOperator::And => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_and(l, r, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for logical and");
+                        }
+                    }
+                    BinaryOperator::Or => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_or(l, r, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for logical or");
+                        }
+                    }
                     _ => anyhow::bail!("Binary operator {:?} not implemented", operator),
+                }
+            }
+            Expression::Unary {
+                expression: expr,
+                operator,
+                is_prefix: _,
+            } => {
+                let expr_val = self.resolve_expression(expr.clone())?;
+                match operator {
+                    UnaryOperator::Plus => {
+                        Ok(expr_val)
+                    }
+                    UnaryOperator::Minus => {
+                        if let BasicValueEnum::IntValue(v) = expr_val {
+                            Ok(self.builder.build_int_neg(v, "")?.into())
+                        } else if let BasicValueEnum::FloatValue(v) = expr_val {
+                            Ok(self.builder.build_float_neg(v, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid type for unary minus");
+                        }
+                    }
+                    _ => anyhow::bail!("Unary operator {:?} not implemented", operator),
+                }
+            }
+            Expression::Assignment {
+                left,
+                operator,
+                right,
+            } => {
+                let right_val = self.resolve_expression(right.clone())?;
+                match operator {
+                    AssignmentOperator::Assign => {
+                        if let Expression::Variable { name, .. } = &*left.borrow() {
+                            if let Some(ptr) = self.lookup_variable(&name.value) {
+                                self.builder.build_store(ptr, right_val)?;
+                                Ok(right_val)
+                            } else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UndefinedVariable,
+                                    format!("Undefined variable: '{}'", name.value),
+                                );
+                                anyhow::bail!("Undefined variable");
+                            }
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnsupportedFeature,
+                                "Invalid assignment target",
+                            );
+                            anyhow::bail!("Invalid assignment target");
+                        }
+                    }
+                    _ => anyhow::bail!("Assignment operator {:?} not implemented", operator),
                 }
             }
             Expression::If {
