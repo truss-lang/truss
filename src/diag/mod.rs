@@ -46,6 +46,8 @@ pub enum TrussDiagnosticCode {
     NeverTypeConversion,
     VoidTypeConversion,
     NestedFunctionType,
+    TypeInferenceFailed,
+    IRVariableNotFound,
 }
 
 impl DiagnosticCode for TrussDiagnosticCode {
@@ -91,6 +93,8 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::NeverTypeConversion => "E0403",
             Self::VoidTypeConversion => "E0404",
             Self::NestedFunctionType => "E0405",
+            Self::TypeInferenceFailed => "E0406",
+            Self::IRVariableNotFound => "E0407",
         }
     }
 

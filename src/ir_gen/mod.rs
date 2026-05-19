@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use anyhow::{Ok, Result};
 use inkwell::{
@@ -6,7 +6,7 @@ use inkwell::{
     context::Context,
     module::Module,
     types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum},
-    values::BasicValueEnum,
+    values::{BasicValueEnum, PointerValue},
 };
 
 use crate::{
@@ -20,6 +20,7 @@ pub struct IRGenerator<'ctx> {
     module: Rc<Module<'ctx>>,
     builder: Builder<'ctx>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
+    variables: Rc<RefCell<HashMap<String, PointerValue<'ctx>>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -31,6 +32,7 @@ impl<'ctx> IRGenerator<'ctx> {
             module,
             builder,
             engine,
+            variables: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -43,7 +45,36 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
         match &*statement.borrow() {
-            Statement::VariableDecl { .. } => {}
+            Statement::VariableDecl {
+                name,
+                type_expression,
+                initializer,
+                ty,
+                ..
+            } => {
+                let llvm_type = if let Some(ty) = ty {
+                    self.resolve_type(ty.clone())?
+                } else if let Some(type_expr) = type_expression {
+                    self.infer_type_from_expression(type_expr.clone())?
+                } else if let Some(init) = initializer {
+                    self.resolve_expression(init.clone())?.get_type()
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::TypeInferenceFailed,
+                        format!("Variable '{}' has no type annotation or initializer", name.value),
+                    );
+                    anyhow::bail!("Cannot determine variable type");
+                };
+
+                let ptr = self.builder.build_alloca(llvm_type, &name.value)?;
+                
+                self.variables.borrow_mut().insert(name.value.clone(), ptr);
+
+                if let Some(init) = initializer {
+                    let init_val = self.resolve_expression(init.clone())?;
+                    self.builder.build_store(ptr, init_val)?;
+                }
+            }
             Statement::FunctionDecl {
                 ty: Some(ty),
                 name,
@@ -123,8 +154,27 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(llvm_type.into_float_type().const_float(*value).into())
             }
             Expression::CharLiteral { .. } => Ok(self.context.i8_type().const_int(0, false).into()),
-            Expression::Variable { .. } => {
-                anyhow::bail!("Variable lookup not implemented");
+            Expression::Variable { name, ty, .. } => {
+                let variables = self.variables.borrow();
+                if let Some(ptr) = variables.get(&name.value) {
+                    let llvm_type = if let Some(ty) = ty {
+                        self.resolve_type(ty.clone())?
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeInferenceFailed,
+                            format!("Variable '{}' needs type annotation for load operation", name.value),
+                        );
+                        anyhow::bail!("Variable needs type annotation");
+                    };
+                    let val = self.builder.build_load(llvm_type, *ptr, &name.value)?;
+                    Ok(val.into())
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedVariable,
+                        format!("Undefined variable: '{}'", name.value),
+                    );
+                    anyhow::bail!("Undefined variable: {}", name.value);
+                }
             }
             Expression::Binary {
                 left,
@@ -260,6 +310,45 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         };
         Ok(resolved)
+    }
+
+    fn infer_type_from_expression(&self, expr: Rc<RefCell<Expression>>) -> Result<BasicTypeEnum<'ctx>> {
+        match &*expr.borrow() {
+            Expression::IntegerLiteral { ty, .. } => {
+                if let Some(ty) = ty {
+                    self.resolve_type(ty.clone())
+                } else {
+                    Ok(self.context.i32_type().into())
+                }
+            }
+            Expression::DecimalLiteral { ty, .. } => {
+                if let Some(ty) = ty {
+                    self.resolve_type(ty.clone())
+                } else {
+                    Ok(self.context.f64_type().into())
+                }
+            }
+            Expression::BooleanLiteral { .. } => Ok(self.context.bool_type().into()),
+            Expression::CharLiteral { .. } => Ok(self.context.i8_type().into()),
+            Expression::Variable { ty, .. } => {
+                if let Some(ty) = ty {
+                    self.resolve_type(ty.clone())
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::TypeInferenceFailed,
+                        "Cannot infer type from variable without type annotation",
+                    );
+                    anyhow::bail!("Cannot infer type from variable")
+                }
+            }
+            _ => {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeInferenceFailed,
+                    "Cannot infer type from this expression",
+                );
+                anyhow::bail!("Cannot infer type")
+            }
+        }
     }
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>) {
