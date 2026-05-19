@@ -19,15 +19,21 @@ fn create_engine() -> Rc<RefCell<TrussDiagnosticEngine>> {
 
 #[test]
 fn test_variable_resolver() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test() { let a = 1 a }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a = 1 a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        Rc::new(RefCell::new(Crate::new(
+            "test".to_string(),
+            CrateId { id: 0 },
+        ))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -44,15 +50,21 @@ fn test_variable_resolver() {
 
 #[test]
 fn test_function_resolver() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test() {} func test2() { test() }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() {} func test2() { test() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        Rc::new(RefCell::new(Crate::new(
+            "test".to_string(),
+            CrateId { id: 0 },
+        ))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -70,15 +82,21 @@ fn test_function_resolver() {
 
 #[test]
 fn test_underscore_variable_no_symbol() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test() { let _ = 1 let _ = 2 }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let _ = 1 let _ = 2 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        Rc::new(RefCell::new(Crate::new(
+            "test".to_string(),
+            CrateId { id: 0 },
+        ))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -86,15 +104,21 @@ fn test_underscore_variable_no_symbol() {
 
 #[test]
 fn test_underscore_parameter_no_symbol() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test(_ _: Int32) { }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test(_ _: Int32) { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        Rc::new(RefCell::new(Crate::new(
+            "test".to_string(),
+            CrateId { id: 0 },
+        ))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -102,19 +126,25 @@ fn test_underscore_parameter_no_symbol() {
 
 #[test]
 fn test_variable_shadowing() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test() { let a = 1 let a = 2 a }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a = 1 let a = 2 a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        Rc::new(RefCell::new(Crate::new(
+            "test".to_string(),
+            CrateId { id: 0 },
+        ))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
-    
+
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[2].borrow()

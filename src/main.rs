@@ -45,8 +45,13 @@ fn main() {
     let content = fs::read_to_string(&cli.file).expect("Failed to read file");
     let file_rc = Rc::new(cli.file.clone());
     let char_stream = CharStream::new(content.clone(), file_rc.clone());
-    let mut lexer = Lexer::new(char_stream);
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(char_stream, engine.clone());
     let tokens = lexer.parse();
+
+    if emit_diagnostics(&engine.borrow(), &content) {
+        return;
+    }
 
     if cli.inspect || cli.tokens {
         println!("=== Tokens ===");

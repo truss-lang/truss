@@ -21,11 +21,14 @@ fn create_engine() -> Rc<RefCell<TrussDiagnosticEngine>> {
 
 #[test]
 fn test_infer_variable_decl() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test()->Int32 { let a = 1 return a }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test()->Int32 { let a = 1 return a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -62,11 +65,14 @@ fn test_infer_variable_decl() {
 
 #[test]
 fn test_check_variable_decl_with_annotation() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test()->Int32 { let a: Int32 = 1 return a }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test()->Int32 { let a: Int32 = 1 return a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -94,11 +100,14 @@ fn test_check_variable_decl_with_annotation() {
 
 #[test]
 fn test_return_type_check() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test()->Bool { return true }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test()->Bool { return true }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -126,11 +135,14 @@ fn test_return_type_check() {
 
 #[test]
 fn test_binary_expression_infer() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test()->Int32 { let a = 1 let b = a + 1 return b }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test()->Int32 { let a = 1 let b = a + 1 return b }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -158,11 +170,14 @@ fn test_binary_expression_infer() {
 
 #[test]
 fn test_expression_body_function() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test()->Int32 = 42".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test()->Int32 = 42".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -186,11 +201,14 @@ fn test_expression_body_function() {
 
 #[test]
 fn test_variable_decl_with_bool_annotation() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test()->Bool { let a: Bool = true return a }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test()->Bool { let a: Bool = true return a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -227,11 +245,14 @@ fn test_variable_decl_with_bool_annotation() {
 
 #[test]
 fn test_type_annotation_mismatch() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test()->Int32 { let a: Bool = 1 return a }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test()->Int32 { let a: Bool = 1 return a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -256,11 +277,14 @@ fn test_type_annotation_mismatch() {
 
 #[test]
 fn test_never_type_annotation() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test()->Never { let a: Never return a }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test()->Never { let a: Never return a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -284,11 +308,14 @@ fn test_never_type_annotation() {
 
 #[test]
 fn test_annotated_param_type() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func test(_ a: Int32)->Int32 { return a }".to_string(),
-        Rc::new("".to_string()),
-    ));
     let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test(_ a: Int32)->Int32 { return a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -324,8 +351,11 @@ fn test_annotated_param_type() {
 }
 
 fn run_type_check_with_return(code: &str) -> Type {
-    let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let engine = create_engine();
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -371,8 +401,11 @@ fn run_type_check_with_return(code: &str) -> Type {
 }
 
 fn run_type_check_var(code: &str, var_name: &str) -> Type {
-    let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let engine = create_engine();
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -545,8 +578,11 @@ fn test_return_type_context_float64() {
 #[test]
 fn test_parameter_type_context() {
     let code = "func test(_ a: Int64) -> Int64 { return a }";
-    let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let engine = create_engine();
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -617,8 +653,11 @@ fn test_u32_max() {
 #[test]
 fn test_type_mismatch_int_float() {
     let code = "func test() -> Int32 { let a: Float64 = 3.14 return a }";
-    let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let engine = create_engine();
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(
@@ -645,8 +684,11 @@ fn test_type_mismatch_int_float() {
 #[test]
 fn test_type_mismatch_different_int_sizes() {
     let code = "func test() -> Int32 { let a: Int64 = 42 return a }";
-    let mut lexer = Lexer::new(CharStream::new(code.to_string(), Rc::new("".to_string())));
-    let engine = create_engine();
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let krate = Rc::new(RefCell::new(Crate::new(

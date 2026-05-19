@@ -1,16 +1,23 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
-use truss::lexer::{
-    CharStream, Lexer,
-    token::{KeywordType, TokenType},
+use truss::{
+    diag::TrussDiagnosticEngine,
+    lexer::{
+        CharStream, Lexer,
+        token::{KeywordType, TokenType},
+    },
 };
 
 #[test]
 fn test_parse_integer() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "0x1f 0b11 012 12 0.5 1.5e3 1".to_string(),
-        Rc::new("".to_string()),
-    ));
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "0x1f 0b11 012 12 0.5 1.5e3 1".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine,
+    );
     let tokens = lexer.parse();
     assert_eq!(tokens[0].value, "0x1f".to_string());
     assert_eq!(tokens[1].ty, TokenType::IntegerLiteral { value: 3 });
@@ -23,20 +30,28 @@ fn test_parse_integer() {
 
 #[test]
 fn test_parse_identifier() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "abc a_".to_string(),
-        Rc::new("".to_string()),
-    ));
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "abc a_".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine,
+    );
     let tokens = lexer.parse();
     assert_eq!(tokens[0].ty, TokenType::Identifier);
     assert_eq!(tokens[1].ty, TokenType::Identifier);
 }
 #[test]
 fn test_parse_keyword() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "func let".to_string(),
-        Rc::new("".to_string()),
-    ));
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func let".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine,
+    );
     let tokens = lexer.parse();
     assert_eq!(
         tokens[0].ty,
@@ -54,10 +69,14 @@ fn test_parse_keyword() {
 
 #[test]
 fn test_parse_char_literal() {
-    let mut lexer = Lexer::new(CharStream::new(
-        "'a' '\\n'".to_string(),
-        Rc::new("".to_string()),
-    ));
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "'a' '\\n'".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine,
+    );
     let tokens = lexer.parse();
     assert_eq!(tokens[0].ty, TokenType::CharLiteral { value: 'a' });
     assert_eq!(tokens[1].ty, TokenType::CharLiteral { value: '\n' });

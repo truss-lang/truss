@@ -1,9 +1,11 @@
 pub mod token;
 
-use std::{char, collections::HashMap, rc::Rc, sync::OnceLock};
+use std::{cell::RefCell, char, collections::HashMap, rc::Rc, sync::OnceLock};
 
 use strum::IntoEnumIterator;
 use token::{KeywordType, OperatorType, Position, SeparatorType, Token, TokenType};
+
+use crate::diag::{new_diagnostic, TrussDiagnosticCode, TrussDiagnosticEngine};
 
 static KEYWORD_MAP: OnceLock<HashMap<String, KeywordType>> = OnceLock::new();
 
@@ -61,6 +63,14 @@ impl CharStream {
         }
     }
     #[inline]
+    pub fn peek_next(&self) -> Option<char> {
+        if self.pos + 1 < self.chars.len() {
+            Some(self.chars[self.pos + 1])
+        } else {
+            None
+        }
+    }
+    #[inline]
     pub fn inc_pos(&mut self) {
         self.pos += 1;
         self.col += 1;
@@ -94,11 +104,12 @@ impl Iterator for CharStream {
 #[derive(Debug)]
 pub struct Lexer {
     input: CharStream,
+    engine: Rc<RefCell<TrussDiagnosticEngine>>,
 }
 
 impl Lexer {
-    pub fn new(input: CharStream) -> Self {
-        Self { input }
+    pub fn new(input: CharStream, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
+        Self { input, engine }
     }
     pub fn get_file(&self) -> Rc<String> {
         self.input.file.clone()
@@ -480,7 +491,54 @@ impl Lexer {
         } else if c == '/' {
             let begin_pos = self.input.get_current_position();
             self.input.inc_pos();
-            if self.input.peek() == '=' {
+            if self.input.peek() == '/' {
+                self.input.inc_pos();
+                while !self.is_empty() && self.input.peek() != '\n' {
+                    self.input.inc_pos();
+                }
+                self.parse_a_token()
+            } else if self.input.peek() == '*' {
+                let comment_begin = begin_pos;
+                self.input.inc_pos();
+                loop {
+                    if self.is_empty() {
+                        let token = Token::new(
+                            "/*".to_string(),
+                            TokenType::Operator {
+                                operator: OperatorType::Divide,
+                            },
+                            comment_begin,
+                            self.input.file.clone(),
+                        );
+                        let diag = new_diagnostic(
+                            TrussDiagnosticCode::LexerError,
+                            "Unterminated block comment",
+                        )
+                        .with_label(
+                            crate::diag::secondary_label_from_token(
+                                &token,
+                                "Unterminated block comment",
+                            ),
+                        );
+                        self.engine.borrow_mut().emit(diag);
+                        return None;
+                    }
+                    let ch = self.input.peek();
+                    if ch == '*' && self.input.peek_next() == Some('/') {
+                        self.input.inc_pos();
+                        self.input.inc_pos();
+                        break;
+                    }
+                    if ch == '\n' {
+                        self.input.line += 1;
+                        self.input.col = 0;
+                    } else {
+                        self.input.col += 1;
+                    }
+                    self.input.pos += 1;
+                }
+                self.parse_a_token()
+            } else if self.input.peek() == '=' {
                 let position = self.get_position_with_begin(begin_pos, None);
                 self.input.inc_pos();
                 Some(Token::new(
