@@ -165,7 +165,48 @@ impl TypeResolver {
             Statement::ExpressionStatement { expression } => {
                 self.infer_type(expression.clone());
             }
+            Statement::While { condition, body } => {
+                let cond_ty = self.infer_type(condition.clone());
+                if let Some(cond_ty) = cond_ty {
+                    if *cond_ty.borrow() != Type::Bool {
+                        self.emit_error(
+                            TrussDiagnosticCode::InvalidConditionType,
+                            format!("While condition must be Bool, found {:?}", cond_ty.borrow()),
+                            &Self::get_token_from_expr(condition),
+                        );
+                    }
+                }
+                self.resolve_block_expression(body.clone());
+            }
+            Statement::Loop { body } => {
+                self.resolve_block_expression(body.clone());
+            }
+            Statement::RepeatWhile { body, condition } => {
+                self.resolve_block_expression(body.clone());
+                let cond_ty = self.infer_type(condition.clone());
+                if let Some(cond_ty) = cond_ty {
+                    if *cond_ty.borrow() != Type::Bool {
+                        self.emit_error(
+                            TrussDiagnosticCode::InvalidConditionType,
+                            format!("Repeat-while condition must be Bool, found {:?}", cond_ty.borrow()),
+                            &Self::get_token_from_expr(condition),
+                        );
+                    }
+                }
+            }
+            Statement::For { pattern: _, iterator, body } => {
+                let _ = self.infer_type(iterator.clone());
+                self.resolve_block_expression(body.clone());
+            }
             _ => {}
+        }
+    }
+
+    fn resolve_block_expression(&mut self, block_expr: Rc<RefCell<Expression>>) {
+        if let Expression::Block { statements } = &*block_expr.borrow() {
+            for stmt in statements {
+                self.resolve_statement(stmt.clone());
+            }
         }
     }
 
