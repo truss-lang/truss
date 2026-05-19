@@ -707,6 +707,13 @@ impl TypeResolver {
                 }
                 Some(Rc::new(RefCell::new(op_ty)))
             }
+            UnaryOperator::BitNot => {
+                let op_ty = operand.borrow().clone();
+                if !Self::is_integer_type(&op_ty) {
+                    return None;
+                }
+                Some(Rc::new(RefCell::new(op_ty)))
+            }
             _ => None,
         }
     }

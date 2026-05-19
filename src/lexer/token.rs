@@ -53,7 +53,7 @@ pub enum SeparatorType {
     SemiColon,    // ;
     Comma,        // ,
     At,           // @
-    Backtick,     // ~
+    Backtick,     // `
     DoubleColon,  // ::
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -85,6 +85,7 @@ pub enum OperatorType {
     BitOr,            // |
     BitAndAssign,     // &=
     BitOrAssign,      // |=
+    BitNot,           // ~
     LeftShift,        // <<
     RightShift,       // >>
     LeftShiftAssign,  // <<=

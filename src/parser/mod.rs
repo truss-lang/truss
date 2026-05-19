@@ -199,7 +199,7 @@ impl Parser {
     fn parse_unary(&mut self) -> Result<Expression, ()> {
         if let Some(token) = self.peek()
             && let TokenType::Operator { operator } = token.ty
-            && let OperatorType::Plus | OperatorType::Minus | OperatorType::Inc | OperatorType::Dec =
+            && let OperatorType::Plus | OperatorType::Minus | OperatorType::Inc | OperatorType::Dec | OperatorType::BitNot =
                 operator
         {
             self.index += 1;

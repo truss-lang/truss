@@ -137,6 +137,7 @@ pub enum UnaryOperator {
     Dec,
     NotNullAssertation,
     OpenRange,
+    BitNot,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssignmentOperator {
@@ -181,6 +182,7 @@ impl UnaryOperator {
             OperatorType::Inc => Some(UnaryOperator::Inc),
             OperatorType::Dec => Some(UnaryOperator::Dec),
             OperatorType::OpenRange => Some(UnaryOperator::OpenRange),
+            OperatorType::BitNot => Some(UnaryOperator::BitNot),
             _ => None,
         }
     }

@@ -659,6 +659,13 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid type for unary minus");
                         }
                     }
+                    UnaryOperator::BitNot => {
+                        if let BasicValueEnum::IntValue(v) = expr_val {
+                            Ok(self.builder.build_not(v, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid type for bitwise not");
+                        }
+                    }
                     _ => anyhow::bail!("Unary operator {:?} not implemented", operator),
                 }
             }
@@ -841,6 +848,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     );
                     anyhow::bail!("Cannot infer type from variable")
                 }
+            }
+            Expression::Unary { expression, .. } => {
+                self.infer_type_from_expression(expression.clone())
+            }
+            Expression::Binary { left, right, .. } => {
+                self.infer_type_from_expression(left.clone())
+                    .or_else(|_| self.infer_type_from_expression(right.clone()))
             }
             _ => {
                 self.emit_error(

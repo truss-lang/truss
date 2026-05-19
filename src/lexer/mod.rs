@@ -258,6 +258,17 @@ impl Lexer {
                 pos,
                 self.input.file.clone(),
             ))
+        } else if c == '~' {
+            let begin_pos = self.input.get_current_position();
+            self.input.inc_pos();
+            Some(Token::new(
+                '~'.to_string(),
+                TokenType::Operator {
+                    operator: OperatorType::BitNot,
+                },
+                begin_pos,
+                self.input.file.clone(),
+            ))
         } else if c == '_' || c.is_alphabetic() {
             let position = self.input.get_current_position();
             let mut value = String::new();
