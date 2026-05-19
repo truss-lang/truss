@@ -15,12 +15,24 @@ use crate::{
     types::Type,
 };
 
+struct Scope<'ctx> {
+    variables: HashMap<String, PointerValue<'ctx>>,
+}
+
+impl<'ctx> Scope<'ctx> {
+    fn new() -> Self {
+        Self {
+            variables: HashMap::new(),
+        }
+    }
+}
+
 pub struct IRGenerator<'ctx> {
     context: &'ctx Context,
     module: Rc<Module<'ctx>>,
     builder: Builder<'ctx>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
-    variables: Rc<RefCell<HashMap<String, PointerValue<'ctx>>>>,
+    scope_stack: Rc<RefCell<Vec<Scope<'ctx>>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -32,8 +44,30 @@ impl<'ctx> IRGenerator<'ctx> {
             module,
             builder,
             engine,
-            variables: Rc::new(RefCell::new(HashMap::new())),
+            scope_stack: Rc::new(RefCell::new(vec![Scope::new()])),
         }
+    }
+
+    fn enter_scope(&self) {
+        self.scope_stack.borrow_mut().push(Scope::new());
+    }
+
+    fn exit_scope(&self) {
+        self.scope_stack.borrow_mut().pop();
+    }
+
+    fn declare_variable(&self, name: String, ptr: PointerValue<'ctx>) {
+        self.scope_stack.borrow_mut().last_mut().unwrap().variables.insert(name, ptr);
+    }
+
+    fn lookup_variable(&self, name: &str) -> Option<PointerValue<'ctx>> {
+        let stack = self.scope_stack.borrow();
+        for scope in stack.iter().rev() {
+            if let Some(ptr) = scope.variables.get(name) {
+                return Some(*ptr);
+            }
+        }
+        None
     }
 
     pub fn generate(&self, program: &Program) -> Rc<Module<'ctx>> {
@@ -67,8 +101,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 };
 
                 let ptr = self.builder.build_alloca(llvm_type, &name.value)?;
-                
-                self.variables.borrow_mut().insert(name.value.clone(), ptr);
+
+                self.declare_variable(name.value.clone(), ptr);
 
                 if let Some(init) = initializer {
                     let init_val = self.resolve_expression(init.clone())?;
@@ -154,9 +188,20 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(llvm_type.into_float_type().const_float(*value).into())
             }
             Expression::CharLiteral { .. } => Ok(self.context.i8_type().const_int(0, false).into()),
+            Expression::Block { statements } => {
+                self.enter_scope();
+                
+                for stmt in statements {
+                    self.resolve_statement(stmt.clone())?;
+                }
+                
+                self.exit_scope();
+                
+                // Return an empty int value as a placeholder
+                Ok(self.context.i32_type().const_int(0, false).into())
+            }
             Expression::Variable { name, ty, .. } => {
-                let variables = self.variables.borrow();
-                if let Some(ptr) = variables.get(&name.value) {
+                if let Some(ptr) = self.lookup_variable(&name.value) {
                     let llvm_type = if let Some(ty) = ty {
                         self.resolve_type(ty.clone())?
                     } else {
@@ -166,7 +211,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         );
                         anyhow::bail!("Variable needs type annotation");
                     };
-                    let val = self.builder.build_load(llvm_type, *ptr, &name.value)?;
+                    let val = self.builder.build_load(llvm_type, ptr, &name.value)?;
                     Ok(val.into())
                 } else {
                     self.emit_error(
