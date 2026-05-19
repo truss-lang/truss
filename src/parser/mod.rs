@@ -398,6 +398,47 @@ impl Parser {
     }
 
     fn parse_type_expression(&mut self) -> Result<Expression, ()> {
+        let Some(token) = self.peek() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedType,
+                "Expected type name",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        
+        if SeparatorType::is_separator(&token, SeparatorType::OpenParen) {
+            self.index += 1;
+            let Some(t) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    "Expected closing parenthesis",
+                    &token,
+                );
+                return Err(());
+            };
+            if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+                let void_token = Token::new(
+                    "Void".to_string(),
+                    TokenType::Identifier,
+                    token.position,
+                    self.file.clone(),
+                );
+                return Ok(Expression::Type {
+                    name: Box::new(void_token),
+                    type_parameters: None,
+                    ty: None,
+                });
+            } else {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    format!("Expected ')' but found '{}'", t.value),
+                    &t,
+                );
+                return Err(());
+            }
+        }
+        
         let Some(name) = self.next() else {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedType,

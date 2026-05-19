@@ -80,8 +80,12 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Statement::Return { value } => {
                 if let Some(value) = value {
-                    let value = self.resolve_expression(value.clone())?;
-                    self.builder.build_return(Some(&value))?;
+                    if matches!(&*value.borrow(), Expression::VoidLiteral { .. }) {
+                        self.builder.build_return(None)?;
+                    } else {
+                        let value = self.resolve_expression(value.clone())?;
+                        self.builder.build_return(Some(&value))?;
+                    }
                 } else {
                     self.builder.build_return(None)?;
                 }
