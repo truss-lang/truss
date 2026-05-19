@@ -91,12 +91,15 @@ impl<'ctx> IRGenerator<'ctx> {
         Ok(())
     }
 
-    fn resolve_block_stmts(&self, statements: &[Rc<RefCell<Statement>>]) -> Result<()> {
+    fn resolve_block_stmts(&self, statements: &[Rc<RefCell<Statement>>]) -> Result<bool> {
         for stmt in statements {
-            self.resolve_statement(stmt.clone())?;
+            let terminates = self.resolve_statement(stmt.clone())?;
+            if terminates {
+                return Ok(true);
+            }
         }
         self.exit_scope();
-        Ok(())
+        Ok(false)
     }
 
     fn enter_scope(&self) {
@@ -128,15 +131,16 @@ impl<'ctx> IRGenerator<'ctx> {
         self.module.clone()
     }
 
-    fn resolve_block_expression(&self, block_expr: Rc<RefCell<Expression>>) -> Result<()> {
+    fn resolve_block_expression(&self, block_expr: Rc<RefCell<Expression>>) -> Result<bool> {
         if let Expression::Block { statements } = &*block_expr.borrow() {
             self.enter_scope_with_stmts(statements)?;
-            self.resolve_block_stmts(statements)?;
+            self.resolve_block_stmts(statements)
+        } else {
+            Ok(false)
         }
-        Ok(())
     }
 
-    fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
+    fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<bool> {
         match &*statement.borrow() {
             Statement::VariableDecl {
                 name,
@@ -155,6 +159,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         anyhow::bail!("Variable alloca not found");
                     }
                 }
+                Ok(false)
             }
             Statement::While { condition, body } => {
                 let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
@@ -170,11 +175,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.build_conditional_branch(cond_int, body_bb, exit_bb)?;
 
                 self.builder.position_at_end(body_bb);
-                self.resolve_block_expression(body.clone())?;
-
-                self.builder.build_unconditional_branch(while_bb)?;
+                let terminates = self.resolve_block_expression(body.clone())?;
+                
+                if !terminates {
+                    self.builder.build_unconditional_branch(while_bb)?;
+                }
 
                 self.builder.position_at_end(exit_bb);
+                Ok(false)
             }
             Statement::Loop { body } => {
                 let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
@@ -184,9 +192,13 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.build_unconditional_branch(body_bb)?;
 
                 self.builder.position_at_end(body_bb);
-                self.resolve_block_expression(body.clone())?;
+                let terminates = self.resolve_block_expression(body.clone())?;
 
-                self.builder.build_unconditional_branch(body_bb)?;
+                if !terminates {
+                    self.builder.build_unconditional_branch(body_bb)?;
+                }
+
+                Ok(false)
             }
             Statement::RepeatWhile { body, condition } => {
                 let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
@@ -197,9 +209,11 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.build_unconditional_branch(body_bb)?;
 
                 self.builder.position_at_end(body_bb);
-                self.resolve_block_expression(body.clone())?;
+                let terminates = self.resolve_block_expression(body.clone())?;
 
-                self.builder.build_unconditional_branch(cond_bb)?;
+                if !terminates {
+                    self.builder.build_unconditional_branch(cond_bb)?;
+                }
 
                 self.builder.position_at_end(cond_bb);
                 let cond_val = self.resolve_expression(condition.clone())?;
@@ -207,10 +221,12 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.build_conditional_branch(cond_int, body_bb, exit_bb)?;
 
                 self.builder.position_at_end(exit_bb);
+                Ok(false)
             }
             Statement::For { pattern: _, iterator, body } => {
                 let _ = self.resolve_expression(iterator.clone());
                 self.resolve_block_expression(body.clone())?;
+                Ok(false)
             }
             Statement::FunctionDecl {
                 ty: Some(ty),
@@ -249,7 +265,10 @@ impl<'ctx> IRGenerator<'ctx> {
                         crate::ast::statement::FunctionBody::Statements(stmts) => {
                             self.enter_scope_with_stmts(stmts)?;
                             for stmt in stmts {
-                                self.resolve_statement(stmt.clone())?;
+                                let terminates = self.resolve_statement(stmt.clone())?;
+                                if terminates {
+                                    break;
+                                }
                             }
                             self.exit_scope();
                         }
@@ -259,6 +278,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                 }
+                Ok(false)
             }
             Statement::Return { value, .. } => {
                 match value {
@@ -270,11 +290,11 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.builder.build_return(None)?;
                     }
                 }
+                Ok(true)
             }
-            Statement::ExpressionStatement { .. } => {}
-            _ => {}
+            Statement::ExpressionStatement { .. } => Ok(false),
+            _ => Ok(false),
         }
-        Ok(())
     }
 
     fn resolve_expression(&self, expr: Rc<RefCell<Expression>>) -> Result<BasicValueEnum<'ctx>> {
