@@ -10,10 +10,7 @@ use crate::{
         node::Program,
         statement::{FunctionBody, Parameter, Pattern, Statement},
     },
-    diag::{
-        new_diagnostic, primary_label_from_token, TrussDiagnosticCode,
-        TrussDiagnosticEngine,
-    },
+    diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{KeywordType, OperatorType, Position, SeparatorType, Token, TokenType},
     parser::precedence::Precedence,
 };
@@ -27,7 +24,11 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(file: Rc<String>, tokens: Vec<Token>, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
+    pub fn new(
+        file: Rc<String>,
+        tokens: Vec<Token>,
+        engine: Rc<RefCell<TrussDiagnosticEngine>>,
+    ) -> Self {
         Self {
             file,
             tokens,
@@ -387,10 +388,34 @@ impl Parser {
                     SeparatorType::OpenParen => expression = self.parse_call(expression)?,
                     _ => break,
                 },
-                TokenType::Operator { operator } => match operator {
-                    OperatorType::Less => expression = self.parse_call(expression)?,
-                    _ => break,
-                },
+                TokenType::Operator { .. } => {
+                    if OperatorType::is_operator(&token, OperatorType::Less)
+                        && matches!(expression, Expression::Variable { .. } | Expression::Type { .. })
+                    {
+                        let mut temp_idx = self.index + 1;
+                        let mut angle_count = 1;
+                        while temp_idx < self.tokens.len() && angle_count > 0 {
+                            if let TokenType::Operator { .. } = self.tokens[temp_idx].ty {
+                                if OperatorType::is_operator(&self.tokens[temp_idx], OperatorType::Less) {
+                                    angle_count += 1;
+                                } else if OperatorType::is_operator(&self.tokens[temp_idx], OperatorType::Greater) {
+                                    angle_count -= 1;
+                                }
+                            }
+                            temp_idx += 1;
+                        }
+                        if angle_count == 0
+                            && temp_idx < self.tokens.len()
+                            && SeparatorType::is_separator(&self.tokens[temp_idx], SeparatorType::OpenParen)
+                        {
+                            expression = self.parse_call(expression)?;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
                 _ => break,
             }
         }
@@ -406,7 +431,7 @@ impl Parser {
             );
             return Err(());
         };
-        
+
         if SeparatorType::is_separator(&token, SeparatorType::OpenParen) {
             self.index += 1;
             let Some(t) = self.next() else {
@@ -438,7 +463,7 @@ impl Parser {
                 return Err(());
             }
         }
-        
+
         let Some(name) = self.next() else {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedType,
@@ -581,11 +606,16 @@ impl Parser {
             self.index += 1;
             Some(self.parse_type_expression()?)
         } else {
-            let current_token = self.peek().unwrap_or_else(|| self.tokens[self.index.saturating_sub(1)].clone());
+            let current_token = self
+                .peek()
+                .unwrap_or_else(|| self.tokens[self.index.saturating_sub(1)].clone());
             let void_token = Token::new(
                 "Void".to_string(),
                 TokenType::Identifier,
-                Position { len: 1, ..current_token.position },
+                Position {
+                    len: 1,
+                    ..current_token.position
+                },
                 self.file.clone(),
             );
             Some(Expression::Type {
@@ -1102,8 +1132,7 @@ impl Parser {
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
         let msg = message.into();
-        let diag = new_diagnostic(code, &msg)
-            .with_label(primary_label_from_token(token, &msg));
+        let diag = new_diagnostic(code, &msg).with_label(primary_label_from_token(token, &msg));
         self.engine.borrow_mut().emit(diag);
     }
 }
