@@ -44,7 +44,7 @@ pub enum TrussDiagnosticCode {
     IRError,
     UnsupportedFeature,
     NeverTypeConversion,
-    UnitTypeConversion,
+    VoidTypeConversion,
     NestedFunctionType,
 }
 
@@ -89,7 +89,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",
             Self::NeverTypeConversion => "E0403",
-            Self::UnitTypeConversion => "E0404",
+            Self::VoidTypeConversion => "E0404",
             Self::NestedFunctionType => "E0405",
         }
     }

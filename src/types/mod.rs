@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Never,
-    Unit,
+    Void,
     Int8,
     Int16,
     Int32,

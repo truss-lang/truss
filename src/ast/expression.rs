@@ -43,7 +43,7 @@ pub enum Expression {
     CharLiteral {
         token: Box<Token>,
     },
-    UnitLiteral {
+    VoidLiteral {
         left: Box<Token>,
         right: Box<Token>,
     },

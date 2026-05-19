@@ -111,9 +111,9 @@ impl TypeResolver {
 
                 let ret_type = if let Some(return_type_expr) = return_type {
                     self.infer_type(return_type_expr.clone())
-                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Unit)))
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
                 } else {
-                    Rc::new(RefCell::new(Type::Unit))
+                    Rc::new(RefCell::new(Type::Void))
                 };
                 self.current_return_type = Some(ret_type.clone());
 
@@ -196,7 +196,7 @@ impl TypeResolver {
             "Float32" => Some(Rc::new(RefCell::new(Type::Float32))),
             "Float64" => Some(Rc::new(RefCell::new(Type::Float64))),
             "Bool" => Some(Rc::new(RefCell::new(Type::Bool))),
-            "Unit" => Some(Rc::new(RefCell::new(Type::Unit))),
+            "Void" => Some(Rc::new(RefCell::new(Type::Void))),
             "Char" => Some(Rc::new(RefCell::new(Type::Char))),
             "Never" => Some(Rc::new(RefCell::new(Type::Never))),
             _ => {
@@ -249,7 +249,7 @@ impl TypeResolver {
                 t
             }
             Expression::Block { statements } => {
-                let mut last_ty = Rc::new(RefCell::new(Type::Unit));
+                let mut last_ty = Rc::new(RefCell::new(Type::Void));
                 for stmt in statements.iter() {
                     if let Some(ty) = self.infer_statement_type(stmt.clone()) {
                         last_ty = ty;
@@ -427,9 +427,9 @@ impl TypeResolver {
                 }
                 then_ty
             }
-            Expression::UnitLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
-            Expression::NullLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
-            Expression::NullptrLiteral { .. } => Rc::new(RefCell::new(Type::Unit)),
+            Expression::VoidLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
+            Expression::NullLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
+            Expression::NullptrLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
             Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
         };
         Some(result)
@@ -443,9 +443,9 @@ impl TypeResolver {
             Statement::ExpressionStatement { expression } => self.infer_type(expression.clone()),
             Statement::Return { value: Some(value) } => self.infer_type(value.clone()),
             Statement::VariableDecl { ty, .. } => {
-                Some(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Unit))))
+                Some(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Void))))
             }
-            _ => Some(Rc::new(RefCell::new(Type::Unit))),
+            _ => Some(Rc::new(RefCell::new(Type::Void))),
         }
     }
 
@@ -663,7 +663,7 @@ impl TypeResolver {
             Expression::NullLiteral { token } => (**token).clone(),
             Expression::NullptrLiteral { token } => (**token).clone(),
             Expression::CharLiteral { token } => (**token).clone(),
-            Expression::UnitLiteral { left, .. } => (**left).clone(),
+            Expression::VoidLiteral { left, .. } => (**left).clone(),
             Expression::Variable { name, .. } => (**name).clone(),
             Expression::Type { name, .. } => (**name).clone(),
             Expression::Unary { expression, .. } => Self::get_token_from_expr(expression),

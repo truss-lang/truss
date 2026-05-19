@@ -341,7 +341,7 @@ impl Parser {
                         return Err(());
                     };
                     if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
-                        Ok(Expression::UnitLiteral {
+                        Ok(Expression::VoidLiteral {
                             left: Box::new(token),
                             right: Box::new(t),
                         })
@@ -541,14 +541,14 @@ impl Parser {
             Some(self.parse_type_expression()?)
         } else {
             let current_token = self.peek().unwrap_or_else(|| self.tokens[self.index.saturating_sub(1)].clone());
-            let unit_token = Token::new(
-                "Unit".to_string(),
+            let void_token = Token::new(
+                "Void".to_string(),
                 TokenType::Identifier,
                 Position { len: 1, ..current_token.position },
                 self.file.clone(),
             );
             Some(Expression::Type {
-                name: Box::new(unit_token),
+                name: Box::new(void_token),
                 type_parameters: None,
                 ty: None,
             })

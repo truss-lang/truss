@@ -203,7 +203,7 @@ impl<'ctx> IRGenerator<'ctx> {
             param_basic_types.push(self.resolve_type(param_type.clone())?.into());
         }
 
-        let is_void = matches!(&*return_type.borrow(), Type::Unit);
+        let is_void = matches!(&*return_type.borrow(), Type::Void);
         if is_void {
             let void_type = self.context.void_type();
             Ok(void_type.fn_type(&param_basic_types, is_vararg))
@@ -235,12 +235,12 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
                 anyhow::bail!("Never type cannot be converted to LLVM type");
             }
-            Type::Unit => {
+            Type::Void => {
                 self.emit_error(
-                    TrussDiagnosticCode::UnitTypeConversion,
-                    "Unit type is handled specially as void return type",
+                    TrussDiagnosticCode::VoidTypeConversion,
+                    "Void type is handled specially as void return type",
                 );
-                anyhow::bail!("Unit type is handled specially as void return type");
+                anyhow::bail!("Void type is handled specially as void return type");
             }
             Type::Function(_, _) => {
                 self.emit_error(
