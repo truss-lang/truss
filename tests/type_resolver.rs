@@ -589,9 +589,8 @@ fn test_i8_max() {
 
 #[test]
 fn test_i8_min() {
-    // Currently unable to infer type through unary expression
-    // let ty = run_type_check_var("func test() { let a: Int8 = -128 }", "a");
-    // assert_eq!(ty, Type::Int8);
+    let ty = run_type_check_var("func test() { let a: Int8 = -128 }", "a");
+    assert_eq!(ty, Type::Int8);
 }
 
 #[test]
