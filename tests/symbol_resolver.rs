@@ -99,3 +99,29 @@ fn test_underscore_parameter_no_symbol() {
     );
     resolver.resolve(&program, "test".to_string());
 }
+
+#[test]
+fn test_variable_shadowing() {
+    let mut lexer = Lexer::new(CharStream::new(
+        "func test() { let a = 1 let a = 2 a }".to_string(),
+        Rc::new("".to_string()),
+    ));
+    let engine = create_engine();
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string(), CrateId { id: 0 }))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[2].borrow()
+        && let Expression::Variable { symbol, .. } = &*expression.borrow()
+    {
+        assert_ne!(*symbol, None);
+    } else {
+        panic!();
+    }
+}

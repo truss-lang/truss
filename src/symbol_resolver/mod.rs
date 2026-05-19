@@ -194,13 +194,6 @@ impl SymbolResolver {
         };
         if let Some(scope) = self.current_scope.clone() {
             let mut scope_mut = scope.borrow_mut();
-            if let Some(_) = scope_mut.name_table.get(&name) {
-                self.emit_warning(
-                    TrussDiagnosticCode::ShadowedVariable,
-                    format!("Variable '{}' shadows existing variable", name),
-                    token,
-                );
-            }
             scope_mut.symbols.insert(id, symbol.clone());
             scope_mut.name_table.insert(name, symbol);
         } else {
@@ -269,13 +262,6 @@ impl SymbolResolver {
     }
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
-        let msg = message.into();
-        let diag = new_diagnostic(code, &msg)
-            .with_label(primary_label_from_token(token, &msg));
-        self.engine.borrow_mut().emit(diag);
-    }
-
-    fn emit_warning(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
         let msg = message.into();
         let diag = new_diagnostic(code, &msg)
             .with_label(primary_label_from_token(token, &msg));
