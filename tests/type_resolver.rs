@@ -242,11 +242,14 @@ fn test_type_annotation_mismatch() {
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    
+
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(errors.len() >= 1);
-    assert_eq!(errors[0].code, truss::diag::TrussDiagnosticCode::TypeMismatch);
+    assert!(!errors.is_empty());
+    assert_eq!(
+        errors[0].code,
+        truss::diag::TrussDiagnosticCode::TypeMismatch
+    );
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Bool"));
 }
@@ -626,11 +629,14 @@ fn test_type_mismatch_int_float() {
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    
+
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].code, truss::diag::TrussDiagnosticCode::TypeMismatch);
+    assert_eq!(
+        errors[0].code,
+        truss::diag::TrussDiagnosticCode::TypeMismatch
+    );
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Int32"));
     assert!(errors[0].message.contains("Float64"));
@@ -651,11 +657,14 @@ fn test_type_mismatch_different_int_sizes() {
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    
+
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].code, truss::diag::TrussDiagnosticCode::TypeMismatch);
+    assert_eq!(
+        errors[0].code,
+        truss::diag::TrussDiagnosticCode::TypeMismatch
+    );
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Int32"));
     assert!(errors[0].message.contains("Int64"));

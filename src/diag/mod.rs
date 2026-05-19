@@ -1,6 +1,8 @@
 use duck_diagnostic::{Diagnostic, DiagnosticCode, DiagnosticEngine, Label, Severity, Span};
 use std::sync::Arc;
 
+use crate::lexer::token::{Position, Token};
+
 pub type TrussDiagnostic = Diagnostic<TrussDiagnosticCode>;
 pub type TrussDiagnosticEngine = DiagnosticEngine<TrussDiagnosticCode>;
 
@@ -110,11 +112,11 @@ impl DiagnosticCode for TrussDiagnosticCode {
     }
 }
 
-pub fn position_to_span(file: &str, pos: &crate::lexer::token::Position) -> Span {
+pub fn position_to_span(file: &str, pos: &Position) -> Span {
     Span::from_zero_based(Arc::from(file), pos.line, pos.col, pos.len)
 }
 
-pub fn token_to_span(token: &crate::lexer::token::Token) -> Span {
+pub fn token_to_span(token: &Token) -> Span {
     Span::from_zero_based(
         Arc::from(token.file.as_str()),
         token.position.line,
@@ -123,11 +125,11 @@ pub fn token_to_span(token: &crate::lexer::token::Token) -> Span {
     )
 }
 
-pub fn primary_label_from_token(token: &crate::lexer::token::Token, message: &str) -> Label {
+pub fn primary_label_from_token(token: &Token, message: &str) -> Label {
     Label::primary(token_to_span(token), Some(message.to_string()))
 }
 
-pub fn secondary_label_from_token(token: &crate::lexer::token::Token, message: &str) -> Label {
+pub fn secondary_label_from_token(token: &Token, message: &str) -> Label {
     Label::secondary(token_to_span(token), Some(message.to_string()))
 }
 

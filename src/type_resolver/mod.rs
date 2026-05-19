@@ -7,12 +7,12 @@ use crate::{
         statement::{FunctionBody, Parameter, Statement},
     },
     diag::{
-        new_diagnostic, primary_label_from_token, secondary_label_from_token,
-        TrussDiagnosticCode, TrussDiagnosticEngine,
+        TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
+        secondary_label_from_token,
     },
     id::ModuleId,
     krate::{Crate, Module},
-    lexer::token::Token,
+    lexer::token::{Position, Token, TokenType},
     types::Type,
 };
 
@@ -70,7 +70,11 @@ impl TypeResolver {
                     let annotated = self.infer_type(type_expr.clone());
                     if let Some(annotated) = annotated {
                         if let Some(init) = initializer {
-                            self.check_type_with_expected(init.clone(), annotated.clone(), name.as_ref());
+                            self.check_type_with_expected(
+                                init.clone(),
+                                annotated.clone(),
+                                name.as_ref(),
+                            );
                         }
                         *ty = Some(annotated.clone());
                         self.type_env
@@ -133,7 +137,9 @@ impl TypeResolver {
                 self.type_env = last_type_env;
                 self.current_return_type = last_return_type;
             }
-            Statement::Return { value: Some(value), ..} => {
+            Statement::Return {
+                value: Some(value), ..
+            } => {
                 let token = &Self::get_token_from_expr(value);
                 if let Some(expected) = self.current_return_type.clone() {
                     self.check_type_with_expected(value.clone(), expected, token);
@@ -150,7 +156,10 @@ impl TypeResolver {
                     if !matches!(&*expected.borrow(), Type::Void) {
                         self.emit_error(
                             TrussDiagnosticCode::ReturnTypeMismatch,
-                            format!("Expected return value of type {:?}, found `return` without value", expected.borrow()),
+                            format!(
+                                "Expected return value of type {:?}, found `return` without value",
+                                expected.borrow()
+                            ),
                             token.as_ref(),
                         );
                     }
@@ -167,14 +176,14 @@ impl TypeResolver {
             }
             Statement::While { condition, body } => {
                 let cond_ty = self.infer_type(condition.clone());
-                if let Some(cond_ty) = cond_ty {
-                    if *cond_ty.borrow() != Type::Bool {
-                        self.emit_error(
-                            TrussDiagnosticCode::InvalidConditionType,
-                            format!("While condition must be Bool, found {:?}", cond_ty.borrow()),
-                            &Self::get_token_from_expr(condition),
-                        );
-                    }
+                if let Some(cond_ty) = cond_ty
+                    && *cond_ty.borrow() != Type::Bool
+                {
+                    self.emit_error(
+                        TrussDiagnosticCode::InvalidConditionType,
+                        format!("While condition must be Bool, found {:?}", cond_ty.borrow()),
+                        &Self::get_token_from_expr(condition),
+                    );
                 }
                 self.resolve_block_expression(body.clone());
             }
@@ -184,17 +193,24 @@ impl TypeResolver {
             Statement::RepeatWhile { body, condition } => {
                 self.resolve_block_expression(body.clone());
                 let cond_ty = self.infer_type(condition.clone());
-                if let Some(cond_ty) = cond_ty {
-                    if *cond_ty.borrow() != Type::Bool {
-                        self.emit_error(
-                            TrussDiagnosticCode::InvalidConditionType,
-                            format!("Repeat-while condition must be Bool, found {:?}", cond_ty.borrow()),
-                            &Self::get_token_from_expr(condition),
-                        );
-                    }
+                if let Some(cond_ty) = cond_ty
+                    && *cond_ty.borrow() != Type::Bool
+                {
+                    self.emit_error(
+                        TrussDiagnosticCode::InvalidConditionType,
+                        format!(
+                            "Repeat-while condition must be Bool, found {:?}",
+                            cond_ty.borrow()
+                        ),
+                        &Self::get_token_from_expr(condition),
+                    );
                 }
             }
-            Statement::For { pattern: _, iterator, body } => {
+            Statement::For {
+                pattern: _,
+                iterator,
+                body,
+            } => {
                 let _ = self.infer_type(iterator.clone());
                 self.resolve_block_expression(body.clone());
             }
@@ -322,7 +338,7 @@ impl TypeResolver {
                 ..
             } => {
                 let left_ty = self.infer_type(left.clone())?;
-                
+
                 {
                     let mut right_mut = right.borrow_mut();
                     match &mut *right_mut {
@@ -341,7 +357,9 @@ impl TypeResolver {
                 }
 
                 let right_ty = self.infer_type(right.clone())?;
-                if let Some(result) = self.check_binary(*operator, left_ty.clone(), right_ty.clone()) {
+                if let Some(result) =
+                    self.check_binary(*operator, left_ty.clone(), right_ty.clone())
+                {
                     result
                 } else {
                     let token = Self::get_token_from_expr(left);
@@ -379,9 +397,7 @@ impl TypeResolver {
                 }
             }
             Expression::Call {
-                callee,
-                parameters,
-                ..
+                callee, parameters, ..
             } => {
                 let callee_type = self.infer_type(callee.clone())?;
                 match &*callee_type.borrow() {
@@ -420,11 +436,7 @@ impl TypeResolver {
                     }
                 }
             }
-            Expression::Assignment {
-                left,
-                right,
-                ..
-            } => {
+            Expression::Assignment { left, right, .. } => {
                 let left_ty = self.infer_type(left.clone())?;
                 let right_ty = self.infer_type(right.clone())?;
                 if left_ty.borrow().clone() != right_ty.borrow().clone() {
@@ -437,14 +449,8 @@ impl TypeResolver {
                             left_ty.borrow().clone(),
                             right_ty.borrow().clone()
                         ),
-                        primary_label_from_token(
-                            &Self::get_token_from_expr(left),
-                            &expected_msg,
-                        ),
-                        secondary_label_from_token(
-                            &Self::get_token_from_expr(right),
-                            &found_msg,
-                        ),
+                        primary_label_from_token(&Self::get_token_from_expr(left), &expected_msg),
+                        secondary_label_from_token(&Self::get_token_from_expr(right), &found_msg),
                     );
                 }
                 left_ty
@@ -459,10 +465,7 @@ impl TypeResolver {
                 if *cond_ty.borrow() != Type::Bool {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
-                        format!(
-                            "If condition must be Bool, found {:?}",
-                            cond_ty.borrow()
-                        ),
+                        format!("If condition must be Bool, found {:?}", cond_ty.borrow()),
                         &Self::get_token_from_expr(condition),
                     );
                 }
@@ -497,7 +500,9 @@ impl TypeResolver {
     ) -> Option<Rc<RefCell<Type>>> {
         match &*statement.borrow() {
             Statement::ExpressionStatement { expression } => self.infer_type(expression.clone()),
-            Statement::Return { value: Some(value), .. } => self.infer_type(value.clone()),
+            Statement::Return {
+                value: Some(value), ..
+            } => self.infer_type(value.clone()),
             Statement::Return { value: None, .. } => Some(Rc::new(RefCell::new(Type::Void))),
             Statement::VariableDecl { ty, .. } => {
                 Some(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Void))))
@@ -527,10 +532,7 @@ impl TypeResolver {
         } else {
             self.emit_error(
                 TrussDiagnosticCode::TypeMismatch,
-                format!(
-                    "Type mismatch: expected {:?}",
-                    expected.borrow().clone()
-                ),
+                format!("Type mismatch: expected {:?}", expected.borrow().clone()),
                 token,
             );
         }
@@ -594,10 +596,7 @@ impl TypeResolver {
         } else {
             self.emit_error(
                 TrussDiagnosticCode::TypeMismatch,
-                format!(
-                    "Type mismatch: expected {:?}",
-                    expected.borrow().clone()
-                ),
+                format!("Type mismatch: expected {:?}", expected.borrow().clone()),
                 token,
             );
         }
@@ -731,13 +730,37 @@ impl TypeResolver {
             Expression::Block { statements } => {
                 if let Some(last) = statements.last() {
                     match &*last.borrow() {
-                        Statement::ExpressionStatement { expression } => Self::get_token_from_expr(expression),
-                        Statement::Return { value: Some(value), .. } => Self::get_token_from_expr(value),
+                        Statement::ExpressionStatement { expression } => {
+                            Self::get_token_from_expr(expression)
+                        }
+                        Statement::Return {
+                            value: Some(value), ..
+                        } => Self::get_token_from_expr(value),
                         Statement::Return { token, .. } => (**token).clone(),
-                        _ => Token::new("".to_string(), crate::lexer::token::TokenType::Identifier, crate::lexer::token::Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new("".to_string())),
+                        _ => Token::new(
+                            "".to_string(),
+                            TokenType::Identifier,
+                            Position {
+                                pos: 0,
+                                line: 0,
+                                col: 0,
+                                len: 0,
+                            },
+                            Rc::new("".to_string()),
+                        ),
                     }
                 } else {
-                    Token::new("".to_string(), crate::lexer::token::TokenType::Identifier, crate::lexer::token::Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new("".to_string()))
+                    Token::new(
+                        "".to_string(),
+                        TokenType::Identifier,
+                        Position {
+                            pos: 0,
+                            line: 0,
+                            col: 0,
+                            len: 0,
+                        },
+                        Rc::new("".to_string()),
+                    )
                 }
             }
         }
@@ -745,8 +768,7 @@ impl TypeResolver {
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
         let msg = message.into();
-        let diag = new_diagnostic(code, &msg)
-            .with_label(primary_label_from_token(token, &msg));
+        let diag = new_diagnostic(code, &msg).with_label(primary_label_from_token(token, &msg));
         self.engine.borrow_mut().emit(diag);
     }
 

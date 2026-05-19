@@ -10,8 +10,13 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{expression::Expression, node::Program, statement::Statement},
+    ast::{
+        expression::{BinaryOperator, Expression},
+        node::Program,
+        statement::{FunctionBody, Statement},
+    },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic},
+    lexer::token::TokenType,
     types::Type,
 };
 
@@ -60,7 +65,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn enter_scope_with_stmts(&self, statements: &[Rc<RefCell<Statement>>]) -> Result<()> {
         self.scope_stack.borrow_mut().push(Scope::new());
-        
+
         for stmt in statements {
             if let Statement::VariableDecl {
                 name,
@@ -87,7 +92,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.declare_variable(name.value.clone(), ptr);
             }
         }
-        
+
         Ok(())
     }
 
@@ -111,7 +116,12 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn declare_variable(&self, name: String, ptr: PointerValue<'ctx>) {
-        self.scope_stack.borrow_mut().last_mut().unwrap().variables.insert(name, ptr);
+        self.scope_stack
+            .borrow_mut()
+            .last_mut()
+            .unwrap()
+            .variables
+            .insert(name, ptr);
     }
 
     fn lookup_variable(&self, name: &str) -> Option<PointerValue<'ctx>> {
@@ -143,9 +153,7 @@ impl<'ctx> IRGenerator<'ctx> {
     fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<bool> {
         match &*statement.borrow() {
             Statement::VariableDecl {
-                name,
-                initializer,
-                ..
+                name, initializer, ..
             } => {
                 if let Some(init) = initializer {
                     let init_val = self.resolve_expression(init.clone())?;
@@ -162,7 +170,12 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(false)
             }
             Statement::While { condition, body } => {
-                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
                 let while_bb = self.context.append_basic_block(fn_val, "while_cond");
                 let body_bb = self.context.append_basic_block(fn_val, "while_body");
                 let exit_bb = self.context.append_basic_block(fn_val, "while_exit");
@@ -172,11 +185,12 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 let cond_val = self.resolve_expression(condition.clone())?;
                 let cond_int = cond_val.into_int_value();
-                self.builder.build_conditional_branch(cond_int, body_bb, exit_bb)?;
+                self.builder
+                    .build_conditional_branch(cond_int, body_bb, exit_bb)?;
 
                 self.builder.position_at_end(body_bb);
                 let terminates = self.resolve_block_expression(body.clone())?;
-                
+
                 if !terminates {
                     self.builder.build_unconditional_branch(while_bb)?;
                 }
@@ -185,7 +199,12 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(false)
             }
             Statement::Loop { body } => {
-                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
                 let body_bb = self.context.append_basic_block(fn_val, "loop_body");
                 let _ = self.context.append_basic_block(fn_val, "loop_exit");
 
@@ -201,7 +220,12 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(false)
             }
             Statement::RepeatWhile { body, condition } => {
-                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
                 let body_bb = self.context.append_basic_block(fn_val, "repeat_body");
                 let cond_bb = self.context.append_basic_block(fn_val, "repeat_cond");
                 let exit_bb = self.context.append_basic_block(fn_val, "repeat_exit");
@@ -218,12 +242,17 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.position_at_end(cond_bb);
                 let cond_val = self.resolve_expression(condition.clone())?;
                 let cond_int = cond_val.into_int_value();
-                self.builder.build_conditional_branch(cond_int, body_bb, exit_bb)?;
+                self.builder
+                    .build_conditional_branch(cond_int, body_bb, exit_bb)?;
 
                 self.builder.position_at_end(exit_bb);
                 Ok(false)
             }
-            Statement::For { pattern: _, iterator, body } => {
+            Statement::For {
+                pattern: _,
+                iterator,
+                body,
+            } => {
                 let _ = self.resolve_expression(iterator.clone());
                 self.resolve_block_expression(body.clone())?;
                 Ok(false)
@@ -262,7 +291,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
 
                     match &*body.borrow() {
-                        crate::ast::statement::FunctionBody::Statements(stmts) => {
+                        FunctionBody::Statements(stmts) => {
                             self.enter_scope_with_stmts(stmts)?;
                             for stmt in stmts {
                                 let terminates = self.resolve_statement(stmt.clone())?;
@@ -272,7 +301,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             }
                             self.exit_scope();
                         }
-                        crate::ast::statement::FunctionBody::Expression(expr) => {
+                        FunctionBody::Expression(expr) => {
                             let value = self.resolve_expression(expr.clone())?;
                             self.builder.build_return(Some(&value))?;
                         }
@@ -304,11 +333,14 @@ impl<'ctx> IRGenerator<'ctx> {
                     Some(t) => self.resolve_type(t.clone())?,
                     None => self.context.i32_type().into(),
                 };
-                Ok(llvm_type.into_int_type().const_int(*value as u64, false).into())
+                Ok(llvm_type
+                    .into_int_type()
+                    .const_int(*value as u64, false)
+                    .into())
             }
             Expression::BooleanLiteral { token } => {
                 let value = match &token.ty {
-                    crate::lexer::token::TokenType::BooleanLiteral { value } => *value,
+                    TokenType::BooleanLiteral { value } => *value,
                     _ => false,
                 };
                 Ok(self
@@ -339,12 +371,15 @@ impl<'ctx> IRGenerator<'ctx> {
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::TypeInferenceFailed,
-                            format!("Variable '{}' needs type annotation for load operation", name.value),
+                            format!(
+                                "Variable '{}' needs type annotation for load operation",
+                                name.value
+                            ),
                         );
                         anyhow::bail!("Variable needs type annotation");
                     };
                     let val = self.builder.build_load(llvm_type, ptr, "")?;
-                    Ok(val.into())
+                    Ok(val)
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,
@@ -362,7 +397,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 let right_val = self.resolve_expression(right.clone())?;
 
                 match operator {
-                    crate::ast::expression::BinaryOperator::Plus => {
+                    BinaryOperator::Plus => {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
@@ -377,7 +412,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid types for addition");
                         }
                     }
-                    crate::ast::expression::BinaryOperator::Minus => {
+                    BinaryOperator::Minus => {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
@@ -392,7 +427,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid types for subtraction");
                         }
                     }
-                    crate::ast::expression::BinaryOperator::Multiply => {
+                    BinaryOperator::Multiply => {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
@@ -407,7 +442,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid types for multiplication");
                         }
                     }
-                    crate::ast::expression::BinaryOperator::Divide => {
+                    BinaryOperator::Divide => {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
@@ -489,7 +524,10 @@ impl<'ctx> IRGenerator<'ctx> {
         Ok(resolved)
     }
 
-    fn infer_type_from_expression(&self, expr: Rc<RefCell<Expression>>) -> Result<BasicTypeEnum<'ctx>> {
+    fn infer_type_from_expression(
+        &self,
+        expr: Rc<RefCell<Expression>>,
+    ) -> Result<BasicTypeEnum<'ctx>> {
         match &*expr.borrow() {
             Expression::IntegerLiteral { ty, .. } => {
                 if let Some(ty) = ty {

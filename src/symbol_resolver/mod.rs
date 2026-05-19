@@ -6,9 +6,7 @@ use crate::{
         node::Program,
         statement::{FunctionBody, Statement},
     },
-    diag::{
-        new_diagnostic, primary_label_from_token, TrussDiagnosticCode, TrussDiagnosticEngine,
-    },
+    diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     id::{ModuleId, SymbolId},
     krate::{Crate, Module},
     lexer::token::Token,
@@ -121,7 +119,9 @@ impl SymbolResolver {
             Statement::ExpressionStatement { expression } => {
                 self.resolve_expression(expression.clone())
             }
-            Statement::Return { value: Some(value), .. } => self.resolve_expression(value.clone()),
+            Statement::Return {
+                value: Some(value), ..
+            } => self.resolve_expression(value.clone()),
             Statement::Return { value: None, .. } => {}
             _ => {}
         }
@@ -199,14 +199,14 @@ impl SymbolResolver {
         } else {
             let module = self.current_module.clone().unwrap();
             let mut module_mut = module.borrow_mut();
-            if let Some(_) = module_mut.name_table.get(&name) {
-                if matches!(*symbol, Symbol::Function { .. }) {
-                    self.emit_error(
-                        TrussDiagnosticCode::DuplicateFunction,
-                        format!("Duplicate function '{}'", name),
-                        token,
-                    );
-                }
+            if let Some(_) = module_mut.name_table.get(&name)
+                && matches!(*symbol, Symbol::Function { .. })
+            {
+                self.emit_error(
+                    TrussDiagnosticCode::DuplicateFunction,
+                    format!("Duplicate function '{}'", name),
+                    token,
+                );
             }
             module_mut.symbols.insert(id, symbol.clone());
             module_mut.name_table.insert(name, symbol);
@@ -220,12 +220,7 @@ impl SymbolResolver {
             Ok(symbol)
         } else {
             let module = self.current_module.clone().unwrap();
-            module
-                .borrow()
-                .name_table
-                .get(&name)
-                .cloned()
-                .ok_or(())
+            module.borrow().name_table.get(&name).cloned().ok_or(())
         }
     }
 
@@ -263,8 +258,7 @@ impl SymbolResolver {
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
         let msg = message.into();
-        let diag = new_diagnostic(code, &msg)
-            .with_label(primary_label_from_token(token, &msg));
+        let diag = new_diagnostic(code, &msg).with_label(primary_label_from_token(token, &msg));
         self.engine.borrow_mut().emit(diag);
     }
 }
