@@ -58,6 +58,47 @@ impl<'ctx> IRGenerator<'ctx> {
         name
     }
 
+    fn enter_scope_with_stmts(&self, statements: &[Rc<RefCell<Statement>>]) -> Result<()> {
+        self.scope_stack.borrow_mut().push(Scope::new());
+        
+        for stmt in statements {
+            if let Statement::VariableDecl {
+                name,
+                type_expression,
+                initializer: _,
+                ty,
+                ..
+            } = &*stmt.borrow()
+            {
+                let llvm_type = if let Some(ty) = ty {
+                    self.resolve_type(ty.clone())?
+                } else if let Some(type_expr) = type_expression {
+                    self.infer_type_from_expression(type_expr.clone())?
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::TypeInferenceFailed,
+                        format!("Variable '{}' has no type annotation", name.value),
+                    );
+                    anyhow::bail!("Cannot determine variable type");
+                };
+
+                let alloca_name = self.unique_alloca_name(&name.value);
+                let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
+                self.declare_variable(name.value.clone(), ptr);
+            }
+        }
+        
+        Ok(())
+    }
+
+    fn resolve_block_stmts(&self, statements: &[Rc<RefCell<Statement>>]) -> Result<()> {
+        for stmt in statements {
+            self.resolve_statement(stmt.clone())?;
+        }
+        self.exit_scope();
+        Ok(())
+    }
+
     fn enter_scope(&self) {
         self.scope_stack.borrow_mut().push(Scope::new());
     }
@@ -87,42 +128,94 @@ impl<'ctx> IRGenerator<'ctx> {
         self.module.clone()
     }
 
+    fn resolve_block_expression(&self, block_expr: Rc<RefCell<Expression>>) -> Result<()> {
+        if let Expression::Block { statements } = &*block_expr.borrow() {
+            self.enter_scope_with_stmts(statements)?;
+            self.resolve_block_stmts(statements)?;
+        }
+        Ok(())
+    }
+
     fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
         match &*statement.borrow() {
             Statement::VariableDecl {
                 name,
-                type_expression,
                 initializer,
-                ty,
                 ..
             } => {
-                let llvm_type = if let Some(ty) = ty {
-                    self.resolve_type(ty.clone())?
-                } else if let Some(type_expr) = type_expression {
-                    self.infer_type_from_expression(type_expr.clone())?
-                } else if let Some(init) = initializer {
-                    self.resolve_expression(init.clone())?.get_type()
-                } else {
-                    self.emit_error(
-                        TrussDiagnosticCode::TypeInferenceFailed,
-                        format!("Variable '{}' has no type annotation or initializer", name.value),
-                    );
-                    anyhow::bail!("Cannot determine variable type");
-                };
-
-                let alloca_name = self.unique_alloca_name(&name.value);
-                let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
-
-                self.declare_variable(name.value.clone(), ptr);
-
                 if let Some(init) = initializer {
                     let init_val = self.resolve_expression(init.clone())?;
-                    self.builder.build_store(ptr, init_val)?;
+                    if let Some(ptr) = self.lookup_variable(&name.value) {
+                        self.builder.build_store(ptr, init_val)?;
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::IRVariableNotFound,
+                            format!("Variable '{}' alloca not found", name.value),
+                        );
+                        anyhow::bail!("Variable alloca not found");
+                    }
                 }
+            }
+            Statement::While { condition, body } => {
+                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let while_bb = self.context.append_basic_block(fn_val, "while_cond");
+                let body_bb = self.context.append_basic_block(fn_val, "while_body");
+                let exit_bb = self.context.append_basic_block(fn_val, "while_exit");
+
+                self.builder.build_unconditional_branch(while_bb)?;
+                self.builder.position_at_end(while_bb);
+
+                let cond_val = self.resolve_expression(condition.clone())?;
+                let cond_int = cond_val.into_int_value();
+                self.builder.build_conditional_branch(cond_int, body_bb, exit_bb)?;
+
+                self.builder.position_at_end(body_bb);
+                self.resolve_block_expression(body.clone())?;
+
+                self.builder.build_unconditional_branch(while_bb)?;
+
+                self.builder.position_at_end(exit_bb);
+            }
+            Statement::Loop { body } => {
+                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let body_bb = self.context.append_basic_block(fn_val, "loop_body");
+                let _ = self.context.append_basic_block(fn_val, "loop_exit");
+
+                self.builder.build_unconditional_branch(body_bb)?;
+
+                self.builder.position_at_end(body_bb);
+                self.resolve_block_expression(body.clone())?;
+
+                self.builder.build_unconditional_branch(body_bb)?;
+            }
+            Statement::RepeatWhile { body, condition } => {
+                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let body_bb = self.context.append_basic_block(fn_val, "repeat_body");
+                let cond_bb = self.context.append_basic_block(fn_val, "repeat_cond");
+                let exit_bb = self.context.append_basic_block(fn_val, "repeat_exit");
+
+                self.builder.build_unconditional_branch(body_bb)?;
+
+                self.builder.position_at_end(body_bb);
+                self.resolve_block_expression(body.clone())?;
+
+                self.builder.build_unconditional_branch(cond_bb)?;
+
+                self.builder.position_at_end(cond_bb);
+                let cond_val = self.resolve_expression(condition.clone())?;
+                let cond_int = cond_val.into_int_value();
+                self.builder.build_conditional_branch(cond_int, body_bb, exit_bb)?;
+
+                self.builder.position_at_end(exit_bb);
+            }
+            Statement::For { pattern: _, iterator, body } => {
+                let _ = self.resolve_expression(iterator.clone());
+                self.resolve_block_expression(body.clone())?;
             }
             Statement::FunctionDecl {
                 ty: Some(ty),
                 name,
+                parameters,
                 body,
                 ..
             } => {
@@ -141,11 +234,24 @@ impl<'ctx> IRGenerator<'ctx> {
                     let entry_block = self.context.append_basic_block(function, "entry");
                     self.builder.position_at_end(entry_block);
 
+                    self.enter_scope();
+                    for (i, param) in parameters.iter().enumerate() {
+                        let param_name = &param.borrow().name.value;
+                        let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                        let alloca_name = self.unique_alloca_name(param_name);
+                        let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
+                        let param_value = function.get_nth_param(i as u32).unwrap();
+                        self.builder.build_store(ptr, param_value)?;
+                        self.declare_variable(param_name.clone(), ptr);
+                    }
+
                     match &*body.borrow() {
                         crate::ast::statement::FunctionBody::Statements(stmts) => {
+                            self.enter_scope_with_stmts(stmts)?;
                             for stmt in stmts {
                                 self.resolve_statement(stmt.clone())?;
                             }
+                            self.exit_scope();
                         }
                         crate::ast::statement::FunctionBody::Expression(expr) => {
                             let value = self.resolve_expression(expr.clone())?;
@@ -200,14 +306,9 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Expression::CharLiteral { .. } => Ok(self.context.i8_type().const_int(0, false).into()),
             Expression::Block { statements } => {
-                self.enter_scope();
-                
-                for stmt in statements {
-                    self.resolve_statement(stmt.clone())?;
-                }
-                
-                self.exit_scope();
-                
+                self.enter_scope_with_stmts(statements)?;
+                self.resolve_block_stmts(statements)?;
+
                 // Return an empty int value as a placeholder
                 Ok(self.context.i32_type().const_int(0, false).into())
             }
