@@ -33,6 +33,7 @@ pub struct IRGenerator<'ctx> {
     builder: Builder<'ctx>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
     scope_stack: Rc<RefCell<Vec<Scope<'ctx>>>>,
+    alloca_namer: Rc<RefCell<HashMap<String, u32>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -45,7 +46,16 @@ impl<'ctx> IRGenerator<'ctx> {
             builder,
             engine,
             scope_stack: Rc::new(RefCell::new(vec![Scope::new()])),
+            alloca_namer: Rc::new(RefCell::new(HashMap::new())),
         }
+    }
+
+    fn unique_alloca_name(&self, base_name: &str) -> String {
+        let mut namer = self.alloca_namer.borrow_mut();
+        let counter = namer.entry(base_name.to_string()).or_insert(0);
+        let name = format!("{}_{}", base_name, counter);
+        *counter += 1;
+        name
     }
 
     fn enter_scope(&self) {
@@ -100,7 +110,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("Cannot determine variable type");
                 };
 
-                let ptr = self.builder.build_alloca(llvm_type, &name.value)?;
+                let alloca_name = self.unique_alloca_name(&name.value);
+                let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
 
                 self.declare_variable(name.value.clone(), ptr);
 
@@ -211,7 +222,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         );
                         anyhow::bail!("Variable needs type annotation");
                     };
-                    let val = self.builder.build_load(llvm_type, ptr, &name.value)?;
+                    let val = self.builder.build_load(llvm_type, ptr, "")?;
                     Ok(val.into())
                 } else {
                     self.emit_error(
@@ -234,13 +245,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_add(l, r, "add")?.into())
+                            Ok(self.builder.build_int_add(l, r, "")?.into())
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_add(l, r, "fadd")?.into())
+                            Ok(self.builder.build_float_add(l, r, "")?.into())
                         } else {
                             anyhow::bail!("Invalid types for addition");
                         }
@@ -249,13 +260,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_sub(l, r, "sub")?.into())
+                            Ok(self.builder.build_int_sub(l, r, "")?.into())
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_sub(l, r, "fsub")?.into())
+                            Ok(self.builder.build_float_sub(l, r, "")?.into())
                         } else {
                             anyhow::bail!("Invalid types for subtraction");
                         }
@@ -264,13 +275,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_mul(l, r, "mul")?.into())
+                            Ok(self.builder.build_int_mul(l, r, "")?.into())
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_mul(l, r, "fmul")?.into())
+                            Ok(self.builder.build_float_mul(l, r, "")?.into())
                         } else {
                             anyhow::bail!("Invalid types for multiplication");
                         }
@@ -279,13 +290,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_signed_div(l, r, "sdiv")?.into())
+                            Ok(self.builder.build_int_signed_div(l, r, "")?.into())
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_div(l, r, "fdiv")?.into())
+                            Ok(self.builder.build_float_div(l, r, "")?.into())
                         } else {
                             anyhow::bail!("Invalid types for division");
                         }
