@@ -15,8 +15,8 @@ use crate::{
         node::Program,
         statement::{FunctionBody, Statement},
     },
-    diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic},
-    lexer::token::TokenType,
+    diag::{primary_label_from_token, TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic},
+    lexer::token::{Token, TokenType},
     types::Type,
 };
 
@@ -85,6 +85,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.emit_error(
                         TrussDiagnosticCode::TypeInferenceFailed,
                         format!("Variable '{}' has no type annotation", name.value),
+                        Some(&name),
                     );
                     anyhow::bail!("Cannot determine variable type");
                 };
@@ -165,6 +166,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.emit_error(
                             TrussDiagnosticCode::IRVariableNotFound,
                             format!("Variable '{}' alloca not found", name.value),
+                            Some(&name),
                         );
                         anyhow::bail!("Variable alloca not found");
                     }
@@ -383,12 +385,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::TypeInferenceFailed,
-                            format!(
-                                "Variable '{}' needs type annotation for load operation",
-                                name.value
-                            ),
+                            "Cannot infer type from variable without type annotation",
+                            Some(&name),
                         );
-                        anyhow::bail!("Variable needs type annotation");
+                        anyhow::bail!("Cannot infer type from variable")
                     };
                     let val = self.builder.build_load(llvm_type, ptr, "")?;
                     Ok(val)
@@ -396,6 +396,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,
                         format!("Undefined variable: '{}'", name.value),
+                        Some(&name),
                     );
                     anyhow::bail!("Undefined variable: {}", name.value);
                 }
@@ -685,6 +686,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 self.emit_error(
                                     TrussDiagnosticCode::UndefinedVariable,
                                     format!("Undefined variable: '{}'", name.value),
+                                    Some(&name),
                                 );
                                 anyhow::bail!("Undefined variable");
                             }
@@ -692,6 +694,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.emit_error(
                                 TrussDiagnosticCode::UnsupportedFeature,
                                 "Invalid assignment target",
+                                None,
                             );
                             anyhow::bail!("Invalid assignment target");
                         }
@@ -796,6 +799,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.emit_error(
                     TrussDiagnosticCode::NeverTypeConversion,
                     "Never type cannot be converted to LLVM type",
+                    None,
                 );
                 anyhow::bail!("Never type cannot be converted to LLVM type");
             }
@@ -803,6 +807,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.emit_error(
                     TrussDiagnosticCode::VoidTypeConversion,
                     "Void type is handled specially as void return type",
+                    None,
                 );
                 anyhow::bail!("Void type is handled specially as void return type");
             }
@@ -810,6 +815,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.emit_error(
                     TrussDiagnosticCode::NestedFunctionType,
                     "Nested function types are not supported",
+                    None,
                 );
                 anyhow::bail!("Nested function types are not supported");
             }
@@ -838,13 +844,14 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Expression::BooleanLiteral { .. } => Ok(self.context.bool_type().into()),
             Expression::CharLiteral { .. } => Ok(self.context.i8_type().into()),
-            Expression::Variable { ty, .. } => {
+            Expression::Variable { ty, name, .. } => {
                 if let Some(ty) = ty {
                     self.resolve_type(ty.clone())
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::TypeInferenceFailed,
                         "Cannot infer type from variable without type annotation",
+                        Some(&name),
                     );
                     anyhow::bail!("Cannot infer type from variable")
                 }
@@ -860,14 +867,20 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.emit_error(
                     TrussDiagnosticCode::TypeInferenceFailed,
                     "Cannot infer type from this expression",
+                    None,
                 );
                 anyhow::bail!("Cannot infer type")
             }
         }
     }
 
-    fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>) {
-        let diag = new_diagnostic(code, message);
+    fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: Option<&Token>) {
+        let msg = message.into();
+        let diag = if let Some(token) = token {
+            new_diagnostic(code, &msg).with_label(primary_label_from_token(token, &msg))
+        } else {
+            new_diagnostic(code, msg)
+        };
         self.engine.borrow_mut().emit(diag);
     }
 }
