@@ -306,11 +306,11 @@ fn test_parse_return() {
     {
         assert!(matches!(
             &*statements[0].borrow(),
-            Statement::Return { value: None }
+            Statement::Return { value: None, .. }
         ));
         assert!(matches!(
             &*statements[1].borrow(),
-            Statement::Return { value } if value.is_some()
+            Statement::Return { value, .. } if value.is_some()
         ));
     } else {
         panic!();

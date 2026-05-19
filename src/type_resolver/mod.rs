@@ -133,7 +133,7 @@ impl TypeResolver {
                 self.type_env = last_type_env;
                 self.current_return_type = last_return_type;
             }
-            Statement::Return { value: Some(value) } => {
+            Statement::Return { value: Some(value), ..} => {
                 let token = &Self::get_token_from_expr(value);
                 if let Some(expected) = self.current_return_type.clone() {
                     self.check_type_with_expected(value.clone(), expected, token);
@@ -142,6 +142,23 @@ impl TypeResolver {
                         TrussDiagnosticCode::ReturnTypeMismatch,
                         "Return statement outside function",
                         token,
+                    );
+                }
+            }
+            Statement::Return { value: None, token } => {
+                if let Some(expected) = self.current_return_type.clone() {
+                    if !matches!(&*expected.borrow(), Type::Void) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ReturnTypeMismatch,
+                            format!("Expected return value of type {:?}, found `return` without value", expected.borrow()),
+                            token.as_ref(),
+                        );
+                    }
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ReturnTypeMismatch,
+                        "Return statement outside function",
+                        token.as_ref(),
                     );
                 }
             }
@@ -322,7 +339,6 @@ impl TypeResolver {
             }
             Expression::Call {
                 callee,
-                type_parameters: _,
                 parameters,
                 ..
             } => {
@@ -365,7 +381,6 @@ impl TypeResolver {
             }
             Expression::Assignment {
                 left,
-                operator: _,
                 right,
                 ..
             } => {
@@ -441,7 +456,8 @@ impl TypeResolver {
     ) -> Option<Rc<RefCell<Type>>> {
         match &*statement.borrow() {
             Statement::ExpressionStatement { expression } => self.infer_type(expression.clone()),
-            Statement::Return { value: Some(value) } => self.infer_type(value.clone()),
+            Statement::Return { value: Some(value), .. } => self.infer_type(value.clone()),
+            Statement::Return { value: None, .. } => Some(Rc::new(RefCell::new(Type::Void))),
             Statement::VariableDecl { ty, .. } => {
                 Some(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Void))))
             }
@@ -675,7 +691,8 @@ impl TypeResolver {
                 if let Some(last) = statements.last() {
                     match &*last.borrow() {
                         Statement::ExpressionStatement { expression } => Self::get_token_from_expr(expression),
-                        Statement::Return { value: Some(value) } => Self::get_token_from_expr(value),
+                        Statement::Return { value: Some(value), .. } => Self::get_token_from_expr(value),
+                        Statement::Return { token, .. } => (**token).clone(),
                         _ => Token::new("".to_string(), crate::lexer::token::TokenType::Identifier, crate::lexer::token::Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new("".to_string())),
                     }
                 } else {

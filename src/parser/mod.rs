@@ -704,6 +704,7 @@ impl Parser {
         };
         let current_line = token.position.line;
         self.index += 1;
+        let return_token = token;
         let value = if let Some(token) = self.peek()
             && current_line == token.position.line
         {
@@ -712,6 +713,7 @@ impl Parser {
             None
         };
         Ok(Statement::Return {
+            token: Box::new(return_token),
             value: value.map(RefCell::new).map(Rc::new),
         })
     }

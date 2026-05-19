@@ -78,7 +78,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
-            Statement::Return { value } => {
+            Statement::Return { value, .. } => {
                 if let Some(value) = value {
                     if matches!(&*value.borrow(), Expression::VoidLiteral { .. }) {
                         self.builder.build_return(None)?;
@@ -90,7 +90,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.builder.build_return(None)?;
                 }
             }
-            Statement::ExpressionStatement { expression: _ } => {}
+            Statement::ExpressionStatement { .. } => {}
             _ => {}
         }
         Ok(())

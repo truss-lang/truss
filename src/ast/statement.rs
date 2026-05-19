@@ -27,6 +27,7 @@ pub enum Statement {
         expression: Rc<RefCell<Expression>>,
     },
     Return {
+        token: Box<Token>,
         value: Option<Rc<RefCell<Expression>>>,
     },
     Loop {
