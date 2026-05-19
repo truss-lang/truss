@@ -94,11 +94,13 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn resolve_expression(&self, expr: Rc<RefCell<Expression>>) -> Result<BasicValueEnum<'ctx>> {
         match &*expr.borrow() {
-            Expression::IntegerLiteral { value, .. } => Ok(self
-                .context
-                .i32_type()
-                .const_int(*value as u64, false)
-                .into()),
+            Expression::IntegerLiteral { value, ty, .. } => {
+                let llvm_type = match ty {
+                    Some(t) => self.resolve_type(t.clone())?,
+                    None => self.context.i32_type().into(),
+                };
+                Ok(llvm_type.into_int_type().const_int(*value as u64, false).into())
+            }
             Expression::BooleanLiteral { token } => {
                 let value = match &token.ty {
                     crate::lexer::token::TokenType::BooleanLiteral { value } => *value,
@@ -110,8 +112,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     .const_int(value as u64, false)
                     .into())
             }
-            Expression::DecimalLiteral { value, .. } => {
-                Ok(self.context.f64_type().const_float(*value).into())
+            Expression::DecimalLiteral { value, ty, .. } => {
+                let llvm_type = match ty {
+                    Some(t) => self.resolve_type(t.clone())?,
+                    None => self.context.f64_type().into(),
+                };
+                Ok(llvm_type.into_float_type().const_float(*value).into())
             }
             Expression::CharLiteral { .. } => Ok(self.context.i8_type().const_int(0, false).into()),
             Expression::Variable { .. } => {
