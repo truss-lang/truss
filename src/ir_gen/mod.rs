@@ -290,14 +290,21 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.declare_variable(param_name.clone(), ptr);
                     }
 
+                    let is_void = matches!(&*return_type.borrow(), Type::Void);
+
                     match &*body.borrow() {
                         FunctionBody::Statements(stmts) => {
                             self.enter_scope_with_stmts(stmts)?;
+                            let mut has_return = false;
                             for stmt in stmts {
                                 let terminates = self.resolve_statement(stmt.clone())?;
                                 if terminates {
+                                    has_return = true;
                                     break;
                                 }
+                            }
+                            if is_void && !has_return {
+                                self.builder.build_return(None)?;
                             }
                             self.exit_scope();
                         }
