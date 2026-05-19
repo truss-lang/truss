@@ -11,7 +11,7 @@ use inkwell::{
 
 use crate::{
     ast::{
-        expression::{BinaryOperator, Expression},
+        expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
         node::Program,
         statement::{FunctionBody, Statement},
     },
@@ -328,7 +328,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 Ok(true)
             }
-            Statement::ExpressionStatement { .. } => Ok(false),
             _ => Ok(false),
         }
     }
@@ -467,9 +466,63 @@ impl<'ctx> IRGenerator<'ctx> {
                     _ => anyhow::bail!("Binary operator {:?} not implemented", operator),
                 }
             }
+            Expression::If {
+                condition,
+                then,
+                else_,
+            } => {
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
+                let cond_bb = self.context.append_basic_block(fn_val, "if_cond");
+                let then_bb = self.context.append_basic_block(fn_val, "if_then");
+                let else_bb = if else_.is_some() {
+                    Some(self.context.append_basic_block(fn_val, "if_else"))
+                } else {
+                    None
+                };
+                let exit_bb = self.context.append_basic_block(fn_val, "if_exit");
+
+                self.builder.build_unconditional_branch(cond_bb)?;
+                self.builder.position_at_end(cond_bb);
+
+                let cond_val = self.resolve_expression(condition.clone())?.into_int_value();
+                self.builder.build_conditional_branch(
+                    cond_val,
+                    then_bb,
+                    if let Some(else_bb) = else_bb {
+                        else_bb
+                    } else {
+                        exit_bb
+                    },
+                )?;
+
+                self.builder.position_at_end(then_bb);
+                let terminates = self.resolve_block_expression(then.clone())?;
+                if !terminates {
+                    self.builder.build_unconditional_branch(exit_bb)?;
+                }
+
+                if let Some(else_) = else_ {
+                    self.builder.position_at_end(else_bb.unwrap());
+                    let terminates = self.resolve_block_expression(else_.clone())?;
+                    if !terminates {
+                        self.builder.build_unconditional_branch(exit_bb)?;
+                    }
+                }
+
+                self.builder.position_at_end(exit_bb);
+
+                // Return an empty int value as a placeholder
+                Ok(self.context.i32_type().const_int(0, false).into())
+            }
             _ => anyhow::bail!("Expression type not implemented"),
         }
     }
+
     fn get_function_type(
         &self,
         return_type: Rc<RefCell<Type>>,
