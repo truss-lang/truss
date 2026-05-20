@@ -5,7 +5,7 @@ use truss::{
         expression::Expression,
         statement::{FunctionBody, Statement},
     },
-    diag::TrussDiagnosticEngine,
+    diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
     id::CrateId,
     krate::Crate,
     lexer::{CharStream, Lexer},
@@ -269,7 +269,7 @@ fn test_type_annotation_mismatch() {
     assert!(!errors.is_empty());
     assert_eq!(
         errors[0].code,
-        truss::diag::TrussDiagnosticCode::TypeMismatch
+        TrussDiagnosticCode::TypeMismatch
     );
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Bool"));
@@ -674,7 +674,7 @@ fn test_type_mismatch_int_float() {
     assert_eq!(errors.len(), 1);
     assert_eq!(
         errors[0].code,
-        truss::diag::TrussDiagnosticCode::TypeMismatch
+        TrussDiagnosticCode::TypeMismatch
     );
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Int32"));
@@ -705,7 +705,7 @@ fn test_type_mismatch_different_int_sizes() {
     assert_eq!(errors.len(), 1);
     assert_eq!(
         errors[0].code,
-        truss::diag::TrussDiagnosticCode::TypeMismatch
+        TrussDiagnosticCode::TypeMismatch
     );
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Int32"));
@@ -872,7 +872,7 @@ fn test_function_call_missing_label() {
     assert!(!errors.is_empty());
     assert_eq!(
         errors[0].code,
-        truss::diag::TrussDiagnosticCode::MissingArgumentLabel
+        TrussDiagnosticCode::MissingArgumentLabel
     );
     assert!(errors[0].message.contains("Missing argument label"));
     assert!(errors[0].message.contains("a"));
@@ -926,7 +926,7 @@ fn test_function_call_with_wrong_label() {
     assert!(!errors.is_empty());
     assert_eq!(
         errors[0].code,
-        truss::diag::TrussDiagnosticCode::ArgumentLabelMismatch
+        TrussDiagnosticCode::ArgumentLabelMismatch
     );
     assert!(errors[0].message.contains("Expected argument label"));
 }
@@ -979,7 +979,7 @@ fn test_function_call_no_label() {
     assert!(!errors.is_empty());
     assert_eq!(
         errors[0].code,
-        truss::diag::TrussDiagnosticCode::MissingArgumentLabel
+        TrussDiagnosticCode::MissingArgumentLabel
     );
     assert!(errors[0].message.contains("Missing argument label"));
     assert!(errors[0].message.contains("a"));
@@ -1033,7 +1033,7 @@ fn test_function_call_parameter_order_must_match() {
     assert!(!errors.is_empty());
     assert_eq!(
         errors[0].code,
-        truss::diag::TrussDiagnosticCode::ArgumentLabelMismatch
+        TrussDiagnosticCode::ArgumentLabelMismatch
     );
     assert!(errors[0].message.contains("Expected argument label 'a' but found 'b'"));
 }

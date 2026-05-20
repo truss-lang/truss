@@ -89,13 +89,20 @@ impl Statement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericParameter {}
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VariadicKind {
+    NotVariadic,
+    BareVariadic,
+    TypedVariadic,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub label: Option<Box<Token>>,
     pub name: Box<Token>,
     pub type_expression: Rc<RefCell<Expression>>,
     pub ty: Option<Rc<RefCell<Type>>>,
-    pub is_variadic: bool,
+    pub variadic_kind: VariadicKind,
 }
 
 #[derive(Debug, Clone, PartialEq)]

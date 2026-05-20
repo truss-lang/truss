@@ -8,7 +8,7 @@ use crate::{
             AssignmentOperator, BinaryOperator, CallParameter, Expression, UnaryOperator,
         },
         node::Program,
-        statement::{FunctionBody, Parameter, Pattern, Statement},
+        statement::{FunctionBody, Parameter, Pattern, Statement, VariadicKind},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{KeywordType, OperatorType, Position, SeparatorType, Token, TokenType},
@@ -510,9 +510,51 @@ impl Parser {
             return Err(());
         }
         let mut parameters = Vec::new();
+        let mut has_variadic = false;
         while let Some(t) = self.peek() {
             if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                 break;
+            }
+            if let TokenType::Operator { operator: _ } = t.ty
+                && OperatorType::is_operator(&t, OperatorType::OpenRange)
+            {
+                if has_variadic {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        "Variadic parameter must be the last parameter and only one is allowed",
+                        &t,
+                    );
+                    return Err(());
+                }
+                self.index += 1;
+                let variadic_token = Token::new(
+                    "...".to_string(),
+                    TokenType::Identifier,
+                    t.position,
+                    self.file.clone(),
+                );
+                parameters.push(Rc::new(RefCell::new(Parameter {
+                    label: None,
+                    name: Box::new(variadic_token),
+                    type_expression: Rc::new(RefCell::new(Expression::Type {
+                        name: Box::new(Token::new(
+                            "Any".to_string(),
+                            TokenType::Identifier,
+                            t.position,
+                            self.file.clone(),
+                        )),
+                        type_parameters: None,
+                        ty: None,
+                    })),
+                    ty: None,
+                    variadic_kind: VariadicKind::BareVariadic,
+                })));
+                has_variadic = true;
+                let Some(comma_or_close) = self.peek() else { break };
+                if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
+                    self.index += 1;
+                }
+                continue;
             }
             let Some(first) = self.next() else {
                 self.emit_error(
@@ -572,20 +614,29 @@ impl Parser {
                 return Err(());
             }
             let type_expression = self.parse_type_expression()?;
-            let is_variadic = if let Some(peeked) = self.peek()
+            let variadic_kind = if let Some(peeked) = self.peek()
                 && OperatorType::is_operator(&peeked, OperatorType::OpenRange)
             {
+                if has_variadic {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        "Variadic parameter must be the last parameter and only one is allowed",
+                        &peeked,
+                    );
+                    return Err(());
+                }
                 self.index += 1;
-                true
+                has_variadic = true;
+                VariadicKind::TypedVariadic
             } else {
-                false
+                VariadicKind::NotVariadic
             };
             parameters.push(Rc::new(RefCell::new(Parameter {
                 label: label_token.map(Box::new),
                 name: Box::new(name_token),
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
-                is_variadic,
+                variadic_kind,
             })));
             let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {
@@ -1004,6 +1055,7 @@ impl Parser {
             return Err(());
         }
         let mut parameters = Vec::new();
+        let mut has_variadic = false;
         while let Some(t) = self.peek() {
             if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                 break;
@@ -1011,6 +1063,14 @@ impl Parser {
             if let TokenType::Operator { operator: _ } = t.ty
                 && OperatorType::is_operator(&t, OperatorType::OpenRange)
             {
+                if has_variadic {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        "Variadic parameter must be the last parameter and only one is allowed",
+                        &t,
+                    );
+                    return Err(());
+                }
                 self.index += 1;
                 let variadic_token = Token::new(
                     "...".to_string(),
@@ -1032,8 +1092,9 @@ impl Parser {
                         ty: None,
                     })),
                     ty: None,
-                    is_variadic: true,
+                    variadic_kind: VariadicKind::BareVariadic,
                 })));
+                has_variadic = true;
                 let Some(comma_or_close) = self.peek() else { break };
                 if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
                     self.index += 1;
@@ -1098,20 +1159,29 @@ impl Parser {
                 return Err(());
             }
             let type_expression = self.parse_type_expression()?;
-            let is_variadic = if let Some(peeked) = self.peek()
+            let variadic_kind = if let Some(peeked) = self.peek()
                 && OperatorType::is_operator(&peeked, OperatorType::OpenRange)
             {
+                if has_variadic {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        "Variadic parameter must be the last parameter and only one is allowed",
+                        &peeked,
+                    );
+                    return Err(());
+                }
                 self.index += 1;
-                true
+                has_variadic = true;
+                VariadicKind::TypedVariadic
             } else {
-                false
+                VariadicKind::NotVariadic
             };
             parameters.push(Rc::new(RefCell::new(Parameter {
                 label: label_token.map(Box::new),
                 name: Box::new(name_token),
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
-                is_variadic,
+                variadic_kind,
             })));
             let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {

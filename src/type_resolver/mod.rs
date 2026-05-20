@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
-        expression::{BinaryOperator, Expression, UnaryOperator},
+        expression::{BinaryOperator, CallParameter, Expression, UnaryOperator},
         node::Program,
         statement::{FunctionBody, Statement},
     },
@@ -886,7 +886,7 @@ impl TypeResolver {
 
     fn check_parameter_label(
         &self,
-        call_param: &crate::ast::expression::CallParameter,
+        call_param: &CallParameter,
         func_decl: &Rc<RefCell<Statement>>,
         param_index: usize,
     ) {

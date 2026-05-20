@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
-        statement::{FunctionBody, Parameter, Pattern, Statement},
+        statement::{FunctionBody, Parameter, Pattern, Statement, VariadicKind},
     },
     diag::TrussDiagnosticEngine,
     lexer::{CharStream, Lexer},
@@ -582,6 +582,33 @@ fn test_parse_extern_variadic_func() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
+            r#"extern "C" func printf(_ formatter: String, args: String...)"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+        assert_eq!(linkage.value, r#""C""#);
+        if let Statement::FunctionDecl { parameters, .. } = &*statement.borrow() {
+            assert_eq!(parameters.len(), 2);
+            assert_eq!(parameters[0].borrow().variadic_kind, VariadicKind::NotVariadic);
+            assert_eq!(parameters[1].borrow().variadic_kind, VariadicKind::TypedVariadic);
+            assert_eq!(parameters[1].borrow().name.value, "args");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_extern_variadic_func_bare() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
             r#"extern "C" func printf(_ formatter: String, ...)"#.to_string(),
             Rc::new("".to_string()),
         ),
@@ -593,8 +620,8 @@ fn test_parse_extern_variadic_func() {
         assert_eq!(linkage.value, r#""C""#);
         if let Statement::FunctionDecl { parameters, .. } = &*statement.borrow() {
             assert_eq!(parameters.len(), 2);
-            assert!(!parameters[0].borrow().is_variadic);
-            assert!(parameters[1].borrow().is_variadic);
+            assert_eq!(parameters[0].borrow().variadic_kind, VariadicKind::NotVariadic);
+            assert_eq!(parameters[1].borrow().variadic_kind, VariadicKind::BareVariadic);
             assert_eq!(parameters[1].borrow().name.value, "...");
         } else {
             panic!();
