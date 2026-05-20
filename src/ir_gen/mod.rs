@@ -489,6 +489,8 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let left_val = self.resolve_expression(left.clone())?.unwrap();
                 let right_val = self.resolve_expression(right.clone())?.unwrap();
+                let left_ty = left.borrow().get_ty().ok().flatten();
+                let is_unsigned = matches!(left_ty, Some(ty) if matches!(&*ty.borrow(), Type::UInt8 | Type::UInt16 | Type::UInt32 | Type::UInt64 | Type::UInt128));
 
                 match operator {
                     BinaryOperator::Plus => {
@@ -540,7 +542,11 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(Some(self.builder.build_int_signed_div(l, r, "")?.into()))
+                            if is_unsigned {
+                                Ok(Some(self.builder.build_int_unsigned_div(l, r, "")?.into()))
+                            } else {
+                                Ok(Some(self.builder.build_int_signed_div(l, r, "")?.into()))
+                            }
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
@@ -601,9 +607,14 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
+                            let predicate = if is_unsigned {
+                                inkwell::IntPredicate::ULT
+                            } else {
+                                inkwell::IntPredicate::SLT
+                            };
                             Ok(Some(
                                 self.builder
-                                    .build_int_compare(inkwell::IntPredicate::SLT, l, r, "")?
+                                    .build_int_compare(predicate, l, r, "")?
                                     .into(),
                             ))
                         } else if let (
@@ -624,9 +635,14 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
+                            let predicate = if is_unsigned {
+                                inkwell::IntPredicate::ULE
+                            } else {
+                                inkwell::IntPredicate::SLE
+                            };
                             Ok(Some(
                                 self.builder
-                                    .build_int_compare(inkwell::IntPredicate::SLE, l, r, "")?
+                                    .build_int_compare(predicate, l, r, "")?
                                     .into(),
                             ))
                         } else if let (
@@ -647,9 +663,14 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
+                            let predicate = if is_unsigned {
+                                inkwell::IntPredicate::UGT
+                            } else {
+                                inkwell::IntPredicate::SGT
+                            };
                             Ok(Some(
                                 self.builder
-                                    .build_int_compare(inkwell::IntPredicate::SGT, l, r, "")?
+                                    .build_int_compare(predicate, l, r, "")?
                                     .into(),
                             ))
                         } else if let (
@@ -670,9 +691,14 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
+                            let predicate = if is_unsigned {
+                                inkwell::IntPredicate::UGE
+                            } else {
+                                inkwell::IntPredicate::SGE
+                            };
                             Ok(Some(
                                 self.builder
-                                    .build_int_compare(inkwell::IntPredicate::SGE, l, r, "")?
+                                    .build_int_compare(predicate, l, r, "")?
                                     .into(),
                             ))
                         } else if let (
@@ -758,7 +784,11 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(Some(self.builder.build_int_signed_rem(l, r, "")?.into()))
+                            if is_unsigned {
+                                Ok(Some(self.builder.build_int_unsigned_rem(l, r, "")?.into()))
+                            } else {
+                                Ok(Some(self.builder.build_int_signed_rem(l, r, "")?.into()))
+                            }
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
