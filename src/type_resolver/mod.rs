@@ -4,7 +4,7 @@ use crate::{
     ast::{
         expression::{BinaryOperator, Expression, UnaryOperator},
         node::Program,
-        statement::{FunctionBody, Parameter, Statement},
+        statement::{FunctionBody, Statement},
     },
     diag::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
@@ -65,8 +65,52 @@ impl TypeResolver {
     pub fn resolve(&mut self, program: &Program, id: ModuleId) {
         self.current_module = self.krate.borrow().modules.get(&id).cloned();
         self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(None))));
+        
+        for stmt in &program.statements {
+            self.process_function_decl(stmt.clone());
+        }
+        
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
+        }
+    }
+
+    fn process_function_decl(&mut self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::FunctionDecl {
+            name,
+            parameters,
+            return_type,
+            ty,
+            ..
+        } = &mut *statement.borrow_mut()
+        {
+            let ret_type = if let Some(return_type_expr) = return_type {
+                self.infer_type(return_type_expr.clone())
+                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+            } else {
+                Rc::new(RefCell::new(Type::Void))
+            };
+
+            let mut parameter_types = Vec::new();
+            for param in parameters.iter() {
+                let param_type = self.infer_type(param.borrow().type_expression.clone());
+                if let Some(ref param_type) = param_type {
+                    param.borrow_mut().ty = Some(param_type.clone());
+                    parameter_types.push(param_type.clone());
+                }
+            }
+            
+            let fn_type = Rc::new(RefCell::new(Type::Function(
+                parameter_types,
+                ret_type,
+            )));
+            *ty = Some(fn_type.clone());
+
+            self.type_env
+                .as_ref()
+                .unwrap()
+                .borrow_mut()
+                .set(name.value.clone(), fn_type);
         }
     }
 
@@ -115,43 +159,29 @@ impl TypeResolver {
                 };
             }
             Statement::FunctionDecl {
-                name,
                 parameters,
-                return_type,
                 body,
                 ty,
                 ..
             } => {
                 let last_return_type = self.current_return_type.clone();
 
-                let ret_type = if let Some(return_type_expr) = return_type {
-                    self.infer_type(return_type_expr.clone())
-                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                let fn_type = if ty.is_some() {
+                    ty.clone().unwrap()
+                } else {
+                    Rc::new(RefCell::new(Type::Function(vec![], Rc::new(RefCell::new(Type::Void)))))
+                };
+                
+                let ret_type = if let Type::Function(_, ret) = &*fn_type.borrow() {
+                    ret.clone()
                 } else {
                     Rc::new(RefCell::new(Type::Void))
                 };
                 self.current_return_type = Some(ret_type.clone());
 
-                let mut parameter_types = Vec::new();
-                for param in parameters.iter() {
-                    if let Some(param_ty) = self.resolve_param(param.clone()) {
-                        parameter_types.push(param_ty);
-                    }
-                }
-                let fn_type = Rc::new(RefCell::new(Type::Function(
-                    parameter_types,
-                    ret_type,
-                )));
-                *ty = Some(fn_type.clone());
-
-                self.type_env
-                    .as_ref()
-                    .unwrap()
-                    .borrow_mut()
-                    .set(name.value.clone(), fn_type.clone());
-
                 let last_type_env = self.type_env.clone();
                 self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(last_type_env.clone()))));
+                
                 for param in parameters.iter() {
                     if let Some(param_ty) = param.borrow().ty.clone() {
                         self.type_env
@@ -237,9 +267,9 @@ impl TypeResolver {
                 }
             }
             Statement::For {
-                pattern: _,
                 iterator,
                 body,
+                ..
             } => {
                 let _ = self.infer_type(iterator.clone());
                 self.resolve_block_expression(body.clone());
@@ -254,19 +284,6 @@ impl TypeResolver {
                 self.resolve_statement(stmt.clone());
             }
         }
-    }
-
-    fn resolve_param(&mut self, param: Rc<RefCell<Parameter>>) -> Option<Rc<RefCell<Type>>> {
-        let param_type = self.infer_type(param.borrow().type_expression.clone());
-        if let Some(ref param_type) = param_type {
-            param.borrow_mut().ty = Some(param_type.clone());
-            self.type_env
-                .as_ref()
-                .unwrap()
-                .borrow_mut()
-                .set(param.borrow().name.value.clone(), param_type.clone());
-        }
-        param_type
     }
 
     fn resolve_function_body(&mut self, body: Rc<RefCell<FunctionBody>>) {
