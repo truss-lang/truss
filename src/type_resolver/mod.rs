@@ -475,8 +475,8 @@ impl TypeResolver {
             } => {
                 let callee_type = self.infer_type(callee.clone())?;
                 match &*callee_type.borrow() {
-                    Type::Function(param_tys, ret_ty, _) => {
-                        if parameters.len() != param_tys.len() {
+                    Type::Function(param_tys, ret_ty, is_vararg) => {
+                        if !*is_vararg && parameters.len() != param_tys.len() {
                             let token = &Self::get_token_from_expr(callee);
                             self.emit_error(
                                 TrussDiagnosticCode::ArgumentCountMismatch,
@@ -487,15 +487,26 @@ impl TypeResolver {
                                 ),
                                 token,
                             );
+                        } else if *is_vararg && parameters.len() < param_tys.len() {
+                            let token = &Self::get_token_from_expr(callee);
+                            self.emit_error(
+                                TrussDiagnosticCode::ArgumentCountMismatch,
+                                format!(
+                                    "Expected at least {} arguments but found {}",
+                                    param_tys.len(),
+                                    parameters.len()
+                                ),
+                                token,
+                            );
                         }
-                        
+
                         let func_decl = self.get_function_decl_from_callee(callee.clone());
-                        
+
                         for (i, param) in parameters.iter().enumerate() {
                             if i < param_tys.len() {
                                 let expected_ty = param_tys[i].clone();
                                 self.infer_expression_type(param.expression.clone(), expected_ty);
-                                
+
                                 if let Some(ref decl) = func_decl {
                                     self.check_parameter_label(param, decl, i);
                                 }
