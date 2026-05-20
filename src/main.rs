@@ -118,10 +118,8 @@ fn main() {
     }
 
     if cli.ir || cli.inspect {
-        module.print_to_file("output.ll").expect("Failed to write LLVM IR file");
-        let ir_content = fs::read_to_string("output.ll").expect("Failed to read LLVM IR file");
+        let ir_content = module.print_to_string().to_string();
         println!("=== LLVM IR ===");
         println!("{}", ir_content);
-        fs::remove_file("output.ll").ok();
     }
 }
