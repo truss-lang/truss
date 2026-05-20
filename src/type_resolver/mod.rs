@@ -134,6 +134,14 @@ impl TypeResolver {
                 FunctionBody::None => {}
             }
         }
+        if let Statement::ExternBlock { items, .. } = &*statement.borrow() {
+            for item in items {
+                self.process_function_decl(item.clone());
+            }
+        }
+        if let Statement::ExternDecl { statement, .. } = &*statement.borrow() {
+            self.process_function_decl(statement.clone());
+        }
     }
 
     fn process_function_decl_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
@@ -303,6 +311,14 @@ impl TypeResolver {
             } => {
                 let _ = self.infer_type(iterator.clone());
                 self.resolve_block_expression(body.clone());
+            }
+            Statement::ExternBlock { items, .. } => {
+                for item in items {
+                    self.resolve_statement(item.clone());
+                }
+            }
+            Statement::ExternDecl { statement, .. } => {
+                self.resolve_statement(statement.clone());
             }
             _ => {}
         }
