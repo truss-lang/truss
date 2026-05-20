@@ -16,13 +16,26 @@ use crate::{
     types::Type,
 };
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct TypeEnv {
     vars: HashMap<String, Rc<RefCell<Type>>>,
+    parent: Option<Rc<RefCell<TypeEnv>>>,
 }
 impl TypeEnv {
+    fn new(parent: Option<Rc<RefCell<TypeEnv>>>) -> Self {
+        Self {
+            vars: HashMap::new(),
+            parent,
+        }
+    }
     fn get(&self, name: &str) -> Option<Rc<RefCell<Type>>> {
-        self.vars.get(name).cloned()
+        if let Some(ty) = self.vars.get(name) {
+            return Some(ty.clone());
+        }
+        if let Some(parent) = &self.parent {
+            return parent.borrow().get(name);
+        }
+        None
     }
     fn set(&mut self, name: String, ty: Rc<RefCell<Type>>) {
         self.vars.insert(name, ty);
@@ -51,7 +64,7 @@ impl TypeResolver {
 
     pub fn resolve(&mut self, program: &Program, id: ModuleId) {
         self.current_module = self.krate.borrow().modules.get(&id).cloned();
-        self.type_env = Some(Rc::new(RefCell::new(TypeEnv::default())));
+        self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(None))));
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
         }
@@ -102,16 +115,14 @@ impl TypeResolver {
                 };
             }
             Statement::FunctionDecl {
+                name,
                 parameters,
                 return_type,
                 body,
                 ty,
                 ..
             } => {
-                let last_type_env = self.type_env.clone();
                 let last_return_type = self.current_return_type.clone();
-
-                self.type_env = Some(Rc::new(RefCell::new(TypeEnv::default())));
 
                 let ret_type = if let Some(return_type_expr) = return_type {
                     self.infer_type(return_type_expr.clone())
@@ -122,15 +133,34 @@ impl TypeResolver {
                 self.current_return_type = Some(ret_type.clone());
 
                 let mut parameter_types = Vec::new();
-                for param in parameters {
+                for param in parameters.iter() {
                     if let Some(param_ty) = self.resolve_param(param.clone()) {
                         parameter_types.push(param_ty);
                     }
                 }
-                *ty = Some(Rc::new(RefCell::new(Type::Function(
+                let fn_type = Rc::new(RefCell::new(Type::Function(
                     parameter_types,
                     ret_type,
-                ))));
+                )));
+                *ty = Some(fn_type.clone());
+
+                self.type_env
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set(name.value.clone(), fn_type.clone());
+
+                let last_type_env = self.type_env.clone();
+                self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(last_type_env.clone()))));
+                for param in parameters.iter() {
+                    if let Some(param_ty) = param.borrow().ty.clone() {
+                        self.type_env
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set(param.borrow().name.value.clone(), param_ty);
+                    }
+                }
 
                 self.resolve_function_body(body.clone());
 
