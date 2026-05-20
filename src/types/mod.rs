@@ -18,5 +18,5 @@ pub enum Type {
     Float64,
     Char,
     Bool,
-    Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>),
+    Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool),
 }

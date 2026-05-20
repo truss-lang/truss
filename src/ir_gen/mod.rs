@@ -176,9 +176,9 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_function_declaration(&self, name: &Token, ty: &Rc<RefCell<Type>>) -> Result<()> {
-        if let Type::Function(param_types, return_type) = &*ty.borrow() {
+        if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
             let function_type =
-                self.get_function_type(return_type.clone(), param_types.clone(), false)?;
+                self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)?;
             self.module.add_function(&name.value, function_type, None);
         }
         Ok(())
@@ -304,7 +304,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 body,
                 ..
             } => {
-                if let Type::Function(_parameter_types, return_type) = &*ty.borrow() {
+                if let Type::Function(_parameter_types, return_type, _) = &*ty.borrow() {
                     let fn_name = &name.value;
                     let function = self.module.get_function(fn_name).unwrap();
 
@@ -1171,7 +1171,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
                 anyhow::bail!("Void type is handled specially as void return type");
             }
-            Type::Function(_, _) => {
+            Type::Function(_, _, _) => {
                 self.emit_error(
                     TrussDiagnosticCode::NestedFunctionType,
                     "Nested function types are not supported",

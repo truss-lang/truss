@@ -93,17 +93,22 @@ impl TypeResolver {
             };
 
             let mut parameter_types = Vec::new();
+            let mut is_vararg = false;
             for param in parameters.iter() {
                 let param_type = self.infer_type(param.borrow().type_expression.clone());
                 if let Some(ref param_type) = param_type {
                     param.borrow_mut().ty = Some(param_type.clone());
                     parameter_types.push(param_type.clone());
                 }
+                if param.borrow().variadic_kind != crate::ast::statement::VariadicKind::NotVariadic {
+                    is_vararg = true;
+                }
             }
 
             let fn_type = Rc::new(RefCell::new(Type::Function(
                 parameter_types,
                 ret_type,
+                is_vararg,
             )));
             *ty = Some(fn_type.clone());
 
@@ -190,10 +195,10 @@ impl TypeResolver {
                 let fn_type = if ty.is_some() {
                     ty.clone().unwrap()
                 } else {
-                    Rc::new(RefCell::new(Type::Function(vec![], Rc::new(RefCell::new(Type::Void)))))
+                    Rc::new(RefCell::new(Type::Function(vec![], Rc::new(RefCell::new(Type::Void)), false)))
                 };
-                
-                let ret_type = if let Type::Function(_, ret) = &*fn_type.borrow() {
+
+                let ret_type = if let Type::Function(_, ret, _) = &*fn_type.borrow() {
                     ret.clone()
                 } else {
                     Rc::new(RefCell::new(Type::Void))
@@ -470,7 +475,7 @@ impl TypeResolver {
             } => {
                 let callee_type = self.infer_type(callee.clone())?;
                 match &*callee_type.borrow() {
-                    Type::Function(param_tys, ret_ty) => {
+                    Type::Function(param_tys, ret_ty, _) => {
                         if parameters.len() != param_tys.len() {
                             let token = &Self::get_token_from_expr(callee);
                             self.emit_error(
