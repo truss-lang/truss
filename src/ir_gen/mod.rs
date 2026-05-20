@@ -167,12 +167,31 @@ impl<'ctx> IRGenerator<'ctx> {
         }
         if let Statement::ExternBlock { items, .. } = &*statement.borrow() {
             for item in items {
-                self.create_function_declarations(item.clone());
+                let _ = self.create_extern_declaration(item.clone());
             }
         }
         if let Statement::ExternDecl { statement, .. } = &*statement.borrow() {
-            self.create_function_declarations(statement.clone());
+            let _ = self.create_extern_declaration(statement.clone());
         }
+    }
+
+    fn create_extern_declaration(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
+        if let Statement::FunctionDecl { name, ty, .. } = &*statement.borrow() {
+            if let Some(ty) = ty {
+                if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
+                    let function_type =
+                        self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)?;
+                    self.module.add_function(&name.value, function_type, None);
+                }
+            }
+        }
+        if let Statement::VariableDecl { name, ty, .. } = &*statement.borrow() {
+            if let Some(ty) = ty {
+                let llvm_type = self.resolve_type(ty.clone())?;
+                self.module.add_global(llvm_type, None, &name.value);
+            }
+        }
+        Ok(())
     }
 
     fn create_function_declarations_in_expr(&self, expr: Rc<RefCell<Expression>>) {
@@ -198,29 +217,6 @@ impl<'ctx> IRGenerator<'ctx> {
             self.resolve_block_stmts(statements)
         } else {
             Ok(false)
-        }
-    }
-
-    fn resolve_extern_decl(&self, statement: Rc<RefCell<Statement>>) -> Result<bool> {
-        match &*statement.borrow() {
-            Statement::FunctionDecl { name, ty, .. } => {
-                if let Some(ty) = ty {
-                    if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
-                        let function_type =
-                            self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)?;
-                        self.module.add_function(&name.value, function_type, None);
-                    }
-                }
-                Ok(false)
-            }
-            Statement::VariableDecl { name, ty, .. } => {
-                if let Some(ty) = ty {
-                    let llvm_type = self.resolve_type(ty.clone())?;
-                    self.module.add_global(llvm_type, None, &name.value);
-                }
-                Ok(false)
-            }
-            _ => Ok(false),
         }
     }
 
@@ -411,8 +407,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 Ok(false)
             }
-            Statement::ExternDecl { statement, .. } => {
-                self.resolve_extern_decl(statement.clone())
+            Statement::ExternDecl { .. } => {
+                Ok(false)
             }
             _ => Ok(false),
         }
