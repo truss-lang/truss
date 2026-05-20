@@ -139,9 +139,34 @@ impl<'ctx> IRGenerator<'ctx> {
 
     pub fn generate(&self, program: &Program) -> Rc<Module<'ctx>> {
         for stmt in &program.statements {
+            if let Statement::FunctionDecl {
+                name,
+                ty,
+                ..
+            } = &*stmt.borrow()
+            {
+                if let Some(ty) = ty {
+                    let _ = self.create_function_declaration(name, ty);
+                }
+            }
+        }
+        
+        for stmt in &program.statements {
             let _ = self.resolve_statement(stmt.clone());
         }
         self.module.clone()
+    }
+
+    fn create_function_declaration(
+        &self,
+        name: &Token,
+        ty: &Rc<RefCell<Type>>,
+    ) -> Result<()> {
+        if let Type::Function(param_types, return_type) = &*ty.borrow() {
+            let function_type = self.get_function_type(return_type.clone(), param_types.clone(), false)?;
+            self.module.add_function(&name.value, function_type, None);
+        }
+        Ok(())
     }
 
     fn resolve_block_expression(&self, block_expr: Rc<RefCell<Expression>>) -> Result<bool> {
@@ -253,9 +278,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(false)
             }
             Statement::For {
-                pattern: _,
                 iterator,
                 body,
+                ..
             } => {
                 let _ = self.resolve_expression(iterator.clone());
                 self.resolve_block_expression(body.clone())?;
@@ -268,17 +293,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 body,
                 ..
             } => {
-                if let Type::Function(parameter_types, return_type) = &*ty.borrow() {
+                if let Type::Function(_parameter_types, return_type) = &*ty.borrow() {
                     let fn_name = &name.value;
-                    let function = self.module.add_function(
-                        fn_name,
-                        self.get_function_type(
-                            return_type.clone(),
-                            parameter_types.clone(),
-                            false,
-                        )?,
-                        None,
-                    );
+                    let function = self.module.get_function(fn_name).unwrap();
 
                     let entry_block = self.context.append_basic_block(function, "entry");
                     self.builder.position_at_end(entry_block);
@@ -383,7 +400,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.enter_scope_with_stmts(statements)?;
                 self.resolve_block_stmts(statements)?;
 
-                // Return an empty int value as a placeholder
                 Ok(Some(self.context.i32_type().const_int(0, false).into()))
             }
             Expression::Variable { name, ty, .. } => {
@@ -709,7 +725,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Unary {
                 expression: expr,
                 operator,
-                is_prefix: _,
+                ..
             } => {
                 let expr_val = self.resolve_expression(expr.clone())?.unwrap();
                 match operator {
