@@ -638,7 +638,74 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid types for logical or");
                         }
                     }
-                    _ => anyhow::bail!("Binary operator {:?} not implemented", operator),
+                    BinaryOperator::BitAnd => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_and(l, r, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for bitwise and");
+                        }
+                    }
+                    BinaryOperator::BitOr => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_or(l, r, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for bitwise or");
+                        }
+                    }
+                    BinaryOperator::BitXor => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_xor(l, r, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for bitwise xor");
+                        }
+                    }
+                    BinaryOperator::LeftShift => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_left_shift(l, r, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for left shift");
+                        }
+                    }
+                    BinaryOperator::RightShift => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_right_shift(l, r, false, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for right shift");
+                        }
+                    }
+                    BinaryOperator::Modulus => {
+                        if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                            (left_val, right_val)
+                        {
+                            Ok(self.builder.build_int_signed_rem(l, r, "")?.into())
+                        } else if let (
+                            BasicValueEnum::FloatValue(l),
+                            BasicValueEnum::FloatValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            Ok(self.builder.build_float_rem(l, r, "")?.into())
+                        } else {
+                            anyhow::bail!("Invalid types for modulus");
+                        }
+                    }
+                    BinaryOperator::RangeTo | BinaryOperator::RangeUntil => {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnsupportedFeature,
+                            "Range expressions are not yet supported in IR generation",
+                            None,
+                        );
+                        anyhow::bail!("Range expressions not implemented");
+                    }
                 }
             }
             Expression::Unary {
