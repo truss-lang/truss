@@ -97,6 +97,14 @@ impl SymbolResolver {
                 FunctionBody::None => {}
             }
         }
+        if let Statement::ExternBlock { items, .. } = &*stmt.borrow() {
+            for item in items {
+                self.register_function_symbols(item.clone());
+            }
+        }
+        if let Statement::ExternDecl { statement, .. } = &*stmt.borrow() {
+            self.register_function_symbols(statement.clone());
+        }
     }
 
     fn register_function_symbols_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
