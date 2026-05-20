@@ -57,6 +57,21 @@ impl SymbolResolver {
             .name_to_modules
             .insert(module_name, module.clone());
         self.current_module = Some(module.clone());
+        
+        for stmt in &program.statements {
+            if let Statement::FunctionDecl { name, .. } = &*stmt.borrow() {
+                let id = self.get_symbol_id();
+                let symbol = Rc::new(Symbol::Function {
+                    name: name.value.clone(),
+                    id,
+                    decl: Some(stmt.clone()),
+                });
+                let module = self.current_module.clone().unwrap();
+                module.borrow_mut().symbols.insert(id, symbol.clone());
+                module.borrow_mut().name_table.insert(name.value.clone(), symbol);
+            }
+        }
+        
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
         }
@@ -66,19 +81,11 @@ impl SymbolResolver {
     fn resolve_statement(&mut self, stmt: Rc<RefCell<Statement>>) {
         match &*stmt.borrow() {
             Statement::FunctionDecl {
-                name,
                 parameters,
                 return_type,
                 body,
                 ..
             } => {
-                let id = self.get_symbol_id();
-                let symbol = Rc::new(Symbol::Function {
-                    name: name.value.clone(),
-                    id,
-                    decl: Some(stmt.clone()),
-                });
-                self.enter(id, symbol, name);
                 self.enter_scope();
                 for parameter in parameters {
                     let name = parameter.borrow().name.value.clone();
