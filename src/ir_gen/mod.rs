@@ -13,7 +13,7 @@ use crate::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
         node::Program,
-        statement::{FunctionBody, Statement},
+        statement::{FunctionBody, Statement, VariadicKind},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{Token, TokenType},
@@ -315,6 +315,9 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     self.enter_scope();
                     for (i, param) in parameters.iter().enumerate() {
+                        if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                            continue;
+                        }
                         let param_name = &param.borrow().name.value;
                         let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
                         let alloca_name = self.unique_alloca_name(param_name);

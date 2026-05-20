@@ -538,7 +538,7 @@ impl Parser {
                     name: Box::new(variadic_token),
                     type_expression: Rc::new(RefCell::new(Expression::Type {
                         name: Box::new(Token::new(
-                            "Any".to_string(),
+                            "Void".to_string(),
                             TokenType::Identifier,
                             t.position,
                             self.file.clone(),
@@ -1083,7 +1083,7 @@ impl Parser {
                     name: Box::new(variadic_token),
                     type_expression: Rc::new(RefCell::new(Expression::Type {
                         name: Box::new(Token::new(
-                            "Any".to_string(),
+                            "Void".to_string(),
                             TokenType::Identifier,
                             t.position,
                             self.file.clone(),

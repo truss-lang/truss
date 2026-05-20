@@ -4,7 +4,7 @@ use crate::{
     ast::{
         expression::{BinaryOperator, CallParameter, Expression, UnaryOperator},
         node::Program,
-        statement::{FunctionBody, Statement},
+        statement::{FunctionBody, Statement, VariadicKind},
     },
     diag::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
@@ -95,12 +95,16 @@ impl TypeResolver {
             let mut parameter_types = Vec::new();
             let mut is_vararg = false;
             for param in parameters.iter() {
+                if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                    is_vararg = true;
+                    continue;
+                }
                 let param_type = self.infer_type(param.borrow().type_expression.clone());
                 if let Some(ref param_type) = param_type {
                     param.borrow_mut().ty = Some(param_type.clone());
                     parameter_types.push(param_type.clone());
                 }
-                if param.borrow().variadic_kind != crate::ast::statement::VariadicKind::NotVariadic {
+                if param.borrow().variadic_kind != VariadicKind::NotVariadic {
                     is_vararg = true;
                 }
             }
