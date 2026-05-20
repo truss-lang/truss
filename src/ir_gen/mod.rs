@@ -159,14 +159,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 name, initializer, ..
             } => {
                 if let Some(init) = initializer {
-                    let init_val = self.resolve_expression(init.clone())?;
+                    let init_val = self.resolve_expression(init.clone())?.unwrap();
                     if let Some(ptr) = self.lookup_variable(&name.value) {
                         self.builder.build_store(ptr, init_val)?;
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::IRVariableNotFound,
                             format!("Variable '{}' alloca not found", name.value),
-                            Some(&name),
+                            Some(name),
                         );
                         anyhow::bail!("Variable alloca not found");
                     }
@@ -187,7 +187,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.build_unconditional_branch(while_bb)?;
                 self.builder.position_at_end(while_bb);
 
-                let cond_val = self.resolve_expression(condition.clone())?;
+                let cond_val = self.resolve_expression(condition.clone())?.unwrap();
                 let cond_int = cond_val.into_int_value();
                 self.builder
                     .build_conditional_branch(cond_int, body_bb, exit_bb)?;
@@ -244,7 +244,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 self.builder.position_at_end(cond_bb);
-                let cond_val = self.resolve_expression(condition.clone())?;
+                let cond_val = self.resolve_expression(condition.clone())?.unwrap();
                 let cond_int = cond_val.into_int_value();
                 self.builder
                     .build_conditional_branch(cond_int, body_bb, exit_bb)?;
@@ -313,7 +313,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.exit_scope();
                         }
                         FunctionBody::Expression(expr) => {
-                            let value = self.resolve_expression(expr.clone())?;
+                            let value = self.resolve_expression(expr.clone())?.unwrap();
                             self.builder.build_return(Some(&value))?;
                         }
                     }
@@ -323,7 +323,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::Return { value, .. } => {
                 match value {
                     Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
-                        let value = self.resolve_expression(value.clone())?;
+                        let value = self.resolve_expression(value.clone())?.unwrap();
                         self.builder.build_return(Some(&value))?;
                     }
                     _ => {
@@ -340,43 +340,51 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
-    fn resolve_expression(&self, expr: Rc<RefCell<Expression>>) -> Result<BasicValueEnum<'ctx>> {
+    fn resolve_expression(
+        &self,
+        expr: Rc<RefCell<Expression>>,
+    ) -> Result<Option<BasicValueEnum<'ctx>>> {
         match &*expr.borrow() {
             Expression::IntegerLiteral { value, ty, .. } => {
                 let llvm_type = match ty {
                     Some(t) => self.resolve_type(t.clone())?,
                     None => self.context.i32_type().into(),
                 };
-                Ok(llvm_type
-                    .into_int_type()
-                    .const_int(*value as u64, false)
-                    .into())
+                Ok(Some(
+                    llvm_type
+                        .into_int_type()
+                        .const_int(*value as u64, false)
+                        .into(),
+                ))
             }
             Expression::BooleanLiteral { token } => {
                 let value = match &token.ty {
                     TokenType::BooleanLiteral { value } => *value,
                     _ => false,
                 };
-                Ok(self
-                    .context
-                    .bool_type()
-                    .const_int(value as u64, false)
-                    .into())
+                Ok(Some(
+                    self.context
+                        .bool_type()
+                        .const_int(value as u64, false)
+                        .into(),
+                ))
             }
             Expression::DecimalLiteral { value, ty, .. } => {
                 let llvm_type = match ty {
                     Some(t) => self.resolve_type(t.clone())?,
                     None => self.context.f64_type().into(),
                 };
-                Ok(llvm_type.into_float_type().const_float(*value).into())
+                Ok(Some(llvm_type.into_float_type().const_float(*value).into()))
             }
-            Expression::CharLiteral { .. } => Ok(self.context.i8_type().const_int(0, false).into()),
+            Expression::CharLiteral { .. } => {
+                Ok(Some(self.context.i8_type().const_int(0, false).into()))
+            }
             Expression::Block { statements } => {
                 self.enter_scope_with_stmts(statements)?;
                 self.resolve_block_stmts(statements)?;
 
                 // Return an empty int value as a placeholder
-                Ok(self.context.i32_type().const_int(0, false).into())
+                Ok(Some(self.context.i32_type().const_int(0, false).into()))
             }
             Expression::Variable { name, ty, .. } => {
                 if let Some(ptr) = self.lookup_variable(&name.value) {
@@ -386,17 +394,17 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.emit_error(
                             TrussDiagnosticCode::TypeInferenceFailed,
                             "Cannot infer type from variable without type annotation",
-                            Some(&name),
+                            Some(name),
                         );
                         anyhow::bail!("Cannot infer type from variable")
                     };
                     let val = self.builder.build_load(llvm_type, ptr, "")?;
-                    Ok(val)
+                    Ok(Some(val))
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,
                         format!("Undefined variable: '{}'", name.value),
-                        Some(&name),
+                        Some(name),
                     );
                     anyhow::bail!("Undefined variable: {}", name.value);
                 }
@@ -406,21 +414,21 @@ impl<'ctx> IRGenerator<'ctx> {
                 operator,
                 right,
             } => {
-                let left_val = self.resolve_expression(left.clone())?;
-                let right_val = self.resolve_expression(right.clone())?;
+                let left_val = self.resolve_expression(left.clone())?.unwrap();
+                let right_val = self.resolve_expression(right.clone())?.unwrap();
 
                 match operator {
                     BinaryOperator::Plus => {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_add(l, r, "")?.into())
+                            Ok(Some(self.builder.build_int_add(l, r, "")?.into()))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_add(l, r, "")?.into())
+                            Ok(Some(self.builder.build_float_add(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for addition");
                         }
@@ -429,13 +437,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_sub(l, r, "")?.into())
+                            Ok(Some(self.builder.build_int_sub(l, r, "")?.into()))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_sub(l, r, "")?.into())
+                            Ok(Some(self.builder.build_float_sub(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for subtraction");
                         }
@@ -444,13 +452,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_mul(l, r, "")?.into())
+                            Ok(Some(self.builder.build_int_mul(l, r, "")?.into()))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_mul(l, r, "")?.into())
+                            Ok(Some(self.builder.build_float_mul(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for multiplication");
                         }
@@ -459,13 +467,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_signed_div(l, r, "")?.into())
+                            Ok(Some(self.builder.build_int_signed_div(l, r, "")?.into()))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_div(l, r, "")?.into())
+                            Ok(Some(self.builder.build_float_div(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for division");
                         }
@@ -474,19 +482,21 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_int_compare(inkwell::IntPredicate::EQ, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_int_compare(inkwell::IntPredicate::EQ, l, r, "")?
+                                    .into(),
+                            ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_float_compare(inkwell::FloatPredicate::OEQ, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_float_compare(inkwell::FloatPredicate::OEQ, l, r, "")?
+                                    .into(),
+                            ))
                         } else {
                             anyhow::bail!("Invalid types for equality comparison");
                         }
@@ -495,19 +505,21 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_int_compare(inkwell::IntPredicate::NE, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_int_compare(inkwell::IntPredicate::NE, l, r, "")?
+                                    .into(),
+                            ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_float_compare(inkwell::FloatPredicate::ONE, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_float_compare(inkwell::FloatPredicate::ONE, l, r, "")?
+                                    .into(),
+                            ))
                         } else {
                             anyhow::bail!("Invalid types for inequality comparison");
                         }
@@ -516,19 +528,21 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_int_compare(inkwell::IntPredicate::SLT, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_int_compare(inkwell::IntPredicate::SLT, l, r, "")?
+                                    .into(),
+                            ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_float_compare(inkwell::FloatPredicate::OLT, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_float_compare(inkwell::FloatPredicate::OLT, l, r, "")?
+                                    .into(),
+                            ))
                         } else {
                             anyhow::bail!("Invalid types for less than comparison");
                         }
@@ -537,19 +551,21 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_int_compare(inkwell::IntPredicate::SLE, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_int_compare(inkwell::IntPredicate::SLE, l, r, "")?
+                                    .into(),
+                            ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_float_compare(inkwell::FloatPredicate::OLE, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_float_compare(inkwell::FloatPredicate::OLE, l, r, "")?
+                                    .into(),
+                            ))
                         } else {
                             anyhow::bail!("Invalid types for less than or equal comparison");
                         }
@@ -558,19 +574,21 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_int_compare(inkwell::IntPredicate::SGT, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_int_compare(inkwell::IntPredicate::SGT, l, r, "")?
+                                    .into(),
+                            ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_float_compare(inkwell::FloatPredicate::OGT, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_float_compare(inkwell::FloatPredicate::OGT, l, r, "")?
+                                    .into(),
+                            ))
                         } else {
                             anyhow::bail!("Invalid types for greater than comparison");
                         }
@@ -579,19 +597,21 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_int_compare(inkwell::IntPredicate::SGE, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_int_compare(inkwell::IntPredicate::SGE, l, r, "")?
+                                    .into(),
+                            ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self
-                                .builder
-                                .build_float_compare(inkwell::FloatPredicate::OGE, l, r, "")?
-                                .into())
+                            Ok(Some(
+                                self.builder
+                                    .build_float_compare(inkwell::FloatPredicate::OGE, l, r, "")?
+                                    .into(),
+                            ))
                         } else {
                             anyhow::bail!("Invalid types for greater than or equal comparison");
                         }
@@ -600,7 +620,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_and(l, r, "")?.into())
+                            Ok(Some(self.builder.build_and(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for logical and");
                         }
@@ -609,7 +629,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_or(l, r, "")?.into())
+                            Ok(Some(self.builder.build_or(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for logical or");
                         }
@@ -618,7 +638,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_and(l, r, "")?.into())
+                            Ok(Some(self.builder.build_and(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for bitwise and");
                         }
@@ -627,7 +647,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_or(l, r, "")?.into())
+                            Ok(Some(self.builder.build_or(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for bitwise or");
                         }
@@ -636,7 +656,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_xor(l, r, "")?.into())
+                            Ok(Some(self.builder.build_xor(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for bitwise xor");
                         }
@@ -645,7 +665,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_left_shift(l, r, "")?.into())
+                            Ok(Some(self.builder.build_left_shift(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for left shift");
                         }
@@ -654,7 +674,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_right_shift(l, r, false, "")?.into())
+                            Ok(Some(
+                                self.builder.build_right_shift(l, r, false, "")?.into(),
+                            ))
                         } else {
                             anyhow::bail!("Invalid types for right shift");
                         }
@@ -663,13 +685,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
                             (left_val, right_val)
                         {
-                            Ok(self.builder.build_int_signed_rem(l, r, "")?.into())
+                            Ok(Some(self.builder.build_int_signed_rem(l, r, "")?.into()))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
                             BasicValueEnum::FloatValue(r),
                         ) = (left_val, right_val)
                         {
-                            Ok(self.builder.build_float_rem(l, r, "")?.into())
+                            Ok(Some(self.builder.build_float_rem(l, r, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid types for modulus");
                         }
@@ -689,21 +711,21 @@ impl<'ctx> IRGenerator<'ctx> {
                 operator,
                 is_prefix: _,
             } => {
-                let expr_val = self.resolve_expression(expr.clone())?;
+                let expr_val = self.resolve_expression(expr.clone())?.unwrap();
                 match operator {
-                    UnaryOperator::Plus => Ok(expr_val),
+                    UnaryOperator::Plus => Ok(Some(expr_val)),
                     UnaryOperator::Minus => {
                         if let BasicValueEnum::IntValue(v) = expr_val {
-                            Ok(self.builder.build_int_neg(v, "")?.into())
+                            Ok(Some(self.builder.build_int_neg(v, "")?.into()))
                         } else if let BasicValueEnum::FloatValue(v) = expr_val {
-                            Ok(self.builder.build_float_neg(v, "")?.into())
+                            Ok(Some(self.builder.build_float_neg(v, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid type for unary minus");
                         }
                     }
                     UnaryOperator::BitNot => {
                         if let BasicValueEnum::IntValue(v) = expr_val {
-                            Ok(self.builder.build_not(v, "")?.into())
+                            Ok(Some(self.builder.build_not(v, "")?.into()))
                         } else {
                             anyhow::bail!("Invalid type for bitwise not");
                         }
@@ -736,7 +758,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         {
                             self.builder.build_store(ptr, result)?;
                         }
-                        Ok(result)
+                        Ok(Some(result))
                     }
                     UnaryOperator::Dec => {
                         let one = if let BasicValueEnum::IntValue(val) = expr_val {
@@ -766,12 +788,12 @@ impl<'ctx> IRGenerator<'ctx> {
                         {
                             self.builder.build_store(ptr, result)?;
                         }
-                        Ok(result)
+                        Ok(Some(result))
                     }
                     UnaryOperator::NotNullAssertation => {
                         // TODO: for now, just pass through the value
                         // In a full implementation, this would check for null/none
-                        Ok(expr_val)
+                        Ok(Some(expr_val))
                     }
                     UnaryOperator::OpenRange => {
                         self.emit_error(
@@ -788,7 +810,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 operator,
                 right,
             } => {
-                let right_val = self.resolve_expression(right.clone())?;
+                let right_val = self.resolve_expression(right.clone())?.unwrap();
 
                 let (var_ptr, current_val) =
                     if let Expression::Variable { name, .. } = &*left.borrow() {
@@ -805,7 +827,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.emit_error(
                                 TrussDiagnosticCode::UndefinedVariable,
                                 format!("Undefined variable: '{}'", name.value),
-                                Some(&name),
+                                Some(name),
                             );
                             anyhow::bail!("Undefined variable");
                         }
@@ -964,7 +986,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 };
 
-                Ok(result)
+                Ok(Some(result))
             }
             Expression::If {
                 condition,
@@ -989,7 +1011,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.build_unconditional_branch(cond_bb)?;
                 self.builder.position_at_end(cond_bb);
 
-                let cond_val = self.resolve_expression(condition.clone())?.into_int_value();
+                let cond_val = self
+                    .resolve_expression(condition.clone())?
+                    .unwrap()
+                    .into_int_value();
                 self.builder.build_conditional_branch(
                     cond_val,
                     then_bb,
@@ -1016,8 +1041,45 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 self.builder.position_at_end(exit_bb);
 
-                // Return an empty int value as a placeholder
-                Ok(self.context.i32_type().const_int(0, false).into())
+                // Return None as a placeholder
+                Ok(None)
+            }
+            Expression::Call {
+                callee, parameters, ..
+            } => {
+                let function_name = match &*callee.borrow() {
+                    Expression::Variable { name, .. } => name.value.clone(),
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnsupportedFeature,
+                            "Only simple function calls are supported",
+                            None,
+                        );
+                        anyhow::bail!("Unsupported callee");
+                    }
+                };
+
+                let function = self.module.get_function(&function_name).ok_or_else(|| {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedFunction,
+                        format!("Undefined function: '{}'", function_name),
+                        None,
+                    );
+                    anyhow::anyhow!("Undefined function: {}", function_name)
+                })?;
+
+                let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                for param in parameters {
+                    let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                    args.push(arg_val.into());
+                }
+
+                let result = self.builder.build_call(function, &args, "")?;
+
+                match result.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
+                    _ => Ok(None),
+                }
             }
             _ => anyhow::bail!("Expression type not implemented"),
         }
@@ -1115,7 +1177,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.emit_error(
                         TrussDiagnosticCode::TypeInferenceFailed,
                         "Cannot infer type from variable without type annotation",
-                        Some(&name),
+                        Some(name),
                     );
                     anyhow::bail!("Cannot infer type from variable")
                 }
