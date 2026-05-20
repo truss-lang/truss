@@ -42,7 +42,13 @@ fn emit_diagnostics(engine: &TrussDiagnosticEngine, content: &str) -> bool {
 fn main() {
     let cli = Cli::parse();
 
-    let content = fs::read_to_string(&cli.file).expect("Failed to read file");
+    let content = match fs::read_to_string(&cli.file) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Cannot read file '{}': {}", cli.file, e);
+            return;
+        }
+    };
     let file_rc = Rc::new(cli.file.clone());
     let char_stream = CharStream::new(content.clone(), file_rc.clone());
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
