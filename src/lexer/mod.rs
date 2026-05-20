@@ -5,7 +5,7 @@ use std::{cell::RefCell, char, collections::HashMap, rc::Rc, sync::OnceLock};
 use strum::IntoEnumIterator;
 use token::{KeywordType, OperatorType, Position, SeparatorType, Token, TokenType};
 
-use crate::diag::{new_diagnostic, TrussDiagnosticCode, TrussDiagnosticEngine};
+use crate::diag::{self, TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic};
 
 static KEYWORD_MAP: OnceLock<HashMap<String, KeywordType>> = OnceLock::new();
 
@@ -283,7 +283,9 @@ impl Lexer {
         } else if c == '_' || c.is_alphabetic() {
             let position = self.input.get_current_position();
             let mut value = String::new();
-            while !self.is_empty() && (self.input.peek().is_alphanumeric() || self.input.peek() == '_') {
+            while !self.is_empty()
+                && (self.input.peek().is_alphanumeric() || self.input.peek() == '_')
+            {
                 value.push(self.input.peek());
                 self.input.inc_pos();
             }
@@ -514,12 +516,10 @@ impl Lexer {
                             TrussDiagnosticCode::LexerError,
                             "Unterminated block comment",
                         )
-                        .with_label(
-                            crate::diag::secondary_label_from_token(
-                                &token,
-                                "Unterminated block comment",
-                            ),
-                        );
+                        .with_label(diag::secondary_label_from_token(
+                            &token,
+                            "Unterminated block comment",
+                        ));
                         self.engine.borrow_mut().emit(diag);
                         return None;
                     }
@@ -931,7 +931,7 @@ impl Lexer {
         let begin_pos = self.input.get_current_position();
         self.input.inc_pos();
         let mut literal = String::new();
-        
+
         if c == '0' {
             c = self.input.peek();
             if c == 'x' || c == 'X' {
