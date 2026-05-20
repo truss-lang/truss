@@ -69,12 +69,7 @@ impl SymbolResolver {
     }
 
     fn register_function_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
-        if let Statement::FunctionDecl {
-            name,
-            body,
-            ..
-        } = &*stmt.borrow()
-        {
+        if let Statement::FunctionDecl { name, body, .. } = &*stmt.borrow() {
             let id = self.get_symbol_id();
             let symbol = Rc::new(Symbol::Function {
                 name: name.value.clone(),
@@ -83,7 +78,10 @@ impl SymbolResolver {
             });
             let module = self.current_module.clone().unwrap();
             module.borrow_mut().symbols.insert(id, symbol.clone());
-            module.borrow_mut().name_table.insert(name.value.clone(), symbol);
+            module
+                .borrow_mut()
+                .name_table
+                .insert(name.value.clone(), symbol);
 
             match &*body.borrow() {
                 FunctionBody::Statements(stmts) => {

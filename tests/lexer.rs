@@ -32,10 +32,7 @@ fn test_parse_integer() {
 fn test_parse_identifier() {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "abc a_".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("abc a_".to_string(), Rc::new("".to_string())),
         engine,
     );
     let tokens = lexer.parse();
@@ -46,10 +43,7 @@ fn test_parse_identifier() {
 fn test_parse_keyword() {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "func let".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("func let".to_string(), Rc::new("".to_string())),
         engine,
     );
     let tokens = lexer.parse();
@@ -71,10 +65,7 @@ fn test_parse_keyword() {
 fn test_parse_char_literal() {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "'a' '\\n'".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("'a' '\\n'".to_string(), Rc::new("".to_string())),
         engine,
     );
     let tokens = lexer.parse();

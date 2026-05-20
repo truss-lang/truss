@@ -179,8 +179,11 @@ impl<'ctx> IRGenerator<'ctx> {
         if let Statement::FunctionDecl { name, ty, .. } = &*statement.borrow() {
             if let Some(ty) = ty {
                 if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
-                    let function_type =
-                        self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)?;
+                    let function_type = self.get_function_type(
+                        return_type.clone(),
+                        param_types.clone(),
+                        *is_vararg,
+                    )?;
                     self.module.add_function(&name.value, function_type, None);
                 }
             }
@@ -407,9 +410,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 Ok(false)
             }
-            Statement::ExternDecl { .. } => {
-                Ok(false)
-            }
+            Statement::ExternDecl { .. } => Ok(false),
             _ => Ok(false),
         }
     }
@@ -613,9 +614,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 inkwell::IntPredicate::SLT
                             };
                             Ok(Some(
-                                self.builder
-                                    .build_int_compare(predicate, l, r, "")?
-                                    .into(),
+                                self.builder.build_int_compare(predicate, l, r, "")?.into(),
                             ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
@@ -641,9 +640,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 inkwell::IntPredicate::SLE
                             };
                             Ok(Some(
-                                self.builder
-                                    .build_int_compare(predicate, l, r, "")?
-                                    .into(),
+                                self.builder.build_int_compare(predicate, l, r, "")?.into(),
                             ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
@@ -669,9 +666,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 inkwell::IntPredicate::SGT
                             };
                             Ok(Some(
-                                self.builder
-                                    .build_int_compare(predicate, l, r, "")?
-                                    .into(),
+                                self.builder.build_int_compare(predicate, l, r, "")?.into(),
                             ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),
@@ -697,9 +692,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 inkwell::IntPredicate::SGE
                             };
                             Ok(Some(
-                                self.builder
-                                    .build_int_compare(predicate, l, r, "")?
-                                    .into(),
+                                self.builder.build_int_compare(predicate, l, r, "")?.into(),
                             ))
                         } else if let (
                             BasicValueEnum::FloatValue(l),

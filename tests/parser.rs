@@ -517,7 +517,10 @@ fn test_parse_extern_single_func() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExternDecl {
+        linkage, statement, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(linkage.value, r#""C""#);
         if let Statement::FunctionDecl { name, .. } = &*statement.borrow() {
             assert_eq!(name.value, "printf");
@@ -541,7 +544,10 @@ fn test_parse_extern_single_let() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExternDecl {
+        linkage, statement, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(linkage.value, r#""C""#);
         if let Statement::VariableDecl { name, .. } = &*statement.borrow() {
             assert_eq!(name.value, "errno");
@@ -565,7 +571,10 @@ fn test_parse_extern_single_var() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExternDecl {
+        linkage, statement, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(linkage.value, r#""C""#);
         if let Statement::VariableDecl { name, .. } = &*statement.borrow() {
             assert_eq!(name.value, "globalCounter");
@@ -589,12 +598,21 @@ fn test_parse_extern_variadic_func() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExternDecl {
+        linkage, statement, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(linkage.value, r#""C""#);
         if let Statement::FunctionDecl { parameters, .. } = &*statement.borrow() {
             assert_eq!(parameters.len(), 2);
-            assert_eq!(parameters[0].borrow().variadic_kind, VariadicKind::NotVariadic);
-            assert_eq!(parameters[1].borrow().variadic_kind, VariadicKind::TypedVariadic);
+            assert_eq!(
+                parameters[0].borrow().variadic_kind,
+                VariadicKind::NotVariadic
+            );
+            assert_eq!(
+                parameters[1].borrow().variadic_kind,
+                VariadicKind::TypedVariadic
+            );
             assert_eq!(parameters[1].borrow().name.value, "args");
         } else {
             panic!();
@@ -616,12 +634,21 @@ fn test_parse_extern_variadic_func_bare() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExternDecl {
+        linkage, statement, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(linkage.value, r#""C""#);
         if let Statement::FunctionDecl { parameters, .. } = &*statement.borrow() {
             assert_eq!(parameters.len(), 2);
-            assert_eq!(parameters[0].borrow().variadic_kind, VariadicKind::NotVariadic);
-            assert_eq!(parameters[1].borrow().variadic_kind, VariadicKind::BareVariadic);
+            assert_eq!(
+                parameters[0].borrow().variadic_kind,
+                VariadicKind::NotVariadic
+            );
+            assert_eq!(
+                parameters[1].borrow().variadic_kind,
+                VariadicKind::BareVariadic
+            );
             assert_eq!(parameters[1].borrow().name.value, "...");
         } else {
             panic!();

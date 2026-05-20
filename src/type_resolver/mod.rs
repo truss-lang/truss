@@ -65,11 +65,11 @@ impl TypeResolver {
     pub fn resolve(&mut self, program: &Program, id: ModuleId) {
         self.current_module = self.krate.borrow().modules.get(&id).cloned();
         self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(None))));
-        
+
         for stmt in &program.statements {
             self.process_function_decl(stmt.clone());
         }
-        
+
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
         }
@@ -207,7 +207,11 @@ impl TypeResolver {
                 let fn_type = if ty.is_some() {
                     ty.clone().unwrap()
                 } else {
-                    Rc::new(RefCell::new(Type::Function(vec![], Rc::new(RefCell::new(Type::Void)), false)))
+                    Rc::new(RefCell::new(Type::Function(
+                        vec![],
+                        Rc::new(RefCell::new(Type::Void)),
+                        false,
+                    )))
                 };
 
                 let ret_type = if let Type::Function(_, ret, _) = &*fn_type.borrow() {
@@ -219,7 +223,7 @@ impl TypeResolver {
 
                 let last_type_env = self.type_env.clone();
                 self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(last_type_env.clone()))));
-                
+
                 for param in parameters.iter() {
                     if let Some(param_ty) = param.borrow().ty.clone() {
                         self.type_env
@@ -304,11 +308,7 @@ impl TypeResolver {
                     );
                 }
             }
-            Statement::For {
-                iterator,
-                body,
-                ..
-            } => {
+            Statement::For { iterator, body, .. } => {
                 let _ = self.infer_type(iterator.clone());
                 self.resolve_block_expression(body.clone());
             }
@@ -909,7 +909,10 @@ impl TypeResolver {
         }
     }
 
-    fn get_function_decl_from_callee(&self, callee: Rc<RefCell<Expression>>) -> Option<Rc<RefCell<Statement>>> {
+    fn get_function_decl_from_callee(
+        &self,
+        callee: Rc<RefCell<Expression>>,
+    ) -> Option<Rc<RefCell<Statement>>> {
         if let Expression::Variable { symbol, .. } = &*callee.borrow() {
             if let Some(sym) = symbol {
                 if let Ok(Some(decl)) = sym.get_decl() {
@@ -930,7 +933,7 @@ impl TypeResolver {
             if param_index >= parameters.len() {
                 return;
             }
-            
+
             let decl_param = &parameters[param_index];
             let decl_param_label = &decl_param.borrow().label;
             let decl_param_name = &decl_param.borrow().name;
@@ -965,10 +968,7 @@ impl TypeResolver {
                     let token = Self::get_token_from_expr(&call_param.expression);
                     self.emit_error(
                         TrussDiagnosticCode::MissingArgumentLabel,
-                        format!(
-                            "Missing argument label '{}' in call",
-                            expected.value
-                        ),
+                        format!("Missing argument label '{}' in call", expected.value),
                         &token,
                     );
                 }
@@ -984,8 +984,7 @@ impl TypeResolver {
                         );
                     }
                 }
-                (None, None) => {
-                }
+                (None, None) => {}
             }
         }
     }

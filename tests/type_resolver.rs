@@ -267,10 +267,7 @@ fn test_type_annotation_mismatch() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert!(!errors.is_empty());
-    assert_eq!(
-        errors[0].code,
-        TrussDiagnosticCode::TypeMismatch
-    );
+    assert_eq!(errors[0].code, TrussDiagnosticCode::TypeMismatch);
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Bool"));
 }
@@ -672,10 +669,7 @@ fn test_type_mismatch_int_float() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 1);
-    assert_eq!(
-        errors[0].code,
-        TrussDiagnosticCode::TypeMismatch
-    );
+    assert_eq!(errors[0].code, TrussDiagnosticCode::TypeMismatch);
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Int32"));
     assert!(errors[0].message.contains("Float64"));
@@ -703,10 +697,7 @@ fn test_type_mismatch_different_int_sizes() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 1);
-    assert_eq!(
-        errors[0].code,
-        TrussDiagnosticCode::TypeMismatch
-    );
+    assert_eq!(errors[0].code, TrussDiagnosticCode::TypeMismatch);
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Int32"));
     assert!(errors[0].message.contains("Int64"));
@@ -870,10 +861,7 @@ fn test_function_call_missing_label() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert!(!errors.is_empty());
-    assert_eq!(
-        errors[0].code,
-        TrussDiagnosticCode::MissingArgumentLabel
-    );
+    assert_eq!(errors[0].code, TrussDiagnosticCode::MissingArgumentLabel);
     assert!(errors[0].message.contains("Missing argument label"));
     assert!(errors[0].message.contains("a"));
 }
@@ -924,10 +912,7 @@ fn test_function_call_with_wrong_label() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert!(!errors.is_empty());
-    assert_eq!(
-        errors[0].code,
-        TrussDiagnosticCode::ArgumentLabelMismatch
-    );
+    assert_eq!(errors[0].code, TrussDiagnosticCode::ArgumentLabelMismatch);
     assert!(errors[0].message.contains("Expected argument label"));
 }
 
@@ -977,10 +962,7 @@ fn test_function_call_no_label() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert!(!errors.is_empty());
-    assert_eq!(
-        errors[0].code,
-        TrussDiagnosticCode::MissingArgumentLabel
-    );
+    assert_eq!(errors[0].code, TrussDiagnosticCode::MissingArgumentLabel);
     assert!(errors[0].message.contains("Missing argument label"));
     assert!(errors[0].message.contains("a"));
 }
@@ -1011,7 +993,8 @@ fn test_function_call_no_label_with_correct_usage() {
 
 #[test]
 fn test_function_call_parameter_order_must_match() {
-    let code = "func f(a a: Int64, b b: Int64) -> Int64 { return a + b } func f2() { f(b: 2, a: 1) }";
+    let code =
+        "func f(a a: Int64, b b: Int64) -> Int64 { return a + b } func f2() { f(b: 2, a: 1) }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -1031,16 +1014,18 @@ fn test_function_call_parameter_order_must_match() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert!(!errors.is_empty());
-    assert_eq!(
-        errors[0].code,
-        TrussDiagnosticCode::ArgumentLabelMismatch
+    assert_eq!(errors[0].code, TrussDiagnosticCode::ArgumentLabelMismatch);
+    assert!(
+        errors[0]
+            .message
+            .contains("Expected argument label 'a' but found 'b'")
     );
-    assert!(errors[0].message.contains("Expected argument label 'a' but found 'b'"));
 }
 
 #[test]
 fn test_function_call_correct_parameter_order() {
-    let code = "func f(a a: Int64, b b: Int64) -> Int64 { return a + b } func f2() { f(a: 1, b: 2) }";
+    let code =
+        "func f(a a: Int64, b b: Int64) -> Int64 { return a + b } func f2() { f(a: 1, b: 2) }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),

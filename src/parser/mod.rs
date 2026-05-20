@@ -200,8 +200,11 @@ impl Parser {
     fn parse_unary(&mut self) -> Result<Expression, ()> {
         if let Some(token) = self.peek()
             && let TokenType::Operator { operator } = token.ty
-            && let OperatorType::Plus | OperatorType::Minus | OperatorType::Inc | OperatorType::Dec | OperatorType::BitNot =
-                operator
+            && let OperatorType::Plus
+            | OperatorType::Minus
+            | OperatorType::Inc
+            | OperatorType::Dec
+            | OperatorType::BitNot = operator
         {
             self.index += 1;
             let expression = self.parse_unary()?;
@@ -391,15 +394,24 @@ impl Parser {
                 },
                 TokenType::Operator { .. } => {
                     if OperatorType::is_operator(&token, OperatorType::Less)
-                        && matches!(expression, Expression::Variable { .. } | Expression::Type { .. })
+                        && matches!(
+                            expression,
+                            Expression::Variable { .. } | Expression::Type { .. }
+                        )
                     {
                         let mut temp_idx = self.index + 1;
                         let mut angle_count = 1;
                         while temp_idx < self.tokens.len() && angle_count > 0 {
                             if let TokenType::Operator { .. } = self.tokens[temp_idx].ty {
-                                if OperatorType::is_operator(&self.tokens[temp_idx], OperatorType::Less) {
+                                if OperatorType::is_operator(
+                                    &self.tokens[temp_idx],
+                                    OperatorType::Less,
+                                ) {
                                     angle_count += 1;
-                                } else if OperatorType::is_operator(&self.tokens[temp_idx], OperatorType::Greater) {
+                                } else if OperatorType::is_operator(
+                                    &self.tokens[temp_idx],
+                                    OperatorType::Greater,
+                                ) {
                                     angle_count -= 1;
                                 }
                             }
@@ -407,7 +419,10 @@ impl Parser {
                         }
                         if angle_count == 0
                             && temp_idx < self.tokens.len()
-                            && SeparatorType::is_separator(&self.tokens[temp_idx], SeparatorType::OpenParen)
+                            && SeparatorType::is_separator(
+                                &self.tokens[temp_idx],
+                                SeparatorType::OpenParen,
+                            )
                         {
                             expression = self.parse_call(expression)?;
                         } else {
@@ -550,7 +565,9 @@ impl Parser {
                     variadic_kind: VariadicKind::BareVariadic,
                 })));
                 has_variadic = true;
-                let Some(comma_or_close) = self.peek() else { break };
+                let Some(comma_or_close) = self.peek() else {
+                    break;
+                };
                 if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
                     self.index += 1;
                 }
@@ -947,7 +964,10 @@ impl Parser {
         } else {
             self.emit_error(
                 TrussDiagnosticCode::UnexpectedToken,
-                format!("Expected string literal for linkage, found '{}'", linkage_token.value),
+                format!(
+                    "Expected string literal for linkage, found '{}'",
+                    linkage_token.value
+                ),
                 &linkage_token,
             );
             return Err(());
@@ -1009,7 +1029,10 @@ impl Parser {
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
-                        format!("Expected 'func', 'let', or 'var' in extern block, found '{}'", token.value),
+                        format!(
+                            "Expected 'func', 'let', or 'var' in extern block, found '{}'",
+                            token.value
+                        ),
                         &token,
                     );
                     Err(())
@@ -1018,7 +1041,10 @@ impl Parser {
             _ => {
                 self.emit_error(
                     TrussDiagnosticCode::UnexpectedToken,
-                    format!("Expected declaration in extern block, found '{}'", token.value),
+                    format!(
+                        "Expected declaration in extern block, found '{}'",
+                        token.value
+                    ),
                     &token,
                 );
                 Err(())
@@ -1095,7 +1121,9 @@ impl Parser {
                     variadic_kind: VariadicKind::BareVariadic,
                 })));
                 has_variadic = true;
-                let Some(comma_or_close) = self.peek() else { break };
+                let Some(comma_or_close) = self.peek() else {
+                    break;
+                };
                 if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
                     self.index += 1;
                 }
