@@ -94,6 +94,7 @@ impl SymbolResolver {
                 FunctionBody::Expression(expr) => {
                     self.register_function_symbols_in_expr(expr.clone());
                 }
+                FunctionBody::None => {}
             }
         }
     }
@@ -170,6 +171,7 @@ impl SymbolResolver {
                 }
             }
             FunctionBody::Expression(expression) => self.resolve_expression(expression.clone()),
+            FunctionBody::None => {}
         }
     }
 

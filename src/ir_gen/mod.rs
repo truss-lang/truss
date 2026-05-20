@@ -162,6 +162,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 FunctionBody::Expression(expr) => {
                     self.create_function_declarations_in_expr(expr.clone());
                 }
+                FunctionBody::None => {}
             }
         }
     }
@@ -345,6 +346,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             let value = self.resolve_expression(expr.clone())?.unwrap();
                             self.builder.build_return(Some(&value))?;
                         }
+                        FunctionBody::None => {}
                     }
 
                     if let Some(block) = current_block {

@@ -122,6 +122,7 @@ impl TypeResolver {
                 FunctionBody::Expression(expr) => {
                     self.process_function_decl_in_expr(expr.clone());
                 }
+                FunctionBody::None => {}
             }
         }
     }
@@ -319,6 +320,7 @@ impl TypeResolver {
                     self.check_type_with_expected(expression.clone(), expected, token);
                 }
             }
+            FunctionBody::None => {}
         }
     }
 

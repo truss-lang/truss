@@ -52,12 +52,23 @@ pub enum Statement {
     EmptyStatement {
         token: Box<Token>,
     },
+    ExternBlock {
+        token: Box<Token>,
+        linkage: Box<Token>,
+        items: Vec<Rc<RefCell<Statement>>>,
+    },
+    ExternDecl {
+        token: Box<Token>,
+        linkage: Box<Token>,
+        statement: Rc<RefCell<Statement>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FunctionBody {
     Statements(Vec<Rc<RefCell<Statement>>>),
     Expression(Rc<RefCell<Expression>>),
+    None,
 }
 
 impl Statement {

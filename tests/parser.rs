@@ -460,3 +460,119 @@ fn test_parse_variable_decl_in_function_at_eof() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_extern_block_single_func() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"extern "C" { func printf(_ format: String) -> Int32 }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExternBlock { linkage, items, .. } = &*program.statements[0].borrow() {
+        assert_eq!(linkage.value, r#""C""#);
+        assert_eq!(items.len(), 1);
+        if let Statement::FunctionDecl { name, .. } = &*items[0].borrow() {
+            assert_eq!(name.value, "printf");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_extern_block_multiple_decls() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"extern "C" { func printf(_ format: String) -> Int32 func malloc(_ size: Int32) -> Int64 let errno: Int32 }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExternBlock { items, .. } = &*program.statements[0].borrow() {
+        assert_eq!(items.len(), 3);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_extern_single_func() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"extern "C" func printf(_ format: String) -> Int32"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+        assert_eq!(linkage.value, r#""C""#);
+        if let Statement::FunctionDecl { name, .. } = &*statement.borrow() {
+            assert_eq!(name.value, "printf");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_extern_single_let() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"extern "C" let errno: Int32"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+        assert_eq!(linkage.value, r#""C""#);
+        if let Statement::VariableDecl { name, .. } = &*statement.borrow() {
+            assert_eq!(name.value, "errno");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_extern_single_var() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"extern "C" var globalCounter: Int32"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+        assert_eq!(linkage.value, r#""C""#);
+        if let Statement::VariableDecl { name, .. } = &*statement.borrow() {
+            assert_eq!(name.value, "globalCounter");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
