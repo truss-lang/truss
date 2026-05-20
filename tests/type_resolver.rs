@@ -711,3 +711,139 @@ fn test_type_mismatch_different_int_sizes() {
     assert!(errors[0].message.contains("Int32"));
     assert!(errors[0].message.contains("Int64"));
 }
+
+#[test]
+fn test_function_call_parameter_type_inference_int8() {
+    let code = "func test(_ a: Int8) -> Int8 { return a } func main() { let result = test(42) return result }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+            && let Some(ty) = ty
+        {
+            assert_eq!(ty.borrow().clone(), Type::Int8);
+        } else {
+            panic!("Variable should have Int8 type inferred from function parameter");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_function_call_parameter_type_inference_int64() {
+    let code = "func test(_ a: Int64) -> Int64 { return a } func main() { let result = test(10000000000) return result }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+            && let Some(ty) = ty
+        {
+            assert_eq!(ty.borrow().clone(), Type::Int64);
+        } else {
+            panic!("Variable should have Int64 type inferred from function parameter");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_function_call_parameter_type_inference_float32() {
+    let code = "func test(_ a: Float32) -> Float32 { return a } func main() { let result = test(3.14) return result }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+            && let Some(ty) = ty
+        {
+            assert_eq!(ty.borrow().clone(), Type::Float32);
+        } else {
+            panic!("Variable should have Float32 type inferred from function parameter");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_function_call_multiple_parameters_type_inference() {
+    let code = "func add(_ a: Int32, _ b: Int32) -> Int32 { return a + b } func main() { let result = add(10, 20) return result }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+            && let Some(ty) = ty
+        {
+            assert_eq!(ty.borrow().clone(), Type::Int32);
+        } else {
+            panic!("Variable should have Int32 type inferred from function return type");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}

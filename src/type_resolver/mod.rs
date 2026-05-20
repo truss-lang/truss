@@ -483,12 +483,8 @@ impl TypeResolver {
                         }
                         for (i, param) in parameters.iter().enumerate() {
                             if i < param_tys.len() {
-                                let token = &Self::get_token_from_expr(&param.expression);
-                                self.check_type(
-                                    param.expression.clone(),
-                                    param_tys[i].clone(),
-                                    token,
-                                );
+                                let expected_ty = param_tys[i].clone();
+                                self.infer_expression_type(param.expression.clone(), expected_ty);
                             }
                         }
                         ret_ty.clone()
@@ -575,33 +571,6 @@ impl TypeResolver {
                 Some(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Void))))
             }
             _ => Some(Rc::new(RefCell::new(Type::Void))),
-        }
-    }
-
-    fn check_type(
-        &mut self,
-        expression: Rc<RefCell<Expression>>,
-        expected: Rc<RefCell<Type>>,
-        token: &Token,
-    ) {
-        if let Some(inferred) = self.infer_type(expression) {
-            if inferred.borrow().clone() != expected.borrow().clone() {
-                self.emit_error(
-                    TrussDiagnosticCode::TypeMismatch,
-                    format!(
-                        "Type mismatch: expected {:?}, found {:?}",
-                        expected.borrow().clone(),
-                        inferred.borrow().clone()
-                    ),
-                    token,
-                );
-            }
-        } else {
-            self.emit_error(
-                TrussDiagnosticCode::TypeMismatch,
-                format!("Type mismatch: expected {:?}", expected.borrow().clone()),
-                token,
-            );
         }
     }
 
@@ -705,6 +674,63 @@ impl TypeResolver {
                 | Type::Float32
                 | Type::Float64
         )
+    }
+
+    /// 根据期望的类型推断表达式的类型，适用于函数参数传递场景
+    /// 如果表达式是字面量，会尝试将其类型设置为期望类型
+    fn infer_expression_type(
+        &mut self,
+        expression: Rc<RefCell<Expression>>,
+        expected_type: Rc<RefCell<Type>>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let expr_ref = expression.borrow();
+        let is_int_literal = matches!(&*expr_ref, Expression::IntegerLiteral { .. });
+        let is_float_literal = matches!(&*expr_ref, Expression::DecimalLiteral { .. });
+        drop(expr_ref);
+
+        if is_int_literal {
+            if Self::is_integer_type(&expected_type.borrow()) {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::IntegerLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected_type.clone());
+                }
+                return Some(expected_type);
+            } else {
+                let token = Self::get_token_from_expr(&expression);
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!(
+                        "Type mismatch: expected {:?}, found integer literal",
+                        expected_type.borrow().clone()
+                    ),
+                    &token,
+                );
+                return None;
+            }
+        }
+
+        if is_float_literal {
+            if Self::is_float_type(&expected_type.borrow()) {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::DecimalLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected_type.clone());
+                }
+                return Some(expected_type);
+            } else {
+                let token = Self::get_token_from_expr(&expression);
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!(
+                        "Type mismatch: expected {:?}, found float literal",
+                        expected_type.borrow().clone()
+                    ),
+                    &token,
+                );
+                return None;
+            }
+        }
+
+        self.infer_type(expression)
     }
 
     fn check_binary(
