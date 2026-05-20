@@ -139,31 +139,45 @@ impl<'ctx> IRGenerator<'ctx> {
 
     pub fn generate(&self, program: &Program) -> Rc<Module<'ctx>> {
         for stmt in &program.statements {
-            if let Statement::FunctionDecl {
-                name,
-                ty,
-                ..
-            } = &*stmt.borrow()
-            {
-                if let Some(ty) = ty {
-                    let _ = self.create_function_declaration(name, ty);
-                }
-            }
+            self.create_function_declarations(stmt.clone());
         }
-        
+
         for stmt in &program.statements {
             let _ = self.resolve_statement(stmt.clone());
         }
         self.module.clone()
     }
 
-    fn create_function_declaration(
-        &self,
-        name: &Token,
-        ty: &Rc<RefCell<Type>>,
-    ) -> Result<()> {
+    fn create_function_declarations(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::FunctionDecl { name, ty, body, .. } = &*statement.borrow() {
+            if let Some(ty) = ty {
+                let _ = self.create_function_declaration(name, ty);
+            }
+            match &*body.borrow() {
+                FunctionBody::Statements(stmts) => {
+                    for s in stmts {
+                        self.create_function_declarations(s.clone());
+                    }
+                }
+                FunctionBody::Expression(expr) => {
+                    self.create_function_declarations_in_expr(expr.clone());
+                }
+            }
+        }
+    }
+
+    fn create_function_declarations_in_expr(&self, expr: Rc<RefCell<Expression>>) {
+        if let Expression::Block { statements } = &*expr.borrow() {
+            for stmt in statements {
+                self.create_function_declarations(stmt.clone());
+            }
+        }
+    }
+
+    fn create_function_declaration(&self, name: &Token, ty: &Rc<RefCell<Type>>) -> Result<()> {
         if let Type::Function(param_types, return_type) = &*ty.borrow() {
-            let function_type = self.get_function_type(return_type.clone(), param_types.clone(), false)?;
+            let function_type =
+                self.get_function_type(return_type.clone(), param_types.clone(), false)?;
             self.module.add_function(&name.value, function_type, None);
         }
         Ok(())
@@ -277,11 +291,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.position_at_end(exit_bb);
                 Ok(false)
             }
-            Statement::For {
-                iterator,
-                body,
-                ..
-            } => {
+            Statement::For { iterator, body, .. } => {
                 let _ = self.resolve_expression(iterator.clone());
                 self.resolve_block_expression(body.clone())?;
                 Ok(false)
@@ -296,6 +306,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Type::Function(_parameter_types, return_type) = &*ty.borrow() {
                     let fn_name = &name.value;
                     let function = self.module.get_function(fn_name).unwrap();
+
+                    let current_block = self.builder.get_insert_block();
 
                     let entry_block = self.context.append_basic_block(function, "entry");
                     self.builder.position_at_end(entry_block);
@@ -333,6 +345,10 @@ impl<'ctx> IRGenerator<'ctx> {
                             let value = self.resolve_expression(expr.clone())?.unwrap();
                             self.builder.build_return(Some(&value))?;
                         }
+                    }
+
+                    if let Some(block) = current_block {
+                        self.builder.position_at_end(block);
                     }
                 }
                 Ok(false)

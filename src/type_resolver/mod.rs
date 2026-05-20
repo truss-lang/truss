@@ -81,6 +81,7 @@ impl TypeResolver {
             parameters,
             return_type,
             ty,
+            body,
             ..
         } = &mut *statement.borrow_mut()
         {
@@ -99,7 +100,7 @@ impl TypeResolver {
                     parameter_types.push(param_type.clone());
                 }
             }
-            
+
             let fn_type = Rc::new(RefCell::new(Type::Function(
                 parameter_types,
                 ret_type,
@@ -111,6 +112,25 @@ impl TypeResolver {
                 .unwrap()
                 .borrow_mut()
                 .set(name.value.clone(), fn_type);
+
+            match &*body.borrow() {
+                FunctionBody::Statements(stmts) => {
+                    for s in stmts {
+                        self.process_function_decl(s.clone());
+                    }
+                }
+                FunctionBody::Expression(expr) => {
+                    self.process_function_decl_in_expr(expr.clone());
+                }
+            }
+        }
+    }
+
+    fn process_function_decl_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
+        if let Expression::Block { statements } = &*expr.borrow() {
+            for stmt in statements {
+                self.process_function_decl(stmt.clone());
+            }
         }
     }
 

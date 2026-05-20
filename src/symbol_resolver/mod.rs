@@ -57,25 +57,53 @@ impl SymbolResolver {
             .name_to_modules
             .insert(module_name, module.clone());
         self.current_module = Some(module.clone());
-        
+
         for stmt in &program.statements {
-            if let Statement::FunctionDecl { name, .. } = &*stmt.borrow() {
-                let id = self.get_symbol_id();
-                let symbol = Rc::new(Symbol::Function {
-                    name: name.value.clone(),
-                    id,
-                    decl: Some(stmt.clone()),
-                });
-                let module = self.current_module.clone().unwrap();
-                module.borrow_mut().symbols.insert(id, symbol.clone());
-                module.borrow_mut().name_table.insert(name.value.clone(), symbol);
-            }
+            self.register_function_symbols(stmt.clone());
         }
-        
+
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
         }
         id
+    }
+
+    fn register_function_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
+        if let Statement::FunctionDecl {
+            name,
+            body,
+            ..
+        } = &*stmt.borrow()
+        {
+            let id = self.get_symbol_id();
+            let symbol = Rc::new(Symbol::Function {
+                name: name.value.clone(),
+                id,
+                decl: Some(stmt.clone()),
+            });
+            let module = self.current_module.clone().unwrap();
+            module.borrow_mut().symbols.insert(id, symbol.clone());
+            module.borrow_mut().name_table.insert(name.value.clone(), symbol);
+
+            match &*body.borrow() {
+                FunctionBody::Statements(stmts) => {
+                    for s in stmts {
+                        self.register_function_symbols(s.clone());
+                    }
+                }
+                FunctionBody::Expression(expr) => {
+                    self.register_function_symbols_in_expr(expr.clone());
+                }
+            }
+        }
+    }
+
+    fn register_function_symbols_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
+        if let Expression::Block { statements } = &*expr.borrow() {
+            for stmt in statements {
+                self.register_function_symbols(stmt.clone());
+            }
+        }
     }
 
     fn resolve_statement(&mut self, stmt: Rc<RefCell<Statement>>) {
