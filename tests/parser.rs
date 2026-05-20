@@ -576,3 +576,30 @@ fn test_parse_extern_single_var() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_extern_variadic_func() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"extern "C" func printf(_ formatter: String, ...)"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExternDecl { linkage, statement, .. } = &*program.statements[0].borrow() {
+        assert_eq!(linkage.value, r#""C""#);
+        if let Statement::FunctionDecl { parameters, .. } = &*statement.borrow() {
+            assert_eq!(parameters.len(), 2);
+            assert!(!parameters[0].borrow().is_variadic);
+            assert!(parameters[1].borrow().is_variadic);
+            assert_eq!(parameters[1].borrow().name.value, "...");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}

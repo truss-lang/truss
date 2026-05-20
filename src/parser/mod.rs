@@ -572,11 +572,20 @@ impl Parser {
                 return Err(());
             }
             let type_expression = self.parse_type_expression()?;
+            let is_variadic = if let Some(peeked) = self.peek()
+                && OperatorType::is_operator(&peeked, OperatorType::OpenRange)
+            {
+                self.index += 1;
+                true
+            } else {
+                false
+            };
             parameters.push(Rc::new(RefCell::new(Parameter {
                 label: label_token.map(Box::new),
                 name: Box::new(name_token),
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
+                is_variadic,
             })));
             let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {
@@ -999,6 +1008,38 @@ impl Parser {
             if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                 break;
             }
+            if let TokenType::Operator { operator: _ } = t.ty
+                && OperatorType::is_operator(&t, OperatorType::OpenRange)
+            {
+                self.index += 1;
+                let variadic_token = Token::new(
+                    "...".to_string(),
+                    TokenType::Identifier,
+                    t.position,
+                    self.file.clone(),
+                );
+                parameters.push(Rc::new(RefCell::new(Parameter {
+                    label: None,
+                    name: Box::new(variadic_token),
+                    type_expression: Rc::new(RefCell::new(Expression::Type {
+                        name: Box::new(Token::new(
+                            "Any".to_string(),
+                            TokenType::Identifier,
+                            t.position,
+                            self.file.clone(),
+                        )),
+                        type_parameters: None,
+                        ty: None,
+                    })),
+                    ty: None,
+                    is_variadic: true,
+                })));
+                let Some(comma_or_close) = self.peek() else { break };
+                if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
+                    self.index += 1;
+                }
+                continue;
+            }
             let Some(first) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedIdentifier,
@@ -1057,11 +1098,20 @@ impl Parser {
                 return Err(());
             }
             let type_expression = self.parse_type_expression()?;
+            let is_variadic = if let Some(peeked) = self.peek()
+                && OperatorType::is_operator(&peeked, OperatorType::OpenRange)
+            {
+                self.index += 1;
+                true
+            } else {
+                false
+            };
             parameters.push(Rc::new(RefCell::new(Parameter {
                 label: label_token.map(Box::new),
                 name: Box::new(name_token),
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
+                is_variadic,
             })));
             let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {

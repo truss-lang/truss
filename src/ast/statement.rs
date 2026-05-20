@@ -95,6 +95,7 @@ pub struct Parameter {
     pub name: Box<Token>,
     pub type_expression: Rc<RefCell<Expression>>,
     pub ty: Option<Rc<RefCell<Type>>>,
+    pub is_variadic: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
