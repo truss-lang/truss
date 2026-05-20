@@ -481,10 +481,17 @@ impl TypeResolver {
                                 token,
                             );
                         }
+                        
+                        let func_decl = self.get_function_decl_from_callee(callee.clone());
+                        
                         for (i, param) in parameters.iter().enumerate() {
                             if i < param_tys.len() {
                                 let expected_ty = param_tys[i].clone();
                                 self.infer_expression_type(param.expression.clone(), expected_ty);
+                                
+                                if let Some(ref decl) = func_decl {
+                                    self.check_parameter_label(param, decl, i);
+                                }
                             }
                         }
                         ret_ty.clone()
@@ -676,8 +683,6 @@ impl TypeResolver {
         )
     }
 
-    /// 根据期望的类型推断表达式的类型，适用于函数参数传递场景
-    /// 如果表达式是字面量，会尝试将其类型设置为期望类型
     fn infer_expression_type(
         &mut self,
         expression: Rc<RefCell<Expression>>,
@@ -861,6 +866,87 @@ impl TypeResolver {
                         },
                         Rc::new("".to_string()),
                     )
+                }
+            }
+        }
+    }
+
+    fn get_function_decl_from_callee(&self, callee: Rc<RefCell<Expression>>) -> Option<Rc<RefCell<Statement>>> {
+        if let Expression::Variable { symbol, .. } = &*callee.borrow() {
+            if let Some(sym) = symbol {
+                if let Ok(Some(decl)) = sym.get_decl() {
+                    return Some(decl);
+                }
+            }
+        }
+        None
+    }
+
+    fn check_parameter_label(
+        &self,
+        call_param: &crate::ast::expression::CallParameter,
+        func_decl: &Rc<RefCell<Statement>>,
+        param_index: usize,
+    ) {
+        if let Statement::FunctionDecl { parameters, .. } = &*func_decl.borrow() {
+            if param_index >= parameters.len() {
+                return;
+            }
+            
+            let decl_param = &parameters[param_index];
+            let decl_param_label = &decl_param.borrow().label;
+            let decl_param_name = &decl_param.borrow().name;
+            let provided_label = &call_param.label;
+
+            let expected_label: Option<&Token>;
+
+            if let Some(label) = decl_param_label {
+                if label.value == "_" {
+                    expected_label = None;
+                } else {
+                    expected_label = Some(label);
+                }
+            } else {
+                expected_label = Some(decl_param_name);
+            }
+
+            match (expected_label, provided_label) {
+                (Some(expected), Some(provided)) => {
+                    if expected.value != provided.value {
+                        self.emit_error(
+                            TrussDiagnosticCode::ArgumentLabelMismatch,
+                            format!(
+                                "Expected argument label '{}' but found '{}'",
+                                expected.value, provided.value
+                            ),
+                            provided,
+                        );
+                    }
+                }
+                (Some(expected), None) => {
+                    let token = Self::get_token_from_expr(&call_param.expression);
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingArgumentLabel,
+                        format!(
+                            "Missing argument label '{}' in call",
+                            expected.value
+                        ),
+                        &token,
+                    );
+                }
+                (None, Some(provided)) => {
+                    if provided.value != "_" {
+                        self.emit_error(
+                            TrussDiagnosticCode::ArgumentLabelMismatch,
+                            format!(
+                                "Argument should not have a label, but found '{}'",
+                                provided.value
+                            ),
+                            provided,
+                        );
+                    }
+                }
+                (None, None) => {
                 }
             }
         }

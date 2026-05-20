@@ -847,3 +847,241 @@ fn test_function_call_multiple_parameters_type_inference() {
         panic!("Expected FunctionDecl");
     }
 }
+
+#[test]
+fn test_function_call_missing_label() {
+    let code = "func f(a a: Int64) -> Int64 { return a } func f2() { f(1) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty());
+    assert_eq!(
+        errors[0].code,
+        truss::diag::TrussDiagnosticCode::MissingArgumentLabel
+    );
+    assert!(errors[0].message.contains("Missing argument label"));
+    assert!(errors[0].message.contains("a"));
+}
+
+#[test]
+fn test_function_call_with_correct_label() {
+    let code = "func f(a a: Int64) -> Int64 { return a } func f2() { f(a: 1) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_function_call_with_wrong_label() {
+    let code = "func f(a a: Int64) -> Int64 { return a } func f2() { f(b: 1) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty());
+    assert_eq!(
+        errors[0].code,
+        truss::diag::TrussDiagnosticCode::ArgumentLabelMismatch
+    );
+    assert!(errors[0].message.contains("Expected argument label"));
+}
+
+#[test]
+fn test_function_call_underscore_label() {
+    let code = "func f(_ a: Int64) -> Int64 { return a } func f2() { f(1) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_function_call_no_label() {
+    let code = "func f(a: Int64) -> Int64 { return a } func f2() { f(1) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty());
+    assert_eq!(
+        errors[0].code,
+        truss::diag::TrussDiagnosticCode::MissingArgumentLabel
+    );
+    assert!(errors[0].message.contains("Missing argument label"));
+    assert!(errors[0].message.contains("a"));
+}
+
+#[test]
+fn test_function_call_no_label_with_correct_usage() {
+    let code = "func f(a: Int64) -> Int64 { return a } func f2() { f(a: 1) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_function_call_parameter_order_must_match() {
+    let code = "func f(a a: Int64, b b: Int64) -> Int64 { return a + b } func f2() { f(b: 2, a: 1) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty());
+    assert_eq!(
+        errors[0].code,
+        truss::diag::TrussDiagnosticCode::ArgumentLabelMismatch
+    );
+    assert!(errors[0].message.contains("Expected argument label 'a' but found 'b'"));
+}
+
+#[test]
+fn test_function_call_correct_parameter_order() {
+    let code = "func f(a a: Int64, b b: Int64) -> Int64 { return a + b } func f2() { f(a: 1, b: 2) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_function_call_underscore_label_with_explicit_underscore() {
+    let code = "func f(_ a: Int64) -> Int64 { return a } func f2() { f(_: 1) }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+}
