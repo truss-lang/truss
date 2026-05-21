@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::{
-        expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
+        expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         statement::{FunctionBody, Parameter, Pattern, Statement, VariadicKind},
     },
     diag::TrussDiagnosticEngine,
@@ -771,6 +771,264 @@ fn test_parse_deref_with_binary() {
         } else {
             panic!("Expected unary expression on left");
         }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_cast_regular() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = 1 as Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Cast {
+            expression,
+            target_type,
+            kind,
+            ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(kind, &CastKind::Regular);
+        assert!(matches!(
+            *expression.borrow(),
+            Expression::IntegerLiteral { .. }
+        ));
+        assert!(
+            matches!(&*target_type.borrow(), Expression::Type { name, .. } if name.value == "Int32")
+        );
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_cast_conditional() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = 1 as? Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Cast {
+            expression,
+            target_type,
+            kind,
+            kind_token,
+            ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(kind, &CastKind::Conditional);
+        assert!(kind_token.is_some());
+        assert_eq!(kind_token.as_ref().unwrap().value, "?");
+        assert!(matches!(
+            *expression.borrow(),
+            Expression::IntegerLiteral { .. }
+        ));
+        assert!(
+            matches!(&*target_type.borrow(), Expression::Type { name, .. } if name.value == "Int32")
+        );
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_cast_force() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = 1 as! Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Cast {
+            expression,
+            target_type,
+            kind,
+            kind_token,
+            ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(kind, &CastKind::Force);
+        assert!(kind_token.is_some());
+        assert_eq!(kind_token.as_ref().unwrap().value, "!");
+        assert!(matches!(
+            *expression.borrow(),
+            Expression::IntegerLiteral { .. }
+        ));
+        assert!(
+            matches!(&*target_type.borrow(), Expression::Type { name, .. } if name.value == "Int32")
+        );
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_cast_chained() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = 1 as Int32 as Float64 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Cast {
+            expression: outer_expr,
+            target_type: outer_target,
+            kind: outer_kind,
+            ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(outer_kind, &CastKind::Regular);
+        assert!(
+            matches!(&*outer_target.borrow(), Expression::Type { name, .. } if name.value == "Float64")
+        );
+        if let Expression::Cast {
+            expression: inner_expr,
+            target_type: inner_target,
+            kind: inner_kind,
+            ..
+        } = &*outer_expr.borrow()
+        {
+            assert_eq!(inner_kind, &CastKind::Regular);
+            assert!(
+                matches!(&*inner_target.borrow(), Expression::Type { name, .. } if name.value == "Int32")
+            );
+            assert!(matches!(
+                *inner_expr.borrow(),
+                Expression::IntegerLiteral { .. }
+            ));
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_cast_precedence() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = 1 + 2 as Float64 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Binary {
+            left,
+            operator,
+            right,
+            ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &BinaryOperator::Plus);
+        assert!(matches!(*left.borrow(), Expression::IntegerLiteral { .. }));
+        if let Expression::Cast { target_type, .. } = &*right.borrow() {
+            assert!(
+                matches!(&*target_type.borrow(), Expression::Type { name, .. } if name.value == "Float64")
+            );
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_cast_to_pointer() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = ptr as Int32* }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Cast { target_type, .. } = &*init_expr.borrow()
+    {
+        assert!(matches!(
+            *target_type.borrow(),
+            Expression::PointerType { .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_cast_conditional_to_pointer() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = ptr as? Int32* }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Cast {
+            kind, target_type, ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(kind, &CastKind::Conditional);
+        assert!(matches!(
+            *target_type.borrow(),
+            Expression::PointerType { .. }
+        ));
     } else {
         panic!();
     }

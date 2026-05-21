@@ -1,4 +1,4 @@
-use crate::lexer::token::{OperatorType, SeparatorType, Token, TokenType};
+use crate::lexer::token::{KeywordType, OperatorType, SeparatorType, Token, TokenType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Precedence {
@@ -55,6 +55,10 @@ impl Precedence {
                     None
                 }
             }
+            TokenType::Keyword { keyword } => match keyword {
+                KeywordType::As => Some(Precedence::Cast),
+                _ => None,
+            },
             _ => None,
         }
     }

@@ -5,7 +5,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CallParameter, Expression, UnaryOperator,
+            AssignmentOperator, BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator,
         },
         node::Program,
         statement::{FunctionBody, Parameter, Pattern, Statement, VariadicKind},
@@ -160,8 +160,8 @@ impl Parser {
                 && prec > precedence
             {
                 self.index += 1;
-                let right = self.parse_binary(prec)?;
                 if let TokenType::Operator { operator } = token.ty {
+                    let right = self.parse_binary(prec)?;
                     let Some(op) = BinaryOperator::from_operator(operator) else {
                         self.emit_error(
                             TrussDiagnosticCode::InvalidOperator,
@@ -174,6 +174,37 @@ impl Parser {
                         left: Rc::new(RefCell::new(left)),
                         operator: op,
                         right: Rc::new(RefCell::new(right)),
+                    }
+                } else if let TokenType::Keyword { keyword } = token.ty
+                    && keyword == KeywordType::As
+                {
+                    let kind = if let Some(next) = self.peek() {
+                        if OperatorType::is_operator(&next, OperatorType::QuestionMark) {
+                            self.index += 1;
+                            CastKind::Conditional
+                        } else if OperatorType::is_operator(&next, OperatorType::Not) {
+                            self.index += 1;
+                            CastKind::Force
+                        } else {
+                            CastKind::Regular
+                        }
+                    } else {
+                        CastKind::Regular
+                    };
+                    let kind_token = match kind {
+                        CastKind::Conditional | CastKind::Force => {
+                            Some(Box::new(self.tokens[self.index - 1].clone()))
+                        }
+                        CastKind::Regular => None,
+                    };
+                    let target_type = self.parse_type_expression()?;
+                    left = Expression::Cast {
+                        expression: Rc::new(RefCell::new(left)),
+                        target_type: Rc::new(RefCell::new(target_type)),
+                        token: Box::new(token),
+                        kind_token,
+                        kind,
+                        ty: None,
                     }
                 } else if let TokenType::Separator { .. } = token.ty {
                     self.emit_error(

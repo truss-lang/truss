@@ -40,6 +40,7 @@ pub enum KeywordType {
     Return,
     Throw,
     Extern,
+    As,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -114,6 +115,7 @@ impl KeywordType {
             KeywordType::Return => "return",
             KeywordType::Throw => "throw",
             KeywordType::Extern => "extern",
+            KeywordType::As => "as",
         }
         .to_string()
     }

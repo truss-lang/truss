@@ -87,6 +87,21 @@ pub enum Expression {
         then: Rc<RefCell<Expression>>,
         else_: Option<Rc<RefCell<Expression>>>,
     },
+    Cast {
+        token: Box<Token>,
+        kind_token: Option<Box<Token>>,
+        expression: Rc<RefCell<Expression>>,
+        target_type: Rc<RefCell<Expression>>,
+        kind: CastKind,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CastKind {
+    Regular,
+    Conditional,
+    Force,
 }
 
 impl Expression {
@@ -95,6 +110,7 @@ impl Expression {
             Self::IntegerLiteral { ty, .. } => Ok(ty.clone()),
             Self::Variable { ty, .. } => Ok(ty.clone()),
             Self::Type { ty, .. } => Ok(ty.clone()),
+            Self::Cast { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
