@@ -1331,3 +1331,207 @@ fn test_nullptr_default_void_pointer() {
         panic!("Expected variable declaration with Void* type");
     }
 }
+
+#[test]
+fn test_cast_int_to_float() {
+    let code = "func test() -> Float64 { let x = 1 as Float64 return x }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            ty, initializer, ..
+        } = &*statements[0].borrow()
+        && let Some(ty) = ty
+        && let Some(init) = initializer
+    {
+        assert_eq!(ty.borrow().clone(), Type::Float64);
+        if let Expression::Cast { ty: cast_ty, .. } = &*init.borrow() {
+            assert!(cast_ty.is_some());
+            assert_eq!(cast_ty.as_ref().unwrap().borrow().clone(), Type::Float64);
+        } else {
+            panic!("Expected Cast expression");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_cast_bool_to_int() {
+    let code = "func test() -> Int32 { let x = true as Int32 return x }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().clone(), Type::Int32);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_cast_invalid_bool_to_float() {
+    let code = "func test() { let x = true as Float64 }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.len() >= 1);
+    assert!(errors[0].message.contains("Cannot cast"));
+}
+
+#[test]
+fn test_cast_int32_to_int64() {
+    let code = "func test() -> Int64 { let x = 42 as Int64 return x }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().clone(), Type::Int64);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_cast_force_no_type_error() {
+    let code = "func test() -> Int32 { let x = 1 as! Int32 return x }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().clone(), Type::Int32);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_cast_conditional_no_type_error() {
+    let code = "func test() -> Int32 { let x = 1 as? Int32 return x }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().clone(), Type::Int32);
+    } else {
+        panic!();
+    }
+}

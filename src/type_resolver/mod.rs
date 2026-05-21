@@ -549,7 +549,10 @@ impl TypeResolver {
             }
             Expression::Assignment { left, right, .. } => {
                 let left_ty = self.infer_type(left.clone())?;
-                let right_ty = self.infer_type(right.clone())?;
+
+                let right_ty = self
+                    .infer_expression_type(right.clone(), left_ty.clone())
+                    .or_else(|| self.infer_type(right.clone()))?;
                 if left_ty.borrow().clone() != right_ty.borrow().clone() {
                     let expected_msg = format!("expected {}", left_ty.borrow());
                     let found_msg = format!("found {}", right_ty.borrow());
@@ -612,10 +615,37 @@ impl TypeResolver {
             }
             Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
             Expression::PointerType { base, ty } => {
+                if let Some(existing_ty) = ty.as_ref() {
+                    return Some(existing_ty.clone());
+                }
                 let base_ty = self.infer_type(*base.clone())?;
                 let pointer_ty = Rc::new(RefCell::new(Type::Pointer(base_ty)));
                 *ty = Some(pointer_ty.clone());
                 pointer_ty
+            }
+            Expression::Cast {
+                expression,
+                target_type,
+                ty,
+                ..
+            } => {
+                let source_ty = self.infer_type(expression.clone())?;
+                let target_ty = self.infer_type(target_type.clone())?;
+
+                if !Self::check_cast(&source_ty.borrow(), &target_ty.borrow()) {
+                    let token = Self::get_token_from_expr(expression);
+                    self.emit_error(
+                        TrussDiagnosticCode::TypeMismatch,
+                        format!(
+                            "Cannot cast from '{}' to '{}'",
+                            source_ty.borrow(),
+                            target_ty.borrow()
+                        ),
+                        &token,
+                    );
+                }
+                *ty = Some(target_ty.clone());
+                target_ty
             }
         };
         Some(result)
@@ -859,6 +889,24 @@ impl TypeResolver {
         }
     }
 
+    fn check_cast(source: &Type, target: &Type) -> bool {
+        if *source == *target {
+            return true;
+        }
+        match (source, target) {
+            (Type::Never, _) => true,
+            (Type::Pointer(_), Type::Pointer(_)) => true,
+            (s, t) if Self::is_numeric_type(s) && Self::is_numeric_type(t) => true,
+            (Type::Bool, t) if Self::is_integer_type(t) => true,
+            (s, Type::Bool) if Self::is_integer_type(s) => true,
+            (Type::Bool, t) if Self::is_float_type(t) => false,
+            (s, Type::Bool) if Self::is_float_type(s) => false,
+            (Type::Char, t) if Self::is_integer_type(t) => true,
+            (s, Type::Char) if Self::is_integer_type(s) => true,
+            _ => false,
+        }
+    }
+
     fn check_unary(
         &self,
         operator: UnaryOperator,
@@ -915,6 +963,7 @@ impl TypeResolver {
             Expression::Call { callee, .. } => Self::get_token_from_expr(callee),
             Expression::Assignment { left, .. } => Self::get_token_from_expr(left),
             Expression::If { condition, .. } => Self::get_token_from_expr(condition),
+            Expression::Cast { token, .. } => (**token).clone(),
             Expression::Block { statements } => {
                 if let Some(last) = statements.last() {
                     match &*last.borrow() {
