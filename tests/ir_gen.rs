@@ -126,3 +126,111 @@ fn test_irgen_void_pointer_variable() {
 
     assert!(llvm_ir.contains("test"));
 }
+
+#[test]
+fn test_irgen_cast_int_to_float() {
+    let code = "func test(x: Int32) -> Float64 { return x as Float64 }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program);
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("sitofp"));
+}
+
+#[test]
+fn test_irgen_cast_float_to_int() {
+    let code = "func test(x: Float64) -> Int32 { return x as Int32 }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program);
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("fptosi"));
+}
+
+#[test]
+fn test_irgen_cast_int_extend() {
+    let code = "func test(x: Int32) -> Int64 { return x as Int64 }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program);
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("zext"));
+}
+
+#[test]
+fn test_irgen_cast_force_bitcast() {
+    let code = "func test(x: Float64) -> Int64 { return x as!! Int64 }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program);
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("bitcast"));
+}

@@ -11,7 +11,7 @@ use inkwell::{
 
 use crate::{
     ast::{
-        expression::{AssignmentOperator, BinaryOperator, Expression, UnaryOperator},
+        expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         node::Program,
         statement::{FunctionBody, Statement, VariadicKind},
     },
@@ -1155,8 +1155,65 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 self.builder.position_at_end(exit_bb);
 
-                // Return None as a placeholder
                 Ok(None)
+            }
+            Expression::Cast {
+                expression,
+                target_type,
+                kind,
+                ..
+            } => {
+                let source_val = self.resolve_expression(expression.clone())?.unwrap();
+                let target_ty = target_type
+                    .borrow()
+                    .get_ty_ref()?
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("No target type"))?
+                    .clone();
+
+                let target_llvm_ty = self.resolve_type(target_ty.clone())?;
+
+                let result = match kind {
+                    CastKind::ForceBitcast => self
+                        .builder
+                        .build_bit_cast(source_val, target_llvm_ty, "")?
+                        .into(),
+                    _ => match source_val {
+                        BasicValueEnum::IntValue(src) => match target_llvm_ty {
+                            BasicTypeEnum::IntType(dst_ty) => {
+                                if src.get_type().get_bit_width() < dst_ty.get_bit_width() {
+                                    self.builder.build_int_z_extend(src, dst_ty, "")?.into()
+                                } else if src.get_type().get_bit_width() > dst_ty.get_bit_width() {
+                                    self.builder.build_int_truncate(src, dst_ty, "")?.into()
+                                } else {
+                                    src.into()
+                                }
+                            }
+                            BasicTypeEnum::FloatType(dst_ty) => self
+                                .builder
+                                .build_signed_int_to_float(src, dst_ty, "")?
+                                .into(),
+                            _ => src.into(),
+                        },
+                        BasicValueEnum::FloatValue(src) => match target_llvm_ty {
+                            BasicTypeEnum::IntType(dst_ty) => self
+                                .builder
+                                .build_float_to_signed_int(src, dst_ty, "")?
+                                .into(),
+                            BasicTypeEnum::FloatType(dst_ty) => {
+                                if src.get_type() == dst_ty {
+                                    src.into()
+                                } else {
+                                    self.builder.build_float_trunc(src, dst_ty, "")?.into()
+                                }
+                            }
+                            _ => src.into(),
+                        },
+                        _ => source_val,
+                    },
+                };
+
+                Ok(Some(result))
             }
             Expression::Call {
                 callee, parameters, ..
