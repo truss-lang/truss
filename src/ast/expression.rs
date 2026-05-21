@@ -102,6 +102,7 @@ pub enum CastKind {
     Regular,
     Conditional,
     Force,
+    ForceBitcast,
 }
 
 impl Expression {

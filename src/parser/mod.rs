@@ -184,7 +184,16 @@ impl Parser {
                             CastKind::Conditional
                         } else if OperatorType::is_operator(&next, OperatorType::Not) {
                             self.index += 1;
-                            CastKind::Force
+                            if let Some(next2) = self.peek() {
+                                if OperatorType::is_operator(&next2, OperatorType::Not) {
+                                    self.index += 1;
+                                    CastKind::ForceBitcast
+                                } else {
+                                    CastKind::Force
+                                }
+                            } else {
+                                CastKind::Force
+                            }
                         } else {
                             CastKind::Regular
                         }
@@ -192,7 +201,7 @@ impl Parser {
                         CastKind::Regular
                     };
                     let kind_token = match kind {
-                        CastKind::Conditional | CastKind::Force => {
+                        CastKind::Conditional | CastKind::Force | CastKind::ForceBitcast => {
                             Some(Box::new(self.tokens[self.index - 1].clone()))
                         }
                         CastKind::Regular => None,
