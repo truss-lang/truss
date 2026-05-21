@@ -20,6 +20,11 @@ pub enum Symbol {
         decl: Option<Rc<RefCell<Statement>>>,
         parameter: Option<Rc<RefCell<Parameter>>>,
     },
+    Struct {
+        name: String,
+        id: SymbolId,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
 }
 
 impl Symbol {
@@ -27,38 +32,21 @@ impl Symbol {
         match self {
             Self::Function { id, .. } => *id,
             Self::Variable { id, .. } => *id,
+            Self::Struct { id, .. } => *id,
         }
     }
     pub fn name(&self) -> Result<String> {
         match self {
-            Self::Function { decl, .. } => {
-                if let Some(decl) = decl.clone()
-                    && let Statement::FunctionDecl { name, .. } = &*decl.borrow()
-                {
-                    Ok(name.value.clone())
-                } else {
-                    Err(anyhow!(""))
-                }
-            }
-            Self::Variable {
-                decl, parameter, ..
-            } => {
-                if let Some(decl) = decl.clone()
-                    && let Statement::VariableDecl { name, .. } = &*decl.borrow()
-                {
-                    Ok(name.value.clone())
-                } else if let Some(parameter) = parameter {
-                    Ok(parameter.borrow().name.value.clone())
-                } else {
-                    Err(anyhow!(""))
-                }
-            }
+            Self::Function { name, .. } => Ok(name.clone()),
+            Self::Variable { name, .. } => Ok(name.clone()),
+            Self::Struct { name, .. } => Ok(name.clone()),
         }
     }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
         match self {
             Self::Function { decl, .. } => Ok(decl.clone()),
             Self::Variable { decl, .. } => Ok(decl.clone()),
+            Self::Struct { decl, .. } => Ok(decl.clone()),
         }
     }
 }
