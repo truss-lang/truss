@@ -21,6 +21,7 @@ pub enum TrussDiagnosticCode {
     ExpectedType,
     InvalidFunctionName,
     InvalidVariableName,
+    InvalidStructName,
     MissingSeparator,
 
     SymbolError,
@@ -70,7 +71,8 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::ExpectedType => "E0105",
             Self::InvalidFunctionName => "E0106",
             Self::InvalidVariableName => "E0107",
-            Self::MissingSeparator => "E0108",
+            Self::InvalidStructName => "E0108",
+            Self::MissingSeparator => "E0109",
 
             Self::SymbolError => "E0201",
             Self::UndefinedVariable => "E0202",

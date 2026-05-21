@@ -97,6 +97,7 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(false),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false),
+                KeywordType::Struct => self.parse_struct_decl(),
                 KeywordType::Return => self.parse_return(),
                 KeywordType::Loop => self.parse_loop(),
                 KeywordType::While => self.parse_while(),
@@ -1126,6 +1127,72 @@ impl Parser {
             type_expression: type_expression.map(RefCell::new).map(Rc::new),
             initializer: initializer.map(RefCell::new).map(Rc::new),
             ty: None,
+        })
+    }
+
+    fn parse_struct_decl(&mut self) -> Result<Statement, ()> {
+        let Some(token) = self.next() else {
+            return Err(());
+        };
+        let Some(name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidStructName,
+                "Expected struct name after 'struct'",
+                &token,
+            );
+            return Err(());
+        };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidStructName,
+                format!("Expected struct name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
+        let mut body = Vec::new();
+        if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        {
+            self.index += 1;
+            while let Some(t) = self.peek() {
+                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                    break;
+                }
+                if let Ok(stmt) = self.parse_statement() {
+                    body.push(Rc::new(RefCell::new(stmt)));
+                } else {
+                    self.skip();
+                }
+            }
+            let Some(next) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '}' to close struct body",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '}}' but found '{}'", next.value),
+                    &next,
+                );
+                return Err(());
+            }
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' to open struct body",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        }
+        Ok(Statement::StructDecl {
+            token: Box::new(token),
+            name: Box::new(name),
+            body,
         })
     }
 

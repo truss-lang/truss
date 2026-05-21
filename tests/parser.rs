@@ -1073,3 +1073,158 @@ fn test_parse_cast_conditional_to_pointer() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_struct_decl_empty() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("struct Point {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert!(body.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_decl_with_fields() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { let x: Int32 let y: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 2);
+        if let Statement::VariableDecl {
+            name: field_name, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(field_name.value, "x");
+        } else {
+            panic!("Expected VariableDecl for field x");
+        }
+        if let Statement::VariableDecl {
+            name: field_name, ..
+        } = &*body[1].borrow()
+        {
+            assert_eq!(field_name.value, "y");
+        } else {
+            panic!("Expected VariableDecl for field y");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_decl_with_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Calculator { func add(a: Int32, b: Int32) -> Int32 { a + b } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Calculator");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl {
+            name: func_name, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(func_name.value, "add");
+        } else {
+            panic!("Expected FunctionDecl for method add");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_decl_mixed_members() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Person { let name: String let age: Int32 func greet() { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Person");
+        assert_eq!(body.len(), 3);
+        if let Statement::VariableDecl {
+            name: field_name, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(field_name.value, "name");
+        } else {
+            panic!("Expected VariableDecl for field name");
+        }
+        if let Statement::VariableDecl {
+            name: field_name, ..
+        } = &*body[1].borrow()
+        {
+            assert_eq!(field_name.value, "age");
+        } else {
+            panic!("Expected VariableDecl for field age");
+        }
+        if let Statement::FunctionDecl {
+            name: func_name, ..
+        } = &*body[2].borrow()
+        {
+            assert_eq!(func_name.value, "greet");
+        } else {
+            panic!("Expected FunctionDecl for method greet");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_decl_nested_function_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Math { func square(x: Int32) -> Int32 { return x * x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Math");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl {
+            body: func_body, ..
+        } = &*body[0].borrow()
+            && let FunctionBody::Statements(statements) = &*func_body.borrow()
+        {
+            assert_eq!(statements.len(), 1);
+            assert!(matches!(&*statements[0].borrow(), Statement::Return { .. }));
+        } else {
+            panic!("Expected FunctionDecl with statements");
+        }
+    } else {
+        panic!();
+    }
+}

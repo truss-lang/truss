@@ -23,6 +23,11 @@ pub enum Statement {
         initializer: Option<Rc<RefCell<Expression>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    StructDecl {
+        token: Box<Token>,
+        name: Box<Token>,
+        body: Vec<Rc<RefCell<Statement>>>,
+    },
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,
     },
