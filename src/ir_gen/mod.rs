@@ -454,6 +454,12 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::CharLiteral { .. } => {
                 Ok(Some(self.context.i8_type().const_int(0, false).into()))
             }
+            Expression::NullptrLiteral { .. } => Ok(Some(
+                self.context
+                    .ptr_type(inkwell::AddressSpace::from(0))
+                    .const_null()
+                    .into(),
+            )),
             Expression::Block { statements } => {
                 self.enter_scope_with_stmts(statements)?;
                 self.resolve_block_stmts(statements)?;
@@ -899,6 +905,18 @@ impl<'ctx> IRGenerator<'ctx> {
                         );
                         anyhow::bail!("Open range not implemented");
                     }
+                    UnaryOperator::Deref => {
+                        if let BasicValueEnum::PointerValue(ptr) = expr_val {
+                            let expr_borrowed = expr.borrow();
+                            let ty_opt = expr_borrowed.get_ty_ref()?;
+                            let ty = ty_opt.as_ref().ok_or_else(|| anyhow::anyhow!("No type"))?;
+                            let llvm_ty = self.resolve_type(ty.clone())?;
+                            drop(expr_borrowed);
+                            Ok(Some(self.builder.build_load(llvm_ty, ptr, "")?.into()))
+                        } else {
+                            anyhow::bail!("Invalid type for dereference");
+                        }
+                    }
                 }
             }
             Expression::Assignment {
@@ -1241,6 +1259,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
                 anyhow::bail!("Nested function types are not supported");
             }
+            Type::Pointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
         };
         Ok(resolved)
     }
