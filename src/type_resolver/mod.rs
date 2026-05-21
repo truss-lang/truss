@@ -439,15 +439,15 @@ impl TypeResolver {
                 {
                     let mut right_mut = right.borrow_mut();
                     match &mut *right_mut {
-                        Expression::IntegerLiteral { ty, .. } if ty.is_none() => {
-                            if Self::is_integer_type(&left_ty.borrow()) {
-                                *ty = Some(left_ty.clone());
-                            }
+                        Expression::IntegerLiteral { ty, .. }
+                            if ty.is_none() && Self::is_integer_type(&left_ty.borrow()) =>
+                        {
+                            *ty = Some(left_ty.clone());
                         }
-                        Expression::DecimalLiteral { ty, .. } if ty.is_none() => {
-                            if Self::is_float_type(&left_ty.borrow()) {
-                                *ty = Some(left_ty.clone());
-                            }
+                        Expression::DecimalLiteral { ty, .. }
+                            if ty.is_none() && Self::is_float_type(&left_ty.borrow()) =>
+                        {
+                            *ty = Some(left_ty.clone());
                         }
                         _ => {}
                     }

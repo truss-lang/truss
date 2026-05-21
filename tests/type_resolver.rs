@@ -1430,7 +1430,7 @@ fn test_cast_invalid_bool_to_float() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(errors.len() >= 1);
+    assert!(!errors.is_empty());
     assert!(errors[0].message.contains("Cannot cast"));
 }
 
@@ -1581,6 +1581,6 @@ fn test_cast_force_bitcast_mismatched_size_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(errors.len() > 0);
+    assert!(!errors.is_empty());
     assert!(errors[0].message.contains("different sizes"));
 }
