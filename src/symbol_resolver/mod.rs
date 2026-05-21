@@ -167,7 +167,6 @@ impl SymbolResolver {
             Statement::Return {
                 value: Some(value), ..
             } => self.resolve_expression(value.clone()),
-            Statement::Return { value: None, .. } => {}
             _ => {}
         }
     }
