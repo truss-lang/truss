@@ -57,6 +57,10 @@ pub enum Expression {
         type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    PointerType {
+        base: Box<Rc<RefCell<Expression>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     Call {
         callee: Rc<RefCell<Expression>>,
         type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
@@ -143,6 +147,7 @@ pub enum UnaryOperator {
     NotNullAssertation,
     OpenRange,
     BitNot,
+    Deref,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssignmentOperator {
@@ -192,6 +197,7 @@ impl UnaryOperator {
             OperatorType::Dec => Some(UnaryOperator::Dec),
             OperatorType::OpenRange => Some(UnaryOperator::OpenRange),
             OperatorType::BitNot => Some(UnaryOperator::BitNot),
+            OperatorType::Multiply => Some(UnaryOperator::Deref),
             _ => None,
         }
     }

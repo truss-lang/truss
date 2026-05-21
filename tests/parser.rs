@@ -657,3 +657,121 @@ fn test_parse_extern_variadic_func_bare() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_deref() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = *ptr }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression,
+            operator,
+            is_prefix,
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &UnaryOperator::Deref);
+        assert!(is_prefix);
+        if let Expression::Variable { name, .. } = &*expression.borrow() {
+            assert_eq!(name.value, "ptr");
+        } else {
+            panic!("Expected variable expression");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_deref_nested() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = **ptr }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression: outer_expr,
+            operator,
+            is_prefix,
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &UnaryOperator::Deref);
+        assert!(is_prefix);
+        if let Expression::Unary {
+            expression: inner_expr,
+            operator: inner_op,
+            is_prefix: inner_prefix,
+        } = &*outer_expr.borrow()
+        {
+            assert_eq!(inner_op, &UnaryOperator::Deref);
+            assert!(inner_prefix);
+            if let Expression::Variable { name, .. } = &*inner_expr.borrow() {
+                assert_eq!(name.value, "ptr");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected nested unary expression");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_deref_with_binary() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = *ptr + 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Binary { left, operator, .. } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &BinaryOperator::Plus);
+        if let Expression::Unary {
+            expression,
+            operator: unary_op,
+            ..
+        } = &*left.borrow()
+        {
+            assert_eq!(unary_op, &UnaryOperator::Deref);
+            if let Expression::Variable { name, .. } = &*expression.borrow() {
+                assert_eq!(name.value, "ptr");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected unary expression on left");
+        }
+    } else {
+        panic!();
+    }
+}

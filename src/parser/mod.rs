@@ -204,7 +204,8 @@ impl Parser {
             | OperatorType::Minus
             | OperatorType::Inc
             | OperatorType::Dec
-            | OperatorType::BitNot = operator
+            | OperatorType::BitNot
+            | OperatorType::Multiply = operator
         {
             self.index += 1;
             let expression = self.parse_unary()?;
@@ -489,11 +490,23 @@ impl Parser {
             return Err(());
         };
         let type_parameters = self.parse_type_parameters()?;
-        Ok(Expression::Type {
+        let mut type_expr = Expression::Type {
             name: Box::new(name),
             type_parameters,
             ty: None,
-        })
+        };
+
+        while let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::Multiply)
+        {
+            self.index += 1;
+            type_expr = Expression::PointerType {
+                base: Box::new(Rc::new(RefCell::new(type_expr))),
+                ty: None,
+            };
+        }
+
+        Ok(type_expr)
     }
 
     fn parse_function_decl(&mut self) -> Result<Statement, ()> {
@@ -530,7 +543,7 @@ impl Parser {
             if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                 break;
             }
-            if let TokenType::Operator { operator: _ } = t.ty
+            if let TokenType::Operator { .. } = t.ty
                 && OperatorType::is_operator(&t, OperatorType::OpenRange)
             {
                 if has_variadic {
@@ -1086,7 +1099,7 @@ impl Parser {
             if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                 break;
             }
-            if let TokenType::Operator { operator: _ } = t.ty
+            if let TokenType::Operator { .. } = t.ty
                 && OperatorType::is_operator(&t, OperatorType::OpenRange)
             {
                 if has_variadic {

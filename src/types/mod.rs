@@ -19,4 +19,5 @@ pub enum Type {
     Char,
     Bool,
     Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool),
+    Pointer(Rc<RefCell<Type>>),
 }
