@@ -891,6 +891,45 @@ fn test_parse_cast_force() {
 }
 
 #[test]
+fn test_parse_cast_force_bitcast() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = 1 as!! Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Cast {
+            expression,
+            target_type,
+            kind,
+            kind_token,
+            ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(kind, &CastKind::ForceBitcast);
+        assert!(kind_token.is_some());
+        assert_eq!(kind_token.as_ref().unwrap().value, "!");
+        assert!(matches!(
+            *expression.borrow(),
+            Expression::IntegerLiteral { .. }
+        ));
+        assert!(
+            matches!(&*target_type.borrow(), Expression::Type { name, .. } if name.value == "Int32")
+        );
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_cast_chained() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
