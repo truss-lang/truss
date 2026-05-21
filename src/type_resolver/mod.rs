@@ -367,6 +367,9 @@ impl TypeResolver {
             "Void" => Some(Rc::new(RefCell::new(Type::Void))),
             "Char" => Some(Rc::new(RefCell::new(Type::Char))),
             "Never" => Some(Rc::new(RefCell::new(Type::Never))),
+            "Pointer" => Some(Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                Type::Void,
+            )))))),
             _ => {
                 self.emit_error(
                     TrussDiagnosticCode::UnknownType,
@@ -598,6 +601,12 @@ impl TypeResolver {
             Expression::NullLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
             Expression::NullptrLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
             Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
+            Expression::PointerType { base, ty } => {
+                let base_ty = self.infer_type(*base.clone())?;
+                let pointer_ty = Rc::new(RefCell::new(Type::Pointer(base_ty)));
+                *ty = Some(pointer_ty.clone());
+                pointer_ty
+            }
         };
         Some(result)
     }
@@ -850,6 +859,14 @@ impl TypeResolver {
                 }
                 Some(Rc::new(RefCell::new(op_ty)))
             }
+            UnaryOperator::Deref => {
+                let op_ty = operand.borrow().clone();
+                if let Type::Pointer(inner_ty) = op_ty {
+                    Some(inner_ty)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -865,6 +882,7 @@ impl TypeResolver {
             Expression::VoidLiteral { left, .. } => (**left).clone(),
             Expression::Variable { name, .. } => (**name).clone(),
             Expression::Type { name, .. } => (**name).clone(),
+            Expression::PointerType { base, .. } => Self::get_token_from_expr(base),
             Expression::Unary { expression, .. } => Self::get_token_from_expr(expression),
             Expression::Binary { left, .. } => Self::get_token_from_expr(left),
             Expression::Call { callee, .. } => Self::get_token_from_expr(callee),

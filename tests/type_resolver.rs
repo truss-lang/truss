@@ -1070,3 +1070,103 @@ fn test_function_call_underscore_label_with_explicit_underscore() {
     let errors = engine_ref.get_errors();
     assert!(errors.is_empty());
 }
+
+#[test]
+fn test_pointer_type_annotation() {
+    let code = "func test() { let p: Int32* }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+        && let Some(ty) = ty
+    {
+        assert!(
+            matches!(ty.borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Int32))
+        );
+    } else {
+        panic!("Expected variable declaration with pointer type");
+    }
+}
+
+#[test]
+fn test_deref_expression() {
+    let code = "func test(p: Int32*) -> Int32 { return *p }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+
+    if let Statement::FunctionDecl { return_type, .. } = &*program.statements[0].borrow()
+        && let Some(return_type) = return_type
+        && let Expression::Type { ty, .. } = &*return_type.borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().clone(), Type::Int32);
+    } else {
+        panic!("Expected function with Int32 return type");
+    }
+}
+
+#[test]
+fn test_nested_deref_expression() {
+    let code = "func test(p: Int64**) -> Int64 { return **p }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+
+    if let Statement::FunctionDecl { return_type, .. } = &*program.statements[0].borrow()
+        && let Some(return_type) = return_type
+        && let Expression::Type { ty, .. } = &*return_type.borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().clone(), Type::Int64);
+    } else {
+        panic!("Expected function with Int64 return type");
+    }
+}
