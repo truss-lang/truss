@@ -176,23 +176,19 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_extern_declaration(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
-        if let Statement::FunctionDecl { name, ty, .. } = &*statement.borrow() {
-            if let Some(ty) = ty {
-                if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
-                    let function_type = self.get_function_type(
-                        return_type.clone(),
-                        param_types.clone(),
-                        *is_vararg,
-                    )?;
-                    self.module.add_function(&name.value, function_type, None);
-                }
-            }
+        if let Statement::FunctionDecl { name, ty, .. } = &*statement.borrow()
+            && let Some(ty) = ty
+            && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+        {
+            let function_type =
+                self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)?;
+            self.module.add_function(&name.value, function_type, None);
         }
-        if let Statement::VariableDecl { name, ty, .. } = &*statement.borrow() {
-            if let Some(ty) = ty {
-                let llvm_type = self.resolve_type(ty.clone())?;
-                self.module.add_global(llvm_type, None, &name.value);
-            }
+        if let Statement::VariableDecl { name, ty, .. } = &*statement.borrow()
+            && let Some(ty) = ty
+        {
+            let llvm_type = self.resolve_type(ty.clone())?;
+            self.module.add_global(llvm_type, None, &name.value);
         }
         Ok(())
     }
@@ -912,7 +908,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             let ty = ty_opt.as_ref().ok_or_else(|| anyhow::anyhow!("No type"))?;
                             let llvm_ty = self.resolve_type(ty.clone())?;
                             drop(expr_borrowed);
-                            Ok(Some(self.builder.build_load(llvm_ty, ptr, "")?.into()))
+                            Ok(Some(self.builder.build_load(llvm_ty, ptr, "")?))
                         } else {
                             anyhow::bail!("Invalid type for dereference");
                         }
@@ -1174,10 +1170,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 let target_llvm_ty = self.resolve_type(target_ty.clone())?;
 
                 let result = match kind {
-                    CastKind::ForceBitcast => self
-                        .builder
-                        .build_bit_cast(source_val, target_llvm_ty, "")?
-                        .into(),
+                    CastKind::ForceBitcast => {
+                        self.builder
+                            .build_bit_cast(source_val, target_llvm_ty, "")?
+                    }
                     _ => match source_val {
                         BasicValueEnum::IntValue(src) => match target_llvm_ty {
                             BasicTypeEnum::IntType(dst_ty) => {
