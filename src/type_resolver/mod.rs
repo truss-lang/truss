@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
-        expression::{BinaryOperator, CallParameter, Expression, UnaryOperator},
+        expression::{BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator},
         node::Program,
         statement::{FunctionBody, Statement, VariadicKind},
     },
@@ -627,22 +627,25 @@ impl TypeResolver {
                 expression,
                 target_type,
                 ty,
+                kind,
                 ..
             } => {
                 let source_ty = self.infer_type(expression.clone())?;
                 let target_ty = self.infer_type(target_type.clone())?;
 
-                if !Self::check_cast(&source_ty.borrow(), &target_ty.borrow()) {
-                    let token = Self::get_token_from_expr(expression);
-                    self.emit_error(
-                        TrussDiagnosticCode::TypeMismatch,
-                        format!(
-                            "Cannot cast from '{}' to '{}'",
-                            source_ty.borrow(),
-                            target_ty.borrow()
-                        ),
-                        &token,
-                    );
+                if *kind != CastKind::ForceBitcast {
+                    if !Self::check_cast(&source_ty.borrow(), &target_ty.borrow()) {
+                        let token = Self::get_token_from_expr(expression);
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeMismatch,
+                            format!(
+                                "Cannot cast from '{}' to '{}'",
+                                source_ty.borrow(),
+                                target_ty.borrow()
+                            ),
+                            &token,
+                        );
+                    }
                 }
                 *ty = Some(target_ty.clone());
                 target_ty
