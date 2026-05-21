@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Ok, Result, anyhow};
+use anyhow::{Ok, Result};
 
 use crate::{
     ast::statement::{Parameter, Statement},
