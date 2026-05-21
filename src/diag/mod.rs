@@ -53,6 +53,7 @@ pub enum TrussDiagnosticCode {
     NestedFunctionType,
     TypeInferenceFailed,
     IRVariableNotFound,
+    StructTypeNotSupported,
 }
 
 impl DiagnosticCode for TrussDiagnosticCode {
@@ -103,6 +104,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::NestedFunctionType => "E0405",
             Self::TypeInferenceFailed => "E0406",
             Self::IRVariableNotFound => "E0407",
+            Self::StructTypeNotSupported => "E0408",
         }
     }
 

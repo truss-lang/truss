@@ -1,5 +1,7 @@
 use std::{cell::RefCell, fmt, rc::Rc};
 
+use crate::id::SymbolId;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Never,
@@ -20,6 +22,7 @@ pub enum Type {
     Bool,
     Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool),
     Pointer(Rc<RefCell<Type>>),
+    Struct(SymbolId),
 }
 
 impl fmt::Display for Type {
@@ -55,6 +58,7 @@ impl fmt::Display for Type {
                 write!(f, ") -> {}", ret.borrow())
             }
             Type::Pointer(inner) => write!(f, "{}*", inner.borrow()),
+            Type::Struct(symbol_id) => write!(f, "Struct({})", symbol_id.id),
         }
     }
 }

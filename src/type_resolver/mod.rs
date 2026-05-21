@@ -13,6 +13,7 @@ use crate::{
     id::ModuleId,
     krate::{Crate, Module},
     lexer::token::{Position, Token, TokenType},
+    symbol::Symbol,
     types::Type,
 };
 
@@ -67,7 +68,7 @@ impl TypeResolver {
         self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(None))));
 
         for stmt in &program.statements {
-            self.process_function_decl(stmt.clone());
+            self.process_decl(stmt.clone());
         }
 
         for stmt in &program.statements {
@@ -75,79 +76,97 @@ impl TypeResolver {
         }
     }
 
-    fn process_function_decl(&mut self, statement: Rc<RefCell<Statement>>) {
-        if let Statement::FunctionDecl {
-            name,
-            parameters,
-            return_type,
-            ty,
-            body,
-            ..
-        } = &mut *statement.borrow_mut()
-        {
-            let ret_type = if let Some(return_type_expr) = return_type {
-                self.infer_type(return_type_expr.clone())
-                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
-            } else {
-                Rc::new(RefCell::new(Type::Void))
-            };
+    fn process_decl(&mut self, statement: Rc<RefCell<Statement>>) {
+        match &mut *statement.borrow_mut() {
+            Statement::FunctionDecl {
+                name,
+                parameters,
+                return_type,
+                ty,
+                body,
+                ..
+            } => {
+                let ret_type = if let Some(return_type_expr) = return_type {
+                    self.infer_type(return_type_expr.clone())
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                } else {
+                    Rc::new(RefCell::new(Type::Void))
+                };
 
-            let mut parameter_types = Vec::new();
-            let mut is_vararg = false;
-            for param in parameters.iter() {
-                if param.borrow().variadic_kind == VariadicKind::BareVariadic {
-                    is_vararg = true;
-                    continue;
-                }
-                let param_type = self.infer_type(param.borrow().type_expression.clone());
-                if let Some(ref param_type) = param_type {
-                    param.borrow_mut().ty = Some(param_type.clone());
-                    parameter_types.push(param_type.clone());
-                }
-                if param.borrow().variadic_kind != VariadicKind::NotVariadic {
-                    is_vararg = true;
-                }
-            }
-
-            let fn_type = Rc::new(RefCell::new(Type::Function(
-                parameter_types,
-                ret_type,
-                is_vararg,
-            )));
-            *ty = Some(fn_type.clone());
-
-            self.type_env
-                .as_ref()
-                .unwrap()
-                .borrow_mut()
-                .set(name.value.clone(), fn_type);
-
-            match &*body.borrow() {
-                FunctionBody::Statements(stmts) => {
-                    for s in stmts {
-                        self.process_function_decl(s.clone());
+                let mut parameter_types = Vec::new();
+                let mut is_vararg = false;
+                for param in parameters.iter() {
+                    if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                        is_vararg = true;
+                        continue;
+                    }
+                    let param_type = self.infer_type(param.borrow().type_expression.clone());
+                    if let Some(ref param_type) = param_type {
+                        param.borrow_mut().ty = Some(param_type.clone());
+                        parameter_types.push(param_type.clone());
+                    }
+                    if param.borrow().variadic_kind != VariadicKind::NotVariadic {
+                        is_vararg = true;
                     }
                 }
-                FunctionBody::Expression(expr) => {
-                    self.process_function_decl_in_expr(expr.clone());
+
+                let fn_type = Rc::new(RefCell::new(Type::Function(
+                    parameter_types,
+                    ret_type,
+                    is_vararg,
+                )));
+                *ty = Some(fn_type.clone());
+
+                self.type_env
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set(name.value.clone(), fn_type);
+
+                match &*body.borrow() {
+                    FunctionBody::Statements(stmts) => {
+                        for s in stmts {
+                            self.process_decl(s.clone());
+                        }
+                    }
+                    FunctionBody::Expression(expr) => {
+                        self.process_function_decl_in_expr(expr.clone());
+                    }
+                    FunctionBody::None => {}
                 }
-                FunctionBody::None => {}
             }
-        }
-        if let Statement::ExternBlock { items, .. } = &*statement.borrow() {
-            for item in items {
-                self.process_function_decl(item.clone());
+            Statement::StructDecl { name, body, .. } => {
+                if let Some(module) = &self.current_module
+                    && let Some(symbol) = module.borrow().name_table.get(&name.value)
+                    && let Symbol::Struct { id, .. } = &**symbol
+                {
+                    let struct_ty = Rc::new(RefCell::new(Type::Struct(*id)));
+                    self.type_env
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set(name.value.clone(), struct_ty);
+                }
+                for stmt in body {
+                    self.process_decl(stmt.clone());
+                }
             }
-        }
-        if let Statement::ExternDecl { statement, .. } = &*statement.borrow() {
-            self.process_function_decl(statement.clone());
+            Statement::ExternBlock { items, .. } => {
+                for item in items {
+                    self.process_decl(item.clone());
+                }
+            }
+            Statement::ExternDecl { statement, .. } => {
+                self.process_decl(statement.clone());
+            }
+            _ => {}
         }
     }
 
     fn process_function_decl_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
         if let Expression::Block { statements } = &*expr.borrow() {
             for stmt in statements {
-                self.process_function_decl(stmt.clone());
+                self.process_decl(stmt.clone());
             }
         }
     }
@@ -371,6 +390,13 @@ impl TypeResolver {
                 Type::Void,
             )))))),
             _ => {
+                if let Some(module) = &self.current_module {
+                    if let Some(symbol) = module.borrow().name_table.get(name) {
+                        if let crate::symbol::Symbol::Struct { id, .. } = &**symbol {
+                            return Some(Rc::new(RefCell::new(Type::Struct(*id))));
+                        }
+                    }
+                }
                 self.emit_error(
                     TrussDiagnosticCode::UnknownType,
                     format!("Unknown type '{}'", name),

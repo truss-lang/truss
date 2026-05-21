@@ -1584,3 +1584,69 @@ fn test_cast_force_bitcast_mismatched_size_error() {
     assert!(!errors.is_empty());
     assert!(errors[0].message.contains("different sizes"));
 }
+
+#[test]
+fn test_struct_decl_type_resolve() {
+    let code = "struct Point { let x: Int32 let y: Int32 }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0);
+
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 2);
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_struct_type_reference() {
+    let code = r#"
+        struct Point { let x: Int32 let y: Int32 }
+        func test() -> Point { let p: Point = ??? return p }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    let unknown_type_errors: Vec<_> = errors
+        .iter()
+        .filter(|e| e.message.contains("Unknown type"))
+        .collect();
+    assert!(
+        unknown_type_errors.is_empty(),
+        "Struct type 'Point' should be recognized, but found errors: {:?}",
+        errors
+    );
+}

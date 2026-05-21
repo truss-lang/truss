@@ -1313,6 +1313,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("Nested function types are not supported");
             }
             Type::Pointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
+            Type::Struct(_) => {
+                self.emit_error(
+                    TrussDiagnosticCode::StructTypeNotSupported,
+                    "Struct types are not yet supported in IR generation",
+                    None,
+                );
+                anyhow::bail!("Struct types are not yet supported in IR generation");
+            }
         };
         Ok(resolved)
     }
