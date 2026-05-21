@@ -89,7 +89,7 @@ pub enum Expression {
     },
     Cast {
         token: Box<Token>,
-        kind_token: Option<Box<Token>>,
+        kind_tokens: Option<(Box<Token>, Box<Token>)>,
         expression: Rc<RefCell<Expression>>,
         target_type: Rc<RefCell<Expression>>,
         kind: CastKind,

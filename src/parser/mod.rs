@@ -200,9 +200,19 @@ impl Parser {
                     } else {
                         CastKind::Regular
                     };
-                    let kind_token = match kind {
-                        CastKind::Conditional | CastKind::Force | CastKind::ForceBitcast => {
-                            Some(Box::new(self.tokens[self.index - 1].clone()))
+                    let kind_tokens = match kind {
+                        CastKind::Conditional => Some((
+                            Box::new(self.tokens[self.index - 1].clone()),
+                            Box::new(self.tokens[self.index - 1].clone()),
+                        )),
+                        CastKind::Force => Some((
+                            Box::new(self.tokens[self.index - 1].clone()),
+                            Box::new(self.tokens[self.index - 1].clone()),
+                        )),
+                        CastKind::ForceBitcast => {
+                            let first_not = self.tokens[self.index - 2].clone();
+                            let second_not = self.tokens[self.index - 1].clone();
+                            Some((Box::new(first_not), Box::new(second_not)))
                         }
                         CastKind::Regular => None,
                     };
@@ -211,7 +221,7 @@ impl Parser {
                         expression: Rc::new(RefCell::new(left)),
                         target_type: Rc::new(RefCell::new(target_type)),
                         token: Box::new(token),
-                        kind_token,
+                        kind_tokens,
                         kind,
                         ty: None,
                     }

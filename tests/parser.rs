@@ -832,13 +832,13 @@ fn test_parse_cast_conditional() {
             expression,
             target_type,
             kind,
-            kind_token,
+            kind_tokens,
             ..
         } = &*init_expr.borrow()
     {
         assert_eq!(kind, &CastKind::Conditional);
-        assert!(kind_token.is_some());
-        assert_eq!(kind_token.as_ref().unwrap().value, "?");
+        assert!(kind_tokens.is_some());
+        assert_eq!(kind_tokens.as_ref().unwrap().0.value, "?");
         assert!(matches!(
             *expression.borrow(),
             Expression::IntegerLiteral { .. }
@@ -871,13 +871,13 @@ fn test_parse_cast_force() {
             expression,
             target_type,
             kind,
-            kind_token,
+            kind_tokens,
             ..
         } = &*init_expr.borrow()
     {
         assert_eq!(kind, &CastKind::Force);
-        assert!(kind_token.is_some());
-        assert_eq!(kind_token.as_ref().unwrap().value, "!");
+        assert!(kind_tokens.is_some());
+        assert_eq!(kind_tokens.as_ref().unwrap().0.value, "!");
         assert!(matches!(
             *expression.borrow(),
             Expression::IntegerLiteral { .. }
@@ -910,13 +910,14 @@ fn test_parse_cast_force_bitcast() {
             expression,
             target_type,
             kind,
-            kind_token,
+            kind_tokens,
             ..
         } = &*init_expr.borrow()
     {
         assert_eq!(kind, &CastKind::ForceBitcast);
-        assert!(kind_token.is_some());
-        assert_eq!(kind_token.as_ref().unwrap().value, "!");
+        assert!(kind_tokens.is_some());
+        assert_eq!(kind_tokens.as_ref().unwrap().0.value, "!");
+        assert_eq!(kind_tokens.as_ref().unwrap().1.value, "!");
         assert!(matches!(
             *expression.borrow(),
             Expression::IntegerLiteral { .. }
