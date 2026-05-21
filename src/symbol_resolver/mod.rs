@@ -69,39 +69,42 @@ impl SymbolResolver {
     }
 
     fn register_function_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
-        if let Statement::FunctionDecl { name, body, .. } = &*stmt.borrow() {
-            let id = self.get_symbol_id();
-            let symbol = Rc::new(Symbol::Function {
-                name: name.value.clone(),
-                id,
-                decl: Some(stmt.clone()),
-            });
-            let module = self.current_module.clone().unwrap();
-            module.borrow_mut().symbols.insert(id, symbol.clone());
-            module
-                .borrow_mut()
-                .name_table
-                .insert(name.value.clone(), symbol);
+        match &*stmt.borrow() {
+            Statement::FunctionDecl { name, body, .. } => {
+                let id = self.get_symbol_id();
+                let symbol = Rc::new(Symbol::Function {
+                    name: name.value.clone(),
+                    id,
+                    decl: Some(stmt.clone()),
+                });
+                let module = self.current_module.clone().unwrap();
+                module.borrow_mut().symbols.insert(id, symbol.clone());
+                module
+                    .borrow_mut()
+                    .name_table
+                    .insert(name.value.clone(), symbol);
 
-            match &*body.borrow() {
-                FunctionBody::Statements(stmts) => {
-                    for s in stmts {
-                        self.register_function_symbols(s.clone());
+                match &*body.borrow() {
+                    FunctionBody::Statements(stmts) => {
+                        for s in stmts {
+                            self.register_function_symbols(s.clone());
+                        }
                     }
+                    FunctionBody::Expression(expr) => {
+                        self.register_function_symbols_in_expr(expr.clone());
+                    }
+                    FunctionBody::None => {}
                 }
-                FunctionBody::Expression(expr) => {
-                    self.register_function_symbols_in_expr(expr.clone());
+            }
+            Statement::ExternBlock { items, .. } => {
+                for item in items {
+                    self.register_function_symbols(item.clone());
                 }
-                FunctionBody::None => {}
             }
-        }
-        if let Statement::ExternBlock { items, .. } = &*stmt.borrow() {
-            for item in items {
-                self.register_function_symbols(item.clone());
+            Statement::ExternDecl { statement, .. } => {
+                self.register_function_symbols(statement.clone());
             }
-        }
-        if let Statement::ExternDecl { statement, .. } = &*stmt.borrow() {
-            self.register_function_symbols(statement.clone());
+            _ => {}
         }
     }
 
