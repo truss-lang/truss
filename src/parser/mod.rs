@@ -620,7 +620,14 @@ impl Parser {
                         "Variadic parameter must be the last parameter and only one is allowed",
                         &t,
                     );
-                    return Err(());
+                    self.skip();
+                    let Some(comma_or_close) = self.peek() else {
+                        break;
+                    };
+                    if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
+                        self.index += 1;
+                    }
+                    continue;
                 }
                 self.index += 1;
                 let variadic_token = Token::new(
@@ -721,11 +728,13 @@ impl Parser {
                         "Variadic parameter must be the last parameter and only one is allowed",
                         &peeked,
                     );
-                    return Err(());
+                    self.skip();
+                    VariadicKind::NotVariadic
+                } else {
+                    self.index += 1;
+                    has_variadic = true;
+                    VariadicKind::TypedVariadic
                 }
-                self.index += 1;
-                has_variadic = true;
-                VariadicKind::TypedVariadic
             } else {
                 VariadicKind::NotVariadic
             };
