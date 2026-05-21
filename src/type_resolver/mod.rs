@@ -1069,14 +1069,14 @@ impl TypeResolver {
         &self,
         callee: Rc<RefCell<Expression>>,
     ) -> Option<Rc<RefCell<Statement>>> {
-        if let Expression::Variable { symbol, .. } = &*callee.borrow() {
-            if let Some(sym) = symbol {
-                if let Ok(Some(decl)) = sym.get_decl() {
-                    return Some(decl);
-                }
-            }
+        if let Expression::Variable { symbol, .. } = &*callee.borrow()
+            && let Some(sym) = symbol
+            && let Ok(Some(decl)) = sym.get_decl()
+        {
+            Some(decl)
+        } else {
+            None
         }
-        None
     }
 
     fn check_parameter_label(
