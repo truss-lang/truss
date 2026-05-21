@@ -39,6 +39,7 @@ pub enum Expression {
     },
     NullptrLiteral {
         token: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     CharLiteral {
         token: Box<Token>,

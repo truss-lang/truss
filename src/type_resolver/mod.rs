@@ -259,7 +259,7 @@ impl TypeResolver {
                         self.emit_error(
                             TrussDiagnosticCode::ReturnTypeMismatch,
                             format!(
-                                "Expected return value of type {:?}, found `return` without value",
+                                "Expected return value of type {}, found `return` without value",
                                 expected.borrow()
                             ),
                             token.as_ref(),
@@ -283,7 +283,7 @@ impl TypeResolver {
                 {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
-                        format!("While condition must be Bool, found {:?}", cond_ty.borrow()),
+                        format!("While condition must be Bool, found {}", cond_ty.borrow()),
                         &Self::get_token_from_expr(condition),
                     );
                 }
@@ -301,7 +301,7 @@ impl TypeResolver {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
                         format!(
-                            "Repeat-while condition must be Bool, found {:?}",
+                            "Repeat-while condition must be Bool, found {}",
                             cond_ty.borrow()
                         ),
                         &Self::get_token_from_expr(condition),
@@ -463,7 +463,7 @@ impl TypeResolver {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidOperand,
                         format!(
-                            "Invalid operands for binary operator: {:?} and {:?}",
+                            "Invalid operands for binary operator: {} and {}",
                             left_ty.borrow().clone(),
                             right_ty.borrow().clone()
                         ),
@@ -485,7 +485,7 @@ impl TypeResolver {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidOperand,
                         format!(
-                            "Invalid operand for unary operator: {:?}",
+                            "Invalid operand for unary operator: {}",
                             operand_ty.borrow().clone()
                         ),
                         &token,
@@ -540,7 +540,7 @@ impl TypeResolver {
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::CallingNonFunction,
-                            format!("Cannot call non-function type {:?}", callee_type.borrow()),
+                            format!("Cannot call non-function type {}", callee_type.borrow()),
                             &Self::get_token_from_expr(callee),
                         );
                         return None;
@@ -551,14 +551,14 @@ impl TypeResolver {
                 let left_ty = self.infer_type(left.clone())?;
                 let right_ty = self.infer_type(right.clone())?;
                 if left_ty.borrow().clone() != right_ty.borrow().clone() {
-                    let expected_msg = format!("expected {:?}", left_ty.borrow().clone());
-                    let found_msg = format!("found {:?}", right_ty.borrow().clone());
+                    let expected_msg = format!("expected {}", left_ty.borrow());
+                    let found_msg = format!("found {}", right_ty.borrow());
                     self.emit_error_with_labels(
                         TrussDiagnosticCode::TypeMismatch,
                         format!(
-                            "Type mismatch in assignment: {:?} vs {:?}",
-                            left_ty.borrow().clone(),
-                            right_ty.borrow().clone()
+                            "Type mismatch in assignment: {} vs {}",
+                            left_ty.borrow(),
+                            right_ty.borrow()
                         ),
                         primary_label_from_token(&Self::get_token_from_expr(left), &expected_msg),
                         secondary_label_from_token(&Self::get_token_from_expr(right), &found_msg),
@@ -576,7 +576,7 @@ impl TypeResolver {
                 if *cond_ty.borrow() != Type::Bool {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
-                        format!("If condition must be Bool, found {:?}", cond_ty.borrow()),
+                        format!("If condition must be Bool, found {}", cond_ty.borrow()),
                         &Self::get_token_from_expr(condition),
                     );
                 }
@@ -587,9 +587,9 @@ impl TypeResolver {
                         self.emit_error(
                             TrussDiagnosticCode::BranchTypeMismatch,
                             format!(
-                                "If branches have different types: {:?} vs {:?}",
-                                then_ty.borrow().clone(),
-                                else_ty.borrow().clone()
+                                "If branches have different types: {} vs {}",
+                                then_ty.borrow(),
+                                else_ty.borrow()
                             ),
                             &Self::get_token_from_expr(then),
                         );
@@ -599,7 +599,17 @@ impl TypeResolver {
             }
             Expression::VoidLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
             Expression::NullLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
-            Expression::NullptrLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
+            Expression::NullptrLiteral { ty, .. } => {
+                if let Some(existing_ty) = ty {
+                    existing_ty.clone()
+                } else {
+                    let ptr_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    *ty = Some(ptr_ty.clone());
+                    ptr_ty
+                }
+            }
             Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
             Expression::PointerType { base, ty } => {
                 let base_ty = self.infer_type(*base.clone())?;
@@ -636,6 +646,7 @@ impl TypeResolver {
     ) {
         let is_int_literal = matches!(&*expression.borrow(), Expression::IntegerLiteral { .. });
         let is_float_literal = matches!(&*expression.borrow(), Expression::DecimalLiteral { .. });
+        let is_nullptr = matches!(&*expression.borrow(), Expression::NullptrLiteral { .. });
 
         if is_int_literal {
             if Self::is_integer_type(&expected.borrow()) {
@@ -648,8 +659,8 @@ impl TypeResolver {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
-                        "Type mismatch: expected {:?}, found integer literal",
-                        expected.borrow().clone()
+                        "Type mismatch: expected {}, found integer literal",
+                        expected.borrow()
                     ),
                     token,
                 );
@@ -665,20 +676,26 @@ impl TypeResolver {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
-                        "Type mismatch: expected {:?}, found float literal",
-                        expected.borrow().clone()
+                        "Type mismatch: expected {}, found float literal",
+                        expected.borrow()
                     ),
                     token,
                 );
             }
+        } else if is_nullptr {
+            let mut expr_mut = expression.borrow_mut();
+            if let Expression::NullptrLiteral { ty, .. } = &mut *expr_mut {
+                *ty = Some(expected.clone());
+            }
+            drop(expr_mut);
         } else if let Some(inferred) = self.infer_type(expression) {
             if inferred.borrow().clone() != expected.borrow().clone() {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
-                        "Type mismatch: expected {:?}, found {:?}",
-                        expected.borrow().clone(),
-                        inferred.borrow().clone()
+                        "Type mismatch: expected {}, found {}",
+                        expected.borrow(),
+                        inferred.borrow()
                     ),
                     token,
                 );
@@ -686,7 +703,7 @@ impl TypeResolver {
         } else {
             self.emit_error(
                 TrussDiagnosticCode::TypeMismatch,
-                format!("Type mismatch: expected {:?}", expected.borrow().clone()),
+                format!("Type mismatch: expected {}", expected.borrow()),
                 token,
             );
         }
@@ -752,8 +769,8 @@ impl TypeResolver {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
-                        "Type mismatch: expected {:?}, found integer literal",
-                        expected_type.borrow().clone()
+                        "Type mismatch: expected {}, found integer literal",
+                        expected_type.borrow()
                     ),
                     &token,
                 );
@@ -773,13 +790,23 @@ impl TypeResolver {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
-                        "Type mismatch: expected {:?}, found float literal",
-                        expected_type.borrow().clone()
+                        "Type mismatch: expected {}, found float literal",
+                        expected_type.borrow()
                     ),
                     &token,
                 );
                 return None;
             }
+        }
+
+        if let Expression::NullptrLiteral { ty, .. } = &*expression.borrow() {
+            if ty.is_none() {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::NullptrLiteral { ty: nullptr_ty, .. } = &mut *expr_mut {
+                    *nullptr_ty = Some(expected_type.clone());
+                }
+            }
+            return Some(expected_type);
         }
 
         self.infer_type(expression)
@@ -877,7 +904,7 @@ impl TypeResolver {
             Expression::DecimalLiteral { token, .. } => (**token).clone(),
             Expression::BooleanLiteral { token } => (**token).clone(),
             Expression::NullLiteral { token } => (**token).clone(),
-            Expression::NullptrLiteral { token } => (**token).clone(),
+            Expression::NullptrLiteral { token, .. } => (**token).clone(),
             Expression::CharLiteral { token } => (**token).clone(),
             Expression::VoidLiteral { left, .. } => (**left).clone(),
             Expression::Variable { name, .. } => (**name).clone(),

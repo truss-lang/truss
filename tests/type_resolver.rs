@@ -1170,3 +1170,164 @@ fn test_nested_deref_expression() {
         panic!("Expected function with Int64 return type");
     }
 }
+
+#[test]
+fn test_nullptr_literal() {
+    let code = "func test() { let p: Void* = nullptr }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            ty, initializer, ..
+        } = &*statements[0].borrow()
+        && let Some(ty) = ty
+        && let Some(init) = initializer
+    {
+        assert!(
+            matches!(ty.borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Void))
+        );
+        if let Expression::NullptrLiteral { ty: init_ty, .. } = &*init.borrow() {
+            assert!(init_ty.is_some());
+            assert!(
+                matches!(init_ty.as_ref().unwrap().borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Void))
+            );
+        } else {
+            panic!("Expected nullptr literal");
+        }
+    } else {
+        panic!("Expected variable declaration with pointer type");
+    }
+}
+
+#[test]
+fn test_nullptr_type_inference_with_annotation() {
+    let code = "func test() { var p: Int32* = nullptr }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            ty, initializer, ..
+        } = &*statements[0].borrow()
+        && let Some(ty) = ty
+        && let Some(init) = initializer
+    {
+        assert!(
+            matches!(ty.borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Int32))
+        );
+        if let Expression::NullptrLiteral { ty: init_ty, .. } = &*init.borrow() {
+            assert!(init_ty.is_some());
+            assert!(
+                matches!(init_ty.as_ref().unwrap().borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Int32))
+            );
+        } else {
+            panic!("Expected nullptr literal");
+        }
+    } else {
+        panic!("Expected variable declaration with pointer type");
+    }
+}
+
+#[test]
+fn test_nullptr_return_type_inference() {
+    let code = "func getNull() -> Int32* { return nullptr }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_nullptr_default_void_pointer() {
+    let code = "func test() { var p = nullptr }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            ty, initializer, ..
+        } = &*statements[0].borrow()
+        && let Some(ty) = ty
+        && let Some(init) = initializer
+    {
+        assert!(
+            matches!(ty.borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Void))
+        );
+        if let Expression::NullptrLiteral { ty: init_ty, .. } = &*init.borrow() {
+            assert!(init_ty.is_some());
+            assert!(
+                matches!(init_ty.as_ref().unwrap().borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Void))
+            );
+        } else {
+            panic!("Expected nullptr literal");
+        }
+    } else {
+        panic!("Expected variable declaration with Void* type");
+    }
+}
