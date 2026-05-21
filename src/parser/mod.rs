@@ -540,6 +540,14 @@ impl Parser {
             );
             return Err(());
         };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedType,
+                format!("Expected type name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
         let type_parameters = self.parse_type_parameters()?;
         let mut type_expr = Expression::Type {
             name: Box::new(name),
@@ -572,6 +580,14 @@ impl Parser {
             );
             return Err(());
         };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidFunctionName,
+                format!("Expected function name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
         let Some(next) = self.next() else {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
@@ -848,6 +864,14 @@ impl Parser {
             );
             return Err(());
         };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidVariableName,
+                format!("Expected variable name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
         let type_expression = if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::Colon)
         {
@@ -1128,6 +1152,14 @@ impl Parser {
             );
             return Err(());
         };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidFunctionName,
+                format!("Expected function name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
         let Some(next) = self.next() else {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
@@ -1345,6 +1377,14 @@ impl Parser {
             );
             return Err(());
         };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidVariableName,
+                format!("Expected variable name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
         let type_expression = if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::Colon)
         {
