@@ -95,8 +95,8 @@ impl Parser {
         };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
-                KeywordType::Func => self.parse_function_decl(),
-                KeywordType::Let | KeywordType::Var => self.parse_variable_decl(),
+                KeywordType::Func => self.parse_function_decl(false),
+                KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false),
                 KeywordType::Return => self.parse_return(),
                 KeywordType::Loop => self.parse_loop(),
                 KeywordType::While => self.parse_while(),
@@ -568,8 +568,8 @@ impl Parser {
         Ok(type_expr)
     }
 
-    fn parse_function_decl(&mut self) -> Result<Statement, ()> {
-        let Some(_token) = self.next() else {
+    fn parse_function_decl(&mut self, is_extern: bool) -> Result<Statement, ()> {
+        let Some(token) = self.next() else {
             return Err(());
         };
         let Some(name) = self.next() else {
@@ -782,117 +782,60 @@ impl Parser {
                 ty: None,
             })
         };
-        if let Some(token) = self.peek()
-            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
-        {
-            self.index += 1;
-            let mut statements = Vec::new();
-            while let Some(t) = self.peek() {
-                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
-                    break;
-                }
-                if let Ok(stmt) = self.parse_statement() {
-                    statements.push(Rc::new(RefCell::new(stmt)));
-                } else {
-                    self.skip();
-                }
-            }
-            let Some(next) = self.next() else {
-                self.emit_error(
-                    TrussDiagnosticCode::MissingSeparator,
-                    "Expected '}' to close function body",
-                    &self.tokens[self.index.saturating_sub(1)],
-                );
-                return Err(());
-            };
-            if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
-                Ok(Statement::FunctionDecl {
-                    token: Box::new(token),
-                    name: Box::new(name),
-                    generic_parameters: vec![],
-                    parameters,
-                    return_type: return_type.map(RefCell::new).map(Rc::new),
-                    body: Rc::new(RefCell::new(FunctionBody::Statements(statements))),
-                    ty: None,
-                })
-            } else {
-                self.emit_error(
-                    TrussDiagnosticCode::MissingSeparator,
-                    format!("Expected '}}' but found '{}'", next.value),
-                    &next,
-                );
-                Err(())
-            }
-        } else if let Some(token) = self.peek()
-            && OperatorType::is_operator(&token, OperatorType::Assign)
-        {
-            self.index += 1;
-            let expression = self.parse_expression()?;
-            Ok(Statement::FunctionDecl {
-                token: Box::new(token),
-                name: Box::new(name),
-                generic_parameters: vec![],
-                parameters,
-                return_type: return_type.map(RefCell::new).map(Rc::new),
-                body: Rc::new(RefCell::new(FunctionBody::Expression(Rc::new(
-                    RefCell::new(expression),
-                )))),
-                ty: None,
-            })
-        } else {
-            Ok(Statement::FunctionDecl {
-                token: Box::new(_token),
-                name: Box::new(name),
-                generic_parameters: vec![],
-                parameters,
-                return_type: return_type.map(RefCell::new).map(Rc::new),
-                body: Rc::new(RefCell::new(FunctionBody::None)),
-                ty: None,
-            })
-        }
-    }
 
-    fn parse_variable_decl(&mut self) -> Result<Statement, ()> {
-        let Some(token) = self.next() else {
-            return Err(());
-        };
-        let Some(name) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::InvalidVariableName,
-                "Expected variable name after 'let' or 'var'",
-                &token,
-            );
-            return Err(());
-        };
-        if TokenType::Identifier != name.ty {
-            self.emit_error(
-                TrussDiagnosticCode::InvalidVariableName,
-                format!("Expected variable name but found '{}'", name.value),
-                &name,
-            );
-            return Err(());
-        }
-        let type_expression = if let Some(t) = self.peek()
-            && SeparatorType::is_separator(&t, SeparatorType::Colon)
-        {
-            self.index += 1;
-            Some(self.parse_type_expression()?)
+        let body = if is_extern {
+            FunctionBody::None
         } else {
-            None
+            if let Some(token) = self.peek()
+                && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+            {
+                self.index += 1;
+                let mut statements = Vec::new();
+                while let Some(t) = self.peek() {
+                    if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                        break;
+                    }
+                    if let Ok(stmt) = self.parse_statement() {
+                        statements.push(Rc::new(RefCell::new(stmt)));
+                    } else {
+                        self.skip();
+                    }
+                }
+                let Some(next) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        "Expected '}' to close function body",
+                        &self.tokens[self.index.saturating_sub(1)],
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        format!("Expected '}}' but found '{}'", next.value),
+                        &next,
+                    );
+                    return Err(());
+                }
+                FunctionBody::Statements(statements)
+            } else if let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::Assign)
+            {
+                self.index += 1;
+                let expression = self.parse_expression()?;
+                FunctionBody::Expression(Rc::new(RefCell::new(expression)))
+            } else {
+                FunctionBody::None
+            }
         };
-        let initializer = if let Some(t) = self.peek()
-            && OperatorType::is_operator(&t, OperatorType::Assign)
-        {
-            self.index += 1;
-            Some(self.parse_expression()?)
-        } else {
-            None
-        };
-        Ok(Statement::VariableDecl {
+
+        Ok(Statement::FunctionDecl {
             token: Box::new(token),
             name: Box::new(name),
-            type_expression: type_expression.map(RefCell::new).map(Rc::new),
-            initializer: initializer.map(RefCell::new).map(Rc::new),
+            generic_parameters: vec![],
+            parameters,
+            return_type: return_type.map(RefCell::new).map(Rc::new),
+            body: Rc::new(RefCell::new(body)),
             ty: None,
         })
     }
@@ -1112,8 +1055,8 @@ impl Parser {
         };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
-                KeywordType::Func => self.parse_function_decl_in_extern(),
-                KeywordType::Let | KeywordType::Var => self.parse_variable_decl_in_extern(),
+                KeywordType::Func => self.parse_function_decl(true),
+                KeywordType::Let | KeywordType::Var => self.parse_variable_decl(true),
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
@@ -1140,232 +1083,7 @@ impl Parser {
         }
     }
 
-    fn parse_function_decl_in_extern(&mut self) -> Result<Statement, ()> {
-        let Some(token) = self.next() else {
-            return Err(());
-        };
-        let Some(name) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::InvalidFunctionName,
-                "Expected function name after 'func'",
-                &self.tokens[self.index.saturating_sub(1)],
-            );
-            return Err(());
-        };
-        if TokenType::Identifier != name.ty {
-            self.emit_error(
-                TrussDiagnosticCode::InvalidFunctionName,
-                format!("Expected function name but found '{}'", name.value),
-                &name,
-            );
-            return Err(());
-        }
-        let Some(next) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::MissingSeparator,
-                "Expected '(' after function name",
-                &name,
-            );
-            return Err(());
-        };
-        if !SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
-            self.emit_error(
-                TrussDiagnosticCode::MissingSeparator,
-                format!("Expected '(' but found '{}'", next.value),
-                &next,
-            );
-            return Err(());
-        }
-        let mut parameters = Vec::new();
-        let mut has_variadic = false;
-        while let Some(t) = self.peek() {
-            if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
-                break;
-            }
-            if let TokenType::Operator { .. } = t.ty
-                && OperatorType::is_operator(&t, OperatorType::OpenRange)
-            {
-                if has_variadic {
-                    self.emit_error(
-                        TrussDiagnosticCode::UnexpectedToken,
-                        "Variadic parameter must be the last parameter and only one is allowed",
-                        &t,
-                    );
-                    return Err(());
-                }
-                self.index += 1;
-                let variadic_token = Token::new(
-                    "...".to_string(),
-                    TokenType::Identifier,
-                    t.position,
-                    self.file.clone(),
-                );
-                parameters.push(Rc::new(RefCell::new(Parameter {
-                    label: None,
-                    name: Box::new(variadic_token),
-                    type_expression: Rc::new(RefCell::new(Expression::Type {
-                        name: Box::new(Token::new(
-                            "Void".to_string(),
-                            TokenType::Identifier,
-                            t.position,
-                            self.file.clone(),
-                        )),
-                        type_parameters: None,
-                        ty: None,
-                    })),
-                    ty: None,
-                    variadic_kind: VariadicKind::BareVariadic,
-                })));
-                has_variadic = true;
-                let Some(comma_or_close) = self.peek() else {
-                    break;
-                };
-                if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
-                    self.index += 1;
-                }
-                continue;
-            }
-            let Some(first) = self.next() else {
-                self.emit_error(
-                    TrussDiagnosticCode::ExpectedIdentifier,
-                    "Expected parameter name",
-                    &t,
-                );
-                return Err(());
-            };
-            if TokenType::Identifier != first.ty {
-                self.emit_error(
-                    TrussDiagnosticCode::ExpectedIdentifier,
-                    format!("Expected parameter name but found '{}'", first.value),
-                    &first,
-                );
-                return Err(());
-            }
-
-            let (label_token, name_token) = if let Some(peeked) = self.peek()
-                && SeparatorType::is_separator(&peeked, SeparatorType::Colon)
-            {
-                (None, first)
-            } else {
-                let Some(second) = self.next() else {
-                    self.emit_error(
-                        TrussDiagnosticCode::ExpectedIdentifier,
-                        "Expected parameter name after label",
-                        &first,
-                    );
-                    return Err(());
-                };
-                if TokenType::Identifier != second.ty {
-                    self.emit_error(
-                        TrussDiagnosticCode::ExpectedIdentifier,
-                        format!("Expected parameter name but found '{}'", second.value),
-                        &second,
-                    );
-                    return Err(());
-                }
-                (Some(first), second)
-            };
-
-            let Some(colon) = self.next() else {
-                self.emit_error(
-                    TrussDiagnosticCode::MissingSeparator,
-                    "Expected ':' after parameter name",
-                    &name_token,
-                );
-                return Err(());
-            };
-            if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
-                self.emit_error(
-                    TrussDiagnosticCode::MissingSeparator,
-                    format!("Expected ':' but found '{}'", colon.value),
-                    &colon,
-                );
-                return Err(());
-            }
-            let type_expression = self.parse_type_expression()?;
-            let variadic_kind = if let Some(peeked) = self.peek()
-                && OperatorType::is_operator(&peeked, OperatorType::OpenRange)
-            {
-                if has_variadic {
-                    self.emit_error(
-                        TrussDiagnosticCode::UnexpectedToken,
-                        "Variadic parameter must be the last parameter and only one is allowed",
-                        &peeked,
-                    );
-                    return Err(());
-                }
-                self.index += 1;
-                has_variadic = true;
-                VariadicKind::TypedVariadic
-            } else {
-                VariadicKind::NotVariadic
-            };
-            parameters.push(Rc::new(RefCell::new(Parameter {
-                label: label_token.map(Box::new),
-                name: Box::new(name_token),
-                type_expression: Rc::new(RefCell::new(type_expression)),
-                ty: None,
-                variadic_kind,
-            })));
-            let Some(t) = self.peek() else { break };
-            if SeparatorType::is_separator(&t, SeparatorType::Comma) {
-                self.index += 1;
-            } else {
-                break;
-            }
-        }
-        let Some(next) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::MissingSeparator,
-                "Expected ')' to close parameter list",
-                &self.tokens[self.index.saturating_sub(1)],
-            );
-            return Err(());
-        };
-        if !SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
-            self.emit_error(
-                TrussDiagnosticCode::MissingSeparator,
-                format!("Expected ')' but found '{}'", next.value),
-                &next,
-            );
-            return Err(());
-        }
-        let return_type = if let Some(token) = self.peek()
-            && OperatorType::is_operator(&token, OperatorType::Arrow)
-        {
-            self.index += 1;
-            Some(self.parse_type_expression()?)
-        } else {
-            let current_token = self
-                .peek()
-                .unwrap_or_else(|| self.tokens[self.index.saturating_sub(1)].clone());
-            let void_token = Token::new(
-                "Void".to_string(),
-                TokenType::Identifier,
-                Position {
-                    len: 1,
-                    ..current_token.position
-                },
-                self.file.clone(),
-            );
-            Some(Expression::Type {
-                name: Box::new(void_token),
-                type_parameters: None,
-                ty: None,
-            })
-        };
-        Ok(Statement::FunctionDecl {
-            token: Box::new(token),
-            name: Box::new(name),
-            generic_parameters: vec![],
-            parameters,
-            return_type: return_type.map(RefCell::new).map(Rc::new),
-            body: Rc::new(RefCell::new(FunctionBody::None)),
-            ty: None,
-        })
-    }
-
-    fn parse_variable_decl_in_extern(&mut self) -> Result<Statement, ()> {
+    fn parse_variable_decl(&mut self, is_extern: bool) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -1393,11 +1111,20 @@ impl Parser {
         } else {
             None
         };
+        let initializer = if !is_extern
+            && let Some(t) = self.peek()
+            && OperatorType::is_operator(&t, OperatorType::Assign)
+        {
+            self.index += 1;
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
         Ok(Statement::VariableDecl {
             token: Box::new(token),
             name: Box::new(name),
             type_expression: type_expression.map(RefCell::new).map(Rc::new),
-            initializer: None,
+            initializer: initializer.map(RefCell::new).map(Rc::new),
             ty: None,
         })
     }
