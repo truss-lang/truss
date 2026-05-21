@@ -614,21 +614,6 @@ impl Parser {
             if let TokenType::Operator { .. } = t.ty
                 && OperatorType::is_operator(&t, OperatorType::OpenRange)
             {
-                if has_variadic {
-                    self.emit_error(
-                        TrussDiagnosticCode::UnexpectedToken,
-                        "Variadic parameter must be the last parameter and only one is allowed",
-                        &t,
-                    );
-                    self.skip();
-                    let Some(comma_or_close) = self.peek() else {
-                        break;
-                    };
-                    if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
-                        self.index += 1;
-                    }
-                    continue;
-                }
                 self.index += 1;
                 let variadic_token = Token::new(
                     "...".to_string(),
@@ -652,12 +637,31 @@ impl Parser {
                     ty: None,
                     variadic_kind: VariadicKind::BareVariadic,
                 })));
-                has_variadic = true;
-                let Some(comma_or_close) = self.peek() else {
-                    break;
-                };
-                if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
-                    self.index += 1;
+                if has_variadic {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        "Variadic parameter must be the last parameter and only one is allowed",
+                        &t,
+                    );
+                    let Some(comma_or_close) = self.peek() else {
+                        break;
+                    };
+                    if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
+                        self.index += 1;
+                    }
+                } else {
+                    has_variadic = true;
+                    let Some(comma_or_close) = self.peek() else {
+                        break;
+                    };
+                    if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            "Variadic parameter must be the last parameter and only one is allowed",
+                            &t,
+                        );
+                        self.index += 1;
+                    }
                 }
                 continue;
             }
@@ -722,19 +726,27 @@ impl Parser {
             let variadic_kind = if let Some(peeked) = self.peek()
                 && OperatorType::is_operator(&peeked, OperatorType::OpenRange)
             {
+                self.index += 1;
                 if has_variadic {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
                         "Variadic parameter must be the last parameter and only one is allowed",
                         &peeked,
                     );
-                    self.skip();
-                    VariadicKind::NotVariadic
                 } else {
-                    self.index += 1;
                     has_variadic = true;
-                    VariadicKind::TypedVariadic
+                    let Some(comma_or_close) = self.peek() else {
+                        break;
+                    };
+                    if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            "Variadic parameter must be the last parameter and only one is allowed",
+                            &peeked,
+                        );
+                    }
                 }
+                VariadicKind::TypedVariadic
             } else {
                 VariadicKind::NotVariadic
             };
