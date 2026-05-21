@@ -632,19 +632,36 @@ impl TypeResolver {
             } => {
                 let source_ty = self.infer_type(expression.clone())?;
                 let target_ty = self.infer_type(target_type.clone())?;
+                let token = Self::get_token_from_expr(expression);
 
-                if *kind != CastKind::ForceBitcast {
-                    if !Self::check_cast(&source_ty.borrow(), &target_ty.borrow()) {
-                        let token = Self::get_token_from_expr(expression);
-                        self.emit_error(
-                            TrussDiagnosticCode::TypeMismatch,
-                            format!(
-                                "Cannot cast from '{}' to '{}'",
-                                source_ty.borrow(),
-                                target_ty.borrow()
-                            ),
-                            &token,
-                        );
+                match kind {
+                    CastKind::ForceBitcast => {
+                        if !Self::check_cast_bitcast(&source_ty.borrow(), &target_ty.borrow()) {
+                            self.emit_error(
+                                TrussDiagnosticCode::TypeMismatch,
+                                format!(
+                                    "Cannot bitcast between types of different sizes: '{}' ({} bits) to '{}' ({} bits)",
+                                    source_ty.borrow(),
+                                    Self::get_type_size_bits(&source_ty.borrow()).unwrap_or(0),
+                                    target_ty.borrow(),
+                                    Self::get_type_size_bits(&target_ty.borrow()).unwrap_or(0)
+                                ),
+                                &token,
+                            );
+                        }
+                    }
+                    _ => {
+                        if !Self::check_cast(&source_ty.borrow(), &target_ty.borrow()) {
+                            self.emit_error(
+                                TrussDiagnosticCode::TypeMismatch,
+                                format!(
+                                    "Cannot cast from '{}' to '{}'",
+                                    source_ty.borrow(),
+                                    target_ty.borrow()
+                                ),
+                                &token,
+                            );
+                        }
                     }
                 }
                 *ty = Some(target_ty.clone());
@@ -910,6 +927,34 @@ impl TypeResolver {
         }
     }
 
+    fn get_type_size_bits(ty: &Type) -> Option<u32> {
+        match ty {
+            Type::Int8 | Type::UInt8 => Some(8),
+            Type::Int16 | Type::UInt16 => Some(16),
+            Type::Int32 | Type::UInt32 | Type::Float32 => Some(32),
+            Type::Int64 | Type::UInt64 | Type::Float64 => Some(64),
+            Type::Int128 | Type::UInt128 => Some(128),
+            Type::Bool | Type::Char => Some(8),
+            Type::Pointer(_) => Some(64),
+            _ => None,
+        }
+    }
+
+    fn check_cast_bitcast(source: &Type, target: &Type) -> bool {
+        let source_size = Self::get_type_size_bits(source);
+        let target_size = Self::get_type_size_bits(target);
+
+        match (source_size, target_size) {
+            (Some(s), Some(t)) => {
+                if s != t {
+                    return false;
+                }
+                true
+            }
+            _ => true,
+        }
+    }
+
     fn check_unary(
         &self,
         operator: UnaryOperator,
@@ -966,7 +1011,21 @@ impl TypeResolver {
             Expression::Call { callee, .. } => Self::get_token_from_expr(callee),
             Expression::Assignment { left, .. } => Self::get_token_from_expr(left),
             Expression::If { condition, .. } => Self::get_token_from_expr(condition),
-            Expression::Cast { token, .. } => (**token).clone(),
+            Expression::Cast {
+                token,
+                kind_tokens,
+                kind,
+                ..
+            } => match kind {
+                CastKind::ForceBitcast => {
+                    if let Some((_, second)) = kind_tokens {
+                        (**second).clone()
+                    } else {
+                        (**token).clone()
+                    }
+                }
+                _ => (**token).clone(),
+            },
             Expression::Block { statements } => {
                 if let Some(last) = statements.last() {
                     match &*last.borrow() {

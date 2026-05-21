@@ -1535,3 +1535,52 @@ fn test_cast_conditional_no_type_error() {
         panic!();
     }
 }
+
+#[test]
+fn test_cast_force_bitcast_same_size() {
+    let code = "func test() -> Int32 { let x = 3.14 as Float32 as!! Int32 return x }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0);
+}
+
+#[test]
+fn test_cast_force_bitcast_mismatched_size_error() {
+    let code = "func test() -> Int16 { let x = 3.14 as!! Int16 return x }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.len() > 0);
+    assert!(errors[0].message.contains("different sizes"));
+}
