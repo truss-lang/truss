@@ -1620,7 +1620,7 @@ fn test_struct_decl_type_resolve() {
 fn test_struct_type_reference() {
     let code = r#"
         struct Point { let x: Int32 let y: Int32 }
-        func test() -> Point { let p: Point = ??? return p }
+        func test() -> Point { var p: Point return p }
     "#;
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
@@ -1649,4 +1649,81 @@ fn test_struct_type_reference() {
         "Struct type 'Point' should be recognized, but found errors: {:?}",
         errors
     );
+}
+
+#[test]
+fn test_member_access_type_inference() {
+    let code = r#"
+        struct Point { let x: Int32 let y: Int32 }
+        func test() { let p: Point = ??? let val = p.x }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    let field_not_found_errors: Vec<_> = errors
+        .iter()
+        .filter(|e| e.message.contains("Field") && e.message.contains("not found"))
+        .collect();
+    assert!(
+        field_not_found_errors.is_empty(),
+        "Field 'x' should be found in struct Point, but found errors: {:?}",
+        errors
+    );
+
+    if let Statement::StructDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_struct_method_call() {
+    let code = r#"
+        struct Math { func double(x: Int32) -> Int32 { return x * 2 } }
+        func test() { 
+            let m: Math
+            let val = m.double(5)
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::StructDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Math");
+    } else {
+        panic!("Expected StructDecl");
+    }
 }

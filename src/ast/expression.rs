@@ -72,6 +72,7 @@ pub enum Expression {
     MemberAccess {
         object: Rc<RefCell<Expression>>,
         member: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     Binary {
         left: Rc<RefCell<Expression>>,

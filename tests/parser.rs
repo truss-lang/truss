@@ -1244,7 +1244,7 @@ fn test_parse_member_access_simple() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
-        && let Expression::MemberAccess { object, member } = &*expression.borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*expression.borrow()
     {
         if let Expression::Variable { name, .. } = &*object.borrow() {
             assert_eq!(name.value, "obj");
@@ -1269,12 +1269,13 @@ fn test_parse_member_access_chain() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
-        && let Expression::MemberAccess { object, member } = &*expression.borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*expression.borrow()
     {
         assert_eq!(member.value, "c");
         if let Expression::MemberAccess {
             object: inner_obj,
             member: inner_member,
+            ..
         } = &*object.borrow()
         {
             assert_eq!(inner_member.value, "b");
@@ -1307,7 +1308,7 @@ fn test_parse_member_access_with_call() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::Call { callee, .. } = &*expression.borrow()
-        && let Expression::MemberAccess { object, member } = &*callee.borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
     {
         if let Expression::Variable { name, .. } = &*object.borrow() {
             assert_eq!(name.value, "obj");
@@ -1336,7 +1337,7 @@ fn test_parse_member_access_in_assignment() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::Assignment { left, .. } = &*expression.borrow()
-        && let Expression::MemberAccess { object, member } = &*left.borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*left.borrow()
     {
         if let Expression::Variable { name, .. } = &*object.borrow() {
             assert_eq!(name.value, "obj");

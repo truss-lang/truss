@@ -467,6 +467,7 @@ impl Parser {
                         expression = Expression::MemberAccess {
                             object: Rc::new(RefCell::new(expression)),
                             member: Box::new(member_token),
+                            ty: None,
                         };
                     }
                     OperatorType::Less

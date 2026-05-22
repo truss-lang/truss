@@ -15,7 +15,7 @@ use crate::{
     lexer::token::{Position, Token, TokenType},
     scope::Scope,
     symbol::Symbol,
-    types::{StructInfo, Type},
+    types::Type,
 };
 
 #[derive(Debug)]
@@ -140,17 +140,69 @@ impl TypeResolver {
                 };
 
                 if let Some(id) = struct_id {
-                    let struct_ty = Rc::new(RefCell::new(Type::Struct(Rc::new(RefCell::new(
-                        StructInfo::new(name.value.clone(), id),
-                    )))));
+                    let struct_ty = Rc::new(RefCell::new(Type::Struct(name.value.clone(), id)));
                     self.current_scope
                         .as_ref()
                         .unwrap()
                         .borrow_mut()
                         .set_type(name.value.clone(), struct_ty);
                 }
+
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for stmt in body {
+                    let method_info: Option<(String, Rc<RefCell<Type>>, Vec<Rc<RefCell<Type>>>)> = {
+                        if struct_id.is_some() {
+                            if let Statement::FunctionDecl {
+                                name: method_name,
+                                parameters,
+                                return_type,
+                                ..
+                            } = &*stmt.borrow()
+                            {
+                                let ret_type = if let Some(return_type_expr) = return_type {
+                                    self.infer_type(return_type_expr.clone())
+                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                                } else {
+                                    Rc::new(RefCell::new(Type::Void))
+                                };
+
+                                let mut parameter_types = Vec::new();
+                                let mut is_vararg = false;
+                                for param in parameters.iter() {
+                                    if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                        is_vararg = true;
+                                        continue;
+                                    }
+                                    let param_type =
+                                        self.infer_type(param.borrow().type_expression.clone());
+                                    if let Some(ref param_type) = param_type {
+                                        param.borrow_mut().ty = Some(param_type.clone());
+                                        parameter_types.push(param_type.clone());
+                                    }
+                                    if param.borrow().variadic_kind != VariadicKind::NotVariadic {
+                                        is_vararg = true;
+                                    }
+                                }
+
+                                let fn_type = Rc::new(RefCell::new(Type::Function(
+                                    parameter_types.clone(),
+                                    ret_type,
+                                    is_vararg,
+                                )));
+                                Some((method_name.value.clone(), fn_type, parameter_types))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    };
+
+                    if let Some((_method_name, fn_type, _)) = method_info {
+                        if let Statement::FunctionDecl { ty, .. } = &mut *stmt.borrow_mut() {
+                            *ty = Some(fn_type.clone());
+                        }
+                    }
                     self.process_decl(stmt.clone());
                 }
                 self.leave_scope();
@@ -699,8 +751,78 @@ impl TypeResolver {
                 *ty = Some(target_ty.clone());
                 target_ty
             }
-            Expression::MemberAccess { object, member } => {
-                todo!()
+            Expression::MemberAccess { object, member, ty } => {
+                let object_ty = self.infer_type(object.clone())?;
+                match &*object_ty.borrow() {
+                    Type::Struct(struct_name, struct_id) => {
+                        let scope = self.current_scope.as_ref().unwrap().borrow();
+                        if let Some(symbol) = scope.get_symbol(struct_name)
+                            && let Symbol::Struct {
+                                fields, methods, ..
+                            } = &*symbol
+                        {
+                            for field in fields {
+                                if field.name().as_ref().ok() == Some(&member.value) {
+                                    if let Some(decl) = field.get_decl().ok().flatten() {
+                                        if let Statement::VariableDecl { ty: field_ty, .. } =
+                                            &*decl.borrow()
+                                        {
+                                            if let Some(t) = field_ty {
+                                                *ty = Some(t.clone());
+                                                return Some(t.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            for method in methods {
+                                if method.name().as_ref().ok() == Some(&member.value) {
+                                    if let Some(decl) = method.get_decl().ok().flatten() {
+                                        if let Statement::FunctionDecl { ty: method_ty, .. } =
+                                            &*decl.borrow()
+                                        {
+                                            if let Some(t) = method_ty {
+                                                *ty = Some(t.clone());
+                                                return Some(t.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            let token = &*member;
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!(
+                                    "Field '{}' not found on struct '{}'",
+                                    member.value, struct_name
+                                ),
+                                token,
+                            );
+                            return None;
+                        } else {
+                            let token = &*member;
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!("Struct symbol '{}' not found", struct_name),
+                                token,
+                            );
+                            return None;
+                        }
+                    }
+                    _ => {
+                        let token = &*member;
+                        self.emit_error(
+                            TrussDiagnosticCode::FieldNotFound,
+                            format!(
+                                "Cannot access member '{}' of non-struct type '{}'",
+                                member.value,
+                                object_ty.borrow()
+                            ),
+                            token,
+                        );
+                        return None;
+                    }
+                }
             }
         };
         Some(result)

@@ -45,6 +45,7 @@ pub enum TrussDiagnosticCode {
     InvalidConditionType,
     BranchTypeMismatch,
     CallingNonFunction,
+    FieldNotFound,
 
     IRError,
     UnsupportedFeature,
@@ -96,6 +97,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::InvalidConditionType => "E0312",
             Self::BranchTypeMismatch => "E0313",
             Self::CallingNonFunction => "E0314",
+            Self::FieldNotFound => "E0315",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",

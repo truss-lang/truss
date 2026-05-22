@@ -82,12 +82,8 @@ impl SymbolResolver {
                 name, body, scope, ..
             } => {
                 let struct_id = self.get_symbol_id();
-                let struct_symbol = Rc::new(Symbol::Struct {
-                    name: name.value.clone(),
-                    id: struct_id,
-                    decl: stmt.clone(),
-                });
-                self.enter(struct_symbol, name);
+                let mut fields = Vec::new();
+                let mut methods = Vec::new();
 
                 *scope = Some(self.enter_scope(None));
                 for field_stmt in body {
@@ -102,6 +98,7 @@ impl SymbolResolver {
                             parent: struct_id,
                             decl: Some(field_stmt.clone()),
                         });
+                        fields.push(field_symbol.clone());
                         self.enter(field_symbol, field_name);
                     } else if let Statement::FunctionDecl {
                         name: method_name, ..
@@ -114,6 +111,7 @@ impl SymbolResolver {
                             parent: struct_id,
                             decl: Some(field_stmt.clone()),
                         });
+                        methods.push(method_symbol.clone());
                         self.enter(method_symbol, method_name);
                         if let Statement::FunctionDecl {
                             body: method_body, ..
@@ -136,6 +134,15 @@ impl SymbolResolver {
                     }
                 }
                 self.leave_scope();
+
+                let struct_symbol = Rc::new(Symbol::Struct {
+                    name: name.value.clone(),
+                    id: struct_id,
+                    decl: stmt.clone(),
+                    fields,
+                    methods,
+                });
+                self.enter(struct_symbol, name);
             }
             Statement::ExternBlock { items, .. } => {
                 for item in items {

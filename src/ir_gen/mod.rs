@@ -194,7 +194,7 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_function_declarations_in_expr(&self, expr: Rc<RefCell<Expression>>) {
-        if let Expression::Block { statements } = &*expr.borrow() {
+        if let Expression::Block { statements, .. } = &*expr.borrow() {
             for stmt in statements {
                 self.create_function_declarations(stmt.clone());
             }
@@ -211,7 +211,7 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn resolve_block_expression(&self, block_expr: Rc<RefCell<Expression>>) -> Result<bool> {
-        if let Expression::Block { statements } = &*block_expr.borrow() {
+        if let Expression::Block { statements, .. } = &*block_expr.borrow() {
             self.enter_scope_with_stmts(statements)?;
             self.resolve_block_stmts(statements)
         } else {
@@ -456,7 +456,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     .const_null()
                     .into(),
             )),
-            Expression::Block { statements } => {
+            Expression::Block { statements, .. } => {
                 self.enter_scope_with_stmts(statements)?;
                 self.resolve_block_stmts(statements)?;
 
@@ -1313,7 +1313,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("Nested function types are not supported");
             }
             Type::Pointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
-            Type::Struct(_) => {
+            Type::Struct(..) => {
                 self.emit_error(
                     TrussDiagnosticCode::StructTypeNotSupported,
                     "Struct types are not yet supported in IR generation",
