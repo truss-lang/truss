@@ -339,6 +339,11 @@ impl TypeResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.resolve_statement(statement.clone());
             }
+            Statement::StructDecl { body, .. } => {
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
+            }
             _ => {}
         }
     }
