@@ -1261,10 +1261,7 @@ fn test_parse_member_access_simple() {
 fn test_parse_member_access_chain() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "func test() { a.b.c }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("func test() { a.b.c }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -1275,7 +1272,11 @@ fn test_parse_member_access_chain() {
         && let Expression::MemberAccess { object, member } = &*expression.borrow()
     {
         assert_eq!(member.value, "c");
-        if let Expression::MemberAccess { object: inner_obj, member: inner_member } = &*object.borrow() {
+        if let Expression::MemberAccess {
+            object: inner_obj,
+            member: inner_member,
+        } = &*object.borrow()
+        {
             assert_eq!(inner_member.value, "b");
             if let Expression::Variable { name, .. } = &*inner_obj.borrow() {
                 assert_eq!(name.value, "a");
