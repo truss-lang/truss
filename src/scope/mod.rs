@@ -18,15 +18,28 @@ impl Scope {
             parent,
         }
     }
+    pub fn get_symbol(&self, name: &str) -> Option<Rc<Symbol>> {
+        if let Some(symbol) = self.name_table.get(name) {
+            Some(symbol.clone())
+        } else if let Some(parent) = &self.parent {
+            parent.borrow().get_symbol(name)
+        } else {
+            None
+        }
+    }
+    pub fn set_symbol(&mut self, symbol: Rc<Symbol>) {
+        self.symbols.insert(symbol.id(), symbol.clone());
+        self.name_table.insert(symbol.name().unwrap(), symbol);
+    }
 
     pub fn get_type(&self, name: &str) -> Option<Rc<RefCell<Type>>> {
         if let Some(ty) = self.type_env.get(name) {
-            return Some(ty.clone());
+            Some(ty.clone())
+        } else if let Some(parent) = &self.parent {
+            parent.borrow().get_type(name)
+        } else {
+            None
         }
-        if let Some(parent) = &self.parent {
-            return parent.borrow().get_type(name);
-        }
-        None
     }
 
     pub fn set_type(&mut self, name: String, ty: Rc<RefCell<Type>>) {

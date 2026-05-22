@@ -12,7 +12,7 @@ pub enum Symbol {
     Function {
         name: String,
         id: SymbolId,
-        decl: Option<Rc<RefCell<Statement>>>,
+        decl: Rc<RefCell<Statement>>,
     },
     Variable {
         name: String,
@@ -23,7 +23,7 @@ pub enum Symbol {
     Struct {
         name: String,
         id: SymbolId,
-        decl: Option<Rc<RefCell<Statement>>>,
+        decl: Rc<RefCell<Statement>>,
     },
     StructField {
         name: String,
@@ -60,9 +60,9 @@ impl Symbol {
     }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
         match self {
-            Self::Function { decl, .. } => Ok(decl.clone()),
+            Self::Function { decl, .. } => Ok(Some(decl.clone())),
             Self::Variable { decl, .. } => Ok(decl.clone()),
-            Self::Struct { decl, .. } => Ok(decl.clone()),
+            Self::Struct { decl, .. } => Ok(Some(decl.clone())),
             Self::StructField { decl, .. } => Ok(decl.clone()),
             Self::StructMethod { decl, .. } => Ok(decl.clone()),
         }

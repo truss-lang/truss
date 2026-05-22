@@ -42,7 +42,8 @@ impl SymbolResolver {
             .name_to_modules
             .insert(module_name, module.clone());
         self.current_module = Some(module.clone());
-        self.enter_scope(None);
+        let scope = self.enter_scope(None);
+        self.current_module.as_ref().unwrap().borrow_mut().scope = Some(scope.clone());
 
         for stmt in &program.statements {
             self.register_symbols(stmt.clone());
@@ -62,9 +63,9 @@ impl SymbolResolver {
                 let symbol = Rc::new(Symbol::Function {
                     name: name.value.clone(),
                     id,
-                    decl: Some(stmt.clone()),
+                    decl: stmt.clone(),
                 });
-                self.enter(id, symbol, name);
+                self.enter(symbol, name);
                 match &*body.borrow() {
                     FunctionBody::Statements(stmts) => {
                         for s in stmts {
@@ -84,9 +85,9 @@ impl SymbolResolver {
                 let struct_symbol = Rc::new(Symbol::Struct {
                     name: name.value.clone(),
                     id: struct_id,
-                    decl: Some(stmt.clone()),
+                    decl: stmt.clone(),
                 });
-                self.enter(struct_id, struct_symbol, name);
+                self.enter(struct_symbol, name);
 
                 *scope = Some(self.enter_scope(None));
                 for field_stmt in body {
@@ -101,7 +102,7 @@ impl SymbolResolver {
                             parent: struct_id,
                             decl: Some(field_stmt.clone()),
                         });
-                        self.enter(field_id, field_symbol, field_name);
+                        self.enter(field_symbol, field_name);
                     } else if let Statement::FunctionDecl {
                         name: method_name, ..
                     } = &*field_stmt.borrow()
@@ -113,7 +114,7 @@ impl SymbolResolver {
                             parent: struct_id,
                             decl: Some(field_stmt.clone()),
                         });
-                        self.enter(method_id, method_symbol, method_name);
+                        self.enter(method_symbol, method_name);
                         if let Statement::FunctionDecl {
                             body: method_body, ..
                         } = &*field_stmt.borrow()
@@ -176,7 +177,7 @@ impl SymbolResolver {
                             decl: None,
                             parameter: Some(parameter.clone()),
                         });
-                        self.enter(id, symbol, &parameter.borrow().name);
+                        self.enter(symbol, &parameter.borrow().name);
                     }
                 }
                 if let Some(return_type) = return_type {
@@ -196,7 +197,7 @@ impl SymbolResolver {
                         decl: Some(stmt.clone()),
                         parameter: None,
                     });
-                    self.enter(id, symbol, name);
+                    self.enter(symbol, name);
                 }
                 if let Some(initializer) = initializer {
                     self.resolve_expression(initializer.clone());
@@ -240,18 +241,16 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Expression::Variable { name, symbol, .. } => {
-                match self.resolve_symbol(name.value.clone()) {
-                    Ok(sym) => *symbol = Some(sym),
-                    Err(_) => {
-                        self.emit_error(
-                            TrussDiagnosticCode::UndefinedVariable,
-                            format!("Undefined variable '{}'", name.value),
-                            name.as_ref(),
-                        );
-                    }
+            Expression::Variable { name, symbol, .. } => match self.resolve_symbol(name) {
+                Ok(sym) => *symbol = Some(sym),
+                Err(_) => {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedVariable,
+                        format!("Undefined variable '{}'", name.value),
+                        name.as_ref(),
+                    );
                 }
-            }
+            },
             Expression::Call {
                 callee,
                 type_parameters,
@@ -283,32 +282,35 @@ impl SymbolResolver {
         }
     }
 
-    fn enter(&mut self, id: SymbolId, symbol: Rc<Symbol>, token: &Token) {
-        let name = match symbol.name() {
-            Ok(n) => n,
-            Err(_) => return,
-        };
+    fn enter(&mut self, symbol: Rc<Symbol>, token: &Token) {
         if let Some(scope) = self.current_scope.clone() {
-            let mut scope_mut = scope.borrow_mut();
-            scope_mut.symbols.insert(id, symbol.clone());
-            scope_mut.name_table.insert(name, symbol);
+            scope.borrow_mut().set_symbol(symbol.clone());
         } else {
+            let name = match symbol.name() {
+                Ok(n) => n,
+                Err(_) => return,
+            };
             self.emit_error(
-                TrussDiagnosticCode::NoAvaliableScope,
+                TrussDiagnosticCode::SymbolError,
                 format!("No avaliable scope for symbol '{}'", name),
                 token,
             );
         }
     }
 
-    fn resolve_symbol(&mut self, name: String) -> Result<Rc<Symbol>, ()> {
+    fn resolve_symbol(&mut self, token: &Token) -> Result<Rc<Symbol>, ()> {
+        let name = token.value.clone();
         if let Some(current_scope) = self.current_scope.clone()
             && let Some(symbol) = self.resolve_symbol_in_scope(name.clone(), current_scope)?
         {
             Ok(symbol)
         } else {
-            let module = self.current_module.clone().unwrap();
-            module.borrow().name_table.get(&name).cloned().ok_or(())
+            self.emit_error(
+                TrussDiagnosticCode::SymbolError,
+                format!("No avaliable scope for symbol '{}'", name),
+                token,
+            );
+            Err(())
         }
     }
 
@@ -317,7 +319,7 @@ impl SymbolResolver {
         name: String,
         scope: Rc<RefCell<Scope>>,
     ) -> Result<Option<Rc<Symbol>>, ()> {
-        if let Some(symbol) = scope.borrow().name_table.get(&name).cloned() {
+        if let Some(symbol) = scope.borrow().get_symbol(&name) {
             Ok(Some(symbol))
         } else if let Some(parent) = scope.borrow().parent.clone() {
             self.resolve_symbol_in_scope(name, parent)

@@ -54,8 +54,6 @@ pub enum TrussDiagnosticCode {
     TypeInferenceFailed,
     IRVariableNotFound,
     StructTypeNotSupported,
-
-    NoAvaliableScope,
 }
 
 impl DiagnosticCode for TrussDiagnosticCode {
@@ -107,8 +105,6 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::TypeInferenceFailed => "E0406",
             Self::IRVariableNotFound => "E0407",
             Self::StructTypeNotSupported => "E0408",
-
-            Self::NoAvaliableScope => "E0500",
         }
     }
 
