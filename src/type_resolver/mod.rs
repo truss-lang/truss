@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{
@@ -13,42 +13,17 @@ use crate::{
     id::ModuleId,
     krate::{Crate, Module},
     lexer::token::{Position, Token, TokenType},
+    scope::Scope,
     symbol::Symbol,
-    types::Type,
+    types::{StructInfo, Type},
 };
-
-#[derive(Debug, Clone)]
-struct TypeEnv {
-    vars: HashMap<String, Rc<RefCell<Type>>>,
-    parent: Option<Rc<RefCell<TypeEnv>>>,
-}
-impl TypeEnv {
-    fn new(parent: Option<Rc<RefCell<TypeEnv>>>) -> Self {
-        Self {
-            vars: HashMap::new(),
-            parent,
-        }
-    }
-    fn get(&self, name: &str) -> Option<Rc<RefCell<Type>>> {
-        if let Some(ty) = self.vars.get(name) {
-            return Some(ty.clone());
-        }
-        if let Some(parent) = &self.parent {
-            return parent.borrow().get(name);
-        }
-        None
-    }
-    fn set(&mut self, name: String, ty: Rc<RefCell<Type>>) {
-        self.vars.insert(name, ty);
-    }
-}
 
 #[derive(Debug)]
 pub struct TypeResolver {
     pub krate: Rc<RefCell<Crate>>,
     current_module: Option<Rc<RefCell<Module>>>,
     current_return_type: Option<Rc<RefCell<Type>>>,
-    type_env: Option<Rc<RefCell<TypeEnv>>>,
+    current_scope: Option<Rc<RefCell<Scope>>>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
 }
 
@@ -58,14 +33,22 @@ impl TypeResolver {
             krate,
             current_module: None,
             current_return_type: None,
-            type_env: None,
+            current_scope: None,
             engine,
         }
     }
 
     pub fn resolve(&mut self, program: &Program, id: ModuleId) {
         self.current_module = self.krate.borrow().modules.get(&id).cloned();
-        self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(None))));
+        let scope = self
+            .current_module
+            .as_ref()
+            .unwrap()
+            .borrow()
+            .scope
+            .clone()
+            .unwrap();
+        self.enter_scope(scope);
 
         for stmt in &program.statements {
             self.process_decl(stmt.clone());
@@ -74,6 +57,8 @@ impl TypeResolver {
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
         }
+
+        self.leave_scope();
     }
 
     fn process_decl(&mut self, statement: Rc<RefCell<Statement>>) {
@@ -82,8 +67,9 @@ impl TypeResolver {
                 name,
                 parameters,
                 return_type,
-                ty,
                 body,
+                scope,
+                ty,
                 ..
             } => {
                 let ret_type = if let Some(return_type_expr) = return_type {
@@ -117,11 +103,13 @@ impl TypeResolver {
                 )));
                 *ty = Some(fn_type.clone());
 
-                self.type_env
+                self.current_scope
                     .as_ref()
                     .unwrap()
                     .borrow_mut()
-                    .set(name.value.clone(), fn_type);
+                    .set_type(name.value.clone(), fn_type);
+
+                self.enter_scope(scope.as_ref().unwrap().clone());
 
                 match &*body.borrow() {
                     FunctionBody::Statements(stmts) => {
@@ -134,22 +122,38 @@ impl TypeResolver {
                     }
                     FunctionBody::None => {}
                 }
+
+                self.leave_scope();
             }
-            Statement::StructDecl { name, body, .. } => {
-                if let Some(module) = &self.current_module
-                    && let Some(symbol) = module.borrow().name_table.get(&name.value)
-                    && let Symbol::Struct { id, .. } = &**symbol
-                {
-                    let struct_ty = Rc::new(RefCell::new(Type::Struct(*id)));
-                    self.type_env
+            Statement::StructDecl {
+                name, body, scope, ..
+            } => {
+                let struct_id = {
+                    if let Some(current_scope) = &self.current_scope
+                        && let Some(symbol) = current_scope.borrow().name_table.get(&name.value)
+                        && let Symbol::Struct { id, .. } = &**symbol
+                    {
+                        Some(*id)
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(id) = struct_id {
+                    let struct_ty = Rc::new(RefCell::new(Type::Struct(Rc::new(RefCell::new(
+                        StructInfo::new(name.value.clone(), id),
+                    )))));
+                    self.current_scope
                         .as_ref()
                         .unwrap()
                         .borrow_mut()
-                        .set(name.value.clone(), struct_ty);
+                        .set_type(name.value.clone(), struct_ty);
                 }
+                self.enter_scope(scope.as_ref().unwrap().clone());
                 for stmt in body {
                     self.process_decl(stmt.clone());
                 }
+                self.leave_scope();
             }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
@@ -164,7 +168,7 @@ impl TypeResolver {
     }
 
     fn process_function_decl_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
-        if let Expression::Block { statements } = &*expr.borrow() {
+        if let Expression::Block { statements, .. } = &*expr.borrow() {
             for stmt in statements {
                 self.process_decl(stmt.clone());
             }
@@ -191,21 +195,21 @@ impl TypeResolver {
                             );
                         }
                         *ty = Some(annotated.clone());
-                        self.type_env
+                        self.current_scope
                             .as_ref()
                             .unwrap()
                             .borrow_mut()
-                            .set(name.value.clone(), annotated);
+                            .set_type(name.value.clone(), annotated);
                     }
                 } else if let Some(init) = initializer {
                     let init_ty = self.infer_type(init.clone());
                     if let Some(init_ty) = init_ty {
                         *ty = Some(init_ty.clone());
-                        self.type_env
+                        self.current_scope
                             .as_ref()
                             .unwrap()
                             .borrow_mut()
-                            .set(name.value.clone(), init_ty);
+                            .set_type(name.value.clone(), init_ty);
                     }
                 } else {
                     self.emit_error(
@@ -218,6 +222,7 @@ impl TypeResolver {
             Statement::FunctionDecl {
                 parameters,
                 body,
+                scope,
                 ty,
                 ..
             } => {
@@ -239,23 +244,21 @@ impl TypeResolver {
                     Rc::new(RefCell::new(Type::Void))
                 };
                 self.current_return_type = Some(ret_type.clone());
-
-                let last_type_env = self.type_env.clone();
-                self.type_env = Some(Rc::new(RefCell::new(TypeEnv::new(last_type_env.clone()))));
+                self.enter_scope(scope.as_ref().unwrap().clone());
 
                 for param in parameters.iter() {
                     if let Some(param_ty) = param.borrow().ty.clone() {
-                        self.type_env
+                        self.current_scope
                             .as_ref()
                             .unwrap()
                             .borrow_mut()
-                            .set(param.borrow().name.value.clone(), param_ty);
+                            .set_type(param.borrow().name.value.clone(), param_ty);
                     }
                 }
 
                 self.resolve_function_body(body.clone());
 
-                self.type_env = last_type_env;
+                self.leave_scope();
                 self.current_return_type = last_return_type;
             }
             Statement::Return {
@@ -349,7 +352,7 @@ impl TypeResolver {
     }
 
     fn resolve_block_expression(&mut self, block_expr: Rc<RefCell<Expression>>) {
-        if let Expression::Block { statements } = &*block_expr.borrow() {
+        if let Expression::Block { statements, .. } = &*block_expr.borrow() {
             for stmt in statements {
                 self.resolve_statement(stmt.clone());
             }
@@ -395,12 +398,13 @@ impl TypeResolver {
                 Type::Void,
             )))))),
             _ => {
-                if let Some(module) = &self.current_module {
-                    if let Some(symbol) = module.borrow().name_table.get(name) {
-                        if let crate::symbol::Symbol::Struct { id, .. } = &**symbol {
-                            return Some(Rc::new(RefCell::new(Type::Struct(*id))));
-                        }
-                    }
+                if let Some(current_scope) = &self.current_scope
+                    && let Some(symbol) = current_scope.borrow().name_table.get(name)
+                    && let Symbol::Struct { decl, .. } = &**symbol
+                    && let Statement::StructDecl { ty, .. } = &*decl.borrow()
+                    && let Some(ty) = ty
+                {
+                    return Some(ty.clone());
                 }
                 self.emit_error(
                     TrussDiagnosticCode::UnknownType,
@@ -429,7 +433,7 @@ impl TypeResolver {
             Expression::BooleanLiteral { .. } => Rc::new(RefCell::new(Type::Bool)),
             Expression::Variable { name, ty, .. } => {
                 let t = self
-                    .type_env
+                    .current_scope
                     .as_ref()
                     .ok_or_else(|| {
                         self.emit_error(
@@ -440,7 +444,7 @@ impl TypeResolver {
                     })
                     .ok()?
                     .borrow()
-                    .get(&name.value);
+                    .get_type(&name.value);
                 let t = t?;
                 *ty = Some(t.clone());
                 t
@@ -450,7 +454,7 @@ impl TypeResolver {
                 *ty = Some(t.clone());
                 t
             }
-            Expression::Block { statements } => {
+            Expression::Block { statements, .. } => {
                 let mut last_ty = Rc::new(RefCell::new(Type::Void));
                 for stmt in statements.iter() {
                     if let Some(ty) = self.infer_statement_type(stmt.clone()) {
@@ -697,6 +701,9 @@ impl TypeResolver {
                 }
                 *ty = Some(target_ty.clone());
                 target_ty
+            }
+            Expression::MemberAccess { object, member } => {
+                todo!()
             }
         };
         Some(result)
@@ -1057,7 +1064,7 @@ impl TypeResolver {
                 }
                 _ => (**token).clone(),
             },
-            Expression::Block { statements } => {
+            Expression::Block { statements, .. } => {
                 if let Some(last) = statements.last() {
                     match &*last.borrow() {
                         Statement::ExpressionStatement { expression } => {
@@ -1093,6 +1100,7 @@ impl TypeResolver {
                     )
                 }
             }
+            Expression::MemberAccess { object, .. } => Self::get_token_from_expr(object),
         }
     }
 
@@ -1174,6 +1182,13 @@ impl TypeResolver {
                 (None, None) => {}
             }
         }
+    }
+    fn enter_scope(&mut self, scope: Rc<RefCell<Scope>>) {
+        self.current_scope = Some(scope);
+    }
+
+    fn leave_scope(&mut self) {
+        self.current_scope = self.current_scope.clone().unwrap().borrow().parent.clone();
     }
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {

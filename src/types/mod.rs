@@ -1,6 +1,24 @@
-use std::{cell::RefCell, fmt, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use crate::id::SymbolId;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructInfo {
+    pub name: String,
+    pub symbol_id: SymbolId,
+    pub fields: HashMap<String, Rc<RefCell<Type>>>,
+    pub methods: HashMap<String, Rc<RefCell<Type>>>,
+}
+impl StructInfo {
+    pub fn new(name: String, symbol_id: SymbolId) -> Self {
+        Self {
+            name,
+            symbol_id,
+            fields: HashMap::new(),
+            methods: HashMap::new(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -22,7 +40,7 @@ pub enum Type {
     Bool,
     Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool),
     Pointer(Rc<RefCell<Type>>),
-    Struct(SymbolId),
+    Struct(Rc<RefCell<StructInfo>>),
 }
 
 impl fmt::Display for Type {
@@ -58,7 +76,7 @@ impl fmt::Display for Type {
                 write!(f, ") -> {}", ret.borrow())
             }
             Type::Pointer(inner) => write!(f, "{}*", inner.borrow()),
-            Type::Struct(symbol_id) => write!(f, "Struct({})", symbol_id.id),
+            Type::Struct(struct_info) => write!(f, "Struct({})", struct_info.borrow().name),
         }
     }
 }
