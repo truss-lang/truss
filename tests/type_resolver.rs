@@ -1727,3 +1727,64 @@ fn test_struct_method_call() {
         panic!("Expected StructDecl");
     }
 }
+
+#[test]
+fn test_struct_init_deinit_type() {
+    let code = r#"
+        struct Point { let x: Int32 init(x: Int32) { } deinit { } }
+        func test() {
+            let p: Point
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(body.len(), 3);
+        if let Statement::InitDecl { ty, .. } = &*body[1].borrow() {
+            assert!(ty.is_some());
+            let fn_type = ty.as_ref().unwrap().borrow().clone();
+            if let Type::Function(param_tys, ret_ty, is_vararg) = &fn_type {
+                assert_eq!(param_tys.len(), 1);
+                assert_eq!(*ret_ty.borrow(), Type::Void);
+                assert!(!is_vararg);
+            } else {
+                panic!("Expected Function type for init");
+            }
+        } else {
+            panic!("Expected InitDecl");
+        }
+        if let Statement::DeinitDecl { ty, .. } = &*body[2].borrow() {
+            assert!(ty.is_some());
+            let fn_type = ty.as_ref().unwrap().borrow().clone();
+            if let Type::Function(param_tys, ret_ty, is_vararg) = &fn_type {
+                assert_eq!(param_tys.len(), 0);
+                assert_eq!(*ret_ty.borrow(), Type::Void);
+                assert!(!is_vararg);
+            } else {
+                panic!("Expected Function type for deinit");
+            }
+        } else {
+            panic!("Expected DeinitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}

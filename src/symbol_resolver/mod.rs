@@ -141,6 +141,52 @@ impl SymbolResolver {
                                 FunctionBody::None => {}
                             }
                         }
+                    } else if let Statement::InitDecl { body, .. } = &*field_stmt.borrow() {
+                        let init_id = self.get_symbol_id();
+                        let init_symbol = Rc::new(Symbol::StructMethod {
+                            name: "init".to_string(),
+                            id: init_id,
+                            parent: struct_id,
+                            decl: Some(field_stmt.clone()),
+                        });
+                        methods.push(init_symbol.clone());
+                        let init_token = {
+                            let stmt = field_stmt.borrow();
+                            if let Statement::InitDecl { token, .. } = &*stmt {
+                                Box::new(token.clone())
+                            } else {
+                                unreachable!()
+                            }
+                        };
+                        self.enter(init_symbol, &init_token);
+                        if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                            for s in stmts {
+                                self.register_symbols(s.clone());
+                            }
+                        }
+                    } else if let Statement::DeinitDecl { body, .. } = &*field_stmt.borrow() {
+                        let deinit_id = self.get_symbol_id();
+                        let deinit_symbol = Rc::new(Symbol::StructMethod {
+                            name: "deinit".to_string(),
+                            id: deinit_id,
+                            parent: struct_id,
+                            decl: Some(field_stmt.clone()),
+                        });
+                        methods.push(deinit_symbol.clone());
+                        let deinit_token = {
+                            let stmt = field_stmt.borrow();
+                            if let Statement::DeinitDecl { token, .. } = &*stmt {
+                                Box::new(token.clone())
+                            } else {
+                                unreachable!()
+                            }
+                        };
+                        self.enter(deinit_symbol, &deinit_token);
+                        if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                            for s in stmts {
+                                self.register_symbols(s.clone());
+                            }
+                        }
                     } else {
                         self.register_symbols(field_stmt.clone());
                     }
@@ -227,6 +273,29 @@ impl SymbolResolver {
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
                 }
+                self.leave_scope();
+            }
+            Statement::InitDecl { parameters, body, scope, .. } => {
+                *scope = Some(self.enter_scope(None));
+                for parameter in parameters {
+                    let name = parameter.borrow().name.value.clone();
+                    if name != "_" {
+                        let id = self.get_symbol_id();
+                        let symbol = Rc::new(Symbol::Variable {
+                            name,
+                            id,
+                            decl: None,
+                            parameter: Some(parameter.clone()),
+                        });
+                        self.enter(symbol, &parameter.borrow().name);
+                    }
+                }
+                self.resolve_function_body(body.clone());
+                self.leave_scope();
+            }
+            Statement::DeinitDecl { body, scope, .. } => {
+                *scope = Some(self.enter_scope(None));
+                self.resolve_function_body(body.clone());
                 self.leave_scope();
             }
             Statement::ExpressionStatement { expression } => {

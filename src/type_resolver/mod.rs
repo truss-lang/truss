@@ -207,6 +207,57 @@ impl TypeResolver {
                 }
                 self.leave_scope();
             }
+            Statement::InitDecl {
+                parameters,
+                body,
+                scope,
+                ty,
+                ..
+            } => {
+                let ret_type = Rc::new(RefCell::new(Type::Void));
+                let mut parameter_types = Vec::new();
+                for param in parameters.iter() {
+                    let param_type = self.infer_type(param.borrow().type_expression.clone());
+                    if let Some(ref param_type) = param_type {
+                        param.borrow_mut().ty = Some(param_type.clone());
+                        parameter_types.push(param_type.clone());
+                    }
+                }
+                let fn_type = Rc::new(RefCell::new(Type::Function(
+                    parameter_types,
+                    ret_type,
+                    false,
+                )));
+                *ty = Some(fn_type.clone());
+
+                self.enter_scope(scope.as_ref().unwrap().clone());
+
+                if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                    for s in stmts {
+                        self.process_decl(s.clone());
+                    }
+                }
+
+                self.leave_scope();
+            }
+            Statement::DeinitDecl { body, scope, ty, .. } => {
+                let fn_type = Rc::new(RefCell::new(Type::Function(
+                    vec![],
+                    Rc::new(RefCell::new(Type::Void)),
+                    false,
+                )));
+                *ty = Some(fn_type.clone());
+
+                self.enter_scope(scope.as_ref().unwrap().clone());
+
+                if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                    for s in stmts {
+                        self.process_decl(s.clone());
+                    }
+                }
+
+                self.leave_scope();
+            }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
                     self.process_decl(item.clone());
@@ -312,6 +363,32 @@ impl TypeResolver {
 
                 self.leave_scope();
                 self.current_return_type = last_return_type;
+            }
+            Statement::InitDecl {
+                parameters,
+                body,
+                scope,
+                ..
+            } => {
+                self.enter_scope(scope.as_ref().unwrap().clone());
+
+                for param in parameters.iter() {
+                    if let Some(param_ty) = param.borrow().ty.clone() {
+                        self.current_scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_type(param.borrow().name.value.clone(), param_ty);
+                    }
+                }
+
+                self.resolve_function_body(body.clone());
+                self.leave_scope();
+            }
+            Statement::DeinitDecl { body, scope, .. } => {
+                self.enter_scope(scope.as_ref().unwrap().clone());
+                self.resolve_function_body(body.clone());
+                self.leave_scope();
             }
             Statement::Return {
                 value: Some(value), ..
@@ -775,12 +852,23 @@ impl TypeResolver {
                             for method in methods {
                                 if method.name().as_ref().ok() == Some(&member.value)
                                     && let Some(decl) = method.get_decl().ok().flatten()
-                                    && let Statement::FunctionDecl { ty: method_ty, .. } =
-                                        &*decl.borrow()
-                                    && let Some(t) = method_ty
                                 {
-                                    *ty = Some(t.clone());
-                                    return Some(t.clone());
+                                    let method_ty = {
+                                        let decl_ref = decl.borrow();
+                                        if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                            ty.clone()
+                                        } else if let Statement::InitDecl { ty, .. } = &*decl_ref {
+                                            ty.clone()
+                                        } else if let Statement::DeinitDecl { ty, .. } = &*decl_ref {
+                                            ty.clone()
+                                        } else {
+                                            continue;
+                                        }
+                                    };
+                                    if let Some(t) = method_ty {
+                                        *ty = Some(t.clone());
+                                        return Some(t.clone());
+                                    }
                                 }
                             }
                             let token = &*member;
