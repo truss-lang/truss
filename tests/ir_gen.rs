@@ -269,3 +269,84 @@ fn test_irgen_struct_field_access() {
     assert!(llvm_ir.contains("struct.Point"));
     assert!(llvm_ir.contains("load"));
 }
+
+#[test]
+fn test_irgen_struct_method_call() {
+    let code = r#"
+        struct Point {
+            let x: Int32
+            let y: Int32
+            func f() -> Int64 {
+                return 1
+            }
+        }
+        func test() -> Int64 {
+            var p: Point
+            return p.f()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("@Point.f"));
+    assert!(llvm_ir.contains("call i64 @Point.f()"));
+}
+
+#[test]
+fn test_irgen_struct_method_call_with_params() {
+    let code = r#"
+        struct Point {
+            let x: Int32
+            func add(_ a: Int32, _ b: Int32) -> Int32 {
+                return a + b
+            }
+        }
+        func test() -> Int32 {
+            var p: Point
+            return p.add(3, 4)
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new(
+        "test".to_string(),
+        CrateId { id: 0 },
+    )));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("@Point.add"));
+    assert!(llvm_ir.contains("call i32 @Point.add("));
+    assert!(llvm_ir.contains("i32 3"));
+    assert!(llvm_ir.contains("i32 4"));
+}

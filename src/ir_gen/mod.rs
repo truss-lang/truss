@@ -43,6 +43,7 @@ pub struct IRGenerator<'ctx> {
     alloca_namer: Rc<RefCell<HashMap<String, u32>>>,
     struct_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     program_scope: Rc<RefCell<Option<Rc<RefCell<TrussScope>>>>>,
+    current_struct: Rc<RefCell<Option<String>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -58,6 +59,7 @@ impl<'ctx> IRGenerator<'ctx> {
             alloca_namer: Rc::new(RefCell::new(HashMap::new())),
             struct_types: Rc::new(RefCell::new(HashMap::new())),
             program_scope: Rc::new(RefCell::new(None)),
+            current_struct: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -227,6 +229,25 @@ impl<'ctx> IRGenerator<'ctx> {
         if let Statement::ExternDecl { statement, .. } = &*statement.borrow() {
             let _ = self.create_extern_declaration(statement.clone());
         }
+        if let Statement::StructDecl { name, body, .. } = &*statement.borrow() {
+            for stmt in body {
+                if let Statement::FunctionDecl { name: method_name, ty, .. } = &*stmt.borrow()
+                    && let Some(ty) = ty
+                {
+                    if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
+                        if let Ok(function_type) = self.get_function_type(
+                            return_type.clone(),
+                            param_types.clone(),
+                            *is_vararg,
+                        ) {
+                            let llvm_name =
+                                format!("{}.{}", name.value, method_name.value);
+                            self.module.add_function(&llvm_name, function_type, None);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn create_extern_declaration(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
@@ -385,8 +406,12 @@ impl<'ctx> IRGenerator<'ctx> {
                 ..
             } => {
                 if let Type::Function(_parameter_types, return_type, _) = &*ty.borrow() {
-                    let fn_name = &name.value;
-                    let function = self.module.get_function(fn_name).unwrap();
+                    let fn_name = if let Some(struct_name) = &*self.current_struct.borrow() {
+                        format!("{}.{}", struct_name, name.value)
+                    } else {
+                        name.value.clone()
+                    };
+                    let function = self.module.get_function(&fn_name).unwrap();
 
                     let current_block = self.builder.get_insert_block();
 
@@ -461,6 +486,15 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(false)
             }
             Statement::ExternDecl { .. } => Ok(false),
+            Statement::StructDecl { name, body, .. } => {
+                let prev = self.current_struct.borrow_mut().take();
+                self.current_struct.borrow_mut().replace(name.value.clone());
+                for stmt in body {
+                    self.resolve_statement(stmt.clone())?;
+                }
+                *self.current_struct.borrow_mut() = prev;
+                Ok(false)
+            }
             _ => Ok(false),
         }
     }
@@ -1362,10 +1396,28 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let function_name = match &*callee.borrow() {
                     Expression::Variable { name, .. } => name.value.clone(),
+                    Expression::MemberAccess { object, member, .. } => {
+                        let object_expr = object.borrow();
+                        let object_ty = object_expr.get_ty_ref()?.clone();
+                        drop(object_expr);
+
+                        if let Some(ty) = object_ty
+                            && let Type::Struct(struct_name, _) = &*ty.borrow()
+                        {
+                            format!("{}.{}", struct_name, member.value)
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnsupportedFeature,
+                                "Method call on non-struct type",
+                                Some(member.as_ref()),
+                            );
+                            anyhow::bail!("Method call on non-struct type");
+                        }
+                    }
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::UnsupportedFeature,
-                            "Only simple function calls are supported",
+                            "Only simple function calls and method calls are supported",
                             None,
                         );
                         anyhow::bail!("Unsupported callee");
