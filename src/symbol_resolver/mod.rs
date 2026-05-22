@@ -91,16 +91,52 @@ impl SymbolResolver {
                 }
             }
             Statement::StructDecl { name, body, .. } => {
-                let id = self.get_symbol_id();
-                let symbol = Rc::new(Symbol::Struct {
+                let struct_id = self.get_symbol_id();
+                let struct_symbol = Rc::new(Symbol::Struct {
                     name: name.value.clone(),
-                    id,
+                    id: struct_id,
                     decl: Some(stmt.clone()),
                 });
-                self.enter(id, symbol, name);
-                for stmt in body {
-                    self.register_symbols(stmt.clone());
+                self.enter(struct_id, struct_symbol, name);
+                
+                self.enter_scope();
+                for field_stmt in body {
+                    if let Statement::VariableDecl { name: field_name, .. } = &*field_stmt.borrow() {
+                        let field_id = self.get_symbol_id();
+                        let field_symbol = Rc::new(Symbol::StructField {
+                            name: field_name.value.clone(),
+                            id: field_id,
+                            parent: struct_id,
+                            decl: Some(field_stmt.clone()),
+                        });
+                        self.enter(field_id, field_symbol, field_name);
+                    } else if let Statement::FunctionDecl { name: method_name, .. } = &*field_stmt.borrow() {
+                        let method_id = self.get_symbol_id();
+                        let method_symbol = Rc::new(Symbol::StructMethod {
+                            name: method_name.value.clone(),
+                            id: method_id,
+                            parent: struct_id,
+                            decl: Some(field_stmt.clone()),
+                        });
+                        self.enter(method_id, method_symbol, method_name);
+                        if let Statement::FunctionDecl { body: method_body, .. } = &*field_stmt.borrow() {
+                            match &*method_body.borrow() {
+                                FunctionBody::Statements(stmts) => {
+                                    for s in stmts {
+                                        self.register_symbols(s.clone());
+                                    }
+                                }
+                                FunctionBody::Expression(expr) => {
+                                    self.register_function_symbols_in_expr(expr.clone());
+                                }
+                                FunctionBody::None => {}
+                            }
+                        }
+                    } else {
+                        self.register_symbols(field_stmt.clone());
+                    }
                 }
+                self.leave_scope();
             }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
@@ -240,6 +276,9 @@ impl SymbolResolver {
             Expression::Assignment { left, right, .. } => {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())
+            }
+            Expression::MemberAccess { object, .. } => {
+                self.resolve_expression(object.clone());
             }
             _ => {}
         }

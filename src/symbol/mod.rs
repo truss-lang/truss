@@ -25,6 +25,18 @@ pub enum Symbol {
         id: SymbolId,
         decl: Option<Rc<RefCell<Statement>>>,
     },
+    StructField {
+        name: String,
+        id: SymbolId,
+        parent: SymbolId,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
+    StructMethod {
+        name: String,
+        id: SymbolId,
+        parent: SymbolId,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
 }
 
 impl Symbol {
@@ -33,6 +45,8 @@ impl Symbol {
             Self::Function { id, .. } => *id,
             Self::Variable { id, .. } => *id,
             Self::Struct { id, .. } => *id,
+            Self::StructField { id, .. } => *id,
+            Self::StructMethod { id, .. } => *id,
         }
     }
     pub fn name(&self) -> Result<String> {
@@ -40,6 +54,8 @@ impl Symbol {
             Self::Function { name, .. } => Ok(name.clone()),
             Self::Variable { name, .. } => Ok(name.clone()),
             Self::Struct { name, .. } => Ok(name.clone()),
+            Self::StructField { name, .. } => Ok(name.clone()),
+            Self::StructMethod { name, .. } => Ok(name.clone()),
         }
     }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
@@ -47,6 +63,14 @@ impl Symbol {
             Self::Function { decl, .. } => Ok(decl.clone()),
             Self::Variable { decl, .. } => Ok(decl.clone()),
             Self::Struct { decl, .. } => Ok(decl.clone()),
+            Self::StructField { decl, .. } => Ok(decl.clone()),
+            Self::StructMethod { decl, .. } => Ok(decl.clone()),
+        }
+    }
+    pub fn parent(&self) -> Option<SymbolId> {
+        match self {
+            Self::StructField { parent, .. } | Self::StructMethod { parent, .. } => Some(*parent),
+            _ => None,
         }
     }
 }

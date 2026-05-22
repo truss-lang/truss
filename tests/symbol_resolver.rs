@@ -155,3 +155,69 @@ fn test_variable_shadowing() {
         panic!();
     }
 }
+
+#[test]
+fn test_struct_field_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { let x: Int32 let y: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new(
+            "test".to_string(),
+            CrateId { id: 0 },
+        ))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 2);
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_struct_method_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Math { func square(x: Int32) -> Int32 { return x * x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new(
+            "test".to_string(),
+            CrateId { id: 0 },
+        ))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Math");
+        assert_eq!(body.len(), 1);
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
