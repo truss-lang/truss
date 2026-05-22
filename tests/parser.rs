@@ -1228,3 +1228,122 @@ fn test_parse_struct_decl_nested_function_body() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_member_access_simple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { obj.field }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::MemberAccess { object, member } = &*expression.borrow()
+    {
+        if let Expression::Variable { name, .. } = &*object.borrow() {
+            assert_eq!(name.value, "obj");
+        } else {
+            panic!("Expected variable expression");
+        }
+        assert_eq!(member.value, "field");
+    } else {
+        panic!("Expected MemberAccess expression");
+    }
+}
+
+#[test]
+fn test_parse_member_access_chain() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { a.b.c }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::MemberAccess { object, member } = &*expression.borrow()
+    {
+        assert_eq!(member.value, "c");
+        if let Expression::MemberAccess { object: inner_obj, member: inner_member } = &*object.borrow() {
+            assert_eq!(inner_member.value, "b");
+            if let Expression::Variable { name, .. } = &*inner_obj.borrow() {
+                assert_eq!(name.value, "a");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected nested MemberAccess expression");
+        }
+    } else {
+        panic!("Expected MemberAccess expression");
+    }
+}
+
+#[test]
+fn test_parse_member_access_with_call() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { obj.method() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Call { callee, .. } = &*expression.borrow()
+        && let Expression::MemberAccess { object, member } = &*callee.borrow()
+    {
+        if let Expression::Variable { name, .. } = &*object.borrow() {
+            assert_eq!(name.value, "obj");
+        } else {
+            panic!("Expected variable expression");
+        }
+        assert_eq!(member.value, "method");
+    } else {
+        panic!("Expected Call expression on MemberAccess");
+    }
+}
+
+#[test]
+fn test_parse_member_access_in_assignment() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { obj.field = 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Assignment { left, .. } = &*expression.borrow()
+        && let Expression::MemberAccess { object, member } = &*left.borrow()
+    {
+        if let Expression::Variable { name, .. } = &*object.borrow() {
+            assert_eq!(name.value, "obj");
+        } else {
+            panic!("Expected variable expression");
+        }
+        assert_eq!(member.value, "field");
+    } else {
+        panic!("Expected Assignment expression with MemberAccess on left");
+    }
+}

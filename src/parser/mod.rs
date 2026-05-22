@@ -445,12 +445,35 @@ impl Parser {
                     SeparatorType::OpenParen => expression = self.parse_call(expression)?,
                     _ => break,
                 },
-                TokenType::Operator { .. } => {
-                    if OperatorType::is_operator(&token, OperatorType::Less)
-                        && matches!(
+                TokenType::Operator { operator } => match operator {
+                    OperatorType::Dot => {
+                        self.index += 1;
+                        let Some(member_token) = self.next() else {
+                            self.emit_error(
+                                TrussDiagnosticCode::ExpectedExpression,
+                                "Expected member name after '.'",
+                                &token,
+                            );
+                            return Err(());
+                        };
+                        if TokenType::Identifier != member_token.ty {
+                            self.emit_error(
+                                TrussDiagnosticCode::ExpectedIdentifier,
+                                format!("Expected member name but found '{}'", member_token.value),
+                                &member_token,
+                            );
+                            return Err(());
+                        }
+                        expression = Expression::MemberAccess {
+                            object: Rc::new(RefCell::new(expression)),
+                            member: Box::new(member_token),
+                        };
+                    }
+                    OperatorType::Less
+                        if matches!(
                             expression,
                             Expression::Variable { .. } | Expression::Type { .. }
-                        )
+                        ) =>
                     {
                         let mut temp_idx = self.index + 1;
                         let mut angle_count = 1;
@@ -481,10 +504,11 @@ impl Parser {
                         } else {
                             break;
                         }
-                    } else {
+                    }
+                    _ => {
                         break;
                     }
-                }
+                },
                 _ => break,
             }
         }

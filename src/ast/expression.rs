@@ -67,6 +67,10 @@ pub enum Expression {
         type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
         parameters: Vec<CallParameter>,
     },
+    MemberAccess {
+        object: Rc<RefCell<Expression>>,
+        member: Box<Token>,
+    },
     Binary {
         left: Rc<RefCell<Expression>>,
         operator: BinaryOperator,
