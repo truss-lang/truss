@@ -399,12 +399,9 @@ impl TypeResolver {
             )))))),
             _ => {
                 if let Some(current_scope) = &self.current_scope
-                    && let Some(symbol) = current_scope.borrow().name_table.get(name)
-                    && let Symbol::Struct { decl, .. } = &**symbol
-                    && let Statement::StructDecl { ty, .. } = &*decl.borrow()
-                    && let Some(ty) = ty
+                    && let Some(ty) = current_scope.borrow().get_type(name)
                 {
-                    return Some(ty.clone());
+                    return Some(ty);
                 }
                 self.emit_error(
                     TrussDiagnosticCode::UnknownType,
