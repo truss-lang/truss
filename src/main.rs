@@ -111,7 +111,8 @@ fn main() {
     let context = inkwell::context::Context::create();
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let ir_generator = IRGenerator::new(&context, engine.clone());
-    let module = ir_generator.generate(&program);
+    let scope = symbol_resolver.get_module_scope(module_id);
+    let module = ir_generator.generate(&program, scope);
 
     if emit_diagnostics(&engine.borrow(), &content) {
         return;

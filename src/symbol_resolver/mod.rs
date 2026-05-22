@@ -56,6 +56,18 @@ impl SymbolResolver {
         id
     }
 
+    pub fn get_module_scope(&self, module_id: ModuleId) -> Rc<RefCell<Scope>> {
+        self.krate
+            .borrow()
+            .modules
+            .get(&module_id)
+            .unwrap()
+            .borrow()
+            .scope
+            .clone()
+            .unwrap()
+    }
+
     fn register_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
         match &mut *stmt.borrow_mut() {
             Statement::FunctionDecl { name, body, .. } => {

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use anyhow::{Ok, Result};
+use anyhow::Result;
 use inkwell::{
     builder::Builder,
     context::Context,
@@ -17,6 +17,8 @@ use crate::{
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{Token, TokenType},
+    scope::Scope as TrussScope,
+    symbol::Symbol,
     types::Type,
 };
 
@@ -39,6 +41,8 @@ pub struct IRGenerator<'ctx> {
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
     scope_stack: Rc<RefCell<Vec<Scope<'ctx>>>>,
     alloca_namer: Rc<RefCell<HashMap<String, u32>>>,
+    struct_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
+    program_scope: Rc<RefCell<Option<Rc<RefCell<TrussScope>>>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -52,6 +56,8 @@ impl<'ctx> IRGenerator<'ctx> {
             engine,
             scope_stack: Rc::new(RefCell::new(vec![Scope::new()])),
             alloca_namer: Rc::new(RefCell::new(HashMap::new())),
+            struct_types: Rc::new(RefCell::new(HashMap::new())),
+            program_scope: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -137,7 +143,17 @@ impl<'ctx> IRGenerator<'ctx> {
         None
     }
 
-    pub fn generate(&self, program: &Program) -> Rc<Module<'ctx>> {
+    pub fn generate(&self, program: &Program, scope: Rc<RefCell<TrussScope>>) -> Rc<Module<'ctx>> {
+        *self.program_scope.borrow_mut() = Some(scope);
+
+        for stmt in &program.statements {
+            self.declare_struct_types(stmt.clone());
+        }
+
+        for stmt in &program.statements {
+            self.create_struct_type_bodies(stmt.clone());
+        }
+
         for stmt in &program.statements {
             self.create_function_declarations(stmt.clone());
         }
@@ -146,6 +162,44 @@ impl<'ctx> IRGenerator<'ctx> {
             let _ = self.resolve_statement(stmt.clone());
         }
         self.module.clone()
+    }
+
+    fn declare_struct_types(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::StructDecl { name, .. } = &*statement.borrow() {
+            let struct_name = &name.value;
+            if !self.struct_types.borrow().contains_key(struct_name) {
+                let struct_type = self
+                    .context
+                    .opaque_struct_type(&format!("struct.{}", struct_name));
+                self.struct_types
+                    .borrow_mut()
+                    .insert(struct_name.clone(), struct_type);
+            }
+        }
+    }
+
+    fn create_struct_type_bodies(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::StructDecl { name, body, .. } = &*statement.borrow() {
+            let struct_name = &name.value;
+            if let Some(struct_type) = self.struct_types.borrow().get(struct_name).cloned() {
+                let field_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = body
+                    .iter()
+                    .filter_map(|stmt| {
+                        if let Statement::VariableDecl { ty, .. } = &*stmt.borrow() {
+                            if let Some(ty) = ty {
+                                match self.resolve_type(ty.clone()) {
+                                    Ok(llvm_ty) => return Some(llvm_ty),
+                                    Err(_) => return None,
+                                }
+                            }
+                        }
+                        None
+                    })
+                    .collect();
+
+                struct_type.set_body(&field_types, false);
+            }
+        }
     }
 
     fn create_function_declarations(&self, statement: Rc<RefCell<Statement>>) {
@@ -922,33 +976,87 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let right_val = self.resolve_expression(right.clone())?.unwrap();
 
-                let (var_ptr, current_val) =
-                    if let Expression::Variable { name, .. } = &*left.borrow() {
-                        if let Some(ptr) = self.lookup_variable(&name.value) {
-                            let ty_opt = left.borrow().get_ty()?;
-                            let ty = if let Some(ty_rc) = ty_opt {
-                                self.resolve_type(ty_rc)?
+                let (var_ptr, current_val) = if let Expression::Variable { name, .. } =
+                    &*left.borrow()
+                {
+                    if let Some(ptr) = self.lookup_variable(&name.value) {
+                        let ty_opt = left.borrow().get_ty()?;
+                        let ty = if let Some(ty_rc) = ty_opt {
+                            self.resolve_type(ty_rc)?
+                        } else {
+                            self.context.i32_type().into()
+                        };
+                        let val = self.builder.build_load(ty, ptr, "")?;
+                        (ptr, Some(val))
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::UndefinedVariable,
+                            format!("Undefined variable: '{}'", name.value),
+                            Some(name),
+                        );
+                        anyhow::bail!("Undefined variable");
+                    }
+                } else if let Expression::MemberAccess { object, member, .. } = &*left.borrow() {
+                    let object_expr = object.borrow();
+                    let object_ty = object_expr.get_ty_ref()?.clone();
+                    drop(object_expr);
+
+                    if let Some(ty) = object_ty {
+                        if let Type::Struct(struct_name, _) = &*ty.borrow() {
+                            let struct_name = struct_name.clone();
+                            let field_name = member.value.clone();
+
+                            let object_val = self.resolve_expression(object.clone())?.unwrap();
+
+                            let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                                ptr
                             } else {
-                                self.context.i32_type().into()
+                                let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(ptr, object_val)?;
+                                ptr
                             };
-                            let val = self.builder.build_load(ty, ptr, "")?;
-                            (ptr, Some(val))
+
+                            let field_index =
+                                self.get_struct_field_index(&struct_name, &field_name)?;
+
+                            let field_ptr = self.builder.build_struct_gep(
+                                self.struct_types
+                                    .borrow()
+                                    .get(&struct_name)
+                                    .unwrap()
+                                    .clone(),
+                                struct_ptr,
+                                field_index as u32,
+                                "",
+                            )?;
+
+                            let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
+                            let val = self.builder.build_load(field_ty, field_ptr, "")?;
+                            (field_ptr, Some(val))
                         } else {
                             self.emit_error(
-                                TrussDiagnosticCode::UndefinedVariable,
-                                format!("Undefined variable: '{}'", name.value),
-                                Some(name),
+                                TrussDiagnosticCode::UnsupportedFeature,
+                                "Member access on non-struct type",
+                                Some(member.as_ref()),
                             );
-                            anyhow::bail!("Undefined variable");
+                            anyhow::bail!("Member access on non-struct type");
                         }
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::UnsupportedFeature,
-                            "Invalid assignment target",
-                            None,
+                            "Cannot infer type for member access",
+                            Some(member.as_ref()),
                         );
-                        anyhow::bail!("Invalid assignment target");
-                    };
+                        anyhow::bail!("Cannot infer type");
+                    }
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnsupportedFeature,
+                        "Invalid assignment target",
+                        None,
+                    );
+                    anyhow::bail!("Invalid assignment target");
+                };
 
                 let result = match operator {
                     AssignmentOperator::Assign => {
@@ -1211,6 +1319,52 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 Ok(Some(result))
             }
+            Expression::MemberAccess { object, member, .. } => {
+                let object_expr = object.borrow();
+                let object_ty = object_expr.get_ty_ref()?.clone();
+                drop(object_expr);
+
+                if let Some(ty) = object_ty {
+                    if let Type::Struct(struct_name, _) = &*ty.borrow() {
+                        let struct_name = struct_name.clone();
+                        let field_name = member.value.clone();
+
+                        let object_val = self.resolve_expression(object.clone())?.unwrap();
+
+                        let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                            ptr
+                        } else {
+                            let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                            self.builder.build_store(ptr, object_val)?;
+                            ptr
+                        };
+
+                        let field_index = self.get_struct_field_index(&struct_name, &field_name)?;
+
+                        let field_ptr = self.builder.build_struct_gep(
+                            self.struct_types
+                                .borrow()
+                                .get(&struct_name)
+                                .unwrap()
+                                .clone(),
+                            struct_ptr,
+                            field_index as u32,
+                            "",
+                        )?;
+
+                        let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
+                        let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                        return Ok(Some(field_val));
+                    }
+                }
+
+                self.emit_error(
+                    TrussDiagnosticCode::UnsupportedFeature,
+                    "Member access on non-struct type",
+                    Some(member.as_ref()),
+                );
+                anyhow::bail!("Member access on non-struct type");
+            }
             Expression::Call {
                 callee, parameters, ..
             } => {
@@ -1313,16 +1467,76 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("Nested function types are not supported");
             }
             Type::Pointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
-            Type::Struct(..) => {
-                self.emit_error(
-                    TrussDiagnosticCode::StructTypeNotSupported,
-                    "Struct types are not yet supported in IR generation",
-                    None,
-                );
-                anyhow::bail!("Struct types are not yet supported in IR generation");
+            Type::Struct(name, _) => {
+                if let Some(struct_type) = self.struct_types.borrow().get(name) {
+                    struct_type.as_basic_type_enum()
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::StructTypeNotSupported,
+                        format!("Struct type '{}' not found in IR generation", name),
+                        None,
+                    );
+                    anyhow::bail!("Struct type not found");
+                }
             }
         };
         Ok(resolved)
+    }
+
+    fn get_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
+        if let Some(scope) = self.program_scope.borrow().as_ref() {
+            if let Some(symbol) = scope.borrow().get_symbol(struct_name) {
+                if let Symbol::Struct { fields, .. } = &*symbol {
+                    for (i, field) in fields.iter().enumerate() {
+                        if field.name().as_ref().ok() == Some(&field_name.to_string()) {
+                            return Ok(i);
+                        }
+                    }
+                }
+            }
+        }
+        self.emit_error(
+            TrussDiagnosticCode::UnsupportedFeature,
+            format!(
+                "Field '{}' not found in struct '{}'",
+                field_name, struct_name
+            ),
+            None,
+        );
+        anyhow::bail!("Field not found")
+    }
+
+    fn get_struct_field_type(
+        &self,
+        struct_name: &str,
+        field_name: &str,
+    ) -> Result<BasicTypeEnum<'ctx>> {
+        if let Some(scope) = self.program_scope.borrow().as_ref() {
+            if let Some(symbol) = scope.borrow().get_symbol(struct_name) {
+                if let Symbol::Struct { fields, .. } = &*symbol {
+                    for field in fields.iter() {
+                        if field.name().as_ref().ok() == Some(&field_name.to_string()) {
+                            if let Some(decl) = field.get_decl().ok().flatten() {
+                                if let Statement::VariableDecl { ty, .. } = &*decl.borrow() {
+                                    if let Some(ty) = ty {
+                                        return self.resolve_type(ty.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.emit_error(
+            TrussDiagnosticCode::UnsupportedFeature,
+            format!(
+                "Cannot get type of field '{}' in struct '{}'",
+                field_name, struct_name
+            ),
+            None,
+        );
+        anyhow::bail!("Cannot get field type")
     }
 
     fn infer_type_from_expression(

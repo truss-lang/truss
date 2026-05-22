@@ -754,7 +754,7 @@ impl TypeResolver {
             Expression::MemberAccess { object, member, ty } => {
                 let object_ty = self.infer_type(object.clone())?;
                 match &*object_ty.borrow() {
-                    Type::Struct(struct_name, struct_id) => {
+                    Type::Struct(struct_name, _) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(struct_name)
                             && let Symbol::Struct {
@@ -762,17 +762,14 @@ impl TypeResolver {
                             } = &*symbol
                         {
                             for field in fields {
-                                if field.name().as_ref().ok() == Some(&member.value) {
-                                    if let Some(decl) = field.get_decl().ok().flatten() {
-                                        if let Statement::VariableDecl { ty: field_ty, .. } =
-                                            &*decl.borrow()
-                                        {
-                                            if let Some(t) = field_ty {
-                                                *ty = Some(t.clone());
-                                                return Some(t.clone());
-                                            }
-                                        }
-                                    }
+                                if field.name().as_ref().ok() == Some(&member.value)
+                                    && let Some(decl) = field.get_decl().ok().flatten()
+                                    && let Statement::VariableDecl { ty: field_ty, .. } =
+                                        &*decl.borrow()
+                                    && let Some(t) = field_ty
+                                {
+                                    *ty = Some(t.clone());
+                                    return Some(t.clone());
                                 }
                             }
                             for method in methods {
