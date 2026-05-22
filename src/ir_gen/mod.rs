@@ -185,12 +185,12 @@ impl<'ctx> IRGenerator<'ctx> {
                 let field_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = body
                     .iter()
                     .filter_map(|stmt| {
-                        if let Statement::VariableDecl { ty, .. } = &*stmt.borrow() {
-                            if let Some(ty) = ty {
-                                match self.resolve_type(ty.clone()) {
-                                    Ok(llvm_ty) => return Some(llvm_ty),
-                                    Err(_) => return None,
-                                }
+                        if let Statement::VariableDecl { ty, .. } = &*stmt.borrow()
+                            && let Some(ty) = ty
+                        {
+                            match self.resolve_type(ty.clone()) {
+                                Ok(llvm_ty) => return Some(llvm_ty),
+                                Err(_) => return None,
                             }
                         }
                         None
@@ -1020,11 +1020,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 self.get_struct_field_index(&struct_name, &field_name)?;
 
                             let field_ptr = self.builder.build_struct_gep(
-                                self.struct_types
-                                    .borrow()
-                                    .get(&struct_name)
-                                    .unwrap()
-                                    .clone(),
+                                *self.struct_types.borrow().get(&struct_name).unwrap(),
                                 struct_ptr,
                                 field_index as u32,
                                 "",
@@ -1324,38 +1320,34 @@ impl<'ctx> IRGenerator<'ctx> {
                 let object_ty = object_expr.get_ty_ref()?.clone();
                 drop(object_expr);
 
-                if let Some(ty) = object_ty {
-                    if let Type::Struct(struct_name, _) = &*ty.borrow() {
-                        let struct_name = struct_name.clone();
-                        let field_name = member.value.clone();
+                if let Some(ty) = object_ty
+                    && let Type::Struct(struct_name, _) = &*ty.borrow()
+                {
+                    let struct_name = struct_name.clone();
+                    let field_name = member.value.clone();
 
-                        let object_val = self.resolve_expression(object.clone())?.unwrap();
+                    let object_val = self.resolve_expression(object.clone())?.unwrap();
 
-                        let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
-                            ptr
-                        } else {
-                            let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
-                            self.builder.build_store(ptr, object_val)?;
-                            ptr
-                        };
+                    let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                        ptr
+                    } else {
+                        let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                        self.builder.build_store(ptr, object_val)?;
+                        ptr
+                    };
 
-                        let field_index = self.get_struct_field_index(&struct_name, &field_name)?;
+                    let field_index = self.get_struct_field_index(&struct_name, &field_name)?;
 
-                        let field_ptr = self.builder.build_struct_gep(
-                            self.struct_types
-                                .borrow()
-                                .get(&struct_name)
-                                .unwrap()
-                                .clone(),
-                            struct_ptr,
-                            field_index as u32,
-                            "",
-                        )?;
+                    let field_ptr = self.builder.build_struct_gep(
+                        *self.struct_types.borrow().get(&struct_name).unwrap(),
+                        struct_ptr,
+                        field_index as u32,
+                        "",
+                    )?;
 
-                        let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
-                        let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
-                        return Ok(Some(field_val));
-                    }
+                    let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
+                    let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                    return Ok(Some(field_val));
                 }
 
                 self.emit_error(
@@ -1484,14 +1476,13 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn get_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
-        if let Some(scope) = self.program_scope.borrow().as_ref() {
-            if let Some(symbol) = scope.borrow().get_symbol(struct_name) {
-                if let Symbol::Struct { fields, .. } = &*symbol {
-                    for (i, field) in fields.iter().enumerate() {
-                        if field.name().as_ref().ok() == Some(&field_name.to_string()) {
-                            return Ok(i);
-                        }
-                    }
+        if let Some(scope) = self.program_scope.borrow().as_ref()
+            && let Some(symbol) = scope.borrow().get_symbol(struct_name)
+            && let Symbol::Struct { fields, .. } = &*symbol
+        {
+            for (i, field) in fields.iter().enumerate() {
+                if field.name().as_ref().ok() == Some(&field_name.to_string()) {
+                    return Ok(i);
                 }
             }
         }
@@ -1511,20 +1502,17 @@ impl<'ctx> IRGenerator<'ctx> {
         struct_name: &str,
         field_name: &str,
     ) -> Result<BasicTypeEnum<'ctx>> {
-        if let Some(scope) = self.program_scope.borrow().as_ref() {
-            if let Some(symbol) = scope.borrow().get_symbol(struct_name) {
-                if let Symbol::Struct { fields, .. } = &*symbol {
-                    for field in fields.iter() {
-                        if field.name().as_ref().ok() == Some(&field_name.to_string()) {
-                            if let Some(decl) = field.get_decl().ok().flatten() {
-                                if let Statement::VariableDecl { ty, .. } = &*decl.borrow() {
-                                    if let Some(ty) = ty {
-                                        return self.resolve_type(ty.clone());
-                                    }
-                                }
-                            }
-                        }
-                    }
+        if let Some(scope) = self.program_scope.borrow().as_ref()
+            && let Some(symbol) = scope.borrow().get_symbol(struct_name)
+            && let Symbol::Struct { fields, .. } = &*symbol
+        {
+            for field in fields.iter() {
+                if field.name().as_ref().ok() == Some(&field_name.to_string())
+                    && let Some(decl) = field.get_decl().ok().flatten()
+                    && let Statement::VariableDecl { ty, .. } = &*decl.borrow()
+                    && let Some(ty) = ty
+                {
+                    return self.resolve_type(ty.clone());
                 }
             }
         }

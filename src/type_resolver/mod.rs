@@ -198,10 +198,10 @@ impl TypeResolver {
                         }
                     };
 
-                    if let Some((_method_name, fn_type, _)) = method_info {
-                        if let Statement::FunctionDecl { ty, .. } = &mut *stmt.borrow_mut() {
-                            *ty = Some(fn_type.clone());
-                        }
+                    if let Some((_method_name, fn_type, _)) = method_info
+                        && let Statement::FunctionDecl { ty, .. } = &mut *stmt.borrow_mut()
+                    {
+                        *ty = Some(fn_type.clone());
                     }
                     self.process_decl(stmt.clone());
                 }
@@ -773,17 +773,14 @@ impl TypeResolver {
                                 }
                             }
                             for method in methods {
-                                if method.name().as_ref().ok() == Some(&member.value) {
-                                    if let Some(decl) = method.get_decl().ok().flatten() {
-                                        if let Statement::FunctionDecl { ty: method_ty, .. } =
-                                            &*decl.borrow()
-                                        {
-                                            if let Some(t) = method_ty {
-                                                *ty = Some(t.clone());
-                                                return Some(t.clone());
-                                            }
-                                        }
-                                    }
+                                if method.name().as_ref().ok() == Some(&member.value)
+                                    && let Some(decl) = method.get_decl().ok().flatten()
+                                    && let Statement::FunctionDecl { ty: method_ty, .. } =
+                                        &*decl.borrow()
+                                    && let Some(t) = method_ty
+                                {
+                                    *ty = Some(t.clone());
+                                    return Some(t.clone());
                                 }
                             }
                             let token = &*member;
