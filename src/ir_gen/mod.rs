@@ -249,6 +249,23 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                 }
+                if let Statement::InitDecl {
+                    ty: Some(ty), ..
+                } = &*stmt.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Void)))));
+                    let mut all_param_types = vec![self_param];
+                    all_param_types.extend(param_types.iter().cloned());
+                    if let Ok(function_type) = self.get_function_type(
+                        return_type.clone(),
+                        all_param_types,
+                        *is_vararg,
+                    ) {
+                        let llvm_name = format!("{}.{}", name.value, "init");
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
             }
         }
     }
@@ -302,17 +319,43 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::VariableDecl {
                 name, initializer, ..
             } => {
-                if let Some(init) = initializer {
-                    let init_val = self.resolve_expression(init.clone())?.unwrap();
-                    if let Some(ptr) = self.lookup_variable(&name.value) {
-                        self.builder.build_store(ptr, init_val)?;
-                    } else {
-                        self.emit_error(
-                            TrussDiagnosticCode::IRVariableNotFound,
-                            format!("Variable '{}' alloca not found", name.value),
-                            Some(name),
-                        );
-                        anyhow::bail!("Variable alloca not found");
+                if let Some(init) = initializer
+                    && let Expression::Call { callee, parameters, .. } = &*init.borrow()
+                    && let Expression::Variable { name: callee_name, .. } = &*callee.borrow()
+                    && self.module.get_function(&callee_name.value).is_none()
+                {
+                    let struct_name = &callee_name.value;
+                    let fn_name = format!("{}.init", struct_name);
+                    if let Some(function) = self.module.get_function(&fn_name) {
+                        if let Some(ptr) = self.lookup_variable(&name.value) {
+                            let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                            args.push(ptr.into());
+                            for param in parameters {
+                                let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                args.push(arg_val.into());
+                            }
+                            self.builder.build_call(function, &args, "")?;
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::IRVariableNotFound,
+                                format!("Variable '{}' alloca not found", name.value),
+                                Some(name),
+                            );
+                            anyhow::bail!("Variable alloca not found");
+                        }
+                    }
+                } else if let Some(init) = initializer {
+                    if let Some(init_val) = self.resolve_expression(init.clone())? {
+                        if let Some(ptr) = self.lookup_variable(&name.value) {
+                            self.builder.build_store(ptr, init_val)?;
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::IRVariableNotFound,
+                                format!("Variable '{}' alloca not found", name.value),
+                                Some(name),
+                            );
+                            anyhow::bail!("Variable alloca not found");
+                        }
                     }
                 }
                 Ok(false)
@@ -458,6 +501,61 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.builder.build_return(Some(&value))?;
                         }
                         FunctionBody::None => {}
+                    }
+
+                    if let Some(block) = current_block {
+                        self.builder.position_at_end(block);
+                    }
+                }
+                Ok(false)
+            }
+            Statement::InitDecl {
+                ty: Some(ty),
+                parameters,
+                body,
+                ..
+            } => {
+                if let Type::Function(_parameter_types, _return_type, _) = &*ty.borrow() {
+                    let struct_name = self.current_struct.borrow().clone().unwrap();
+                    let fn_name = format!("{}.init", struct_name);
+                    let function = self.module.get_function(&fn_name).unwrap();
+
+                    let current_block = self.builder.get_insert_block();
+                    let entry_block = self.context.append_basic_block(function, "entry");
+                    self.builder.position_at_end(entry_block);
+
+                    self.enter_scope();
+                    let self_ptr = function.get_nth_param(0).unwrap();
+                    self.declare_variable("self".to_string(), self_ptr.into_pointer_value());
+                    for (i, param) in parameters.iter().enumerate() {
+                        let param_name = &param.borrow().name.value;
+                        let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                        let alloca_name = self.unique_alloca_name(param_name);
+                        let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
+                        let param_value = function.get_nth_param((i + 1) as u32).unwrap();
+                        self.builder.build_store(ptr, param_value)?;
+                        self.declare_variable(param_name.clone(), ptr);
+                    }
+
+                    match &*body.borrow() {
+                        FunctionBody::Statements(stmts) => {
+                            self.enter_scope_with_stmts(stmts)?;
+                            for stmt in stmts {
+                                let terminates = self.resolve_statement(stmt.clone())?;
+                                if terminates {
+                                    break;
+                                }
+                            }
+                            self.builder.build_return(None)?;
+                            self.exit_scope();
+                        }
+                        FunctionBody::Expression(expr) => {
+                            self.resolve_expression(expr.clone())?;
+                            self.builder.build_return(None)?;
+                        }
+                        FunctionBody::None => {
+                            self.builder.build_return(None)?;
+                        }
                     }
 
                     if let Some(block) = current_block {
@@ -1397,8 +1495,15 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Call {
                 callee, parameters, ..
             } => {
-                let function_name = match &*callee.borrow() {
-                    Expression::Variable { name, .. } => name.value.clone(),
+                let (function_name, is_init_call) = match &*callee.borrow() {
+                    Expression::Variable { name, .. } => {
+                        let name = name.value.clone();
+                        if self.module.get_function(&name).is_some() {
+                            (name, false)
+                        } else {
+                            (format!("{}.init", name), true)
+                        }
+                    }
                     Expression::MemberAccess { object, member, .. } => {
                         let object_expr = object.borrow();
                         let object_ty = object_expr.get_ty_ref()?.clone();
@@ -1407,7 +1512,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let Some(ty) = object_ty
                             && let Type::Struct(struct_name, _) = &*ty.borrow()
                         {
-                            format!("{}.{}", struct_name, member.value)
+                            (format!("{}.{}", struct_name, member.value), false)
                         } else {
                             self.emit_error(
                                 TrussDiagnosticCode::UnsupportedFeature,
@@ -1437,16 +1542,36 @@ impl<'ctx> IRGenerator<'ctx> {
                 })?;
 
                 let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+
+                let instantiation_ptr = if is_init_call {
+                    if let Some(struct_name) = function_name.strip_suffix(".init") {
+                        self.struct_types.borrow().get(struct_name).cloned().map(|st| {
+                            let ptr = self.builder.build_alloca(st, "").unwrap();
+                            args.push(ptr.into());
+                            (st, ptr)
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
                 for param in parameters {
                     let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
                     args.push(arg_val.into());
                 }
 
-                let result = self.builder.build_call(function, &args, "")?;
+                let call_result = self.builder.build_call(function, &args, "")?;
 
-                match result.try_as_basic_value() {
-                    inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
-                    _ => Ok(None),
+                if let Some((struct_type, ptr)) = instantiation_ptr {
+                    let val = self.builder.build_load(struct_type, ptr, "")?;
+                    Ok(Some(val))
+                } else {
+                    match call_result.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
+                        _ => Ok(None),
+                    }
                 }
             }
             _ => anyhow::bail!("Expression type not implemented"),

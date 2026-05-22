@@ -272,3 +272,30 @@ fn test_struct_init_deinit_symbol() {
         panic!("Expected StructDecl");
     }
 }
+
+#[test]
+fn test_type_instantiation_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { let x: Int32 init(x: Int32) {} }
+             func test() { Point(x: 1) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new(
+            "test".to_string(),
+            CrateId { id: 0 },
+        ))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}

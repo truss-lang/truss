@@ -1462,3 +1462,36 @@ fn test_parse_struct_decl_with_init_deinit() {
         panic!("Expected StructDecl");
     }
 }
+
+#[test]
+fn test_parse_type_instantiation_call() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { Point(x: 1, y: 2) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
+        && let Expression::Call { callee, parameters, .. } = &*expression.borrow()
+        && let Expression::Variable { name, .. } = &*callee.borrow()
+    {
+        assert_eq!(name.value, "Point");
+        assert_eq!(parameters.len(), 2);
+        assert_eq!(
+            parameters[0].label.as_ref().map(|t| t.value.as_str()),
+            Some("x")
+        );
+        assert_eq!(
+            parameters[1].label.as_ref().map(|t| t.value.as_str()),
+            Some("y")
+        );
+    } else {
+        panic!("Expected Call with Variable callee named Point");
+    }
+}

@@ -657,7 +657,17 @@ impl TypeResolver {
             Expression::Call {
                 callee, parameters, ..
             } => {
-                let callee_type = self.infer_type(callee.clone())?;
+                let callee_type = self.infer_type(callee.clone());
+
+                let callee_type = callee_type.or_else(|| {
+                    if let Expression::Variable { name, .. } = &*callee.borrow() {
+                        self.resolve_type_name(&name.value, name.as_ref())
+                    } else {
+                        None
+                    }
+                });
+
+                let callee_type = callee_type?;
                 match &*callee_type.borrow() {
                     Type::Function(param_tys, ret_ty, is_vararg) => {
                         if !*is_vararg && parameters.len() != param_tys.len() {
@@ -697,6 +707,59 @@ impl TypeResolver {
                             }
                         }
                         ret_ty.clone()
+                    }
+                    Type::Struct(struct_name, _) => {
+                        let init_params_info = {
+                            let scope = self.current_scope.as_ref().unwrap().borrow();
+                            if let Some(symbol) = scope.get_symbol(struct_name)
+                                && let Symbol::Struct { methods, .. } = &*symbol
+                            {
+                                methods.iter().find_map(|method| {
+                                    if method.name().as_ref().ok().map(|s| s.as_str()) == Some("init")
+                                        && let Ok(Some(decl)) = method.get_decl()
+                                        && let Statement::InitDecl { ty: Some(init_ty), .. } = &*decl.borrow()
+                                        && let Type::Function(param_tys, _, is_vararg) = &*init_ty.borrow()
+                                    {
+                                        Some((decl.clone(), param_tys.clone(), *is_vararg))
+                                    } else {
+                                        None
+                                    }
+                                })
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some((decl, param_tys, is_vararg)) = init_params_info {
+                            if !is_vararg && parameters.len() != param_tys.len() {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ArgumentCountMismatch,
+                                    format!(
+                                        "Expected {} arguments but found {}",
+                                        param_tys.len(),
+                                        parameters.len()
+                                    ),
+                                    &Self::get_token_from_expr(callee),
+                                );
+                            } else if is_vararg && parameters.len() < param_tys.len() {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ArgumentCountMismatch,
+                                    format!(
+                                        "Expected at least {} arguments but found {}",
+                                        param_tys.len(),
+                                        parameters.len()
+                                    ),
+                                    &Self::get_token_from_expr(callee),
+                                );
+                            }
+                            for (i, param) in parameters.iter().enumerate() {
+                                if i < param_tys.len() {
+                                    let expected_ty = param_tys[i].clone();
+                                    self.infer_expression_type(param.expression.clone(), expected_ty);
+                                    self.check_parameter_label(param, &decl, i);
+                                }
+                            }
+                        }
+                        callee_type.clone()
                     }
                     _ => {
                         self.emit_error(
@@ -1325,63 +1388,67 @@ impl TypeResolver {
         func_decl: &Rc<RefCell<Statement>>,
         param_index: usize,
     ) {
-        if let Statement::FunctionDecl { parameters, .. } = &*func_decl.borrow() {
-            if param_index >= parameters.len() {
-                return;
-            }
+        let decl_borrow = func_decl.borrow();
+        let parameters = match &*decl_borrow {
+            Statement::FunctionDecl { parameters, .. } => parameters,
+            Statement::InitDecl { parameters, .. } => parameters,
+            _ => return,
+        };
+        if param_index >= parameters.len() {
+            return;
+        }
 
-            let decl_param = &parameters[param_index];
-            let decl_param_label = &decl_param.borrow().label;
-            let decl_param_name = &decl_param.borrow().name;
-            let provided_label = &call_param.label;
+        let decl_param = &parameters[param_index];
+        let decl_param_label = &decl_param.borrow().label;
+        let decl_param_name = &decl_param.borrow().name;
+        let provided_label = &call_param.label;
 
-            let expected_label: Option<&Token>;
+        let expected_label: Option<&Token>;
 
-            if let Some(label) = decl_param_label {
-                if label.value == "_" {
-                    expected_label = None;
-                } else {
-                    expected_label = Some(label);
-                }
+        if let Some(label) = decl_param_label {
+            if label.value == "_" {
+                expected_label = None;
             } else {
-                expected_label = Some(decl_param_name);
+                expected_label = Some(label);
             }
+        } else {
+            expected_label = Some(decl_param_name);
+        }
 
-            match (expected_label, provided_label) {
-                (Some(expected), Some(provided)) => {
-                    if expected.value != provided.value {
-                        self.emit_error(
-                            TrussDiagnosticCode::ArgumentLabelMismatch,
-                            format!(
-                                "Expected argument label '{}' but found '{}'",
-                                expected.value, provided.value
-                            ),
-                            provided,
-                        );
-                    }
-                }
-                (Some(expected), None) => {
-                    let token = Self::get_token_from_expr(&call_param.expression);
+        match (expected_label, provided_label) {
+            (Some(expected), Some(provided)) => {
+                if expected.value != provided.value {
                     self.emit_error(
-                        TrussDiagnosticCode::MissingArgumentLabel,
-                        format!("Missing argument label '{}' in call", expected.value),
-                        &token,
+                        TrussDiagnosticCode::ArgumentLabelMismatch,
+                        format!(
+                            "Expected argument label '{}' but found '{}'",
+                            expected.value, provided.value
+                        ),
+                        provided,
                     );
                 }
-                (None, Some(provided)) => {
-                    if provided.value != "_" {
-                        self.emit_error(
-                            TrussDiagnosticCode::ArgumentLabelMismatch,
-                            format!(
-                                "Argument should not have a label, but found '{}'",
-                                provided.value
-                            ),
-                            provided,
-                        );
-                    }
-                }
-                (None, None) => {}
             }
+            (Some(expected), None) => {
+                let token = Self::get_token_from_expr(&call_param.expression);
+                self.emit_error(
+                    TrussDiagnosticCode::MissingArgumentLabel,
+                    format!("Missing argument label '{}' in call", expected.value),
+                    &token,
+                );
+            }
+            (None, Some(provided)) => {
+                if provided.value != "_" {
+                    self.emit_error(
+                        TrussDiagnosticCode::ArgumentLabelMismatch,
+                        format!(
+                            "Argument should not have a label, but found '{}'",
+                            provided.value
+                        ),
+                        provided,
+                    );
+                }
+            }
+            (None, None) => {}
         }
     }
     fn enter_scope(&mut self, scope: Rc<RefCell<Scope>>) {
