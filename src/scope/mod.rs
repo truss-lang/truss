@@ -1,0 +1,35 @@
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+use crate::{id::SymbolId, symbol::Symbol, types::Type};
+
+#[derive(Debug, PartialEq)]
+pub struct Scope {
+    pub symbols: HashMap<SymbolId, Rc<Symbol>>,
+    pub name_table: HashMap<String, Rc<Symbol>>,
+    pub type_env: HashMap<String, Rc<RefCell<Type>>>,
+    pub parent: Option<Rc<RefCell<Scope>>>,
+}
+impl Scope {
+    pub fn new(parent: Option<Rc<RefCell<Scope>>>) -> Self {
+        Self {
+            symbols: HashMap::new(),
+            name_table: HashMap::new(),
+            type_env: HashMap::new(),
+            parent,
+        }
+    }
+
+    pub fn get_type(&self, name: &str) -> Option<Rc<RefCell<Type>>> {
+        if let Some(ty) = self.type_env.get(name) {
+            return Some(ty.clone());
+        }
+        if let Some(parent) = &self.parent {
+            return parent.borrow().get_type(name);
+        }
+        None
+    }
+
+    pub fn set_type(&mut self, name: String, ty: Rc<RefCell<Type>>) {
+        self.type_env.insert(name, ty);
+    }
+}

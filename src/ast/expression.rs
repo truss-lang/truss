@@ -4,6 +4,7 @@ use anyhow::{Result, anyhow};
 
 use crate::{
     lexer::token::{OperatorType, Token},
+    scope::Scope,
     symbol::Symbol,
     types::Type,
 };
@@ -20,6 +21,7 @@ pub struct CallParameter {
 pub enum Expression {
     Block {
         statements: Vec<Rc<RefCell<Statement>>>,
+        scope: Option<Rc<RefCell<Scope>>>,
     },
     IntegerLiteral {
         token: Box<Token>,

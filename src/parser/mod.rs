@@ -882,6 +882,7 @@ impl Parser {
             parameters,
             return_type: return_type.map(RefCell::new).map(Rc::new),
             body: Rc::new(RefCell::new(body)),
+            scope: None,
             ty: None,
         })
     }
@@ -1238,6 +1239,7 @@ impl Parser {
             token: Box::new(token),
             name: Box::new(name),
             body,
+            scope: None,
         })
     }
 
@@ -1263,7 +1265,10 @@ impl Parser {
             return Err(());
         };
         if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
-            Ok(Expression::Block { statements })
+            Ok(Expression::Block {
+                statements,
+                scope: None,
+            })
         } else {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,

@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use anyhow::{Result, anyhow};
 
 use super::expression::Expression;
-use crate::{lexer::token::Token, types::Type};
+use crate::{lexer::token::Token, scope::Scope, types::Type};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
@@ -14,6 +14,7 @@ pub enum Statement {
         parameters: Vec<Rc<RefCell<Parameter>>>,
         return_type: Option<Rc<RefCell<Expression>>>,
         body: Rc<RefCell<FunctionBody>>,
+        scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
     VariableDecl {
@@ -27,6 +28,7 @@ pub enum Statement {
         token: Box<Token>,
         name: Box<Token>,
         body: Vec<Rc<RefCell<Statement>>>,
+        scope: Option<Rc<RefCell<Scope>>>,
     },
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,
