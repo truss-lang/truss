@@ -1349,3 +1349,116 @@ fn test_parse_member_access_in_assignment() {
         panic!("Expected Assignment expression with MemberAccess on left");
     }
 }
+
+#[test]
+fn test_parse_init_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { init(x: Int32, y: Int32) {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 1);
+        if let Statement::InitDecl { parameters, .. } = &*body[0].borrow() {
+            assert_eq!(parameters.len(), 2);
+            assert_eq!(parameters[0].borrow().name.value, "x");
+            assert_eq!(parameters[1].borrow().name.value, "y");
+        } else {
+            panic!("Expected InitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_init_decl_empty_params() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { init() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(body.len(), 1);
+        if let Statement::InitDecl { parameters, .. } = &*body[0].borrow() {
+            assert_eq!(parameters.len(), 0);
+        } else {
+            panic!("Expected InitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_deinit_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { deinit {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 1);
+        if let Statement::DeinitDecl { .. } = &*body[0].borrow() {
+        } else {
+            panic!("Expected DeinitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_struct_decl_with_init_deinit() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { let x: Int32 init(x: Int32) { } deinit { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 3);
+        if let Statement::VariableDecl {
+            name: field_name, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(field_name.value, "x");
+        } else {
+            panic!("Expected VariableDecl for field x");
+        }
+        if let Statement::InitDecl { parameters, .. } = &*body[1].borrow() {
+            assert_eq!(parameters.len(), 1);
+            assert_eq!(parameters[0].borrow().name.value, "x");
+        } else {
+            panic!("Expected InitDecl");
+        }
+        if let Statement::DeinitDecl { .. } = &*body[2].borrow() {
+        } else {
+            panic!("Expected DeinitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}

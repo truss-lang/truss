@@ -42,6 +42,8 @@ pub enum KeywordType {
     Extern,
     As,
     Struct,
+    Init,
+    Deinit,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -118,6 +120,8 @@ impl KeywordType {
             KeywordType::Extern => "extern",
             KeywordType::As => "as",
             KeywordType::Struct => "struct",
+            KeywordType::Init => "init",
+            KeywordType::Deinit => "deinit",
         }
         .to_string()
     }

@@ -105,6 +105,8 @@ impl Parser {
                 KeywordType::For => self.parse_for(),
                 KeywordType::Throw => self.parse_throw(),
                 KeywordType::Extern => self.parse_extern(),
+                KeywordType::Init => self.parse_function_decl(false),
+                KeywordType::Deinit => self.parse_deinit_decl(),
                 _ => Ok(Statement::ExpressionStatement {
                     expression: Rc::new(RefCell::new(self.parse_expression()?)),
                 }),
@@ -598,38 +600,65 @@ impl Parser {
         let Some(token) = self.next() else {
             return Err(());
         };
-        let Some(name) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::InvalidFunctionName,
-                "Expected function name after 'func'",
-                &self.tokens[self.index.saturating_sub(1)],
-            );
-            return Err(());
+        let is_init = matches!(
+            token.ty,
+            TokenType::Keyword {
+                keyword: KeywordType::Init
+            }
+        );
+        let name = if !is_init {
+            let Some(name) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::InvalidFunctionName,
+                    "Expected function name after 'func'",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if TokenType::Identifier != name.ty {
+                self.emit_error(
+                    TrussDiagnosticCode::InvalidFunctionName,
+                    format!("Expected function name but found '{}'", name.value),
+                    &name,
+                );
+                return Err(());
+            }
+            let Some(next) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '(' after function name",
+                    &name,
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '(' but found '{}'", next.value),
+                    &next,
+                );
+                return Err(());
+            }
+            Some(name)
+        } else {
+            let Some(next) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '(' after 'init'",
+                    &token,
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '(' but found '{}'", next.value),
+                    &next,
+                );
+                return Err(());
+            }
+            None
         };
-        if TokenType::Identifier != name.ty {
-            self.emit_error(
-                TrussDiagnosticCode::InvalidFunctionName,
-                format!("Expected function name but found '{}'", name.value),
-                &name,
-            );
-            return Err(());
-        }
-        let Some(next) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::MissingSeparator,
-                "Expected '(' after function name",
-                &name,
-            );
-            return Err(());
-        };
-        if !SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
-            self.emit_error(
-                TrussDiagnosticCode::MissingSeparator,
-                format!("Expected '(' but found '{}'", next.value),
-                &next,
-            );
-            return Err(());
-        }
         let mut parameters = Vec::new();
         let mut has_variadic = false;
         while let Some(t) = self.peek() {
@@ -805,7 +834,9 @@ impl Parser {
             );
             return Err(());
         }
-        let return_type = if let Some(token) = self.peek()
+        let return_type = if is_init {
+            None
+        } else if let Some(token) = self.peek()
             && OperatorType::is_operator(&token, OperatorType::Arrow)
         {
             self.index += 1;
@@ -876,12 +907,76 @@ impl Parser {
             }
         };
 
-        Ok(Statement::FunctionDecl {
+        if is_init {
+            Ok(Statement::InitDecl {
+                token: Box::new(token),
+                parameters,
+                body: Rc::new(RefCell::new(body)),
+                scope: None,
+                ty: None,
+            })
+        } else {
+            Ok(Statement::FunctionDecl {
+                token: Box::new(token),
+                name: Box::new(name.unwrap()),
+                generic_parameters: vec![],
+                parameters,
+                return_type: return_type.map(RefCell::new).map(Rc::new),
+                body: Rc::new(RefCell::new(body)),
+                scope: None,
+                ty: None,
+            })
+        }
+    }
+
+    fn parse_deinit_decl(&mut self) -> Result<Statement, ()> {
+        let Some(token) = self.next() else {
+            return Err(());
+        };
+
+        let body = if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        {
+            self.index += 1;
+            let mut statements = Vec::new();
+            while let Some(t) = self.peek() {
+                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                    break;
+                }
+                if let Ok(stmt) = self.parse_statement() {
+                    statements.push(Rc::new(RefCell::new(stmt)));
+                } else {
+                    self.skip();
+                }
+            }
+            let Some(next) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '}' to close deinit body",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '}}' but found '{}'", next.value),
+                    &next,
+                );
+                return Err(());
+            }
+            FunctionBody::Statements(statements)
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' to open deinit body",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+
+        Ok(Statement::DeinitDecl {
             token: Box::new(token),
-            name: Box::new(name),
-            generic_parameters: vec![],
-            parameters,
-            return_type: return_type.map(RefCell::new).map(Rc::new),
             body: Rc::new(RefCell::new(body)),
             scope: None,
             ty: None,

@@ -231,7 +231,11 @@ impl<'ctx> IRGenerator<'ctx> {
         }
         if let Statement::StructDecl { name, body, .. } = &*statement.borrow() {
             for stmt in body {
-                if let Statement::FunctionDecl { name: method_name, ty, .. } = &*stmt.borrow()
+                if let Statement::FunctionDecl {
+                    name: method_name,
+                    ty,
+                    ..
+                } = &*stmt.borrow()
                     && let Some(ty) = ty
                 {
                     if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
@@ -240,8 +244,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             param_types.clone(),
                             *is_vararg,
                         ) {
-                            let llvm_name =
-                                format!("{}.{}", name.value, method_name.value);
+                            let llvm_name = format!("{}.{}", name.value, method_name.value);
                             self.module.add_function(&llvm_name, function_type, None);
                         }
                     }

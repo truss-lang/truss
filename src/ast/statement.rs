@@ -70,6 +70,19 @@ pub enum Statement {
         linkage: Box<Token>,
         statement: Rc<RefCell<Statement>>,
     },
+    InitDecl {
+        token: Box<Token>,
+        parameters: Vec<Rc<RefCell<Parameter>>>,
+        body: Rc<RefCell<FunctionBody>>,
+        scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+    DeinitDecl {
+        token: Box<Token>,
+        body: Rc<RefCell<FunctionBody>>,
+        scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
