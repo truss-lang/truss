@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{
@@ -10,24 +10,9 @@ use crate::{
     id::{ModuleId, SymbolId},
     krate::{Crate, Module},
     lexer::token::Token,
+    scope::Scope,
     symbol::Symbol,
 };
-
-#[derive(Debug)]
-struct Scope {
-    pub symbols: HashMap<SymbolId, Rc<Symbol>>,
-    pub name_table: HashMap<String, Rc<Symbol>>,
-    pub parent: Option<Rc<RefCell<Scope>>>,
-}
-impl Scope {
-    fn new(parent: Option<Rc<RefCell<Scope>>>) -> Self {
-        Self {
-            symbols: HashMap::new(),
-            name_table: HashMap::new(),
-            parent,
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct SymbolResolver {
@@ -57,6 +42,7 @@ impl SymbolResolver {
             .name_to_modules
             .insert(module_name, module.clone());
         self.current_module = Some(module.clone());
+        self.enter_scope(None);
 
         for stmt in &program.statements {
             self.register_symbols(stmt.clone());
@@ -65,11 +51,12 @@ impl SymbolResolver {
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
         }
+        self.leave_scope();
         id
     }
 
     fn register_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
-        match &*stmt.borrow() {
+        match &mut *stmt.borrow_mut() {
             Statement::FunctionDecl { name, body, .. } => {
                 let id = self.get_symbol_id();
                 let symbol = Rc::new(Symbol::Function {
@@ -90,7 +77,9 @@ impl SymbolResolver {
                     FunctionBody::None => {}
                 }
             }
-            Statement::StructDecl { name, body, .. } => {
+            Statement::StructDecl {
+                name, body, scope, ..
+            } => {
                 let struct_id = self.get_symbol_id();
                 let struct_symbol = Rc::new(Symbol::Struct {
                     name: name.value.clone(),
@@ -98,10 +87,13 @@ impl SymbolResolver {
                     decl: Some(stmt.clone()),
                 });
                 self.enter(struct_id, struct_symbol, name);
-                
-                self.enter_scope();
+
+                *scope = Some(self.enter_scope(None));
                 for field_stmt in body {
-                    if let Statement::VariableDecl { name: field_name, .. } = &*field_stmt.borrow() {
+                    if let Statement::VariableDecl {
+                        name: field_name, ..
+                    } = &*field_stmt.borrow()
+                    {
                         let field_id = self.get_symbol_id();
                         let field_symbol = Rc::new(Symbol::StructField {
                             name: field_name.value.clone(),
@@ -110,7 +102,10 @@ impl SymbolResolver {
                             decl: Some(field_stmt.clone()),
                         });
                         self.enter(field_id, field_symbol, field_name);
-                    } else if let Statement::FunctionDecl { name: method_name, .. } = &*field_stmt.borrow() {
+                    } else if let Statement::FunctionDecl {
+                        name: method_name, ..
+                    } = &*field_stmt.borrow()
+                    {
                         let method_id = self.get_symbol_id();
                         let method_symbol = Rc::new(Symbol::StructMethod {
                             name: method_name.value.clone(),
@@ -119,7 +114,10 @@ impl SymbolResolver {
                             decl: Some(field_stmt.clone()),
                         });
                         self.enter(method_id, method_symbol, method_name);
-                        if let Statement::FunctionDecl { body: method_body, .. } = &*field_stmt.borrow() {
+                        if let Statement::FunctionDecl {
+                            body: method_body, ..
+                        } = &*field_stmt.borrow()
+                        {
                             match &*method_body.borrow() {
                                 FunctionBody::Statements(stmts) => {
                                     for s in stmts {
@@ -151,7 +149,7 @@ impl SymbolResolver {
     }
 
     fn register_function_symbols_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
-        if let Expression::Block { statements } = &*expr.borrow() {
+        if let Expression::Block { statements, .. } = &*expr.borrow() {
             for stmt in statements {
                 self.register_symbols(stmt.clone());
             }
@@ -159,14 +157,15 @@ impl SymbolResolver {
     }
 
     fn resolve_statement(&mut self, stmt: Rc<RefCell<Statement>>) {
-        match &*stmt.borrow() {
+        match &mut *stmt.borrow_mut() {
             Statement::FunctionDecl {
                 parameters,
                 return_type,
                 body,
+                scope,
                 ..
             } => {
-                self.enter_scope();
+                *scope = Some(self.enter_scope(None));
                 for parameter in parameters {
                     let name = parameter.borrow().name.value.clone();
                     if name != "_" {
@@ -203,8 +202,8 @@ impl SymbolResolver {
                     self.resolve_expression(initializer.clone());
                 }
             }
-            Statement::StructDecl { body, .. } => {
-                self.enter_scope();
+            Statement::StructDecl { body, scope, .. } => {
+                self.enter_scope(scope.clone());
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
                 }
@@ -234,8 +233,8 @@ impl SymbolResolver {
 
     fn resolve_expression(&mut self, expr: Rc<RefCell<Expression>>) {
         match &mut *expr.borrow_mut() {
-            Expression::Block { statements } => {
-                self.enter_scope();
+            Expression::Block { statements, scope } => {
+                self.enter_scope(scope.clone());
                 for stmt in statements {
                     self.resolve_statement(stmt.clone());
                 }
@@ -268,6 +267,9 @@ impl SymbolResolver {
                     self.resolve_expression(parameter.expression.clone())
                 }
             }
+            Expression::MemberAccess { object, .. } => {
+                self.resolve_expression(object.clone());
+            }
             Expression::Binary { left, right, .. } => {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())
@@ -276,9 +278,6 @@ impl SymbolResolver {
             Expression::Assignment { left, right, .. } => {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())
-            }
-            Expression::MemberAccess { object, .. } => {
-                self.resolve_expression(object.clone());
             }
             _ => {}
         }
@@ -294,19 +293,11 @@ impl SymbolResolver {
             scope_mut.symbols.insert(id, symbol.clone());
             scope_mut.name_table.insert(name, symbol);
         } else {
-            let module = self.current_module.clone().unwrap();
-            let mut module_mut = module.borrow_mut();
-            if let Some(_) = module_mut.name_table.get(&name)
-                && matches!(*symbol, Symbol::Function { .. })
-            {
-                self.emit_error(
-                    TrussDiagnosticCode::DuplicateFunction,
-                    format!("Duplicate function '{}'", name),
-                    token,
-                );
-            }
-            module_mut.symbols.insert(id, symbol.clone());
-            module_mut.name_table.insert(name, symbol);
+            self.emit_error(
+                TrussDiagnosticCode::NoAvaliableScope,
+                format!("No avaliable scope for symbol '{}'", name),
+                token,
+            );
         }
     }
 
@@ -344,9 +335,14 @@ impl SymbolResolver {
         id
     }
 
-    fn enter_scope(&mut self) {
-        let scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
-        self.current_scope = Some(scope);
+    fn enter_scope(&mut self, scope: Option<Rc<RefCell<Scope>>>) -> Rc<RefCell<Scope>> {
+        let sc = if let Some(scope) = scope {
+            scope
+        } else {
+            Rc::new(RefCell::new(Scope::new(self.current_scope.clone())))
+        };
+        self.current_scope = Some(sc.clone());
+        sc
     }
 
     fn leave_scope(&mut self) {
