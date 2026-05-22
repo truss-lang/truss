@@ -1240,6 +1240,7 @@ impl Parser {
             name: Box::new(name),
             body,
             scope: None,
+            ty: None,
         })
     }
 

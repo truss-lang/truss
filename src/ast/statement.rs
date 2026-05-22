@@ -29,6 +29,7 @@ pub enum Statement {
         name: Box<Token>,
         body: Vec<Rc<RefCell<Statement>>>,
         scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     ExpressionStatement {
         expression: Rc<RefCell<Expression>>,
