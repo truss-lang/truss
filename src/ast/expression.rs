@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use crate::{
     lexer::token::{OperatorType, Token},
     scope::Scope,
-    symbol::Symbol,
+    symbol::WeakSymbol,
     types::Type,
 };
 
@@ -53,7 +53,7 @@ pub enum Expression {
     Variable {
         name: Box<Token>,
         ty: Option<Rc<RefCell<Type>>>,
-        symbol: Option<Rc<RefCell<Symbol>>>,
+        symbol: Option<WeakSymbol>,
     },
     Type {
         name: Box<Token>,

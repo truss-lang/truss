@@ -7,11 +7,11 @@ use crate::{
         statement::{FunctionBody, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
-    id::{ModuleId, SymbolId},
+    id::ModuleId,
     krate::{Crate, Module},
     lexer::token::Token,
     scope::Scope,
-    symbol::Symbol,
+    symbol::{Symbol, WeakSymbol},
 };
 
 #[derive(Debug)]
@@ -71,10 +71,8 @@ impl SymbolResolver {
     fn register_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
         match &mut *stmt.borrow_mut() {
             Statement::FunctionDecl { name, body, .. } => {
-                let id = self.get_symbol_id();
                 let symbol = Rc::new(RefCell::new(Symbol::Function {
                     name: name.value.clone(),
-                    id,
                     decl: stmt.clone(),
                 }));
                 self.enter(symbol, name);
@@ -93,9 +91,19 @@ impl SymbolResolver {
             Statement::StructDecl {
                 name, body, scope, ..
             } => {
-                let struct_id = self.get_symbol_id();
-                let mut fields = Vec::new();
-                let mut methods = Vec::new();
+                let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
+                    name: name.value.clone(),
+                    decl: stmt.clone(),
+                    fields: vec![],
+                    methods: vec![],
+                }));
+                self.enter(struct_symbol.clone(), name);
+                let Symbol::Struct {
+                    fields, methods, ..
+                } = &mut *struct_symbol.borrow_mut()
+                else {
+                    return;
+                };
 
                 *scope = Some(self.enter_scope(None));
                 for field_stmt in body {
@@ -103,11 +111,9 @@ impl SymbolResolver {
                         name: field_name, ..
                     } = &*field_stmt.borrow()
                     {
-                        let field_id = self.get_symbol_id();
                         let field_symbol = Rc::new(RefCell::new(Symbol::StructField {
                             name: field_name.value.clone(),
-                            id: field_id,
-                            parent: struct_id,
+                            parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
                         }));
                         fields.push(field_symbol.clone());
@@ -116,11 +122,9 @@ impl SymbolResolver {
                         name: method_name, ..
                     } = &*field_stmt.borrow()
                     {
-                        let method_id = self.get_symbol_id();
                         let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
                             name: method_name.value.clone(),
-                            id: method_id,
-                            parent: struct_id,
+                            parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
                         }));
                         methods.push(method_symbol.clone());
@@ -142,11 +146,9 @@ impl SymbolResolver {
                             }
                         }
                     } else if let Statement::InitDecl { body, .. } = &*field_stmt.borrow() {
-                        let init_id = self.get_symbol_id();
                         let init_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
                             name: "init".to_string(),
-                            id: init_id,
-                            parent: struct_id,
+                            parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
                         }));
                         methods.push(init_symbol.clone());
@@ -165,11 +167,9 @@ impl SymbolResolver {
                             }
                         }
                     } else if let Statement::DeinitDecl { body, .. } = &*field_stmt.borrow() {
-                        let deinit_id = self.get_symbol_id();
                         let deinit_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
                             name: "deinit".to_string(),
-                            id: deinit_id,
-                            parent: struct_id,
+                            parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
                         }));
                         methods.push(deinit_symbol.clone());
@@ -192,15 +192,6 @@ impl SymbolResolver {
                     }
                 }
                 self.leave_scope();
-
-                let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
-                    name: name.value.clone(),
-                    id: struct_id,
-                    decl: stmt.clone(),
-                    fields,
-                    methods,
-                }));
-                self.enter(struct_symbol, name);
             }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
@@ -235,10 +226,8 @@ impl SymbolResolver {
                 for parameter in parameters {
                     let name = parameter.borrow().name.value.clone();
                     if name != "_" {
-                        let id = self.get_symbol_id();
                         let symbol = Rc::new(RefCell::new(Symbol::Variable {
                             name,
-                            id,
                             decl: None,
                             parameter: Some(parameter.clone()),
                         }));
@@ -255,10 +244,8 @@ impl SymbolResolver {
                 name, initializer, ..
             } => {
                 if name.value != "_" {
-                    let id = self.get_symbol_id();
                     let symbol = Rc::new(RefCell::new(Symbol::Variable {
                         name: name.value.clone(),
-                        id,
                         decl: Some(stmt.clone()),
                         parameter: None,
                     }));
@@ -285,10 +272,8 @@ impl SymbolResolver {
                 for parameter in parameters {
                     let name = parameter.borrow().name.value.clone();
                     if name != "_" {
-                        let id = self.get_symbol_id();
                         let symbol = Rc::new(RefCell::new(Symbol::Variable {
                             name,
-                            id,
                             decl: None,
                             parameter: Some(parameter.clone()),
                         }));
@@ -335,7 +320,7 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Expression::Variable { name, symbol, .. } => match self.resolve_symbol(name) {
-                Ok(sym) => *symbol = Some(sym),
+                Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
                 Err(_) => {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,
@@ -419,15 +404,6 @@ impl SymbolResolver {
         } else {
             Ok(None)
         }
-    }
-
-    fn get_symbol_id(&mut self) -> SymbolId {
-        let module = self.current_module.clone().unwrap();
-        let id = SymbolId {
-            id: module.borrow().symbol_count,
-        };
-        module.borrow_mut().symbol_count += 1;
-        id
     }
 
     fn enter_scope(&mut self, scope: Option<Rc<RefCell<Scope>>>) -> Rc<RefCell<Scope>> {

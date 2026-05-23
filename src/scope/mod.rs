@@ -1,10 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{id::SymbolId, symbol::Symbol, types::Type};
+use crate::{symbol::Symbol, types::Type};
 
 #[derive(Debug, PartialEq)]
 pub struct Scope {
-    pub symbols: HashMap<SymbolId, Rc<RefCell<Symbol>>>,
     pub name_table: HashMap<String, Rc<RefCell<Symbol>>>,
     pub type_env: HashMap<String, Rc<RefCell<Type>>>,
     pub parent: Option<Rc<RefCell<Scope>>>,
@@ -12,7 +11,6 @@ pub struct Scope {
 impl Scope {
     pub fn new(parent: Option<Rc<RefCell<Scope>>>) -> Self {
         Self {
-            symbols: HashMap::new(),
             name_table: HashMap::new(),
             type_env: HashMap::new(),
             parent,
@@ -28,7 +26,6 @@ impl Scope {
         }
     }
     pub fn set_symbol(&mut self, symbol: Rc<RefCell<Symbol>>) {
-        self.symbols.insert(symbol.borrow().id(), symbol.clone());
         self.name_table
             .insert(symbol.borrow().name().unwrap(), symbol.clone());
     }

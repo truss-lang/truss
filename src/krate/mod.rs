@@ -27,7 +27,6 @@ impl Crate {
 pub struct Module {
     pub name: String,
     pub id: ModuleId,
-    pub symbol_count: usize,
     pub scope: Option<Rc<RefCell<Scope>>>,
 }
 impl Module {
@@ -35,7 +34,6 @@ impl Module {
         Self {
             name,
             id,
-            symbol_count: 0,
             scope: None,
         }
     }

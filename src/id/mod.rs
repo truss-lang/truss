@@ -13,4 +13,3 @@ macro_rules! id_struct_from {
 
 id_struct_from!(Crate);
 id_struct_from!(Module);
-id_struct_from!(Symbol);

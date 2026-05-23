@@ -1,56 +1,42 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 
 use anyhow::{Ok, Result};
 
-use crate::{
-    ast::statement::{Parameter, Statement},
-    id::SymbolId,
-};
+use crate::ast::statement::{Parameter, Statement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Symbol {
     Function {
         name: String,
-        id: SymbolId,
         decl: Rc<RefCell<Statement>>,
     },
     Variable {
         name: String,
-        id: SymbolId,
         decl: Option<Rc<RefCell<Statement>>>,
         parameter: Option<Rc<RefCell<Parameter>>>,
     },
     Struct {
         name: String,
-        id: SymbolId,
         decl: Rc<RefCell<Statement>>,
         fields: Vec<Rc<RefCell<Symbol>>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
     },
     StructField {
         name: String,
-        id: SymbolId,
-        parent: SymbolId,
+        parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
     },
     StructMethod {
         name: String,
-        id: SymbolId,
-        parent: SymbolId,
+        parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
     },
 }
 
 impl Symbol {
-    pub fn id(&self) -> SymbolId {
-        match self {
-            Self::Function { id, .. } => *id,
-            Self::Variable { id, .. } => *id,
-            Self::Struct { id, .. } => *id,
-            Self::StructField { id, .. } => *id,
-            Self::StructMethod { id, .. } => *id,
-        }
-    }
     pub fn name(&self) -> Result<String> {
         match self {
             Self::Function { name, .. } => Ok(name.clone()),
@@ -69,10 +55,21 @@ impl Symbol {
             Self::StructMethod { decl, .. } => Ok(decl.clone()),
         }
     }
-    pub fn parent(&self) -> Option<SymbolId> {
+    pub fn parent(&self) -> Option<Rc<RefCell<Symbol>>> {
         match self {
-            Self::StructField { parent, .. } | Self::StructMethod { parent, .. } => Some(*parent),
+            Self::StructField { parent, .. } | Self::StructMethod { parent, .. } => {
+                Some(parent.0.upgrade().unwrap())
+            }
             _ => None,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct WeakSymbol(pub Weak<RefCell<Symbol>>);
+
+impl PartialEq for WeakSymbol {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ptr_eq(&other.0)
     }
 }

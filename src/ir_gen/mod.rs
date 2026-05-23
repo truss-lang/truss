@@ -237,17 +237,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
+                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
                 {
-                    if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
-                        if let Ok(function_type) = self.get_function_type(
-                            return_type.clone(),
-                            param_types.clone(),
-                            *is_vararg,
-                        ) {
-                            let llvm_name = format!("{}.{}", name.value, method_name.value);
-                            self.module.add_function(&llvm_name, function_type, None);
-                        }
-                    }
+                    let llvm_name = format!("{}.{}", name.value, method_name.value);
+                    self.module.add_function(&llvm_name, function_type, None);
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
                     && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
@@ -348,18 +343,18 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Variable alloca not found");
                         }
                     }
-                } else if let Some(init) = initializer {
-                    if let Some(init_val) = self.resolve_expression(init.clone())? {
-                        if let Some(ptr) = self.lookup_variable(&name.value) {
-                            self.builder.build_store(ptr, init_val)?;
-                        } else {
-                            self.emit_error(
-                                TrussDiagnosticCode::IRVariableNotFound,
-                                format!("Variable '{}' alloca not found", name.value),
-                                Some(name),
-                            );
-                            anyhow::bail!("Variable alloca not found");
-                        }
+                } else if let Some(init) = initializer
+                    && let Some(init_val) = self.resolve_expression(init.clone())?
+                {
+                    if let Some(ptr) = self.lookup_variable(&name.value) {
+                        self.builder.build_store(ptr, init_val)?;
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::IRVariableNotFound,
+                            format!("Variable '{}' alloca not found", name.value),
+                            Some(name),
+                        );
+                        anyhow::bail!("Variable alloca not found");
                     }
                 }
                 Ok(false)

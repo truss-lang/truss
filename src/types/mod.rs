@@ -1,6 +1,6 @@
 use std::{cell::RefCell, fmt, rc::Rc};
 
-use crate::id::SymbolId;
+use crate::symbol::WeakSymbol;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -22,7 +22,7 @@ pub enum Type {
     Bool,
     Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool),
     Pointer(Rc<RefCell<Type>>),
-    Struct(String, SymbolId),
+    Struct(String, WeakSymbol),
 }
 
 impl fmt::Display for Type {

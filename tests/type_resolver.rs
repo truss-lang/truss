@@ -1840,7 +1840,10 @@ fn test_type_instantiation_arg_mismatch() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(errors.len() > 0, "Should have argument count mismatch error");
+    assert!(
+        !errors.is_empty(),
+        "Should have argument count mismatch error"
+    );
 }
 
 #[test]

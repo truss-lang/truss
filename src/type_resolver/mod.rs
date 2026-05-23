@@ -14,7 +14,7 @@ use crate::{
     krate::{Crate, Module},
     lexer::token::{Position, Token, TokenType},
     scope::Scope,
-    symbol::Symbol,
+    symbol::{Symbol, WeakSymbol},
     types::Type,
 };
 
@@ -128,71 +128,65 @@ impl TypeResolver {
             Statement::StructDecl {
                 name, body, scope, ..
             } => {
-                let struct_id = {
-                    if let Some(current_scope) = &self.current_scope
-                        && let Some(symbol) = current_scope.borrow().name_table.get(&name.value)
-                        && let Symbol::Struct { id, .. } = &*symbol.borrow()
-                    {
-                        Some(*id)
-                    } else {
-                        None
-                    }
+                let Some(symbol) = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().name_table.get(&name.value).cloned())
+                else {
+                    return;
                 };
 
-                if let Some(id) = struct_id {
-                    let struct_ty = Rc::new(RefCell::new(Type::Struct(name.value.clone(), id)));
-                    self.current_scope
-                        .as_ref()
-                        .unwrap()
-                        .borrow_mut()
-                        .set_type(name.value.clone(), struct_ty);
-                }
+                let struct_ty = Rc::new(RefCell::new(Type::Struct(
+                    name.value.clone(),
+                    WeakSymbol(Rc::downgrade(&symbol)),
+                )));
+                self.current_scope
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_type(name.value.clone(), struct_ty);
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for stmt in body {
                     let method_info: Option<(String, Rc<RefCell<Type>>, Vec<Rc<RefCell<Type>>>)> = {
-                        if struct_id.is_some() {
-                            if let Statement::FunctionDecl {
-                                name: method_name,
-                                parameters,
-                                return_type,
-                                ..
-                            } = &*stmt.borrow()
-                            {
-                                let ret_type = if let Some(return_type_expr) = return_type {
-                                    self.infer_type(return_type_expr.clone())
-                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
-                                } else {
-                                    Rc::new(RefCell::new(Type::Void))
-                                };
-
-                                let mut parameter_types = Vec::new();
-                                let mut is_vararg = false;
-                                for param in parameters.iter() {
-                                    if param.borrow().variadic_kind == VariadicKind::BareVariadic {
-                                        is_vararg = true;
-                                        continue;
-                                    }
-                                    let param_type =
-                                        self.infer_type(param.borrow().type_expression.clone());
-                                    if let Some(ref param_type) = param_type {
-                                        param.borrow_mut().ty = Some(param_type.clone());
-                                        parameter_types.push(param_type.clone());
-                                    }
-                                    if param.borrow().variadic_kind != VariadicKind::NotVariadic {
-                                        is_vararg = true;
-                                    }
-                                }
-
-                                let fn_type = Rc::new(RefCell::new(Type::Function(
-                                    parameter_types.clone(),
-                                    ret_type,
-                                    is_vararg,
-                                )));
-                                Some((method_name.value.clone(), fn_type, parameter_types))
+                        if let Statement::FunctionDecl {
+                            name: method_name,
+                            parameters,
+                            return_type,
+                            ..
+                        } = &*stmt.borrow()
+                        {
+                            let ret_type = if let Some(return_type_expr) = return_type {
+                                self.infer_type(return_type_expr.clone())
+                                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
                             } else {
-                                None
+                                Rc::new(RefCell::new(Type::Void))
+                            };
+
+                            let mut parameter_types = Vec::new();
+                            let mut is_vararg = false;
+                            for param in parameters.iter() {
+                                if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                    is_vararg = true;
+                                    continue;
+                                }
+                                let param_type =
+                                    self.infer_type(param.borrow().type_expression.clone());
+                                if let Some(ref param_type) = param_type {
+                                    param.borrow_mut().ty = Some(param_type.clone());
+                                    parameter_types.push(param_type.clone());
+                                }
+                                if param.borrow().variadic_kind != VariadicKind::NotVariadic {
+                                    is_vararg = true;
+                                }
                             }
+
+                            let fn_type = Rc::new(RefCell::new(Type::Function(
+                                parameter_types.clone(),
+                                ret_type,
+                                is_vararg,
+                            )));
+                            Some((method_name.value.clone(), fn_type, parameter_types))
                         } else {
                             None
                         }
@@ -1384,9 +1378,9 @@ impl TypeResolver {
     ) -> Option<Rc<RefCell<Statement>>> {
         if let Expression::Variable { symbol, .. } = &*callee.borrow()
             && let Some(sym) = symbol
-            && let Ok(Some(decl)) = sym.borrow().get_decl()
+            && let Some(sym) = sym.0.upgrade()
         {
-            Some(decl)
+            sym.borrow().get_decl().unwrap()
         } else {
             None
         }
