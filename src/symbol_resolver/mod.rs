@@ -285,6 +285,14 @@ impl SymbolResolver {
                 self.resolve_function_body(body.clone());
                 self.leave_scope();
             }
+            Statement::ExternBlock { items, .. } => {
+                for item in items {
+                    self.resolve_statement(item.clone());
+                }
+            }
+            Statement::ExternDecl { statement, .. } => {
+                self.resolve_statement(statement.clone());
+            }
             Statement::ExpressionStatement { expression } => {
                 self.resolve_expression(expression.clone())
             }
