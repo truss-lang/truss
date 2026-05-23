@@ -17,6 +17,8 @@ use crate::{
     types::Type,
 };
 
+type MethodInfo = Option<(String, Rc<RefCell<Type>>, Vec<Rc<RefCell<Type>>>)>;
+
 #[derive(Debug)]
 pub struct TypeResolver {
     pub krate: Rc<RefCell<Crate>>,
@@ -140,7 +142,7 @@ impl TypeResolver {
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for stmt in body {
-                    let method_info: Option<(String, Rc<RefCell<Type>>, Vec<Rc<RefCell<Type>>>)> = {
+                    let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
                             name: method_name,
                             parameters,
