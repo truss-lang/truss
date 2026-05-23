@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use anyhow::{Result, anyhow};
 
 use crate::{
-    lexer::token::{OperatorType, Token},
+    lexer::token::{OperatorType, Position, Token, TokenType},
     scope::Scope,
     symbol::WeakSymbol,
     types::Type,
@@ -104,14 +104,6 @@ pub enum Expression {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CastKind {
-    Regular,
-    Conditional,
-    Force,
-    ForceBitcast,
-}
-
 impl Expression {
     pub fn get_ty(&self) -> Result<Option<Rc<RefCell<Type>>>> {
         match self {
@@ -138,6 +130,88 @@ impl Expression {
             _ => Err(anyhow!("")),
         }
     }
+    pub fn token(&self) -> Token {
+        match self {
+            Expression::IntegerLiteral { token, .. } => (**token).clone(),
+            Expression::DecimalLiteral { token, .. } => (**token).clone(),
+            Expression::BooleanLiteral { token } => (**token).clone(),
+            Expression::NullLiteral { token } => (**token).clone(),
+            Expression::NullptrLiteral { token, .. } => (**token).clone(),
+            Expression::CharLiteral { token } => (**token).clone(),
+            Expression::VoidLiteral { left, .. } => (**left).clone(),
+            Expression::Variable { name, .. } => (**name).clone(),
+            Expression::Type { name, .. } => (**name).clone(),
+            Expression::PointerType { base, .. } => base.borrow().token(),
+            Expression::Unary { expression, .. } => expression.borrow().token(),
+            Expression::Binary { left, .. } => left.borrow().token(),
+            Expression::Call { callee, .. } => callee.borrow().token(),
+            Expression::Assignment { left, .. } => left.borrow().token(),
+            Expression::If { condition, .. } => condition.borrow().token(),
+            Expression::Cast {
+                token,
+                kind_tokens,
+                kind,
+                ..
+            } => match kind {
+                CastKind::ForceBitcast => {
+                    if let Some((_, second)) = kind_tokens {
+                        (**second).clone()
+                    } else {
+                        (**token).clone()
+                    }
+                }
+                _ => (**token).clone(),
+            },
+            Expression::Block { statements, .. } => {
+                if let Some(last) = statements.last() {
+                    match &*last.borrow() {
+                        Statement::ExpressionStatement { expression } => {
+                            expression.borrow().token()
+                        }
+                        Statement::Return { token, value } => {
+                            if let Some(value) = value {
+                                value.borrow().token()
+                            } else {
+                                (**token).clone()
+                            }
+                        }
+                        _ => Token::new(
+                            "".to_string(),
+                            TokenType::Identifier,
+                            Position {
+                                pos: 0,
+                                line: 0,
+                                col: 0,
+                                len: 0,
+                            },
+                            Rc::new("".to_string()),
+                        ),
+                    }
+                } else {
+                    Token::new(
+                        "".to_string(),
+                        TokenType::Identifier,
+                        Position {
+                            pos: 0,
+                            line: 0,
+                            col: 0,
+                            len: 0,
+                        },
+                        Rc::new("".to_string()),
+                    )
+                }
+            }
+            Expression::MemberAccess { object, .. } => object.borrow().token(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CastKind {
+    Regular,
+    Conditional,
+    Force,
+    ForceBitcast,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

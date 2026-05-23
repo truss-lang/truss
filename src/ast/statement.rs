@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 
 use super::expression::Expression;
 use crate::{lexer::token::Token, scope::Scope, types::Type};
@@ -34,45 +34,6 @@ pub enum Statement {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
-    ExpressionStatement {
-        expression: Rc<RefCell<Expression>>,
-    },
-    Return {
-        token: Box<Token>,
-        value: Option<Rc<RefCell<Expression>>>,
-    },
-    Loop {
-        body: Rc<RefCell<Expression>>,
-    },
-    While {
-        condition: Rc<RefCell<Expression>>,
-        body: Rc<RefCell<Expression>>,
-    },
-    RepeatWhile {
-        body: Rc<RefCell<Expression>>,
-        condition: Rc<RefCell<Expression>>,
-    },
-    For {
-        pattern: Rc<Pattern>,
-        iterator: Rc<RefCell<Expression>>,
-        body: Rc<RefCell<Expression>>,
-    },
-    Throw {
-        exception: Rc<RefCell<Expression>>,
-    },
-    EmptyStatement {
-        token: Box<Token>,
-    },
-    ExternBlock {
-        token: Box<Token>,
-        linkage: Box<Token>,
-        items: Vec<Rc<RefCell<Statement>>>,
-    },
-    ExternDecl {
-        token: Box<Token>,
-        linkage: Box<Token>,
-        statement: Rc<RefCell<Statement>>,
-    },
     InitDecl {
         modifiers: Vec<Modifier>,
         token: Box<Token>,
@@ -88,20 +49,89 @@ pub enum Statement {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    ExpressionStatement {
+        expression: Rc<RefCell<Expression>>,
+    },
+    Return {
+        token: Box<Token>,
+        value: Option<Rc<RefCell<Expression>>>,
+    },
+    Loop {
+        token: Box<Token>,
+        body: Rc<RefCell<Expression>>,
+    },
+    While {
+        token: Box<Token>,
+        condition: Rc<RefCell<Expression>>,
+        body: Rc<RefCell<Expression>>,
+    },
+    RepeatWhile {
+        token: Box<Token>,
+        body: Rc<RefCell<Expression>>,
+        condition: Rc<RefCell<Expression>>,
+    },
+    For {
+        token: Box<Token>,
+        pattern: Rc<Pattern>,
+        iterator: Rc<RefCell<Expression>>,
+        body: Rc<RefCell<Expression>>,
+    },
+    Throw {
+        token: Box<Token>,
+        exception: Rc<RefCell<Expression>>,
+    },
+    EmptyStatement {
+        token: Box<Token>,
+    },
+    ExternBlock {
+        token: Box<Token>,
+        linkage: Box<Token>,
+        items: Vec<Rc<RefCell<Statement>>>,
+    },
+    ExternDecl {
+        token: Box<Token>,
+        linkage: Box<Token>,
+        statement: Rc<RefCell<Statement>>,
+    },
 }
 
 impl Statement {
-    pub fn get_ty(&self) -> Result<Option<Rc<RefCell<Type>>>> {
+    pub fn token(&self) -> Token {
         match self {
-            Self::VariableDecl { ty, .. } => Ok(ty.clone()),
-            _ => Err(anyhow!("")),
+            Self::FunctionDecl { token, .. } => (**token).clone(),
+            Self::VariableDecl { token, .. } => (**token).clone(),
+            Self::StructDecl { token, .. } => (**token).clone(),
+            Self::InitDecl { token, .. } => (**token).clone(),
+            Self::DeinitDecl { token, .. } => (**token).clone(),
+            Self::ExpressionStatement { expression } => expression.borrow().token(),
+            Self::Return { token, .. } => (**token).clone(),
+            Self::Loop { token, .. } => (**token).clone(),
+            Self::While { token, .. } => (**token).clone(),
+            Self::RepeatWhile { token, .. } => (**token).clone(),
+            Self::For { token, .. } => (**token).clone(),
+            Self::Throw { token, .. } => (**token).clone(),
+            Self::EmptyStatement { token } => (**token).clone(),
+            Self::ExternBlock { token, .. } => (**token).clone(),
+            Self::ExternDecl { token, .. } => (**token).clone(),
         }
     }
-    pub fn get_ty_ref(&self) -> Result<&Option<Rc<RefCell<Type>>>> {
+    pub fn modifiers(&self) -> Result<Vec<Modifier>> {
         match self {
-            Self::VariableDecl { ty, .. } => Ok(ty),
-            _ => Err(anyhow!("")),
+            Self::FunctionDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::VariableDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::StructDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::InitDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::DeinitDecl { modifiers, .. } => Ok(modifiers.clone()),
+            _ => anyhow::bail!(""),
         }
+    }
+    pub fn access_modifier(&self) -> Result<Option<Modifier>> {
+        self.modifiers().map(|modifiers| {
+            modifiers
+                .iter()
+                .find(|m| matches!(m.ty, ModifierType::Access(_)))
+                .cloned()
+        })
     }
 }
 

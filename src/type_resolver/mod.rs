@@ -4,14 +4,14 @@ use crate::{
     ast::{
         expression::{BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{FunctionBody, Statement, VariadicKind},
+        statement::{AccessModifier, FunctionBody, ModifierType, Statement, VariadicKind},
     },
     diag::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
         secondary_label_from_token,
     },
     krate::{Crate, Module},
-    lexer::token::{Position, Token, TokenType},
+    lexer::token::Token,
     scope::Scope,
     symbol::{Symbol, WeakSymbol},
     types::Type,
@@ -383,7 +383,7 @@ impl TypeResolver {
             Statement::Return {
                 value: Some(value), ..
             } => {
-                let token = &Self::get_token_from_expr(value);
+                let token = &value.borrow().token();
                 if let Some(expected) = self.current_return_type.clone() {
                     self.check_type_with_expected(value.clone(), expected, token);
                 } else {
@@ -417,7 +417,9 @@ impl TypeResolver {
             Statement::ExpressionStatement { expression } => {
                 self.infer_type(expression.clone());
             }
-            Statement::While { condition, body } => {
+            Statement::While {
+                condition, body, ..
+            } => {
                 let cond_ty = self.infer_type(condition.clone());
                 if let Some(cond_ty) = cond_ty
                     && *cond_ty.borrow() != Type::Bool
@@ -425,15 +427,17 @@ impl TypeResolver {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
                         format!("While condition must be Bool, found {}", cond_ty.borrow()),
-                        &Self::get_token_from_expr(condition),
+                        &condition.borrow().token(),
                     );
                 }
                 self.resolve_block_expression(body.clone());
             }
-            Statement::Loop { body } => {
+            Statement::Loop { body, .. } => {
                 self.resolve_block_expression(body.clone());
             }
-            Statement::RepeatWhile { body, condition } => {
+            Statement::RepeatWhile {
+                body, condition, ..
+            } => {
                 self.resolve_block_expression(body.clone());
                 let cond_ty = self.infer_type(condition.clone());
                 if let Some(cond_ty) = cond_ty
@@ -445,7 +449,7 @@ impl TypeResolver {
                             "Repeat-while condition must be Bool, found {}",
                             cond_ty.borrow()
                         ),
-                        &Self::get_token_from_expr(condition),
+                        &condition.borrow().token(),
                     );
                 }
             }
@@ -487,7 +491,7 @@ impl TypeResolver {
             }
             FunctionBody::Expression(expression) => {
                 if let Some(expected) = self.current_return_type.clone() {
-                    let token = &Self::get_token_from_expr(expression);
+                    let token = &expression.borrow().token();
                     self.check_type_with_expected(expression.clone(), expected, token);
                 }
             }
@@ -610,7 +614,7 @@ impl TypeResolver {
                 {
                     result
                 } else {
-                    let token = Self::get_token_from_expr(left);
+                    let token = left.borrow().token();
                     self.emit_error(
                         TrussDiagnosticCode::InvalidOperand,
                         format!(
@@ -632,7 +636,7 @@ impl TypeResolver {
                 if let Some(result) = self.check_unary(*operator, operand_ty.clone()) {
                     result
                 } else {
-                    let token = Self::get_token_from_expr(expression);
+                    let token = expression.borrow().token();
                     self.emit_error(
                         TrussDiagnosticCode::InvalidOperand,
                         format!(
@@ -661,7 +665,7 @@ impl TypeResolver {
                 match &*callee_type.borrow() {
                     Type::Function(param_tys, ret_ty, is_vararg) => {
                         if !*is_vararg && parameters.len() != param_tys.len() {
-                            let token = &Self::get_token_from_expr(callee);
+                            let token = &callee.borrow().token();
                             self.emit_error(
                                 TrussDiagnosticCode::ArgumentCountMismatch,
                                 format!(
@@ -672,7 +676,7 @@ impl TypeResolver {
                                 token,
                             );
                         } else if *is_vararg && parameters.len() < param_tys.len() {
-                            let token = &Self::get_token_from_expr(callee);
+                            let token = &callee.borrow().token();
                             self.emit_error(
                                 TrussDiagnosticCode::ArgumentCountMismatch,
                                 format!(
@@ -730,7 +734,7 @@ impl TypeResolver {
                                         param_tys.len(),
                                         parameters.len()
                                     ),
-                                    &Self::get_token_from_expr(callee),
+                                    &callee.borrow().token(),
                                 );
                             } else if is_vararg && parameters.len() < param_tys.len() {
                                 self.emit_error(
@@ -740,7 +744,7 @@ impl TypeResolver {
                                         param_tys.len(),
                                         parameters.len()
                                     ),
-                                    &Self::get_token_from_expr(callee),
+                                    &callee.borrow().token(),
                                 );
                             }
                             for (i, param) in parameters.iter().enumerate() {
@@ -760,7 +764,7 @@ impl TypeResolver {
                         self.emit_error(
                             TrussDiagnosticCode::CallingNonFunction,
                             format!("Cannot call non-function type {}", callee_type.borrow()),
-                            &Self::get_token_from_expr(callee),
+                            &callee.borrow().token(),
                         );
                         return None;
                     }
@@ -782,8 +786,8 @@ impl TypeResolver {
                             left_ty.borrow(),
                             right_ty.borrow()
                         ),
-                        primary_label_from_token(&Self::get_token_from_expr(left), &expected_msg),
-                        secondary_label_from_token(&Self::get_token_from_expr(right), &found_msg),
+                        primary_label_from_token(&left.borrow().token(), &expected_msg),
+                        secondary_label_from_token(&right.borrow().token(), &found_msg),
                     );
                 }
                 left_ty
@@ -799,7 +803,7 @@ impl TypeResolver {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
                         format!("If condition must be Bool, found {}", cond_ty.borrow()),
-                        &Self::get_token_from_expr(condition),
+                        &condition.borrow().token(),
                     );
                 }
                 let then_ty = self.infer_type(then.clone())?;
@@ -813,7 +817,7 @@ impl TypeResolver {
                                 then_ty.borrow(),
                                 else_ty.borrow()
                             ),
-                            &Self::get_token_from_expr(then),
+                            &then.borrow().token(),
                         );
                     }
                 }
@@ -851,7 +855,7 @@ impl TypeResolver {
             } => {
                 let source_ty = self.infer_type(expression.clone())?;
                 let target_ty = self.infer_type(target_type.clone())?;
-                let token = Self::get_token_from_expr(expression);
+                let token = expression.borrow().token();
 
                 match kind {
                     CastKind::ForceBitcast => {
@@ -896,6 +900,27 @@ impl TypeResolver {
                                 fields, methods, ..
                             } = &*symbol.borrow()
                         {
+                            if !self.is_member_accessible(&symbol.borrow(), member) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::InaccessibleMember,
+                                    format!(
+                                        "'{}' is inaccessible due to '{}' level",
+                                        member.value,
+                                        symbol
+                                            .borrow()
+                                            .get_decl()
+                                            .unwrap()
+                                            .unwrap()
+                                            .borrow()
+                                            .access_modifier()
+                                            .map_or(String::from("internal"), |m| m
+                                                .map(|m| m.token.value.clone())
+                                                .unwrap_or(String::from("internal")))
+                                    ),
+                                    member,
+                                );
+                                return None;
+                            }
                             for field in fields {
                                 if field.borrow().name().as_ref().ok() == Some(&member.value)
                                     && let Some(decl) = field.borrow().get_decl().ok().flatten()
@@ -1113,7 +1138,7 @@ impl TypeResolver {
                 }
                 return Some(expected_type);
             } else {
-                let token = Self::get_token_from_expr(&expression);
+                let token = expression.borrow().token();
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
@@ -1134,7 +1159,7 @@ impl TypeResolver {
                 }
                 return Some(expected_type);
             } else {
-                let token = Self::get_token_from_expr(&expression);
+                let token = expression.borrow().token();
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
@@ -1292,78 +1317,6 @@ impl TypeResolver {
         }
     }
 
-    fn get_token_from_expr(expr: &Rc<RefCell<Expression>>) -> Token {
-        match &*expr.borrow() {
-            Expression::IntegerLiteral { token, .. } => (**token).clone(),
-            Expression::DecimalLiteral { token, .. } => (**token).clone(),
-            Expression::BooleanLiteral { token } => (**token).clone(),
-            Expression::NullLiteral { token } => (**token).clone(),
-            Expression::NullptrLiteral { token, .. } => (**token).clone(),
-            Expression::CharLiteral { token } => (**token).clone(),
-            Expression::VoidLiteral { left, .. } => (**left).clone(),
-            Expression::Variable { name, .. } => (**name).clone(),
-            Expression::Type { name, .. } => (**name).clone(),
-            Expression::PointerType { base, .. } => Self::get_token_from_expr(base),
-            Expression::Unary { expression, .. } => Self::get_token_from_expr(expression),
-            Expression::Binary { left, .. } => Self::get_token_from_expr(left),
-            Expression::Call { callee, .. } => Self::get_token_from_expr(callee),
-            Expression::Assignment { left, .. } => Self::get_token_from_expr(left),
-            Expression::If { condition, .. } => Self::get_token_from_expr(condition),
-            Expression::Cast {
-                token,
-                kind_tokens,
-                kind,
-                ..
-            } => match kind {
-                CastKind::ForceBitcast => {
-                    if let Some((_, second)) = kind_tokens {
-                        (**second).clone()
-                    } else {
-                        (**token).clone()
-                    }
-                }
-                _ => (**token).clone(),
-            },
-            Expression::Block { statements, .. } => {
-                if let Some(last) = statements.last() {
-                    match &*last.borrow() {
-                        Statement::ExpressionStatement { expression } => {
-                            Self::get_token_from_expr(expression)
-                        }
-                        Statement::Return {
-                            value: Some(value), ..
-                        } => Self::get_token_from_expr(value),
-                        Statement::Return { token, .. } => (**token).clone(),
-                        _ => Token::new(
-                            "".to_string(),
-                            TokenType::Identifier,
-                            Position {
-                                pos: 0,
-                                line: 0,
-                                col: 0,
-                                len: 0,
-                            },
-                            Rc::new("".to_string()),
-                        ),
-                    }
-                } else {
-                    Token::new(
-                        "".to_string(),
-                        TokenType::Identifier,
-                        Position {
-                            pos: 0,
-                            line: 0,
-                            col: 0,
-                            len: 0,
-                        },
-                        Rc::new("".to_string()),
-                    )
-                }
-            }
-            Expression::MemberAccess { object, .. } => Self::get_token_from_expr(object),
-        }
-    }
-
     fn get_function_decl_from_callee(
         &self,
         callee: Rc<RefCell<Expression>>,
@@ -1425,7 +1378,7 @@ impl TypeResolver {
                 }
             }
             (Some(expected), None) => {
-                let token = Self::get_token_from_expr(&call_param.expression);
+                let token = call_param.expression.borrow().token();
                 self.emit_error(
                     TrussDiagnosticCode::MissingArgumentLabel,
                     format!("Missing argument label '{}' in call", expected.value),
@@ -1447,6 +1400,37 @@ impl TypeResolver {
             (None, None) => {}
         }
     }
+
+    fn is_member_accessible(&self, symbol: &Symbol, member_token: &Token) -> bool {
+        let Some(access) = symbol.get_decl().ok().flatten().and_then(|decl| {
+            decl.borrow()
+                .modifiers()
+                .unwrap()
+                .iter()
+                .find(|m| matches!(m.ty, ModifierType::Access(_)))
+                .cloned()
+        }) else {
+            return true;
+        };
+        let ModifierType::Access(access) = access.ty;
+        match access {
+            AccessModifier::Open | AccessModifier::Public | AccessModifier::Internal => true,
+            AccessModifier::Fileprivate => {
+                if let Some(decl) = symbol.get_decl().ok().flatten() {
+                    let decl_file = decl.borrow().token().file;
+                    member_token.file == decl_file
+                } else {
+                    true
+                }
+            }
+            AccessModifier::Private => {
+                // self.is_within_owner_scope(symbol)
+                // TODO: implement is_within_owner_scope
+                true
+            }
+        }
+    }
+
     fn enter_scope(&mut self, scope: Rc<RefCell<Scope>>) {
         self.current_scope = Some(scope);
     }

@@ -359,7 +359,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 Ok(false)
             }
-            Statement::While { condition, body } => {
+            Statement::While {
+                condition, body, ..
+            } => {
                 let fn_val = self
                     .builder
                     .get_insert_block()
@@ -388,7 +390,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.position_at_end(exit_bb);
                 Ok(false)
             }
-            Statement::Loop { body } => {
+            Statement::Loop { body, .. } => {
                 let fn_val = self
                     .builder
                     .get_insert_block()
@@ -409,7 +411,9 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 Ok(false)
             }
-            Statement::RepeatWhile { body, condition } => {
+            Statement::RepeatWhile {
+                body, condition, ..
+            } => {
                 let fn_val = self
                     .builder
                     .get_insert_block()

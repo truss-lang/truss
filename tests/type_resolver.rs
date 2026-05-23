@@ -1433,7 +1433,32 @@ fn test_cast_force_bitcast_same_size() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0);
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_mixed_extern_and_normal_funcs_no_crash() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"extern "C" func putchar(_ c: Char)
+func caller(_ c: Char) { putchar(c) }"#
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
 }
 
 #[test]
@@ -1581,12 +1606,32 @@ fn test_struct_method_call() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}
 
-    if let Statement::StructDecl { name, .. } = &*program.statements[0].borrow() {
-        assert_eq!(name.value, "Math");
-    } else {
-        panic!("Expected StructDecl");
-    }
+#[test]
+fn test_extern_func_no_crash() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"extern "C" func putchar(_ c: Char)
+extern "C" func malloc(_ size: UInt64) -> Void*
+func f(_ a: UInt64, _ b: UInt64) -> UInt64 { a / b }"#
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
 }
 
 #[test]

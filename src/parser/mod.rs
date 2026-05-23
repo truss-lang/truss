@@ -1089,12 +1089,13 @@ impl Parser {
     }
 
     fn parse_loop(&mut self) -> Result<Statement, ()> {
-        self.index += 1;
-        if let Some(token) = self.peek()
-            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        let token = self.next().unwrap();
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
             let body = self.parse_block()?;
             Ok(Statement::Loop {
+                token: Box::new(token),
                 body: Rc::new(RefCell::new(body)),
             })
         } else {
@@ -1108,13 +1109,14 @@ impl Parser {
     }
 
     fn parse_while(&mut self) -> Result<Statement, ()> {
-        self.index += 1;
+        let token = self.next().unwrap();
         let condition = self.parse_expression()?;
-        if let Some(token) = self.peek()
-            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
             let body = self.parse_block()?;
             Ok(Statement::While {
+                token: Box::new(token),
                 condition: Rc::new(RefCell::new(condition)),
                 body: Rc::new(RefCell::new(body)),
             })
@@ -1129,7 +1131,7 @@ impl Parser {
     }
 
     fn parse_repeat_while(&mut self) -> Result<Statement, ()> {
-        self.index += 1;
+        let token = self.next().unwrap();
         if let Some(token) = self.peek()
             && !SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
         {
@@ -1141,12 +1143,13 @@ impl Parser {
             return Err(());
         }
         let body = self.parse_block()?;
-        if let Some(token) = self.peek()
-            && KeywordType::is_keyword(&token, KeywordType::While)
+        if let Some(t) = self.peek()
+            && KeywordType::is_keyword(&t, KeywordType::While)
         {
             self.index += 1;
             let condition = self.parse_expression()?;
             Ok(Statement::RepeatWhile {
+                token: Box::new(token),
                 body: Rc::new(RefCell::new(body)),
                 condition: Rc::new(RefCell::new(condition)),
             })
@@ -1161,7 +1164,7 @@ impl Parser {
     }
 
     fn parse_for(&mut self) -> Result<Statement, ()> {
-        self.index += 1;
+        let token = self.next().unwrap();
         let pattern = self.parse_pattern()?;
         let Some(in_keyword) = self.next() else {
             self.emit_error(
@@ -1180,11 +1183,12 @@ impl Parser {
             return Err(());
         }
         let iterator = self.parse_expression()?;
-        if let Some(token) = self.peek()
-            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
             let body = self.parse_block()?;
             Ok(Statement::For {
+                token: Box::new(token),
                 pattern: Rc::new(pattern),
                 iterator: Rc::new(RefCell::new(iterator)),
                 body: Rc::new(RefCell::new(body)),
@@ -1200,9 +1204,10 @@ impl Parser {
     }
 
     fn parse_throw(&mut self) -> Result<Statement, ()> {
-        self.index += 1;
+        let token = self.next().unwrap();
         let exception = self.parse_expression()?;
         Ok(Statement::Throw {
+            token: Box::new(token),
             exception: Rc::new(RefCell::new(exception)),
         })
     }
