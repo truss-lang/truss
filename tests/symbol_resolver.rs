@@ -6,7 +6,6 @@ use truss::{
         statement::{FunctionBody, Statement},
     },
     diag::TrussDiagnosticEngine,
-    id::CrateId,
     krate::Crate,
     lexer::{CharStream, Lexer},
     parser::Parser,
@@ -30,10 +29,7 @@ fn test_variable_resolver() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -61,10 +57,7 @@ fn test_function_resolver() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -93,10 +86,7 @@ fn test_underscore_variable_no_symbol() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -115,10 +105,7 @@ fn test_underscore_parameter_no_symbol() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -137,10 +124,7 @@ fn test_variable_shadowing() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine,
     );
     resolver.resolve(&program, "test".to_string());
@@ -169,10 +153,7 @@ fn test_struct_field_symbol() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine.clone(),
     );
     resolver.resolve(&program, "test".to_string());
@@ -202,10 +183,7 @@ fn test_struct_method_symbol() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine.clone(),
     );
     resolver.resolve(&program, "test".to_string());
@@ -235,10 +213,7 @@ fn test_struct_init_deinit_symbol() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine.clone(),
     );
     resolver.resolve(&program, "test".to_string());
@@ -287,10 +262,7 @@ fn test_type_instantiation_symbol() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(
-        Rc::new(RefCell::new(Crate::new(
-            "test".to_string(),
-            CrateId { id: 0 },
-        ))),
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
         engine.clone(),
     );
     resolver.resolve(&program, "test".to_string());

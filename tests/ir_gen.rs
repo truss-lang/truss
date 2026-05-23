@@ -3,7 +3,6 @@ use std::{cell::RefCell, rc::Rc};
 use inkwell::context::Context;
 use truss::{
     diag::TrussDiagnosticEngine,
-    id::CrateId,
     ir_gen::IRGenerator,
     krate::Crate,
     lexer::{CharStream, Lexer},
@@ -26,18 +25,15 @@ fn test_irgen_nullptr_literal() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("test"));
@@ -54,18 +50,15 @@ fn test_irgen_pointer_parameter() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("test"));
@@ -82,18 +75,15 @@ fn test_irgen_deref_in_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("test"));
@@ -110,18 +100,15 @@ fn test_irgen_void_pointer_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("test"));
@@ -137,18 +124,15 @@ fn test_irgen_cast_int_to_float() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("sitofp"));
@@ -164,18 +148,15 @@ fn test_irgen_cast_float_to_int() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("fptosi"));
@@ -191,18 +172,15 @@ fn test_irgen_cast_int_extend() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("zext"));
@@ -218,18 +196,15 @@ fn test_irgen_cast_force_bitcast() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("bitcast"));
@@ -252,18 +227,15 @@ fn test_irgen_struct_field_access() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("struct.Point"));
@@ -292,18 +264,15 @@ fn test_irgen_struct_method_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("@Point.f"));
@@ -331,18 +300,15 @@ fn test_irgen_struct_method_call_with_params() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("@Point.add"));
@@ -369,18 +335,15 @@ fn test_irgen_type_instantiation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "test".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module_id.clone());
 
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, symbol_resolver.get_module_scope(module_id));
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("@Point.init"));

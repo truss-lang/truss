@@ -10,7 +10,6 @@ use crate::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
         secondary_label_from_token,
     },
-    id::ModuleId,
     krate::{Crate, Module},
     lexer::token::{Position, Token, TokenType},
     scope::Scope,
@@ -38,16 +37,9 @@ impl TypeResolver {
         }
     }
 
-    pub fn resolve(&mut self, program: &Program, id: ModuleId) {
-        self.current_module = self.krate.borrow().modules.get(&id).cloned();
-        let scope = self
-            .current_module
-            .as_ref()
-            .unwrap()
-            .borrow()
-            .scope
-            .clone()
-            .unwrap();
+    pub fn resolve(&mut self, program: &Program, module: Rc<RefCell<Module>>) {
+        self.current_module = Some(module.clone());
+        let scope = module.borrow().scope.clone().unwrap();
         self.enter_scope(scope);
 
         for stmt in &program.statements {

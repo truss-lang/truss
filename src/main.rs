@@ -3,7 +3,6 @@ use std::{cell::RefCell, fs, rc::Rc};
 use clap::Parser;
 use truss::{
     diag::TrussDiagnosticEngine,
-    id::CrateId,
     ir_gen::IRGenerator,
     krate::Crate,
     lexer::{CharStream, Lexer},
@@ -80,12 +79,9 @@ fn main() {
         println!("{:#?}", program);
     }
 
-    let krate = Rc::new(RefCell::new(Crate::new(
-        "main".to_string(),
-        CrateId { id: 0 },
-    )));
+    let krate = Rc::new(RefCell::new(Crate::new("main".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
-    let module_id = symbol_resolver.resolve(&program, file_rc.to_string());
+    let module = symbol_resolver.resolve(&program, file_rc.to_string());
 
     if emit_diagnostics(&engine.borrow(), &content) {
         return;
@@ -97,7 +93,7 @@ fn main() {
     }
 
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id);
+    type_resolver.resolve(&program, module.clone());
 
     if emit_diagnostics(&engine.borrow(), &content) {
         return;
@@ -111,8 +107,7 @@ fn main() {
     let context = inkwell::context::Context::create();
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let ir_generator = IRGenerator::new(&context, engine.clone());
-    let scope = symbol_resolver.get_module_scope(module_id);
-    let module = ir_generator.generate(&program, scope);
+    let module = ir_generator.generate(&program, module.borrow().scope.clone().unwrap());
 
     if emit_diagnostics(&engine.borrow(), &content) {
         return;

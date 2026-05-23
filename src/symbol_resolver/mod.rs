@@ -7,7 +7,6 @@ use crate::{
         statement::{FunctionBody, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
-    id::ModuleId,
     krate::{Crate, Module},
     lexer::token::Token,
     scope::Scope,
@@ -31,15 +30,11 @@ impl SymbolResolver {
         }
     }
 
-    pub fn resolve(&mut self, program: &Program, module_name: String) -> ModuleId {
-        let id = ModuleId {
-            id: self.krate.borrow().modules.len(),
-        };
-        let module = Rc::new(RefCell::new(Module::new(module_name.clone(), id)));
-        self.krate.borrow_mut().modules.insert(id, module.clone());
+    pub fn resolve(&mut self, program: &Program, module_name: String) -> Rc<RefCell<Module>> {
+        let module = Rc::new(RefCell::new(Module::new(module_name.clone())));
         self.krate
             .borrow_mut()
-            .name_to_modules
+            .modules
             .insert(module_name, module.clone());
         self.current_module = Some(module.clone());
         let scope = self.enter_scope(None);
@@ -53,19 +48,7 @@ impl SymbolResolver {
             self.resolve_statement(stmt.clone());
         }
         self.leave_scope();
-        id
-    }
-
-    pub fn get_module_scope(&self, module_id: ModuleId) -> Rc<RefCell<Scope>> {
-        self.krate
-            .borrow()
-            .modules
-            .get(&module_id)
-            .unwrap()
-            .borrow()
-            .scope
-            .clone()
-            .unwrap()
+        module
     }
 
     fn register_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
