@@ -44,6 +44,11 @@ pub enum KeywordType {
     Struct,
     Init,
     Deinit,
+    Open,
+    Public,
+    Internal,
+    Fileprivate,
+    Private,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -122,6 +127,11 @@ impl KeywordType {
             KeywordType::Struct => "struct",
             KeywordType::Init => "init",
             KeywordType::Deinit => "deinit",
+            KeywordType::Open => "open",
+            KeywordType::Public => "public",
+            KeywordType::Internal => "internal",
+            KeywordType::Fileprivate => "fileprivate",
+            KeywordType::Private => "private",
         }
         .to_string()
     }

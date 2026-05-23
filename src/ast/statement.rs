@@ -8,6 +8,7 @@ use crate::{lexer::token::Token, scope::Scope, types::Type};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     FunctionDecl {
+        modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
         generic_parameters: Vec<GenericParameter>,
@@ -18,6 +19,7 @@ pub enum Statement {
         ty: Option<Rc<RefCell<Type>>>,
     },
     VariableDecl {
+        modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
         type_expression: Option<Rc<RefCell<Expression>>>,
@@ -25,6 +27,7 @@ pub enum Statement {
         ty: Option<Rc<RefCell<Type>>>,
     },
     StructDecl {
+        modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
         body: Vec<Rc<RefCell<Statement>>>,
@@ -71,6 +74,7 @@ pub enum Statement {
         statement: Rc<RefCell<Statement>>,
     },
     InitDecl {
+        modifiers: Vec<Modifier>,
         token: Box<Token>,
         parameters: Vec<Rc<RefCell<Parameter>>>,
         body: Rc<RefCell<FunctionBody>>,
@@ -78,18 +82,12 @@ pub enum Statement {
         ty: Option<Rc<RefCell<Type>>>,
     },
     DeinitDecl {
+        modifiers: Vec<Modifier>,
         token: Box<Token>,
         body: Rc<RefCell<FunctionBody>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum FunctionBody {
-    Statements(Vec<Rc<RefCell<Statement>>>),
-    Expression(Rc<RefCell<Expression>>),
-    None,
 }
 
 impl Statement {
@@ -105,6 +103,33 @@ impl Statement {
             _ => Err(anyhow!("")),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Modifier {
+    pub token: Box<Token>,
+    pub ty: ModifierType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ModifierType {
+    Access(AccessModifier),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AccessModifier {
+    Open,
+    Public,
+    Internal,
+    Fileprivate,
+    Private,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FunctionBody {
+    Statements(Vec<Rc<RefCell<Statement>>>),
+    Expression(Rc<RefCell<Expression>>),
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq)]

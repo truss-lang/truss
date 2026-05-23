@@ -8,7 +8,10 @@ use crate::{
             AssignmentOperator, BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator,
         },
         node::Program,
-        statement::{FunctionBody, Parameter, Pattern, Statement, VariadicKind},
+        statement::{
+            AccessModifier, FunctionBody, Modifier, ModifierType, Parameter, Pattern, Statement,
+            VariadicKind,
+        },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{KeywordType, OperatorType, Position, SeparatorType, Token, TokenType},
@@ -90,30 +93,101 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ()> {
+        let modifiers = self.parse_modifiers()?;
         let Some(token) = self.peek() else {
             return Err(());
         };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
-                KeywordType::Func => self.parse_function_decl(false),
-                KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false),
-                KeywordType::Struct => self.parse_struct_decl(),
-                KeywordType::Return => self.parse_return(),
-                KeywordType::Loop => self.parse_loop(),
-                KeywordType::While => self.parse_while(),
-                KeywordType::Repeat => self.parse_repeat_while(),
-                KeywordType::For => self.parse_for(),
-                KeywordType::Throw => self.parse_throw(),
-                KeywordType::Extern => self.parse_extern(),
-                KeywordType::Init => self.parse_function_decl(false),
-                KeywordType::Deinit => self.parse_deinit_decl(),
-                _ => Ok(Statement::ExpressionStatement {
-                    expression: Rc::new(RefCell::new(self.parse_expression()?)),
-                }),
+                KeywordType::Func => self.parse_function_decl(false, modifiers),
+                KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false, modifiers),
+                KeywordType::Struct => self.parse_struct_decl(modifiers),
+                KeywordType::Extern => self.parse_extern(modifiers),
+                KeywordType::Init => self.parse_function_decl(false, modifiers),
+                KeywordType::Deinit => self.parse_deinit_decl(modifiers),
+                KeywordType::Return => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_return()
+                }
+                KeywordType::Loop => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_loop()
+                }
+                KeywordType::While => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_while()
+                }
+                KeywordType::Repeat => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_repeat_while()
+                }
+                KeywordType::For => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_for()
+                }
+                KeywordType::Throw => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_throw()
+                }
+                _ => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    Ok(Statement::ExpressionStatement {
+                        expression: Rc::new(RefCell::new(self.parse_expression()?)),
+                    })
+                }
             },
             TokenType::Separator { separator } => match separator {
                 SeparatorType::SemiColon => {
                     self.index += 1;
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            "Modifiers are not allowed on empty statement.",
+                            &modifiers[0].token,
+                        );
+                    }
                     Ok(Statement::EmptyStatement {
                         token: Box::new(token),
                     })
@@ -127,9 +201,18 @@ impl Parser {
                     Err(())
                 }
             },
-            _ => Ok(Statement::ExpressionStatement {
-                expression: Rc::new(RefCell::new(self.parse_expression()?)),
-            }),
+            _ => {
+                if !modifiers.is_empty() {
+                    self.emit_error(
+                        TrussDiagnosticCode::ModifierNotAllowedHere,
+                        format!("Modifiers are not allowed on '{}'.", token.value),
+                        &modifiers[0].token,
+                    );
+                }
+                Ok(Statement::ExpressionStatement {
+                    expression: Rc::new(RefCell::new(self.parse_expression()?)),
+                })
+            }
         }
     }
 
@@ -596,7 +679,11 @@ impl Parser {
         Ok(type_expr)
     }
 
-    fn parse_function_decl(&mut self, is_extern: bool) -> Result<Statement, ()> {
+    fn parse_function_decl(
+        &mut self,
+        is_extern: bool,
+        modifiers: Vec<Modifier>,
+    ) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -904,6 +991,7 @@ impl Parser {
 
         if is_init {
             Ok(Statement::InitDecl {
+                modifiers,
                 token: Box::new(token),
                 parameters,
                 body: Rc::new(RefCell::new(body)),
@@ -912,6 +1000,7 @@ impl Parser {
             })
         } else {
             Ok(Statement::FunctionDecl {
+                modifiers,
                 token: Box::new(token),
                 name: Box::new(name.unwrap()),
                 generic_parameters: vec![],
@@ -924,7 +1013,7 @@ impl Parser {
         }
     }
 
-    fn parse_deinit_decl(&mut self) -> Result<Statement, ()> {
+    fn parse_deinit_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -971,6 +1060,7 @@ impl Parser {
         };
 
         Ok(Statement::DeinitDecl {
+            modifiers,
             token: Box::new(token),
             body: Rc::new(RefCell::new(body)),
             scope: None,
@@ -1117,7 +1207,7 @@ impl Parser {
         })
     }
 
-    fn parse_extern(&mut self) -> Result<Statement, ()> {
+    fn parse_extern(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
         let Some(extern_token) = self.next() else {
             return Err(());
         };
@@ -1150,7 +1240,7 @@ impl Parser {
                 if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
                     break;
                 }
-                if let Ok(stmt) = self.parse_extern_item() {
+                if let Ok(stmt) = self.parse_extern_item(modifiers.clone()) {
                     items.push(Rc::new(RefCell::new(stmt)));
                 } else {
                     self.skip();
@@ -1178,7 +1268,7 @@ impl Parser {
                 items,
             })
         } else {
-            let statement = self.parse_extern_item()?;
+            let statement = self.parse_extern_item(modifiers)?;
             Ok(Statement::ExternDecl {
                 token: Box::new(extern_token),
                 linkage: Box::new(linkage_token),
@@ -1187,14 +1277,14 @@ impl Parser {
         }
     }
 
-    fn parse_extern_item(&mut self) -> Result<Statement, ()> {
+    fn parse_extern_item(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
         let Some(token) = self.peek() else {
             return Err(());
         };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
-                KeywordType::Func => self.parse_function_decl(true),
-                KeywordType::Let | KeywordType::Var => self.parse_variable_decl(true),
+                KeywordType::Func => self.parse_function_decl(true, modifiers),
+                KeywordType::Let | KeywordType::Var => self.parse_variable_decl(true, modifiers),
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
@@ -1221,7 +1311,11 @@ impl Parser {
         }
     }
 
-    fn parse_variable_decl(&mut self, is_extern: bool) -> Result<Statement, ()> {
+    fn parse_variable_decl(
+        &mut self,
+        is_extern: bool,
+        modifiers: Vec<Modifier>,
+    ) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -1259,6 +1353,7 @@ impl Parser {
             None
         };
         Ok(Statement::VariableDecl {
+            modifiers,
             token: Box::new(token),
             name: Box::new(name),
             type_expression: type_expression.map(RefCell::new).map(Rc::new),
@@ -1267,7 +1362,7 @@ impl Parser {
         })
     }
 
-    fn parse_struct_decl(&mut self) -> Result<Statement, ()> {
+    fn parse_struct_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -1327,6 +1422,7 @@ impl Parser {
             return Err(());
         }
         Ok(Statement::StructDecl {
+            modifiers,
             token: Box::new(token),
             name: Box::new(name),
             body,
@@ -1477,6 +1573,51 @@ impl Parser {
             then: Rc::new(RefCell::new(then)),
             else_: else_.map(RefCell::new).map(Rc::new),
         })
+    }
+
+    fn parse_modifiers(&mut self) -> Result<Vec<Modifier>, ()> {
+        let mut modifiers: Vec<Modifier> = Vec::new();
+        while !self.is_empty() {
+            let Some(token) = self.peek() else {
+                return Err(());
+            };
+            let TokenType::Keyword { keyword } = token.ty else {
+                break;
+            };
+            let ty = match keyword {
+                KeywordType::Open => ModifierType::Access(AccessModifier::Open),
+                KeywordType::Public => ModifierType::Access(AccessModifier::Public),
+                KeywordType::Internal => ModifierType::Access(AccessModifier::Internal),
+                KeywordType::Fileprivate => ModifierType::Access(AccessModifier::Fileprivate),
+                KeywordType::Private => ModifierType::Access(AccessModifier::Private),
+                _ => {
+                    break;
+                }
+            };
+            if modifiers
+                .iter()
+                .find(|m| {
+                    m.ty == ty
+                        || (matches!(m.ty, ModifierType::Access(_))
+                            && matches!(ty, ModifierType::Access(_)))
+                })
+                .is_some()
+            {
+                self.emit_error(
+                    TrussDiagnosticCode::DuplicateModifier,
+                    format!("Duplicate modifier: '{}'", token.value),
+                    &token,
+                );
+                self.index += 1;
+                continue;
+            }
+            modifiers.push(Modifier {
+                token: Box::new(token.clone()),
+                ty,
+            });
+            self.index += 1;
+        }
+        Ok(modifiers)
     }
 
     #[allow(dead_code)]

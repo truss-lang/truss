@@ -23,6 +23,8 @@ pub enum TrussDiagnosticCode {
     InvalidVariableName,
     InvalidStructName,
     MissingSeparator,
+    DuplicateModifier,
+    ModifierNotAllowedHere,
 
     SymbolError,
     UndefinedVariable,
@@ -75,6 +77,8 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::InvalidVariableName => "E0107",
             Self::InvalidStructName => "E0108",
             Self::MissingSeparator => "E0109",
+            Self::DuplicateModifier => "E0110",
+            Self::ModifierNotAllowedHere => "E0111",
 
             Self::SymbolError => "E0201",
             Self::UndefinedVariable => "E0202",

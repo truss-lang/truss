@@ -3,9 +3,12 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
-        statement::{FunctionBody, Parameter, Pattern, Statement, VariadicKind},
+        statement::{
+            AccessModifier, FunctionBody, Modifier, ModifierType, Parameter, Pattern, Statement,
+            VariadicKind,
+        },
     },
-    diag::TrussDiagnosticEngine,
+    diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
     lexer::{CharStream, Lexer},
     parser::Parser,
 };
@@ -1478,7 +1481,9 @@ fn test_parse_type_instantiation_call() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
-        && let Expression::Call { callee, parameters, .. } = &*expression.borrow()
+        && let Expression::Call {
+            callee, parameters, ..
+        } = &*expression.borrow()
         && let Expression::Variable { name, .. } = &*callee.borrow()
     {
         assert_eq!(name.value, "Point");
@@ -1494,4 +1499,450 @@ fn test_parse_type_instantiation_call() {
     } else {
         panic!("Expected Call with Variable callee named Point");
     }
+}
+
+fn collect_modifiers(stmt: &Statement) -> Vec<Modifier> {
+    match stmt {
+        Statement::FunctionDecl { modifiers, .. }
+        | Statement::VariableDecl { modifiers, .. }
+        | Statement::StructDecl { modifiers, .. }
+        | Statement::InitDecl { modifiers, .. }
+        | Statement::DeinitDecl { modifiers, .. } => modifiers.clone(),
+        _ => vec![],
+    }
+}
+
+fn assert_has_access_modifier(stmt: &Statement, expected: AccessModifier) {
+    let modifiers = collect_modifiers(stmt);
+    assert!(
+        modifiers
+            .iter()
+            .any(|m| m.ty == ModifierType::Access(expected.clone())),
+        "Expected access modifier {:?} not found in {:?}",
+        expected,
+        modifiers,
+    );
+}
+
+fn assert_has_no_modifiers(stmt: &Statement) {
+    let modifiers = collect_modifiers(stmt);
+    assert!(
+        modifiers.is_empty(),
+        "Expected no modifiers, found {:?}",
+        modifiers,
+    );
+}
+
+#[test]
+fn test_parse_public_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("public func foo() {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "foo");
+        assert_has_access_modifier(&program.statements[0].borrow(), AccessModifier::Public);
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_private_variable() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("private var x: Int32".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "x");
+        assert_has_access_modifier(&program.statements[0].borrow(), AccessModifier::Private);
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_internal_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "internal struct Bar {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Bar");
+        assert_has_access_modifier(&program.statements[0].borrow(), AccessModifier::Internal);
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_public_init_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { public init(x: Int32) {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(body.len(), 1);
+        assert_has_access_modifier(&body[0].borrow(), AccessModifier::Public);
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_private_deinit_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { private deinit {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(body.len(), 1);
+        assert_has_access_modifier(&body[0].borrow(), AccessModifier::Private);
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_struct_with_public_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { public func bar() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Foo");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl { name: fn_name, .. } = &*body[0].borrow() {
+            assert_eq!(fn_name.value, "bar");
+            assert_has_access_modifier(&body[0].borrow(), AccessModifier::Public);
+        } else {
+            panic!("Expected FunctionDecl inside struct");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_function_without_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func foo() {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_has_no_modifiers(&program.statements[0].borrow());
+}
+
+#[test]
+fn test_parse_variable_without_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: Int32".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_has_no_modifiers(&program.statements[0].borrow());
+}
+
+#[test]
+fn test_parse_struct_without_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("struct Empty {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_has_no_modifiers(&program.statements[0].borrow());
+}
+
+#[test]
+fn test_parse_private_struct_field() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Person { private let name: String }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(body.len(), 1);
+        if let Statement::VariableDecl { name, .. } = &*body[0].borrow() {
+            assert_eq!(name.value, "name");
+            assert_has_access_modifier(&body[0].borrow(), AccessModifier::Private);
+        } else {
+            panic!("Expected VariableDecl field");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+fn engine_has_error(engine: &Rc<RefCell<TrussDiagnosticEngine>>, code: TrussDiagnosticCode) -> bool {
+    engine
+        .borrow()
+        .get_errors()
+        .iter()
+        .any(|e| e.code == code)
+}
+
+// =================== Modifier validity tests ===================
+
+#[test]
+fn test_duplicate_access_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public public func foo() {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_conflicting_access_modifiers() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public private func foo() {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_duplicate_same_access_modifier_twice() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "private private func foo() {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_triple_access_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public internal private func foo() {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_modifier_on_return() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { public return 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
+}
+
+#[test]
+fn test_modifier_on_loop() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { public loop {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
+}
+
+#[test]
+fn test_modifier_on_while() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { private while true {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
+}
+
+#[test]
+fn test_modifier_on_for() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { internal for _ in 1..<3 {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
+}
+
+#[test]
+fn test_modifier_on_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { public 1 + 2 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
+}
+
+#[test]
+fn test_modifier_on_expression_at_top_level() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("private 42".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_modifier_on_throw() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { public throw 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
+}
+
+#[test]
+fn test_valid_public_func_no_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("public func foo() {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(!engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert!(!engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
+}
+
+#[test]
+fn test_valid_private_struct_no_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "private struct Foo {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(!engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert!(!engine_has_error(
+        &engine,
+        TrussDiagnosticCode::ModifierNotAllowedHere
+    ));
 }

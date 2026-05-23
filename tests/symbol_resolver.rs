@@ -254,7 +254,8 @@ fn test_type_instantiation_symbol() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct Point { let x: Int32 init(x: Int32) {} }
-             func test() { Point(x: 1) }".to_string(),
+             func test() { Point(x: 1) }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
