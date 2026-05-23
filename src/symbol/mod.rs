@@ -24,8 +24,8 @@ pub enum Symbol {
         name: String,
         id: SymbolId,
         decl: Rc<RefCell<Statement>>,
-        fields: Vec<Rc<Symbol>>,
-        methods: Vec<Rc<Symbol>>,
+        fields: Vec<Rc<RefCell<Symbol>>>,
+        methods: Vec<Rc<RefCell<Symbol>>>,
     },
     StructField {
         name: String,

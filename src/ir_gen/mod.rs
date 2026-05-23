@@ -249,19 +249,17 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                 }
-                if let Statement::InitDecl {
-                    ty: Some(ty), ..
-                } = &*stmt.borrow()
+                if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
                     && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
                 {
-                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Void)))));
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
                     let mut all_param_types = vec![self_param];
                     all_param_types.extend(param_types.iter().cloned());
-                    if let Ok(function_type) = self.get_function_type(
-                        return_type.clone(),
-                        all_param_types,
-                        *is_vararg,
-                    ) {
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
+                    {
                         let llvm_name = format!("{}.{}", name.value, "init");
                         self.module.add_function(&llvm_name, function_type, None);
                     }
@@ -320,18 +318,24 @@ impl<'ctx> IRGenerator<'ctx> {
                 name, initializer, ..
             } => {
                 if let Some(init) = initializer
-                    && let Expression::Call { callee, parameters, .. } = &*init.borrow()
-                    && let Expression::Variable { name: callee_name, .. } = &*callee.borrow()
+                    && let Expression::Call {
+                        callee, parameters, ..
+                    } = &*init.borrow()
+                    && let Expression::Variable {
+                        name: callee_name, ..
+                    } = &*callee.borrow()
                     && self.module.get_function(&callee_name.value).is_none()
                 {
                     let struct_name = &callee_name.value;
                     let fn_name = format!("{}.init", struct_name);
                     if let Some(function) = self.module.get_function(&fn_name) {
                         if let Some(ptr) = self.lookup_variable(&name.value) {
-                            let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                            let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                                Vec::new();
                             args.push(ptr.into());
                             for param in parameters {
-                                let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                let arg_val =
+                                    self.resolve_expression(param.expression.clone())?.unwrap();
                                 args.push(arg_val.into());
                             }
                             self.builder.build_call(function, &args, "")?;
@@ -1545,11 +1549,15 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 let instantiation_ptr = if is_init_call {
                     if let Some(struct_name) = function_name.strip_suffix(".init") {
-                        self.struct_types.borrow().get(struct_name).cloned().map(|st| {
-                            let ptr = self.builder.build_alloca(st, "").unwrap();
-                            args.push(ptr.into());
-                            (st, ptr)
-                        })
+                        self.struct_types
+                            .borrow()
+                            .get(struct_name)
+                            .cloned()
+                            .map(|st| {
+                                let ptr = self.builder.build_alloca(st, "").unwrap();
+                                args.push(ptr.into());
+                                (st, ptr)
+                            })
                     } else {
                         None
                     }
@@ -1658,10 +1666,10 @@ impl<'ctx> IRGenerator<'ctx> {
     fn get_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
-            && let Symbol::Struct { fields, .. } = &*symbol
+            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
         {
             for (i, field) in fields.iter().enumerate() {
-                if field.name().as_ref().ok() == Some(&field_name.to_string()) {
+                if field.borrow().name().as_ref().ok() == Some(&field_name.to_string()) {
                     return Ok(i);
                 }
             }
@@ -1684,11 +1692,11 @@ impl<'ctx> IRGenerator<'ctx> {
     ) -> Result<BasicTypeEnum<'ctx>> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
-            && let Symbol::Struct { fields, .. } = &*symbol
+            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
         {
             for field in fields.iter() {
-                if field.name().as_ref().ok() == Some(&field_name.to_string())
-                    && let Some(decl) = field.get_decl().ok().flatten()
+                if field.borrow().name().as_ref().ok() == Some(&field_name.to_string())
+                    && let Some(decl) = field.borrow().get_decl().ok().flatten()
                     && let Statement::VariableDecl { ty, .. } = &*decl.borrow()
                     && let Some(ty) = ty
                 {

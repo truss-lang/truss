@@ -53,7 +53,7 @@ pub enum Expression {
     Variable {
         name: Box<Token>,
         ty: Option<Rc<RefCell<Type>>>,
-        symbol: Option<Rc<Symbol>>,
+        symbol: Option<Rc<RefCell<Symbol>>>,
     },
     Type {
         name: Box<Token>,

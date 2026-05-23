@@ -4,8 +4,8 @@ use crate::{id::SymbolId, symbol::Symbol, types::Type};
 
 #[derive(Debug, PartialEq)]
 pub struct Scope {
-    pub symbols: HashMap<SymbolId, Rc<Symbol>>,
-    pub name_table: HashMap<String, Rc<Symbol>>,
+    pub symbols: HashMap<SymbolId, Rc<RefCell<Symbol>>>,
+    pub name_table: HashMap<String, Rc<RefCell<Symbol>>>,
     pub type_env: HashMap<String, Rc<RefCell<Type>>>,
     pub parent: Option<Rc<RefCell<Scope>>>,
 }
@@ -18,7 +18,7 @@ impl Scope {
             parent,
         }
     }
-    pub fn get_symbol(&self, name: &str) -> Option<Rc<Symbol>> {
+    pub fn get_symbol(&self, name: &str) -> Option<Rc<RefCell<Symbol>>> {
         if let Some(symbol) = self.name_table.get(name) {
             Some(symbol.clone())
         } else if let Some(parent) = &self.parent {
@@ -27,9 +27,10 @@ impl Scope {
             None
         }
     }
-    pub fn set_symbol(&mut self, symbol: Rc<Symbol>) {
-        self.symbols.insert(symbol.id(), symbol.clone());
-        self.name_table.insert(symbol.name().unwrap(), symbol);
+    pub fn set_symbol(&mut self, symbol: Rc<RefCell<Symbol>>) {
+        self.symbols.insert(symbol.borrow().id(), symbol.clone());
+        self.name_table
+            .insert(symbol.borrow().name().unwrap(), symbol.clone());
     }
 
     pub fn get_type(&self, name: &str) -> Option<Rc<RefCell<Type>>> {

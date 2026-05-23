@@ -131,7 +131,7 @@ impl TypeResolver {
                 let struct_id = {
                     if let Some(current_scope) = &self.current_scope
                         && let Some(symbol) = current_scope.borrow().name_table.get(&name.value)
-                        && let Symbol::Struct { id, .. } = &**symbol
+                        && let Symbol::Struct { id, .. } = &*symbol.borrow()
                     {
                         Some(*id)
                     } else {
@@ -240,7 +240,9 @@ impl TypeResolver {
 
                 self.leave_scope();
             }
-            Statement::DeinitDecl { body, scope, ty, .. } => {
+            Statement::DeinitDecl {
+                body, scope, ty, ..
+            } => {
                 let fn_type = Rc::new(RefCell::new(Type::Function(
                     vec![],
                     Rc::new(RefCell::new(Type::Void)),
@@ -712,13 +714,17 @@ impl TypeResolver {
                         let init_params_info = {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
                             if let Some(symbol) = scope.get_symbol(struct_name)
-                                && let Symbol::Struct { methods, .. } = &*symbol
+                                && let Symbol::Struct { methods, .. } = &*symbol.borrow()
                             {
                                 methods.iter().find_map(|method| {
-                                    if method.name().as_ref().ok().map(|s| s.as_str()) == Some("init")
-                                        && let Ok(Some(decl)) = method.get_decl()
-                                        && let Statement::InitDecl { ty: Some(init_ty), .. } = &*decl.borrow()
-                                        && let Type::Function(param_tys, _, is_vararg) = &*init_ty.borrow()
+                                    if method.borrow().name().as_ref().ok().map(|s| s.as_str())
+                                        == Some("init")
+                                        && let Ok(Some(decl)) = method.borrow().get_decl()
+                                        && let Statement::InitDecl {
+                                            ty: Some(init_ty), ..
+                                        } = &*decl.borrow()
+                                        && let Type::Function(param_tys, _, is_vararg) =
+                                            &*init_ty.borrow()
                                     {
                                         Some((decl.clone(), param_tys.clone(), *is_vararg))
                                     } else {
@@ -754,7 +760,10 @@ impl TypeResolver {
                             for (i, param) in parameters.iter().enumerate() {
                                 if i < param_tys.len() {
                                     let expected_ty = param_tys[i].clone();
-                                    self.infer_expression_type(param.expression.clone(), expected_ty);
+                                    self.infer_expression_type(
+                                        param.expression.clone(),
+                                        expected_ty,
+                                    );
                                     self.check_parameter_label(param, &decl, i);
                                 }
                             }
@@ -899,11 +908,11 @@ impl TypeResolver {
                         if let Some(symbol) = scope.get_symbol(struct_name)
                             && let Symbol::Struct {
                                 fields, methods, ..
-                            } = &*symbol
+                            } = &*symbol.borrow()
                         {
                             for field in fields {
-                                if field.name().as_ref().ok() == Some(&member.value)
-                                    && let Some(decl) = field.get_decl().ok().flatten()
+                                if field.borrow().name().as_ref().ok() == Some(&member.value)
+                                    && let Some(decl) = field.borrow().get_decl().ok().flatten()
                                     && let Statement::VariableDecl { ty: field_ty, .. } =
                                         &*decl.borrow()
                                     && let Some(t) = field_ty
@@ -913,8 +922,8 @@ impl TypeResolver {
                                 }
                             }
                             for method in methods {
-                                if method.name().as_ref().ok() == Some(&member.value)
-                                    && let Some(decl) = method.get_decl().ok().flatten()
+                                if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                    && let Some(decl) = method.borrow().get_decl().ok().flatten()
                                 {
                                     let method_ty = {
                                         let decl_ref = decl.borrow();
@@ -922,7 +931,8 @@ impl TypeResolver {
                                             ty.clone()
                                         } else if let Statement::InitDecl { ty, .. } = &*decl_ref {
                                             ty.clone()
-                                        } else if let Statement::DeinitDecl { ty, .. } = &*decl_ref {
+                                        } else if let Statement::DeinitDecl { ty, .. } = &*decl_ref
+                                        {
                                             ty.clone()
                                         } else {
                                             continue;
@@ -1374,7 +1384,7 @@ impl TypeResolver {
     ) -> Option<Rc<RefCell<Statement>>> {
         if let Expression::Variable { symbol, .. } = &*callee.borrow()
             && let Some(sym) = symbol
-            && let Ok(Some(decl)) = sym.get_decl()
+            && let Ok(Some(decl)) = sym.borrow().get_decl()
         {
             Some(decl)
         } else {

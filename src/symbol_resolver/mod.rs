@@ -72,11 +72,11 @@ impl SymbolResolver {
         match &mut *stmt.borrow_mut() {
             Statement::FunctionDecl { name, body, .. } => {
                 let id = self.get_symbol_id();
-                let symbol = Rc::new(Symbol::Function {
+                let symbol = Rc::new(RefCell::new(Symbol::Function {
                     name: name.value.clone(),
                     id,
                     decl: stmt.clone(),
-                });
+                }));
                 self.enter(symbol, name);
                 match &*body.borrow() {
                     FunctionBody::Statements(stmts) => {
@@ -104,12 +104,12 @@ impl SymbolResolver {
                     } = &*field_stmt.borrow()
                     {
                         let field_id = self.get_symbol_id();
-                        let field_symbol = Rc::new(Symbol::StructField {
+                        let field_symbol = Rc::new(RefCell::new(Symbol::StructField {
                             name: field_name.value.clone(),
                             id: field_id,
                             parent: struct_id,
                             decl: Some(field_stmt.clone()),
-                        });
+                        }));
                         fields.push(field_symbol.clone());
                         self.enter(field_symbol, field_name);
                     } else if let Statement::FunctionDecl {
@@ -117,12 +117,12 @@ impl SymbolResolver {
                     } = &*field_stmt.borrow()
                     {
                         let method_id = self.get_symbol_id();
-                        let method_symbol = Rc::new(Symbol::StructMethod {
+                        let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
                             name: method_name.value.clone(),
                             id: method_id,
                             parent: struct_id,
                             decl: Some(field_stmt.clone()),
-                        });
+                        }));
                         methods.push(method_symbol.clone());
                         self.enter(method_symbol, method_name);
                         if let Statement::FunctionDecl {
@@ -143,12 +143,12 @@ impl SymbolResolver {
                         }
                     } else if let Statement::InitDecl { body, .. } = &*field_stmt.borrow() {
                         let init_id = self.get_symbol_id();
-                        let init_symbol = Rc::new(Symbol::StructMethod {
+                        let init_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
                             name: "init".to_string(),
                             id: init_id,
                             parent: struct_id,
                             decl: Some(field_stmt.clone()),
-                        });
+                        }));
                         methods.push(init_symbol.clone());
                         let init_token = {
                             let stmt = field_stmt.borrow();
@@ -166,12 +166,12 @@ impl SymbolResolver {
                         }
                     } else if let Statement::DeinitDecl { body, .. } = &*field_stmt.borrow() {
                         let deinit_id = self.get_symbol_id();
-                        let deinit_symbol = Rc::new(Symbol::StructMethod {
+                        let deinit_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
                             name: "deinit".to_string(),
                             id: deinit_id,
                             parent: struct_id,
                             decl: Some(field_stmt.clone()),
-                        });
+                        }));
                         methods.push(deinit_symbol.clone());
                         let deinit_token = {
                             let stmt = field_stmt.borrow();
@@ -193,13 +193,13 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
 
-                let struct_symbol = Rc::new(Symbol::Struct {
+                let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
                     name: name.value.clone(),
                     id: struct_id,
                     decl: stmt.clone(),
                     fields,
                     methods,
-                });
+                }));
                 self.enter(struct_symbol, name);
             }
             Statement::ExternBlock { items, .. } => {
@@ -236,12 +236,12 @@ impl SymbolResolver {
                     let name = parameter.borrow().name.value.clone();
                     if name != "_" {
                         let id = self.get_symbol_id();
-                        let symbol = Rc::new(Symbol::Variable {
+                        let symbol = Rc::new(RefCell::new(Symbol::Variable {
                             name,
                             id,
                             decl: None,
                             parameter: Some(parameter.clone()),
-                        });
+                        }));
                         self.enter(symbol, &parameter.borrow().name);
                     }
                 }
@@ -256,12 +256,12 @@ impl SymbolResolver {
             } => {
                 if name.value != "_" {
                     let id = self.get_symbol_id();
-                    let symbol = Rc::new(Symbol::Variable {
+                    let symbol = Rc::new(RefCell::new(Symbol::Variable {
                         name: name.value.clone(),
                         id,
                         decl: Some(stmt.clone()),
                         parameter: None,
-                    });
+                    }));
                     self.enter(symbol, name);
                 }
                 if let Some(initializer) = initializer {
@@ -275,18 +275,23 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Statement::InitDecl { parameters, body, scope, .. } => {
+            Statement::InitDecl {
+                parameters,
+                body,
+                scope,
+                ..
+            } => {
                 *scope = Some(self.enter_scope(None));
                 for parameter in parameters {
                     let name = parameter.borrow().name.value.clone();
                     if name != "_" {
                         let id = self.get_symbol_id();
-                        let symbol = Rc::new(Symbol::Variable {
+                        let symbol = Rc::new(RefCell::new(Symbol::Variable {
                             name,
                             id,
                             decl: None,
                             parameter: Some(parameter.clone()),
-                        });
+                        }));
                         self.enter(symbol, &parameter.borrow().name);
                     }
                 }
@@ -370,11 +375,11 @@ impl SymbolResolver {
         }
     }
 
-    fn enter(&mut self, symbol: Rc<Symbol>, token: &Token) {
+    fn enter(&mut self, symbol: Rc<RefCell<Symbol>>, token: &Token) {
         if let Some(scope) = self.current_scope.clone() {
             scope.borrow_mut().set_symbol(symbol.clone());
         } else {
-            let name = match symbol.name() {
+            let name = match symbol.borrow().name() {
                 Ok(n) => n,
                 Err(_) => return,
             };
@@ -386,7 +391,7 @@ impl SymbolResolver {
         }
     }
 
-    fn resolve_symbol(&mut self, token: &Token) -> Result<Rc<Symbol>, ()> {
+    fn resolve_symbol(&mut self, token: &Token) -> Result<Rc<RefCell<Symbol>>, ()> {
         let name = token.value.clone();
         if let Some(current_scope) = self.current_scope.clone()
             && let Some(symbol) = self.resolve_symbol_in_scope(name.clone(), current_scope)?
@@ -406,7 +411,7 @@ impl SymbolResolver {
         &mut self,
         name: String,
         scope: Rc<RefCell<Scope>>,
-    ) -> Result<Option<Rc<Symbol>>, ()> {
+    ) -> Result<Option<Rc<RefCell<Symbol>>>, ()> {
         if let Some(symbol) = scope.borrow().get_symbol(&name) {
             Ok(Some(symbol))
         } else if let Some(parent) = scope.borrow().parent.clone() {
