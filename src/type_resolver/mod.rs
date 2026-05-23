@@ -700,12 +700,10 @@ impl TypeResolver {
                         let init_params_info = {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
                             if let Some(symbol) = scope.get_symbol(struct_name)
-                                && let Symbol::Struct { methods, .. } = &*symbol.borrow()
+                                && let Symbol::Struct { constructors, .. } = &*symbol.borrow()
                             {
-                                methods.iter().find_map(|method| {
-                                    if method.borrow().name().as_ref().ok().map(|s| s.as_str())
-                                        == Some("init")
-                                        && let Ok(Some(decl)) = method.borrow().get_decl()
+                                constructors.iter().find_map(|constructor| {
+                                    if let Ok(Some(decl)) = constructor.borrow().get_decl()
                                         && let Statement::InitDecl {
                                             ty: Some(init_ty), ..
                                         } = &*decl.borrow()

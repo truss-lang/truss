@@ -79,10 +79,16 @@ impl SymbolResolver {
                     decl: stmt.clone(),
                     fields: vec![],
                     methods: vec![],
+                    constructors: vec![],
+                    destrcutor: None,
                 }));
                 self.enter(struct_symbol.clone(), name);
                 let Symbol::Struct {
-                    fields, methods, ..
+                    fields,
+                    methods,
+                    constructors,
+                    destrcutor,
+                    ..
                 } = &mut *struct_symbol.borrow_mut()
                 else {
                     return;
@@ -134,7 +140,7 @@ impl SymbolResolver {
                             parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
                         }));
-                        methods.push(init_symbol.clone());
+                        constructors.push(init_symbol.clone());
                         let init_token = {
                             let stmt = field_stmt.borrow();
                             if let Statement::InitDecl { token, .. } = &*stmt {
@@ -155,15 +161,23 @@ impl SymbolResolver {
                             parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
                         }));
-                        methods.push(deinit_symbol.clone());
                         let deinit_token = {
                             let stmt = field_stmt.borrow();
                             if let Statement::DeinitDecl { token, .. } = &*stmt {
-                                Box::new(token.clone())
+                                token.as_ref().clone()
                             } else {
                                 unreachable!()
                             }
                         };
+                        if destrcutor.is_none() {
+                            *destrcutor = Some(deinit_symbol.clone());
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::DuplicateFunction,
+                                "Duplicate deinit function",
+                                &deinit_token,
+                            );
+                        }
                         self.enter(deinit_symbol, &deinit_token);
                         if let FunctionBody::Statements(stmts) = &*body.borrow() {
                             for s in stmts {

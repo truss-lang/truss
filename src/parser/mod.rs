@@ -600,12 +600,7 @@ impl Parser {
         let Some(token) = self.next() else {
             return Err(());
         };
-        let is_init = matches!(
-            token.ty,
-            TokenType::Keyword {
-                keyword: KeywordType::Init
-            }
-        );
+        let is_init = KeywordType::is_keyword(&token, KeywordType::Init);
         let name = if !is_init {
             let Some(name) = self.next() else {
                 self.emit_error(

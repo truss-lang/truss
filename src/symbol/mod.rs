@@ -23,6 +23,8 @@ pub enum Symbol {
         decl: Rc<RefCell<Statement>>,
         fields: Vec<Rc<RefCell<Symbol>>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
+        constructors: Vec<Rc<RefCell<Symbol>>>,
+        destrcutor: Option<Rc<RefCell<Symbol>>>,
     },
     StructField {
         name: String,
