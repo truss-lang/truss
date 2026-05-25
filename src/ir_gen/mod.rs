@@ -44,6 +44,7 @@ pub struct IRGenerator<'ctx> {
     struct_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     program_scope: Rc<RefCell<Option<Rc<RefCell<TrussScope>>>>>,
     current_struct: Rc<RefCell<Option<String>>>,
+    current_accessor_struct: Rc<RefCell<Option<(String, PointerValue<'ctx>)>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -60,6 +61,7 @@ impl<'ctx> IRGenerator<'ctx> {
             struct_types: Rc::new(RefCell::new(HashMap::new())),
             program_scope: Rc::new(RefCell::new(None)),
             current_struct: Rc::new(RefCell::new(None)),
+            current_accessor_struct: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -236,35 +238,6 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
         anyhow::bail!("Stored field '{}' not found in struct '{}'", field_name, struct_name)
-    }
-
-    fn get_stored_field_names(&self, struct_name: &str) -> Vec<(String, BasicTypeEnum<'ctx>, usize)> {
-        let mut result = Vec::new();
-        if let Some(scope) = self.program_scope.borrow().as_ref()
-            && let Some(symbol) = scope.borrow().get_symbol(struct_name)
-            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
-        {
-            let mut stored_idx = 0;
-            for field in fields.iter() {
-                if let Some(decl) = field.borrow().get_decl().ok().flatten()
-                    && let Statement::VariableDecl { ty, accessors, .. } = &*decl.borrow()
-                {
-                    let has_computed = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
-                    if has_computed {
-                        continue;
-                    }
-                    if let Some(ty) = ty {
-                        if let Ok(llvm_ty) = self.resolve_type(ty.clone()) {
-                            if let Ok(name) = field.borrow().name() {
-                                result.push((name, llvm_ty, stored_idx));
-                            }
-                        }
-                    }
-                    stored_idx += 1;
-                }
-            }
-        }
-        result
     }
 
     fn create_function_declarations(&self, statement: Rc<RefCell<Statement>>) {
@@ -449,20 +422,8 @@ impl<'ctx> IRGenerator<'ctx> {
 
         self.enter_scope();
 
-        if let Some(sname) = struct_name {
-            let struct_llvm_type = self.struct_types.borrow().get(sname).copied();
-            if let Some(stype) = struct_llvm_type {
-                for (fname, _, idx) in self.get_stored_field_names(sname) {
-                    if let Ok(field_ptr) = self.builder.build_struct_gep(
-                        stype,
-                        ptr_var,
-                        idx as u32,
-                        "",
-                    ) {
-                        self.declare_variable(fname, field_ptr);
-                    }
-                }
-            }
+        if struct_name.is_some() {
+            *self.current_accessor_struct.borrow_mut() = Some((struct_name.unwrap().to_string(), ptr_var));
         } else {
             self.declare_variable(format!("_{}", backing_var_name), ptr_var);
         }
@@ -497,6 +458,8 @@ impl<'ctx> IRGenerator<'ctx> {
         self.exit_scope();
 
         self.exit_scope();
+
+        *self.current_accessor_struct.borrow_mut() = None;
 
         if let Some(block) = current_block {
             self.builder.position_at_end(block);
@@ -1008,6 +971,24 @@ impl<'ctx> IRGenerator<'ctx> {
                         anyhow::bail!("Cannot infer type from variable")
                     };
                     let val = self.builder.build_load(llvm_type, ptr, "")?;
+                    Ok(Some(val))
+                } else if let Some((sname, struct_ptr)) = &*self.current_accessor_struct.borrow()
+                    && let Ok(idx) = self.get_stored_struct_field_index(sname, &name.value)
+                    && let Some(stype) = self.struct_types.borrow().get(sname).copied()
+                    && let Ok(field_ptr) = self.builder.build_struct_gep(stype, *struct_ptr, idx as u32, "")
+                {
+                    self.declare_variable(name.value.clone(), field_ptr);
+                    let llvm_type = if let Some(ty) = ty {
+                        self.resolve_type(ty.clone())?
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeInferenceFailed,
+                            "Cannot infer type from variable without type annotation",
+                            Some(name),
+                        );
+                        anyhow::bail!("Cannot infer type from variable")
+                    };
+                    let val = self.builder.build_load(llvm_type, field_ptr, "")?;
                     Ok(Some(val))
                 } else {
                     self.emit_error(
@@ -1524,6 +1505,20 @@ impl<'ctx> IRGenerator<'ctx> {
                         };
                         let val = self.builder.build_load(ty, ptr, "")?;
                         (ptr, Some(val))
+                    } else if let Some((sname, struct_ptr)) = &*self.current_accessor_struct.borrow()
+                        && let Ok(idx) = self.get_stored_struct_field_index(sname, &name.value)
+                        && let Some(stype) = self.struct_types.borrow().get(sname).copied()
+                        && let Ok(field_ptr) = self.builder.build_struct_gep(stype, *struct_ptr, idx as u32, "")
+                    {
+                        self.declare_variable(name.value.clone(), field_ptr);
+                        let ty_opt = left.borrow().get_ty()?;
+                        let ty = if let Some(ty_rc) = ty_opt {
+                            self.resolve_type(ty_rc)?
+                        } else {
+                            self.context.i32_type().into()
+                        };
+                        let val = self.builder.build_load(ty, field_ptr, "")?;
+                        (field_ptr, Some(val))
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::UndefinedVariable,
@@ -2133,28 +2128,6 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         };
         Ok(resolved)
-    }
-
-    fn get_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
-        if let Some(scope) = self.program_scope.borrow().as_ref()
-            && let Some(symbol) = scope.borrow().get_symbol(struct_name)
-            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
-        {
-            for (i, field) in fields.iter().enumerate() {
-                if field.borrow().name().as_ref().ok() == Some(&field_name.to_string()) {
-                    return Ok(i);
-                }
-            }
-        }
-        self.emit_error(
-            TrussDiagnosticCode::UnsupportedFeature,
-            format!(
-                "Field '{}' not found in struct '{}'",
-                field_name, struct_name
-            ),
-            None,
-        );
-        anyhow::bail!("Field not found")
     }
 
     fn get_struct_field_type(
