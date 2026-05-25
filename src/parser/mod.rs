@@ -9,8 +9,8 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, FunctionBody, Modifier, ModifierType, Parameter, Pattern, Statement,
-            VariadicKind,
+            AccessModifier, Accessor, AccessorKind, FunctionBody, Modifier, ModifierType, Parameter,
+            Pattern, Statement, VariadicKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -1357,14 +1357,233 @@ impl Parser {
         } else {
             None
         };
+        let accessors = if !is_extern
+            && let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+        {
+            self.index += 1;
+            self.parse_accessor_body()?
+        } else {
+            Vec::new()
+        };
         Ok(Statement::VariableDecl {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
             type_expression: type_expression.map(RefCell::new).map(Rc::new),
             initializer: initializer.map(RefCell::new).map(Rc::new),
+            accessors,
             ty: None,
         })
+    }
+
+    fn parse_accessor_body(&mut self) -> Result<Vec<Accessor>, ()> {
+        let Some(first) = self.peek() else {
+            let last = &self.tokens[self.index.saturating_sub(1)];
+            self.emit_error(
+                TrussDiagnosticCode::UnexpectedToken,
+                "Expected accessor or getter body after '{'".to_string(),
+                last,
+            );
+            return Err(());
+        };
+        let is_accessor_block = if let TokenType::Identifier = first.ty {
+            matches!(first.value.as_str(), "get" | "set" | "willSet" | "didSet")
+                && self.peek2().is_some()
+                && (SeparatorType::is_separator(&self.peek2().unwrap(), SeparatorType::OpenBrace)
+                    || SeparatorType::is_separator(
+                        &self.peek2().unwrap(),
+                        SeparatorType::OpenParen,
+                    ))
+        } else {
+            false
+        };
+        if is_accessor_block {
+            self.parse_accessors()
+        } else {
+            let mut body = Vec::new();
+            while let Some(t) = self.peek() {
+                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                    break;
+                }
+                if let Ok(stmt) = self.parse_statement() {
+                    body.push(Rc::new(RefCell::new(stmt)));
+                } else {
+                    self.skip();
+                }
+            }
+            let Some(close) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '}' to close getter body".to_string(),
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '}}' but found '{}'", close.value),
+                    &close,
+                );
+                return Err(());
+            }
+            Ok(vec![Accessor {
+                kind: AccessorKind::Get,
+                parameter: None,
+                body,
+            }])
+        }
+    }
+
+    fn parse_accessors(&mut self) -> Result<Vec<Accessor>, ()> {
+        let mut accessors = Vec::new();
+        loop {
+            let Some(token) = self.peek() else {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    "Expected accessor or '}'".to_string(),
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
+                break;
+            }
+            if let TokenType::Identifier = token.ty {
+            } else {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    format!("Expected accessor name but found '{}'", token.value),
+                    &token,
+                );
+                return Err(());
+            }
+            let kind = match token.value.as_str() {
+                "get" => AccessorKind::Get,
+                "set" => AccessorKind::Set,
+                "willSet" => AccessorKind::WillSet,
+                "didSet" => AccessorKind::DidSet,
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        format!(
+                            "Expected 'get', 'set', 'willSet', or 'didSet' but found '{}'",
+                            token.value
+                        ),
+                        &token,
+                    );
+                    return Err(());
+                }
+            };
+            self.index += 1;
+            let parameter = if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::OpenParen)
+            {
+                self.index += 1;
+                let Some(param) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        "Expected parameter name".to_string(),
+                        &self.tokens[self.index.saturating_sub(1)],
+                    );
+                    return Err(());
+                };
+                if TokenType::Identifier != param.ty {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!("Expected parameter name but found '{}'", param.value),
+                        &param,
+                    );
+                    return Err(());
+                }
+                let Some(close) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        "Expected ')' after parameter name".to_string(),
+                        &self.tokens[self.index.saturating_sub(1)],
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        format!("Expected ')' but found '{}'", close.value),
+                        &close,
+                    );
+                    return Err(());
+                }
+                Some(Box::new(param))
+            } else {
+                None
+            };
+            let Some(t) = self.peek() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '{' to open accessor body".to_string(),
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&t, SeparatorType::OpenBrace) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '{{' but found '{}'", t.value),
+                    &t,
+                );
+                return Err(());
+            }
+            self.index += 1;
+            let mut body = Vec::new();
+            while let Some(t) = self.peek() {
+                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                    break;
+                }
+                if let Ok(stmt) = self.parse_statement() {
+                    body.push(Rc::new(RefCell::new(stmt)));
+                } else {
+                    self.skip();
+                }
+            }
+            let Some(close) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '}' to close accessor body".to_string(),
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '}}' but found '{}'", close.value),
+                    &close,
+                );
+                return Err(());
+            }
+            accessors.push(Accessor {
+                kind,
+                parameter,
+                body,
+            });
+        }
+        let Some(close) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '}' to close accessor block".to_string(),
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '}}' but found '{}'", close.value),
+                &close,
+            );
+            return Err(());
+        }
+        Ok(accessors)
     }
 
     fn parse_struct_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {

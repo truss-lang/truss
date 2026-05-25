@@ -24,6 +24,7 @@ pub enum Statement {
         name: Box<Token>,
         type_expression: Option<Rc<RefCell<Expression>>>,
         initializer: Option<Rc<RefCell<Expression>>>,
+        accessors: Vec<Accessor>,
         ty: Option<Rc<RefCell<Type>>>,
     },
     StructDecl {
@@ -160,6 +161,21 @@ pub enum FunctionBody {
     Statements(Vec<Rc<RefCell<Statement>>>),
     Expression(Rc<RefCell<Expression>>),
     None,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AccessorKind {
+    Get,
+    Set,
+    WillSet,
+    DidSet,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Accessor {
+    pub kind: AccessorKind,
+    pub parameter: Option<Box<Token>>,
+    pub body: Vec<Rc<RefCell<Statement>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

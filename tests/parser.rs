@@ -4,8 +4,8 @@ use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         statement::{
-            AccessModifier, FunctionBody, Modifier, ModifierType, Parameter, Pattern, Statement,
-            VariadicKind,
+            AccessModifier, AccessorKind, FunctionBody, Modifier, ModifierType, Parameter, Pattern,
+            Statement, VariadicKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -1711,6 +1711,265 @@ fn test_parse_private_struct_field() {
         }
     } else {
         panic!("Expected StructDecl");
+    }
+}
+
+// =================== Accessor / Getter/Set/WillSet/DidSet tests ===================
+
+#[test]
+fn test_parse_var_get_shorthand() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { return 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name,
+        accessors,
+        type_expression,
+        initializer,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "v");
+        assert!(type_expression.is_some());
+        assert!(initializer.is_none());
+        assert_eq!(accessors.len(), 1);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert!(accessors[0].parameter.is_none());
+        assert_eq!(accessors[0].body.len(), 1);
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_get_explicit() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { return 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name, accessors, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 1);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_get_set() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { return _v } set(value) { _v = value } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name, accessors, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 2);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert!(accessors[0].parameter.is_none());
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+        assert_eq!(
+            accessors[1].parameter.as_ref().unwrap().value,
+            "value"
+        );
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_all_accessors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { return _v } set(v) { _v = v } willSet { } didSet { } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name, accessors, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 4);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+        assert_eq!(accessors[2].kind, AccessorKind::WillSet);
+        assert_eq!(accessors[3].kind, AccessorKind::DidSet);
+        assert!(accessors[2].parameter.is_none());
+        assert!(accessors[3].parameter.is_none());
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_didset_only() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var didSetOnly: Int = 0 { didSet { print(1) } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name,
+        accessors,
+        initializer,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "didSetOnly");
+        assert!(initializer.is_some());
+        assert_eq!(accessors.len(), 1);
+        assert_eq!(accessors[0].kind, AccessorKind::DidSet);
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_get_willset_didset() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { 1 } willSet(newValue) {} didSet(oldValue) {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name, accessors, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 3);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert_eq!(accessors[1].kind, AccessorKind::WillSet);
+        assert_eq!(
+            accessors[1].parameter.as_ref().unwrap().value,
+            "newValue"
+        );
+        assert_eq!(accessors[2].kind, AccessorKind::DidSet);
+        assert_eq!(
+            accessors[2].parameter.as_ref().unwrap().value,
+            "oldValue"
+        );
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_set_no_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { 1 } set { _v = newValue } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name, accessors, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 2);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+        assert!(accessors[1].parameter.is_none());
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_accessors_in_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { var v: Int32 { return 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            name, accessors, ..
+        } = &*statements[0].borrow()
+    {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 1);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+    } else {
+        panic!("Expected FunctionDecl containing VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_accessors_in_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { var v: Int32 { get { return _v } set { _v = newValue } } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow()
+        && let Statement::VariableDecl {
+            name, accessors, ..
+        } = &*body[0].borrow()
+    {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 2);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+    } else {
+        panic!("Expected StructDecl containing VariableDecl");
     }
 }
 
