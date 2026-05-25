@@ -184,8 +184,8 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn is_stored_field(&self, stmt: &Rc<RefCell<Statement>>) -> bool {
         if let Statement::VariableDecl { accessors, .. } = &*stmt.borrow() {
-            let has_computed = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
-            !has_computed
+            let has_get_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+            !has_get_set
         } else {
             false
         }
@@ -226,8 +226,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Some(decl) = field.borrow().get_decl().ok().flatten()
                     && let Statement::VariableDecl { accessors, .. } = &*decl.borrow()
                 {
-                    let has_computed = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
-                    if has_computed {
+                    let has_get_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+                    if has_get_set {
                         continue;
                     }
                     if field.borrow().name().as_ref().ok() == Some(&field_name.to_string()) {

@@ -1567,6 +1567,16 @@ impl Parser {
                 body,
             });
         }
+        let has_computed = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+        let has_willset_didset = accessors.iter().any(|a| matches!(a.kind, AccessorKind::WillSet | AccessorKind::DidSet));
+        if has_computed && has_willset_didset {
+            let conflict_token = &self.tokens[self.index.saturating_sub(1)];
+            self.emit_error(
+                TrussDiagnosticCode::IncompatibleAccessors,
+                "A property cannot have both willSet/didSet and get/set — willSet/didSet are for stored properties, get/set are for computed properties",
+                conflict_token,
+            );
+        }
         let Some(close) = self.next() else {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,

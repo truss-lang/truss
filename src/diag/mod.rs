@@ -25,6 +25,7 @@ pub enum TrussDiagnosticCode {
     MissingSeparator,
     DuplicateModifier,
     ModifierNotAllowedHere,
+    IncompatibleAccessors,
 
     SymbolError,
     UndefinedVariable,
@@ -80,6 +81,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::MissingSeparator => "E0109",
             Self::DuplicateModifier => "E0110",
             Self::ModifierNotAllowedHere => "E0111",
+            Self::IncompatibleAccessors => "E0112",
 
             Self::SymbolError => "E0201",
             Self::UndefinedVariable => "E0202",

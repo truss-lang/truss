@@ -1793,10 +1793,7 @@ fn test_parse_var_get_set() {
         assert_eq!(accessors[0].kind, AccessorKind::Get);
         assert!(accessors[0].parameter.is_none());
         assert_eq!(accessors[1].kind, AccessorKind::Set);
-        assert_eq!(
-            accessors[1].parameter.as_ref().unwrap().value,
-            "value"
-        );
+        assert_eq!(accessors[1].parameter.as_ref().unwrap().value, "value");
     } else {
         panic!("Expected VariableDecl");
     }
@@ -1813,23 +1810,13 @@ fn test_parse_var_all_accessors() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    if let Statement::VariableDecl {
-        name, accessors, ..
-    } = &*program.statements[0].borrow()
-    {
-        assert_eq!(name.value, "v");
-        assert_eq!(accessors.len(), 4);
-        assert_eq!(accessors[0].kind, AccessorKind::Get);
-        assert_eq!(accessors[1].kind, AccessorKind::Set);
-        assert_eq!(accessors[2].kind, AccessorKind::WillSet);
-        assert_eq!(accessors[3].kind, AccessorKind::DidSet);
-        assert!(accessors[2].parameter.is_none());
-        assert!(accessors[3].parameter.is_none());
-    } else {
-        panic!("Expected VariableDecl");
-    }
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::IncompatibleAccessors
+    ));
+    assert_eq!(program.statements.len(), 1);
 }
 
 #[test]
@@ -1870,28 +1857,13 @@ fn test_parse_var_get_willset_didset() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    if let Statement::VariableDecl {
-        name, accessors, ..
-    } = &*program.statements[0].borrow()
-    {
-        assert_eq!(name.value, "v");
-        assert_eq!(accessors.len(), 3);
-        assert_eq!(accessors[0].kind, AccessorKind::Get);
-        assert_eq!(accessors[1].kind, AccessorKind::WillSet);
-        assert_eq!(
-            accessors[1].parameter.as_ref().unwrap().value,
-            "newValue"
-        );
-        assert_eq!(accessors[2].kind, AccessorKind::DidSet);
-        assert_eq!(
-            accessors[2].parameter.as_ref().unwrap().value,
-            "oldValue"
-        );
-    } else {
-        panic!("Expected VariableDecl");
-    }
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::IncompatibleAccessors
+    ));
+    assert_eq!(program.statements.len(), 1);
 }
 
 #[test]
@@ -1951,8 +1923,7 @@ fn test_parse_var_accessors_in_struct() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Foo { var v: Int32 { get { return _v } set { _v = newValue } } }"
-                .to_string(),
+            "struct Foo { var v: Int32 { get { return _v } set { _v = newValue } } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -1973,12 +1944,141 @@ fn test_parse_var_accessors_in_struct() {
     }
 }
 
-fn engine_has_error(engine: &Rc<RefCell<TrussDiagnosticEngine>>, code: TrussDiagnosticCode) -> bool {
-    engine
-        .borrow()
-        .get_errors()
-        .iter()
-        .any(|e| e.code == code)
+#[test]
+fn test_parse_var_get_set_with_willset_conflict() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { 1 } set { } willSet { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::IncompatibleAccessors
+    ));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_parse_var_get_set_with_didset_conflict() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { 1 } set { } didSet { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::IncompatibleAccessors
+    ));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_parse_var_get_set_with_willset_didset_conflict() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { 1 } set(v) { } willSet(v) { } didSet(v) { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::IncompatibleAccessors
+    ));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_parse_var_didset_only_no_conflict() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 = 0 { didSet { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine_has_error(
+        &engine,
+        TrussDiagnosticCode::IncompatibleAccessors
+    ));
+    if let Statement::VariableDecl { accessors, .. } = &*program.statements[0].borrow() {
+        assert_eq!(accessors.len(), 1);
+        assert_eq!(accessors[0].kind, AccessorKind::DidSet);
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_willset_only_no_conflict() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 = 0 { willSet { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine_has_error(
+        &engine,
+        TrussDiagnosticCode::IncompatibleAccessors
+    ));
+    if let Statement::VariableDecl { accessors, .. } = &*program.statements[0].borrow() {
+        assert_eq!(accessors.len(), 1);
+        assert_eq!(accessors[0].kind, AccessorKind::WillSet);
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_var_get_set_only_no_conflict() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "var v: Int32 { get { 1 } set { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine_has_error(
+        &engine,
+        TrussDiagnosticCode::IncompatibleAccessors
+    ));
+    if let Statement::VariableDecl { accessors, .. } = &*program.statements[0].borrow() {
+        assert_eq!(accessors.len(), 2);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+fn engine_has_error(
+    engine: &Rc<RefCell<TrussDiagnosticEngine>>,
+    code: TrussDiagnosticCode,
+) -> bool {
+    engine.borrow().get_errors().iter().any(|e| e.code == code)
 }
 
 // =================== Modifier validity tests ===================
@@ -1995,7 +2095,10 @@ fn test_duplicate_access_modifier() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
     assert_eq!(program.statements.len(), 1);
 }
 
@@ -2011,7 +2114,10 @@ fn test_conflicting_access_modifiers() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
     assert_eq!(program.statements.len(), 1);
 }
 
@@ -2027,7 +2133,10 @@ fn test_duplicate_same_access_modifier_twice() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
     assert_eq!(program.statements.len(), 1);
 }
 
@@ -2043,7 +2152,10 @@ fn test_triple_access_modifier() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
     assert_eq!(program.statements.len(), 1);
 }
 
@@ -2180,7 +2292,10 @@ fn test_valid_public_func_no_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(!engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert!(!engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
     assert!(!engine_has_error(
         &engine,
         TrussDiagnosticCode::ModifierNotAllowedHere
@@ -2191,15 +2306,15 @@ fn test_valid_public_func_no_error() {
 fn test_valid_private_struct_no_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "private struct Foo {}".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("private struct Foo {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(!engine_has_error(&engine, TrussDiagnosticCode::DuplicateModifier));
+    assert!(!engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
     assert!(!engine_has_error(
         &engine,
         TrussDiagnosticCode::ModifierNotAllowedHere
