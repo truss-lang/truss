@@ -2320,3 +2320,134 @@ fn test_valid_private_struct_no_error() {
         TrussDiagnosticCode::ModifierNotAllowedHere
     ));
 }
+
+#[test]
+fn test_parse_enum_simple_cases() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Direction { case north, south, east, west }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::EnumDecl { name, cases, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Direction");
+        assert_eq!(cases.len(), 4);
+        assert_eq!(cases[0].name.value, "north");
+        assert_eq!(cases[1].name.value, "south");
+        assert_eq!(cases[2].name.value, "east");
+        assert_eq!(cases[3].name.value, "west");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_enum_with_payload() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Result { case success(Int32), error(String) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::EnumDecl { name, cases, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Result");
+        assert_eq!(cases.len(), 2);
+        assert_eq!(cases[0].name.value, "success");
+        assert_eq!(cases[0].parameters.len(), 1);
+        assert!(cases[0].parameters[0].label.is_none());
+        assert_eq!(cases[1].name.value, "error");
+        assert_eq!(cases[1].parameters.len(), 1);
+        assert!(cases[1].parameters[0].label.is_none());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_enum_with_labeled_parameters() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Point { case origin(x: Int32, y: Int32) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::EnumDecl { name, cases, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(cases.len(), 1);
+        assert_eq!(cases[0].name.value, "origin");
+        assert_eq!(cases[0].parameters.len(), 2);
+        assert_eq!(cases[0].parameters[0].label.as_ref().unwrap().value, "x");
+        assert_eq!(cases[0].parameters[1].label.as_ref().unwrap().value, "y");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_enum_with_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Name { case a, b, c case d(Int32) case e(x: Int64, y: Int8) var x: Int32 }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::EnumDecl { name, cases, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Name");
+        assert_eq!(cases.len(), 5);
+        assert_eq!(cases[0].name.value, "a");
+        assert_eq!(cases[1].name.value, "b");
+        assert_eq!(cases[2].name.value, "c");
+        assert_eq!(cases[3].name.value, "d");
+        assert_eq!(cases[3].parameters.len(), 1);
+        assert!(cases[3].parameters[0].label.is_none());
+        assert_eq!(cases[4].name.value, "e");
+        assert_eq!(cases[4].parameters.len(), 2);
+        assert_eq!(cases[4].parameters[0].label.as_ref().unwrap().value, "x");
+        assert_eq!(cases[4].parameters[1].label.as_ref().unwrap().value, "y");
+        assert_eq!(body.len(), 1);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_enum_with_multiple_case_lines() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Status { case idle case running(Int32) case stopped }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::EnumDecl { name, cases, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Status");
+        assert_eq!(cases.len(), 3);
+        assert_eq!(cases[0].name.value, "idle");
+        assert_eq!(cases[1].name.value, "running");
+        assert_eq!(cases[1].parameters.len(), 1);
+        assert!(cases[1].parameters[0].label.is_none());
+        assert_eq!(cases[2].name.value, "stopped");
+    } else {
+        panic!();
+    }
+}

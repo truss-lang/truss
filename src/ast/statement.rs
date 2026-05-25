@@ -35,6 +35,15 @@ pub enum Statement {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    EnumDecl {
+        modifiers: Vec<Modifier>,
+        token: Box<Token>,
+        name: Box<Token>,
+        cases: Vec<EnumCase>,
+        body: Vec<Rc<RefCell<Statement>>>,
+        scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     InitDecl {
         modifiers: Vec<Modifier>,
         token: Box<Token>,
@@ -102,6 +111,7 @@ impl Statement {
             Self::FunctionDecl { token, .. } => (**token).clone(),
             Self::VariableDecl { token, .. } => (**token).clone(),
             Self::StructDecl { token, .. } => (**token).clone(),
+            Self::EnumDecl { token, .. } => (**token).clone(),
             Self::InitDecl { token, .. } => (**token).clone(),
             Self::DeinitDecl { token, .. } => (**token).clone(),
             Self::ExpressionStatement { expression } => expression.borrow().token(),
@@ -121,6 +131,7 @@ impl Statement {
             Self::FunctionDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::VariableDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::StructDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::EnumDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::InitDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::DeinitDecl { modifiers, .. } => Ok(modifiers.clone()),
             _ => anyhow::bail!(""),
@@ -202,4 +213,17 @@ pub enum Pattern {
     Identifier(Box<Token>),
     Tuple(Vec<Pattern>),
     Ignore,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumCase {
+    pub token: Box<Token>,
+    pub name: Box<Token>,
+    pub parameters: Vec<EnumCaseParameter>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumCaseParameter {
+    pub label: Option<Box<Token>>,
+    pub type_expression: Rc<RefCell<Expression>>,
 }

@@ -9,8 +9,8 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, Accessor, AccessorKind, FunctionBody, Modifier, ModifierType, Parameter,
-            Pattern, Statement, VariadicKind,
+            AccessModifier, Accessor, AccessorKind, EnumCase, EnumCaseParameter, FunctionBody,
+            Modifier, ModifierType, Parameter, Pattern, Statement, VariadicKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -102,6 +102,7 @@ impl Parser {
                 KeywordType::Func => self.parse_function_decl(false, modifiers),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false, modifiers),
                 KeywordType::Struct => self.parse_struct_decl(modifiers),
+                KeywordType::Enum => self.parse_enum_decl(modifiers),
                 KeywordType::Extern => self.parse_extern(modifiers),
                 KeywordType::Init => self.parse_function_decl(false, modifiers),
                 KeywordType::Deinit => self.parse_deinit_decl(modifiers),
@@ -1659,6 +1660,168 @@ impl Parser {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
+            body,
+            scope: None,
+            ty: None,
+        })
+    }
+
+    fn parse_enum_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+        let Some(token) = self.next() else {
+            return Err(());
+        };
+        let Some(name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidStructName,
+                "Expected enum name after 'enum'",
+                &token,
+            );
+            return Err(());
+        };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidStructName,
+                format!("Expected enum name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
+        let mut cases = Vec::new();
+        let mut body = Vec::new();
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+        {
+            self.index += 1;
+            while let Some(t) = self.peek() {
+                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                    break;
+                }
+                if let TokenType::Keyword { keyword } = t.ty
+                    && keyword == KeywordType::Case
+                {
+                    self.index += 1;
+                    loop {
+                        let Some(case_name) = self.next() else {
+                            self.emit_error(
+                                TrussDiagnosticCode::ExpectedIdentifier,
+                                "Expected case name",
+                                &t,
+                            );
+                            return Err(());
+                        };
+                        if TokenType::Identifier != case_name.ty {
+                            self.emit_error(
+                                TrussDiagnosticCode::ExpectedIdentifier,
+                                format!("Expected case name but found '{}'", case_name.value),
+                                &case_name,
+                            );
+                            return Err(());
+                        }
+                        let mut parameters = Vec::new();
+                        if let Some(next) = self.peek()
+                            && SeparatorType::is_separator(&next, SeparatorType::OpenParen)
+                        {
+                            self.index += 1;
+                            while let Some(p) = self.peek() {
+                                if SeparatorType::is_separator(&p, SeparatorType::CloseParen) {
+                                    break;
+                                }
+                                let label = if let Some(peeked) = self.peek2()
+                                    && SeparatorType::is_separator(&peeked, SeparatorType::Colon)
+                                {
+                                    let label = Box::new(self.next().unwrap());
+                                    self.index += 1;
+                                    Some(label)
+                                } else {
+                                    None
+                                };
+                                let type_expression = self.parse_type_expression()?;
+                                parameters.push(EnumCaseParameter {
+                                    label,
+                                    type_expression: Rc::new(RefCell::new(type_expression)),
+                                });
+                                if let Some(comma) = self.peek()
+                                    && SeparatorType::is_separator(&comma, SeparatorType::Comma)
+                                {
+                                    self.index += 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            let Some(close_paren) = self.next() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::MissingSeparator,
+                                    "Expected ')' to close case parameter list",
+                                    &self.tokens[self.index.saturating_sub(1)],
+                                );
+                                return Err(());
+                            };
+                            if !SeparatorType::is_separator(&close_paren, SeparatorType::CloseParen) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::MissingSeparator,
+                                    format!("Expected ')' but found '{}'", close_paren.value),
+                                    &close_paren,
+                                );
+                                return Err(());
+                            }
+                        }
+                        cases.push(EnumCase {
+                            token: Box::new(t.clone()),
+                            name: Box::new(case_name),
+                            parameters,
+                        });
+                        if let Some(comma_or_close) = self.peek() {
+                            if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
+                                self.index += 1;
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    if let Some(sep) = self.peek()
+                        && SeparatorType::is_separator(&sep, SeparatorType::SemiColon)
+                    {
+                        self.index += 1;
+                    }
+                } else {
+                    if let Ok(stmt) = self.parse_statement() {
+                        body.push(Rc::new(RefCell::new(stmt)));
+                    } else {
+                        self.skip();
+                    }
+                }
+            }
+            let Some(next) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '}' to close enum body",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '}}' but found '{}'", next.value),
+                    &next,
+                );
+                return Err(());
+            }
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' to open enum body",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        }
+        Ok(Statement::EnumDecl {
+            modifiers,
+            token: Box::new(token),
+            name: Box::new(name),
+            cases,
             body,
             scope: None,
             ty: None,
