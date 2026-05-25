@@ -4,7 +4,7 @@ use crate::{
     ast::{
         expression::Expression,
         node::Program,
-        statement::{FunctionBody, Statement},
+        statement::{AccessorKind, FunctionBody, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     krate::{Crate, Module},
@@ -255,7 +255,13 @@ impl SymbolResolver {
                     for accessor in accessors {
                         let accessor_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
                         let saved = self.current_scope.clone();
-                        self.current_scope = Some(accessor_scope);
+                        self.current_scope = Some(accessor_scope.clone());
+                        let backing_sym = Rc::new(RefCell::new(Symbol::Variable {
+                            name: format!("_{}", name.value),
+                            decl: None,
+                            parameter: None,
+                        }));
+                        accessor_scope.borrow_mut().set_symbol(backing_sym);
                         if let Some(param) = &accessor.parameter {
                             let param_sym = Rc::new(RefCell::new(Symbol::Variable {
                                 name: param.value.clone(),
@@ -263,6 +269,19 @@ impl SymbolResolver {
                                 parameter: None,
                             }));
                             self.enter(param_sym, param);
+                        } else {
+                            let param_name = match accessor.kind {
+                                AccessorKind::DidSet => "oldValue",
+                                _ => "newValue",
+                            };
+                            let param_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                name: param_name.to_string(),
+                                decl: None,
+                                parameter: None,
+                            }));
+                            if let Some(scope) = self.current_scope.clone() {
+                                scope.borrow_mut().set_symbol(param_sym);
+                            }
                         }
                         for stmt in &accessor.body {
                             self.resolve_statement(stmt.clone());
