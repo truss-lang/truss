@@ -307,7 +307,8 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn generate_accessor_function(
         &self,
-        var_name: &str,
+        fn_prefix: &str,
+        backing_var_name: &str,
         accessor: &Accessor,
         llvm_var_type: BasicTypeEnum<'ctx>,
     ) -> Result<()> {
@@ -316,7 +317,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Vec<Option<String>>,
             bool,
         ) = match accessor.kind {
-            AccessorKind::Get => (format!("{}.getter", var_name), vec![], true),
+            AccessorKind::Get => (format!("{}.getter", fn_prefix), vec![], true),
             AccessorKind::Set => {
                 let param_name = accessor
                     .parameter
@@ -324,7 +325,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     .map(|t| t.value.clone())
                     .unwrap_or_else(|| "newValue".to_string());
                 (
-                    format!("{}.setter", var_name),
+                    format!("{}.setter", fn_prefix),
                     vec![Some(param_name)],
                     false,
                 )
@@ -336,7 +337,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     .map(|t| t.value.clone())
                     .unwrap_or_else(|| "newValue".to_string());
                 (
-                    format!("{}.willSet", var_name),
+                    format!("{}.willSet", fn_prefix),
                     vec![Some(param_name)],
                     false,
                 )
@@ -348,7 +349,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     .map(|t| t.value.clone())
                     .unwrap_or_else(|| "oldValue".to_string());
                 (
-                    format!("{}.didSet", var_name),
+                    format!("{}.didSet", fn_prefix),
                     vec![Some(param_name)],
                     false,
                 )
@@ -384,7 +385,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
         self.enter_scope();
 
-        self.declare_variable(format!("_{}", var_name), ptr_var);
+        self.declare_variable(format!("_{}", backing_var_name), ptr_var);
 
         for (i, param_name) in all_param_names.iter().enumerate().skip(1) {
             let param_val = function.get_nth_param(i as u32).unwrap();
@@ -404,7 +405,7 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
         if is_getter && !has_return {
-            if let Some(ptr) = self.lookup_variable(&format!("_{}", var_name)) {
+            if let Some(ptr) = self.lookup_variable(&format!("_{}", backing_var_name)) {
                 let val = self.builder.build_load(llvm_var_type, ptr, "")?;
                 self.builder.build_return(Some(&val))?;
             } else {
@@ -583,15 +584,16 @@ impl<'ctx> IRGenerator<'ctx> {
                     {
                         self.builder.build_store(ptr, init_val)?;
                     }
+                }
 
-                    if !accessors.is_empty() {
-                        for accessor in accessors {
-                            self.generate_accessor_function(
-                                &name.value,
-                                accessor,
-                                llvm_var_type,
-                            )?;
-                        }
+                if !accessors.is_empty() {
+                    let (fn_prefix, backing_name) = if let Some(struct_name) = &*self.current_struct.borrow() {
+                        (format!("{}.{}", struct_name, name.value), name.value.clone())
+                    } else {
+                        (name.value.clone(), name.value.clone())
+                    };
+                    for accessor in accessors {
+                        self.generate_accessor_function(&fn_prefix, &backing_name, accessor, llvm_var_type)?;
                     }
                 }
                 Ok(false)
@@ -1479,6 +1481,56 @@ impl<'ctx> IRGenerator<'ctx> {
                                 "",
                             )?;
 
+                            let setter_name =
+                                format!("{}.{}.setter", struct_name, field_name);
+                            let willset_name =
+                                format!("{}.{}.willSet", struct_name, field_name);
+                            let didset_name =
+                                format!("{}.{}.didSet", struct_name, field_name);
+
+                            let has_setter =
+                                self.module.get_function(&setter_name).is_some();
+                            let has_willset =
+                                self.module.get_function(&willset_name).is_some();
+                            let has_didset =
+                                self.module.get_function(&didset_name).is_some();
+
+                            if has_setter || has_willset || has_didset {
+                                let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
+                                let current_val = self.builder.build_load(field_ty, field_ptr, "")?;
+
+                                if has_willset {
+                                    let willset_fn =
+                                        self.module.get_function(&willset_name).unwrap();
+                                    let args: Vec<
+                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                    > = vec![field_ptr.into(), right_val.into()];
+                                    self.builder.build_call(willset_fn, &args, "")?;
+                                }
+
+                                if has_setter {
+                                    let setter_fn =
+                                        self.module.get_function(&setter_name).unwrap();
+                                    let args: Vec<
+                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                    > = vec![field_ptr.into(), right_val.into()];
+                                    self.builder.build_call(setter_fn, &args, "")?;
+                                } else {
+                                    self.builder.build_store(field_ptr, right_val)?;
+                                }
+
+                                if has_didset {
+                                    let didset_fn =
+                                        self.module.get_function(&didset_name).unwrap();
+                                    let args: Vec<
+                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                    > = vec![field_ptr.into(), current_val.into()];
+                                    self.builder.build_call(didset_fn, &args, "")?;
+                                }
+
+                                return Ok(Some(right_val));
+                            }
+
                             let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
                             let val = self.builder.build_load(field_ty, field_ptr, "")?;
                             (field_ptr, Some(val))
@@ -1797,6 +1849,20 @@ impl<'ctx> IRGenerator<'ctx> {
                         field_index as u32,
                         "",
                     )?;
+
+                    let getter_name = format!("{}.{}.getter", struct_name, field_name);
+                    if let Some(getter_fn) = self.module.get_function(&getter_name) {
+                        let result = self.builder.build_call(
+                            getter_fn,
+                            &[field_ptr.into()],
+                            "",
+                        )?;
+                        let result_val = match result.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => val,
+                            _ => anyhow::bail!("Getter call did not return a value"),
+                        };
+                        return Ok(Some(result_val));
+                    }
 
                     let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
                     let field_val = self.builder.build_load(field_ty, field_ptr, "")?;

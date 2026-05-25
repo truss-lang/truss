@@ -549,3 +549,184 @@ fn test_irgen_var_set_no_param() {
     assert!(llvm_ir.contains("@v.setter"));
     assert!(llvm_ir.contains("call void @v.setter("));
 }
+
+#[test]
+fn test_irgen_struct_getter_shorthand() {
+    let code = r#"
+        struct T {
+            var i: Int32 { return 42 }
+        }
+        func test() -> Int32 {
+            let t = T()
+            return t.i
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("@T.i.getter"));
+    assert!(llvm_ir.contains("define i32 @T.i.getter(ptr"));
+    assert!(llvm_ir.contains("call i32 @T.i.getter("));
+}
+
+#[test]
+fn test_irgen_struct_getter_explicit() {
+    let code = r#"
+        struct T {
+            var i: Int32 { get { return 1 } }
+        }
+        func test() -> Int32 {
+            let t = T()
+            return t.i
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("define i32 @T.i.getter(ptr"));
+    assert!(llvm_ir.contains("call i32 @T.i.getter("));
+}
+
+#[test]
+fn test_irgen_struct_get_set() {
+    let code = r#"
+        struct T {
+            var i: Int32 {
+                get { return _i }
+                set { _i = newValue }
+            }
+        }
+        func test() {
+            let t = T()
+            t.i = 7
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("define i32 @T.i.getter(ptr"));
+    assert!(llvm_ir.contains("define void @T.i.setter(ptr"));
+    assert!(llvm_ir.contains("call void @T.i.setter("));
+}
+
+#[test]
+fn test_irgen_struct_willset_didset() {
+    let code = r#"
+        struct T {
+            var i: Int32 = 0 {
+                willSet { }
+                didSet { }
+            }
+        }
+        func test() {
+            var t = T()
+            t.i = 1
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("define void @T.i.willSet(ptr"));
+    assert!(llvm_ir.contains("define void @T.i.didSet(ptr"));
+    assert!(llvm_ir.contains("call void @T.i.willSet("));
+    assert!(llvm_ir.contains("call void @T.i.didSet("));
+}
+
+#[test]
+fn test_irgen_struct_get_set_read_write() {
+    let code = r#"
+        struct T {
+            var i: Int32 {
+                get { return _i }
+                set { _i = newValue }
+            }
+        }
+        func test() -> Int32 {
+            let t = T()
+            t.i = 7
+            return t.i
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("define i32 @T.i.getter(ptr"));
+    assert!(llvm_ir.contains("define void @T.i.setter(ptr"));
+    assert!(llvm_ir.contains("call void @T.i.setter("));
+    assert!(llvm_ir.contains("call i32 @T.i.getter("));
+}
