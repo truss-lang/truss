@@ -23,6 +23,7 @@ pub enum Type {
     Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool),
     Pointer(Rc<RefCell<Type>>),
     Struct(String, WeakSymbol),
+    Enum(String, WeakSymbol),
 }
 
 impl fmt::Display for Type {
@@ -59,6 +60,7 @@ impl fmt::Display for Type {
             }
             Type::Pointer(inner) => write!(f, "{}*", inner.borrow()),
             Type::Struct(name, _) => write!(f, "Struct({})", name),
+            Type::Enum(name, _) => write!(f, "Enum({})", name),
         }
     }
 }

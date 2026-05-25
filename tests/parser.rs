@@ -2451,3 +2451,36 @@ fn test_parse_enum_with_multiple_case_lines() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_enum_case_constructor() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Result { case success(Int32) } func test() { let r = Result.success(42) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Call { callee, parameters, .. } = &*init.borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
+    {
+        assert_eq!(member.value, "success");
+        assert_eq!(parameters.len(), 1);
+        // object can be Type or Variable depending on how it's parsed
+        match &*object.borrow() {
+            Expression::Type { name, .. } | Expression::Variable { name, .. } => {
+                assert_eq!(name.value, "Result");
+            }
+            _ => panic!("Expected Type or Variable expression for object"),
+        }
+    } else {
+        panic!("Expected FunctionDecl -> VariableDecl -> Call -> MemberAccess, got: {:?}", program.statements);
+    }
+}

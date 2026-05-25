@@ -190,6 +190,66 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
+            Statement::EnumDecl {
+                name, cases: ast_cases, body, scope, ..
+            } => {
+                let enum_symbol = Rc::new(RefCell::new(Symbol::Enum {
+                    name: name.value.clone(),
+                    decl: stmt.clone(),
+                    cases: vec![],
+                    methods: vec![],
+                }));
+                self.enter(enum_symbol.clone(), name);
+                let Symbol::Enum { cases, methods, .. } = &mut *enum_symbol.borrow_mut()
+                else {
+                    return;
+                };
+
+                *scope = Some(self.enter_scope(None));
+                for case in ast_cases {
+                    let case_symbol = Rc::new(RefCell::new(Symbol::EnumCase {
+                        name: case.name.value.clone(),
+                        parent: WeakSymbol(Rc::downgrade(&enum_symbol)),
+                        decl: Some(stmt.clone()),
+                        parameter_types: vec![],
+                    }));
+                    cases.push(case_symbol.clone());
+                    self.enter(case_symbol, &case.name);
+                }
+                for field_stmt in body {
+                    if let Statement::FunctionDecl {
+                        name: method_name, ..
+                    } = &*field_stmt.borrow()
+                    {
+                        let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                            name: method_name.value.clone(),
+                            parent: WeakSymbol(Rc::downgrade(&enum_symbol)),
+                            decl: Some(field_stmt.clone()),
+                        }));
+                        methods.push(method_symbol.clone());
+                        self.enter(method_symbol, method_name);
+                        if let Statement::FunctionDecl {
+                            body: method_body, ..
+                        } = &*field_stmt.borrow()
+                        {
+                            match &*method_body.borrow() {
+                                FunctionBody::Statements(stmts) => {
+                                    for s in stmts {
+                                        self.register_symbols(s.clone());
+                                    }
+                                }
+                                FunctionBody::Expression(expr) => {
+                                    self.register_function_symbols_in_expr(expr.clone());
+                                }
+                                FunctionBody::None => {}
+                            }
+                        }
+                    } else {
+                        self.register_symbols(field_stmt.clone());
+                    }
+                }
+                self.leave_scope();
+            }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
                     self.register_symbols(item.clone());
@@ -291,6 +351,13 @@ impl SymbolResolver {
                 }
             }
             Statement::StructDecl { body, scope, .. } => {
+                self.enter_scope(scope.clone());
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
+                self.leave_scope();
+            }
+            Statement::EnumDecl { body, scope, .. } => {
                 self.enter_scope(scope.clone());
                 for stmt in body {
                     self.resolve_statement(stmt.clone());

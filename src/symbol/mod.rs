@@ -5,7 +5,10 @@ use std::{
 
 use anyhow::{Ok, Result};
 
-use crate::ast::statement::{Parameter, Statement};
+use crate::{
+    ast::statement::{Parameter, Statement},
+    types::Type,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Symbol {
@@ -36,6 +39,18 @@ pub enum Symbol {
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
     },
+    Enum {
+        name: String,
+        decl: Rc<RefCell<Statement>>,
+        cases: Vec<Rc<RefCell<Symbol>>>,
+        methods: Vec<Rc<RefCell<Symbol>>>,
+    },
+    EnumCase {
+        name: String,
+        parent: WeakSymbol,
+        decl: Option<Rc<RefCell<Statement>>>,
+        parameter_types: Vec<Rc<RefCell<Type>>>,
+    },
 }
 
 impl Symbol {
@@ -46,6 +61,8 @@ impl Symbol {
             Self::Struct { name, .. } => Ok(name.clone()),
             Self::StructField { name, .. } => Ok(name.clone()),
             Self::StructMethod { name, .. } => Ok(name.clone()),
+            Self::Enum { name, .. } => Ok(name.clone()),
+            Self::EnumCase { name, .. } => Ok(name.clone()),
         }
     }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
@@ -55,13 +72,15 @@ impl Symbol {
             Self::Struct { decl, .. } => Ok(Some(decl.clone())),
             Self::StructField { decl, .. } => Ok(decl.clone()),
             Self::StructMethod { decl, .. } => Ok(decl.clone()),
+            Self::Enum { decl, .. } => Ok(Some(decl.clone())),
+            Self::EnumCase { decl, .. } => Ok(decl.clone()),
         }
     }
     pub fn parent(&self) -> Option<Rc<RefCell<Symbol>>> {
         match self {
-            Self::StructField { parent, .. } | Self::StructMethod { parent, .. } => {
-                Some(parent.0.upgrade().unwrap())
-            }
+            Self::StructField { parent, .. }
+            | Self::StructMethod { parent, .. }
+            | Self::EnumCase { parent, .. } => Some(parent.0.upgrade().unwrap()),
             _ => None,
         }
     }

@@ -2126,6 +2126,14 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("Struct type not found");
                 }
             }
+            Type::Enum(name, _) => {
+                self.emit_error(
+                    TrussDiagnosticCode::EnumTypeNotSupported,
+                    format!("Enum type '{}' is not supported in IR generation yet", name),
+                    None,
+                );
+                anyhow::bail!("Enum type not supported");
+            }
         };
         Ok(resolved)
     }

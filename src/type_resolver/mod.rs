@@ -195,6 +195,97 @@ impl TypeResolver {
                 }
                 self.leave_scope();
             }
+            Statement::EnumDecl {
+                name, cases: ast_cases, body, scope, ..
+            } => {
+                let Some(symbol) = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().name_table.get(&name.value).cloned())
+                else {
+                    return;
+                };
+
+                let enum_ty = Rc::new(RefCell::new(Type::Enum(
+                    name.value.clone(),
+                    WeakSymbol(Rc::downgrade(&symbol)),
+                )));
+                self.current_scope
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_type(name.value.clone(), enum_ty);
+
+                if let Symbol::Enum { cases, .. } = &mut *symbol.borrow_mut() {
+                    for (case_symbol, ast_case) in cases.iter().zip(ast_cases.iter()) {
+                        let mut parameter_types = Vec::new();
+                        for param in &ast_case.parameters {
+                            let param_type = self.infer_type(param.type_expression.clone());
+                            if let Some(ref param_type) = param_type {
+                                parameter_types.push(param_type.clone());
+                            }
+                        }
+                        if let Symbol::EnumCase { parameter_types: param_tys, .. } = &mut *case_symbol.borrow_mut() {
+                            *param_tys = parameter_types;
+                        }
+                    }
+                }
+
+                self.enter_scope(scope.as_ref().unwrap().clone());
+                for stmt in body {
+                    let method_info: MethodInfo = {
+                        if let Statement::FunctionDecl {
+                            name: method_name,
+                            parameters,
+                            return_type,
+                            ..
+                        } = &*stmt.borrow()
+                        {
+                            let ret_type = if let Some(return_type_expr) = return_type {
+                                self.infer_type(return_type_expr.clone())
+                                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                            } else {
+                                Rc::new(RefCell::new(Type::Void))
+                            };
+
+                            let mut parameter_types = Vec::new();
+                            let mut is_vararg = false;
+                            for param in parameters.iter() {
+                                if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                    is_vararg = true;
+                                    continue;
+                                }
+                                let param_type =
+                                    self.infer_type(param.borrow().type_expression.clone());
+                                if let Some(ref param_type) = param_type {
+                                    param.borrow_mut().ty = Some(param_type.clone());
+                                    parameter_types.push(param_type.clone());
+                                }
+                                if param.borrow().variadic_kind != VariadicKind::NotVariadic {
+                                    is_vararg = true;
+                                }
+                            }
+
+                            let fn_type = Rc::new(RefCell::new(Type::Function(
+                                parameter_types.clone(),
+                                ret_type,
+                                is_vararg,
+                            )));
+                            Some((method_name.value.clone(), fn_type, parameter_types))
+                        } else {
+                            None
+                        }
+                    };
+
+                    if let Some((_method_name, fn_type, _)) = method_info
+                        && let Statement::FunctionDecl { ty, .. } = &mut *stmt.borrow_mut()
+                    {
+                        *ty = Some(fn_type.clone());
+                    }
+                    self.process_decl(stmt.clone());
+                }
+                self.leave_scope();
+            }
             Statement::InitDecl {
                 parameters,
                 body,
@@ -556,6 +647,11 @@ impl TypeResolver {
                 self.resolve_statement(statement.clone());
             }
             Statement::StructDecl { body, .. } => {
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
+            }
+            Statement::EnumDecl { body, .. } => {
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
                 }
@@ -1065,12 +1161,55 @@ impl TypeResolver {
                             return None;
                         }
                     }
+                    Type::Enum(enum_name, _) => {
+                        let scope = self.current_scope.as_ref().unwrap().borrow();
+                        if let Some(symbol) = scope.get_symbol(enum_name)
+                            && let Symbol::Enum { cases, .. } = &*symbol.borrow()
+                        {
+                            for case in cases {
+                                if case.borrow().name().as_ref().ok() == Some(&member.value) {
+                                    if let Symbol::EnumCase { parameter_types, .. } = &*case.borrow() {
+                                        if parameter_types.is_empty() {
+                                            *ty = Some(object_ty.clone());
+                                            return Some(object_ty.clone());
+                                        } else {
+                                            let case_fn_type = Rc::new(RefCell::new(Type::Function(
+                                                parameter_types.clone(),
+                                                object_ty.clone(),
+                                                false,
+                                            )));
+                                            *ty = Some(case_fn_type.clone());
+                                            return Some(case_fn_type);
+                                        }
+                                    }
+                                }
+                            }
+                            let token = &*member;
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!(
+                                    "Case '{}' not found on enum '{}'",
+                                    member.value, enum_name
+                                ),
+                                token,
+                            );
+                            return None;
+                        } else {
+                            let token = &*member;
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!("Enum symbol '{}' not found", enum_name),
+                                token,
+                            );
+                            return None;
+                        }
+                    }
                     _ => {
                         let token = &*member;
                         self.emit_error(
                             TrussDiagnosticCode::FieldNotFound,
                             format!(
-                                "Cannot access member '{}' of non-struct type '{}'",
+                                "Cannot access member '{}' of non-struct/enum type '{}'",
                                 member.value,
                                 object_ty.borrow()
                             ),
