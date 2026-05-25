@@ -180,12 +180,22 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn is_stored_field(&self, stmt: &Rc<RefCell<Statement>>) -> bool {
+        if let Statement::VariableDecl { accessors, .. } = &*stmt.borrow() {
+            let has_computed = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+            !has_computed
+        } else {
+            false
+        }
+    }
+
     fn create_struct_type_bodies(&self, statement: Rc<RefCell<Statement>>) {
         if let Statement::StructDecl { name, body, .. } = &*statement.borrow() {
             let struct_name = &name.value;
             if let Some(struct_type) = self.struct_types.borrow().get(struct_name).cloned() {
                 let field_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = body
                     .iter()
+                    .filter(|stmt| self.is_stored_field(stmt))
                     .filter_map(|stmt| {
                         if let Statement::VariableDecl { ty, .. } = &*stmt.borrow()
                             && let Some(ty) = ty
@@ -202,6 +212,59 @@ impl<'ctx> IRGenerator<'ctx> {
                 struct_type.set_body(&field_types, false);
             }
         }
+    }
+
+    fn get_stored_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
+        if let Some(scope) = self.program_scope.borrow().as_ref()
+            && let Some(symbol) = scope.borrow().get_symbol(struct_name)
+            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
+        {
+            let mut stored_idx = 0;
+            for field in fields.iter() {
+                if let Some(decl) = field.borrow().get_decl().ok().flatten()
+                    && let Statement::VariableDecl { accessors, .. } = &*decl.borrow()
+                {
+                    let has_computed = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+                    if has_computed {
+                        continue;
+                    }
+                    if field.borrow().name().as_ref().ok() == Some(&field_name.to_string()) {
+                        return Ok(stored_idx);
+                    }
+                    stored_idx += 1;
+                }
+            }
+        }
+        anyhow::bail!("Stored field '{}' not found in struct '{}'", field_name, struct_name)
+    }
+
+    fn get_stored_field_names(&self, struct_name: &str) -> Vec<(String, BasicTypeEnum<'ctx>, usize)> {
+        let mut result = Vec::new();
+        if let Some(scope) = self.program_scope.borrow().as_ref()
+            && let Some(symbol) = scope.borrow().get_symbol(struct_name)
+            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
+        {
+            let mut stored_idx = 0;
+            for field in fields.iter() {
+                if let Some(decl) = field.borrow().get_decl().ok().flatten()
+                    && let Statement::VariableDecl { ty, accessors, .. } = &*decl.borrow()
+                {
+                    let has_computed = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+                    if has_computed {
+                        continue;
+                    }
+                    if let Some(ty) = ty {
+                        if let Ok(llvm_ty) = self.resolve_type(ty.clone()) {
+                            if let Ok(name) = field.borrow().name() {
+                                result.push((name, llvm_ty, stored_idx));
+                            }
+                        }
+                    }
+                    stored_idx += 1;
+                }
+            }
+        }
+        result
     }
 
     fn create_function_declarations(&self, statement: Rc<RefCell<Statement>>) {
@@ -311,6 +374,7 @@ impl<'ctx> IRGenerator<'ctx> {
         backing_var_name: &str,
         accessor: &Accessor,
         llvm_var_type: BasicTypeEnum<'ctx>,
+        struct_name: Option<&str>,
     ) -> Result<()> {
         let (fn_name, param_names, is_getter): (
             String,
@@ -358,7 +422,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::from(0));
         let mut param_types: Vec<BasicMetadataTypeEnum<'ctx>> = vec![ptr_type.into()];
-        let mut all_param_names: Vec<String> = vec!["__backing_ptr".to_string()];
+        let mut all_param_names: Vec<String> = vec!["__struct_ptr".to_string()];
         for pn in &param_names {
             if let Some(name) = pn {
                 param_types.push(llvm_var_type.into());
@@ -385,7 +449,23 @@ impl<'ctx> IRGenerator<'ctx> {
 
         self.enter_scope();
 
-        self.declare_variable(format!("_{}", backing_var_name), ptr_var);
+        if let Some(sname) = struct_name {
+            let struct_llvm_type = self.struct_types.borrow().get(sname).copied();
+            if let Some(stype) = struct_llvm_type {
+                for (fname, _, idx) in self.get_stored_field_names(sname) {
+                    if let Ok(field_ptr) = self.builder.build_struct_gep(
+                        stype,
+                        ptr_var,
+                        idx as u32,
+                        "",
+                    ) {
+                        self.declare_variable(fname, field_ptr);
+                    }
+                }
+            }
+        } else {
+            self.declare_variable(format!("_{}", backing_var_name), ptr_var);
+        }
 
         for (i, param_name) in all_param_names.iter().enumerate().skip(1) {
             let param_val = function.get_nth_param(i as u32).unwrap();
@@ -587,13 +667,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 if !accessors.is_empty() {
-                    let (fn_prefix, backing_name) = if let Some(struct_name) = &*self.current_struct.borrow() {
-                        (format!("{}.{}", struct_name, name.value), name.value.clone())
+                    let struct_name_opt = self.current_struct.borrow().clone();
+                    let (fn_prefix, backing_name) = if let Some(ref sname) = struct_name_opt {
+                        (format!("{}.{}", sname, name.value), name.value.clone())
                     } else {
                         (name.value.clone(), name.value.clone())
                     };
                     for accessor in accessors {
-                        self.generate_accessor_function(&fn_prefix, &backing_name, accessor, llvm_var_type)?;
+                        self.generate_accessor_function(&fn_prefix, &backing_name, accessor, llvm_var_type, struct_name_opt.as_deref())?;
                     }
                 }
                 Ok(false)
@@ -1471,16 +1552,6 @@ impl<'ctx> IRGenerator<'ctx> {
                                 ptr
                             };
 
-                            let field_index =
-                                self.get_struct_field_index(&struct_name, &field_name)?;
-
-                            let field_ptr = self.builder.build_struct_gep(
-                                *self.struct_types.borrow().get(&struct_name).unwrap(),
-                                struct_ptr,
-                                field_index as u32,
-                                "",
-                            )?;
-
                             let setter_name =
                                 format!("{}.{}.setter", struct_name, field_name);
                             let willset_name =
@@ -1495,42 +1566,63 @@ impl<'ctx> IRGenerator<'ctx> {
                             let has_didset =
                                 self.module.get_function(&didset_name).is_some();
 
-                            if has_setter || has_willset || has_didset {
-                                let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
-                                let current_val = self.builder.build_load(field_ty, field_ptr, "")?;
-
+                            if has_setter {
                                 if has_willset {
                                     let willset_fn =
                                         self.module.get_function(&willset_name).unwrap();
-                                    let args: Vec<
-                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
-                                    > = vec![field_ptr.into(), right_val.into()];
-                                    self.builder.build_call(willset_fn, &args, "")?;
+                                    self.builder.build_call(willset_fn, &[struct_ptr.into(), right_val.into()], "")?;
                                 }
-
-                                if has_setter {
-                                    let setter_fn =
-                                        self.module.get_function(&setter_name).unwrap();
-                                    let args: Vec<
-                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
-                                    > = vec![field_ptr.into(), right_val.into()];
-                                    self.builder.build_call(setter_fn, &args, "")?;
-                                } else {
-                                    self.builder.build_store(field_ptr, right_val)?;
-                                }
-
+                                let setter_fn =
+                                    self.module.get_function(&setter_name).unwrap();
+                                self.builder.build_call(setter_fn, &[struct_ptr.into(), right_val.into()], "")?;
                                 if has_didset {
                                     let didset_fn =
                                         self.module.get_function(&didset_name).unwrap();
-                                    let args: Vec<
-                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
-                                    > = vec![field_ptr.into(), current_val.into()];
-                                    self.builder.build_call(didset_fn, &args, "")?;
+                                    self.builder.build_call(didset_fn, &[struct_ptr.into(), right_val.into()], "")?;
                                 }
-
                                 return Ok(Some(right_val));
                             }
 
+                            if has_willset || has_didset {
+                                let field_index = self.get_stored_struct_field_index(&struct_name, &field_name)?;
+                                let field_ptr = self.builder.build_struct_gep(
+                                    *self.struct_types.borrow().get(&struct_name).unwrap(),
+                                    struct_ptr,
+                                    field_index as u32,
+                                    "",
+                                )?;
+                                let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
+                                let current_val = if has_didset {
+                                    Some(self.builder.build_load(field_ty, field_ptr, "")?)
+                                } else {
+                                    None
+                                };
+
+                                if has_willset {
+                                    self.builder.build_call(
+                                        self.module.get_function(&willset_name).unwrap(),
+                                        &[struct_ptr.into(), right_val.into()],
+                                        "",
+                                    )?;
+                                }
+                                self.builder.build_store(field_ptr, right_val)?;
+                                if let Some(old_val) = current_val {
+                                    self.builder.build_call(
+                                        self.module.get_function(&didset_name).unwrap(),
+                                        &[struct_ptr.into(), old_val.into()],
+                                        "",
+                                    )?;
+                                }
+                                return Ok(Some(right_val));
+                            }
+
+                            let field_index = self.get_stored_struct_field_index(&struct_name, &field_name)?;
+                            let field_ptr = self.builder.build_struct_gep(
+                                *self.struct_types.borrow().get(&struct_name).unwrap(),
+                                struct_ptr,
+                                field_index as u32,
+                                "",
+                            )?;
                             let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
                             let val = self.builder.build_load(field_ty, field_ptr, "")?;
                             (field_ptr, Some(val))
@@ -1841,20 +1933,11 @@ impl<'ctx> IRGenerator<'ctx> {
                         ptr
                     };
 
-                    let field_index = self.get_struct_field_index(&struct_name, &field_name)?;
-
-                    let field_ptr = self.builder.build_struct_gep(
-                        *self.struct_types.borrow().get(&struct_name).unwrap(),
-                        struct_ptr,
-                        field_index as u32,
-                        "",
-                    )?;
-
                     let getter_name = format!("{}.{}.getter", struct_name, field_name);
                     if let Some(getter_fn) = self.module.get_function(&getter_name) {
                         let result = self.builder.build_call(
                             getter_fn,
-                            &[field_ptr.into()],
+                            &[struct_ptr.into()],
                             "",
                         )?;
                         let result_val = match result.try_as_basic_value() {
@@ -1863,6 +1946,15 @@ impl<'ctx> IRGenerator<'ctx> {
                         };
                         return Ok(Some(result_val));
                     }
+
+                    let field_index = self.get_stored_struct_field_index(&struct_name, &field_name)?;
+
+                    let field_ptr = self.builder.build_struct_gep(
+                        *self.struct_types.borrow().get(&struct_name).unwrap(),
+                        struct_ptr,
+                        field_index as u32,
+                        "",
+                    )?;
 
                     let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
                     let field_val = self.builder.build_load(field_ty, field_ptr, "")?;

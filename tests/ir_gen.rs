@@ -621,13 +621,14 @@ fn test_irgen_struct_getter_explicit() {
 fn test_irgen_struct_get_set() {
     let code = r#"
         struct T {
+            var _i: Int32
             var i: Int32 {
                 get { return _i }
                 set { _i = newValue }
             }
         }
         func test() {
-            let t = T()
+            var t = T()
             t.i = 7
         }
     "#;
@@ -696,13 +697,14 @@ fn test_irgen_struct_willset_didset() {
 fn test_irgen_struct_get_set_read_write() {
     let code = r#"
         struct T {
+            var _i: Int32
             var i: Int32 {
                 get { return _i }
                 set { _i = newValue }
             }
         }
         func test() -> Int32 {
-            let t = T()
+            var t = T()
             t.i = 7
             return t.i
         }
