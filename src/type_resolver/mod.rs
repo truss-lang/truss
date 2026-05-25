@@ -4,7 +4,7 @@ use crate::{
     ast::{
         expression::{BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{AccessModifier, FunctionBody, ModifierType, Statement, VariadicKind},
+        statement::{AccessModifier, AccessorKind, FunctionBody, ModifierType, Statement, VariadicKind},
     },
     diag::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
@@ -248,6 +248,48 @@ impl TypeResolver {
 
                 self.leave_scope();
             }
+            Statement::VariableDecl {
+                name,
+                type_expression,
+                initializer,
+                accessors,
+                ty,
+                ..
+            } => {
+                if let Some(type_expr) = type_expression {
+                    let annotated = self.infer_type(type_expr.clone());
+                    if let Some(annotated) = annotated {
+                        if let Some(init) = initializer {
+                            self.check_type_with_expected(
+                                init.clone(),
+                                annotated.clone(),
+                                name.as_ref(),
+                            );
+                        }
+                        *ty = Some(annotated.clone());
+                        self.current_scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_type(name.value.clone(), annotated);
+                    }
+                } else if let Some(init) = initializer {
+                    let init_ty = self.infer_type(init.clone());
+                    if let Some(init_ty) = init_ty {
+                        *ty = Some(init_ty.clone());
+                        self.current_scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_type(name.value.clone(), init_ty);
+                    }
+                }
+                for accessor in accessors {
+                    for stmt in &accessor.body {
+                        self.process_decl(stmt.clone());
+                    }
+                }
+            }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
                     self.process_decl(item.clone());
@@ -274,6 +316,7 @@ impl TypeResolver {
                 name,
                 type_expression,
                 initializer,
+                accessors,
                 ty,
                 ..
             } => {
@@ -311,6 +354,53 @@ impl TypeResolver {
                         name.as_ref(),
                     );
                 };
+
+                if !accessors.is_empty() {
+                    let saved_return_type = self.current_return_type.clone();
+                    for accessor in accessors {
+                        let accessor_scope = {
+                            let sc = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                            self.enter_scope(sc.clone());
+                            sc
+                        };
+                        if let Some(var_ty) = ty {
+                            accessor_scope
+                                .borrow_mut()
+                                .set_type(format!("_{}", name.value), var_ty.clone());
+                        }
+                        match accessor.kind {
+                            AccessorKind::Get => {
+                                if let Some(var_ty) = ty {
+                                    self.current_return_type = Some(var_ty.clone());
+                                }
+                            }
+                            AccessorKind::Set
+                            | AccessorKind::WillSet
+                            | AccessorKind::DidSet => {
+                                self.current_return_type =
+                                    Some(Rc::new(RefCell::new(Type::Void)));
+                                let param_name = accessor
+                                    .parameter
+                                    .as_ref()
+                                    .map(|t| t.value.clone())
+                                    .unwrap_or_else(|| match accessor.kind {
+                                        AccessorKind::DidSet => "oldValue".to_string(),
+                                        _ => "newValue".to_string(),
+                                    });
+                                if let Some(var_ty) = ty {
+                                    accessor_scope
+                                        .borrow_mut()
+                                        .set_type(param_name, var_ty.clone());
+                                }
+                            }
+                        }
+                        for stmt in &accessor.body {
+                            self.resolve_statement(stmt.clone());
+                        }
+                        self.leave_scope();
+                    }
+                    self.current_return_type = saved_return_type;
+                }
             }
             Statement::FunctionDecl {
                 parameters,

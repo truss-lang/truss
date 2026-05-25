@@ -238,7 +238,7 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Statement::VariableDecl {
-                name, initializer, ..
+                name, initializer, accessors, ..
             } => {
                 if name.value != "_" {
                     let symbol = Rc::new(RefCell::new(Symbol::Variable {
@@ -250,6 +250,25 @@ impl SymbolResolver {
                 }
                 if let Some(initializer) = initializer {
                     self.resolve_expression(initializer.clone());
+                }
+                if !accessors.is_empty() {
+                    for accessor in accessors {
+                        let accessor_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                        let saved = self.current_scope.clone();
+                        self.current_scope = Some(accessor_scope);
+                        if let Some(param) = &accessor.parameter {
+                            let param_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                name: param.value.clone(),
+                                decl: None,
+                                parameter: None,
+                            }));
+                            self.enter(param_sym, param);
+                        }
+                        for stmt in &accessor.body {
+                            self.resolve_statement(stmt.clone());
+                        }
+                        self.current_scope = saved;
+                    }
                 }
             }
             Statement::StructDecl { body, scope, .. } => {

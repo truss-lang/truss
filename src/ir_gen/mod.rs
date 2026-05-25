@@ -13,7 +13,7 @@ use crate::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{FunctionBody, Statement, VariadicKind},
+        statement::{Accessor, AccessorKind, FunctionBody, Statement, VariadicKind},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{Token, TokenType},
@@ -221,6 +221,13 @@ impl<'ctx> IRGenerator<'ctx> {
                 FunctionBody::None => {}
             }
         }
+        if let Statement::VariableDecl { accessors, .. } = &*statement.borrow() {
+            for accessor in accessors {
+                for stmt in &accessor.body {
+                    self.create_function_declarations(stmt.clone());
+                }
+            }
+        }
         if let Statement::ExternBlock { items, .. } = &*statement.borrow() {
             for item in items {
                 let _ = self.create_extern_declaration(item.clone());
@@ -298,6 +305,236 @@ impl<'ctx> IRGenerator<'ctx> {
         Ok(())
     }
 
+    fn generate_accessor_function(
+        &self,
+        var_name: &str,
+        accessor: &Accessor,
+        llvm_var_type: BasicTypeEnum<'ctx>,
+    ) -> Result<()> {
+        let (fn_name, param_names, is_getter): (
+            String,
+            Vec<Option<String>>,
+            bool,
+        ) = match accessor.kind {
+            AccessorKind::Get => (format!("{}.getter", var_name), vec![], true),
+            AccessorKind::Set => {
+                let param_name = accessor
+                    .parameter
+                    .as_ref()
+                    .map(|t| t.value.clone())
+                    .unwrap_or_else(|| "newValue".to_string());
+                (
+                    format!("{}.setter", var_name),
+                    vec![Some(param_name)],
+                    false,
+                )
+            }
+            AccessorKind::WillSet => {
+                let param_name = accessor
+                    .parameter
+                    .as_ref()
+                    .map(|t| t.value.clone())
+                    .unwrap_or_else(|| "newValue".to_string());
+                (
+                    format!("{}.willSet", var_name),
+                    vec![Some(param_name)],
+                    false,
+                )
+            }
+            AccessorKind::DidSet => {
+                let param_name = accessor
+                    .parameter
+                    .as_ref()
+                    .map(|t| t.value.clone())
+                    .unwrap_or_else(|| "oldValue".to_string());
+                (
+                    format!("{}.didSet", var_name),
+                    vec![Some(param_name)],
+                    false,
+                )
+            }
+        };
+
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::from(0));
+        let mut param_types: Vec<BasicMetadataTypeEnum<'ctx>> = vec![ptr_type.into()];
+        let mut all_param_names: Vec<String> = vec!["__backing_ptr".to_string()];
+        for pn in &param_names {
+            if let Some(name) = pn {
+                param_types.push(llvm_var_type.into());
+                all_param_names.push(name.clone());
+            }
+        }
+
+        let fn_type = if is_getter {
+            llvm_var_type.fn_type(&param_types, false)
+        } else {
+            self.context.void_type().fn_type(&param_types, false)
+        };
+
+        if self.module.get_function(&fn_name).is_some() {
+            return Ok(());
+        }
+        let function = self.module.add_function(&fn_name, fn_type, None);
+        let current_block = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+
+        let ptr_param = function.get_nth_param(0).unwrap();
+        let ptr_var = ptr_param.into_pointer_value();
+
+        self.enter_scope();
+
+        self.declare_variable(format!("_{}", var_name), ptr_var);
+
+        for (i, param_name) in all_param_names.iter().enumerate().skip(1) {
+            let param_val = function.get_nth_param(i as u32).unwrap();
+            let alloca_name = self.unique_alloca_name(param_name);
+            let ptr = self.builder.build_alloca(llvm_var_type, &alloca_name)?;
+            self.builder.build_store(ptr, param_val)?;
+            self.declare_variable(param_name.clone(), ptr);
+        }
+
+        self.enter_scope_with_stmts(&accessor.body)?;
+        let mut has_return = false;
+        for stmt in &accessor.body {
+            let terminates = self.resolve_statement(stmt.clone())?;
+            if terminates {
+                has_return = true;
+                break;
+            }
+        }
+        if is_getter && !has_return {
+            if let Some(ptr) = self.lookup_variable(&format!("_{}", var_name)) {
+                let val = self.builder.build_load(llvm_var_type, ptr, "")?;
+                self.builder.build_return(Some(&val))?;
+            } else {
+                self.builder.build_return(None)?;
+            }
+        } else if !is_getter && !has_return {
+            self.builder.build_return(None)?;
+        }
+        self.exit_scope();
+
+        self.exit_scope();
+
+        if let Some(block) = current_block {
+            self.builder.position_at_end(block);
+        }
+        Ok(())
+    }
+
+    fn compute_compound_assign(
+        &self,
+        left_val: BasicValueEnum<'ctx>,
+        right_val: BasicValueEnum<'ctx>,
+        operator: AssignmentOperator,
+    ) -> Result<BasicValueEnum<'ctx>> {
+        match operator {
+            AssignmentOperator::PlusAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_int_add(l, r, "")?.into())
+                } else if let (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_float_add(l, r, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for += assignment");
+                }
+            }
+            AssignmentOperator::MinusAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_int_sub(l, r, "")?.into())
+                } else if let (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_float_sub(l, r, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for -= assignment");
+                }
+            }
+            AssignmentOperator::MultiplyAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_int_mul(l, r, "")?.into())
+                } else if let (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_float_mul(l, r, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for *= assignment");
+                }
+            }
+            AssignmentOperator::DivideAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_int_signed_div(l, r, "")?.into())
+                } else if let (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_float_div(l, r, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for /= assignment");
+                }
+            }
+            AssignmentOperator::ModulusAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_int_signed_rem(l, r, "")?.into())
+                } else if let (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_float_rem(l, r, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for %= assignment");
+                }
+            }
+            AssignmentOperator::BitAndAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_and(l, r, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for &= assignment");
+                }
+            }
+            AssignmentOperator::BitOrAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_or(l, r, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for |= assignment");
+                }
+            }
+            AssignmentOperator::LeftShiftAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_left_shift(l, r, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for <<= assignment");
+                }
+            }
+            AssignmentOperator::RightShiftAssign => {
+                if let (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) =
+                    (left_val, right_val)
+                {
+                    Ok(self.builder.build_right_shift(l, r, false, "")?.into())
+                } else {
+                    anyhow::bail!("Invalid types for >>= assignment");
+                }
+            }
+            _ => anyhow::bail!("Unsupported compound assignment"),
+        }
+    }
+
     fn resolve_block_expression(&self, block_expr: Rc<RefCell<Expression>>) -> Result<bool> {
         if let Expression::Block { statements, .. } = &*block_expr.borrow() {
             self.enter_scope_with_stmts(statements)?;
@@ -310,21 +547,27 @@ impl<'ctx> IRGenerator<'ctx> {
     fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<bool> {
         match &*statement.borrow() {
             Statement::VariableDecl {
-                name, initializer, ..
+                name, initializer, ty, accessors, ..
             } => {
-                if let Some(init) = initializer
-                    && let Expression::Call {
-                        callee, parameters, ..
-                    } = &*init.borrow()
-                    && let Expression::Variable {
-                        name: callee_name, ..
-                    } = &*callee.borrow()
-                    && self.module.get_function(&callee_name.value).is_none()
-                {
-                    let struct_name = &callee_name.value;
-                    let fn_name = format!("{}.init", struct_name);
-                    if let Some(function) = self.module.get_function(&fn_name) {
-                        if let Some(ptr) = self.lookup_variable(&name.value) {
+                let llvm_var_type = if let Some(ty) = ty {
+                    self.resolve_type(ty.clone())?
+                } else {
+                    self.context.i32_type().into()
+                };
+
+                if let Some(ptr) = self.lookup_variable(&name.value) {
+                    if let Some(init) = initializer
+                        && let Expression::Call {
+                            callee, parameters, ..
+                        } = &*init.borrow()
+                        && let Expression::Variable {
+                            name: callee_name, ..
+                        } = &*callee.borrow()
+                        && self.module.get_function(&callee_name.value).is_none()
+                    {
+                        let struct_name = &callee_name.value;
+                        let fn_name = format!("{}.init", struct_name);
+                        if let Some(function) = self.module.get_function(&fn_name) {
                             let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
                                 Vec::new();
                             args.push(ptr.into());
@@ -334,27 +577,21 @@ impl<'ctx> IRGenerator<'ctx> {
                                 args.push(arg_val.into());
                             }
                             self.builder.build_call(function, &args, "")?;
-                        } else {
-                            self.emit_error(
-                                TrussDiagnosticCode::IRVariableNotFound,
-                                format!("Variable '{}' alloca not found", name.value),
-                                Some(name),
-                            );
-                            anyhow::bail!("Variable alloca not found");
                         }
-                    }
-                } else if let Some(init) = initializer
-                    && let Some(init_val) = self.resolve_expression(init.clone())?
-                {
-                    if let Some(ptr) = self.lookup_variable(&name.value) {
+                    } else if let Some(init) = initializer
+                        && let Some(init_val) = self.resolve_expression(init.clone())?
+                    {
                         self.builder.build_store(ptr, init_val)?;
-                    } else {
-                        self.emit_error(
-                            TrussDiagnosticCode::IRVariableNotFound,
-                            format!("Variable '{}' alloca not found", name.value),
-                            Some(name),
-                        );
-                        anyhow::bail!("Variable alloca not found");
+                    }
+
+                    if !accessors.is_empty() {
+                        for accessor in accessors {
+                            self.generate_accessor_function(
+                                &name.value,
+                                accessor,
+                                llvm_var_type,
+                            )?;
+                        }
                     }
                 }
                 Ok(false)
@@ -593,11 +830,14 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::StructDecl { name, body, .. } => {
                 let prev = self.current_struct.borrow_mut().take();
                 self.current_struct.borrow_mut().replace(name.value.clone());
-                for stmt in body {
-                    self.resolve_statement(stmt.clone())?;
-                }
+                let result = (|| -> Result<bool> {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone())?;
+                    }
+                    Ok(false)
+                })();
                 *self.current_struct.borrow_mut() = prev;
-                Ok(false)
+                result
             }
             _ => Ok(false),
         }
@@ -655,7 +895,25 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(Some(self.context.i32_type().const_int(0, false).into()))
             }
             Expression::Variable { name, ty, .. } => {
-                if let Some(ptr) = self.lookup_variable(&name.value) {
+                let getter_name = format!("{}.getter", name.value);
+                if let Some(getter_fn) = self.module.get_function(&getter_name) {
+                    if let Some(ptr) = self.lookup_variable(&name.value) {
+                        let args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                            vec![ptr.into()];
+                        let result = self.builder.build_call(getter_fn, &args, "")?;
+                        match result.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
+                            _ => Ok(None),
+                        }
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::UndefinedVariable,
+                            format!("Undefined variable: '{}'", name.value),
+                            Some(name),
+                        );
+                        anyhow::bail!("Undefined variable: {}", name.value);
+                    }
+                } else if let Some(ptr) = self.lookup_variable(&name.value) {
                     let llvm_type = if let Some(ty) = ty {
                         self.resolve_type(ty.clone())?
                     } else {
@@ -1114,6 +1372,63 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let right_val = self.resolve_expression(right.clone())?.unwrap();
 
+                if let Expression::Variable { name, .. } = &*left.borrow() {
+                    let setter_name = format!("{}.setter", name.value);
+                    let willset_name = format!("{}.willSet", name.value);
+                    let didset_name = format!("{}.didSet", name.value);
+                    let has_setter = self.module.get_function(&setter_name).is_some();
+                    let has_willset = self.module.get_function(&willset_name).is_some();
+                    let has_didset = self.module.get_function(&didset_name).is_some();
+                    if has_setter || has_willset || has_didset {
+                        let ty_opt = left.borrow().get_ty()?;
+                        let ty = if let Some(ty_rc) = ty_opt {
+                            self.resolve_type(ty_rc)?
+                        } else {
+                            self.context.i32_type().into()
+                        };
+                        let ptr = self.lookup_variable(&name.value).ok_or_else(|| {
+                            self.emit_error(
+                                TrussDiagnosticCode::UndefinedVariable,
+                                format!("Undefined variable: '{}'", name.value),
+                                Some(name),
+                            );
+                            anyhow::anyhow!("Undefined variable")
+                        })?;
+                        let current_val = self.builder.build_load(ty, ptr, "")?;
+                        let store_val = match operator {
+                            AssignmentOperator::Assign => right_val,
+                            _ => {
+                                let op = *operator;
+                                let left_val = current_val;
+                                self.compute_compound_assign(left_val, right_val, op)?
+                            }
+                        };
+                        if has_willset {
+                            let willset_fn =
+                                self.module.get_function(&willset_name).unwrap();
+                            let args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                                vec![ptr.into(), store_val.into()];
+                            self.builder.build_call(willset_fn, &args, "")?;
+                        }
+                        if has_setter {
+                            let setter_fn =
+                                self.module.get_function(&setter_name).unwrap();
+                            let args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                                vec![ptr.into(), store_val.into()];
+                            self.builder.build_call(setter_fn, &args, "")?;
+                        } else {
+                            self.builder.build_store(ptr, store_val)?;
+                        }
+                        if has_didset {
+                            let didset_fn =
+                                self.module.get_function(&didset_name).unwrap();
+                            let args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                                vec![ptr.into(), current_val.into()];
+                            self.builder.build_call(didset_fn, &args, "")?;
+                        }
+                        return Ok(Some(store_val));
+                    }
+                }
                 let (var_ptr, current_val) = if let Expression::Variable { name, .. } =
                     &*left.borrow()
                 {
