@@ -2703,3 +2703,134 @@ fn test_parse_case_alone() {
         panic!("Expected Return with Case expression, got: {:?}", program.statements);
     }
 }
+
+#[test]
+fn test_parse_class_decl_empty() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("class Point {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert!(body.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_class_decl_with_fields() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Point { let x: Int32 let y: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 2);
+        if let Statement::VariableDecl {
+            name: field_name, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(field_name.value, "x");
+        } else {
+            panic!("Expected VariableDecl for field x");
+        }
+        if let Statement::VariableDecl {
+            name: field_name, ..
+        } = &*body[1].borrow()
+        {
+            assert_eq!(field_name.value, "y");
+        } else {
+            panic!("Expected VariableDecl for field y");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_class_decl_with_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Calculator { func add(a: Int32, b: Int32) -> Int32 { a + b } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Calculator");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl {
+            name: func_name, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(func_name.value, "add");
+        } else {
+            panic!("Expected FunctionDecl for method add");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_class_decl_with_init_deinit() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Point { let x: Int32 init() {} deinit {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 3);
+        assert!(matches!(&*body[0].borrow(), Statement::VariableDecl { .. }));
+        assert!(matches!(&*body[1].borrow(), Statement::InitDecl { .. }));
+        assert!(matches!(&*body[2].borrow(), Statement::DeinitDecl { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_public_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public class Point { let x: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name, modifiers, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Point");
+        assert_eq!(modifiers.len(), 1);
+        assert!(matches!(
+            modifiers[0].ty,
+            ModifierType::Access(AccessModifier::Public)
+        ));
+    } else {
+        panic!();
+    }
+}

@@ -102,6 +102,7 @@ impl Parser {
                 KeywordType::Func => self.parse_function_decl(false, modifiers),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false, modifiers),
                 KeywordType::Struct => self.parse_struct_decl(modifiers),
+                KeywordType::Class => self.parse_class_decl(modifiers),
                 KeywordType::Enum => self.parse_enum_decl(modifiers),
                 KeywordType::Extern => self.parse_extern(modifiers),
                 KeywordType::Init => self.parse_function_decl(false, modifiers),
@@ -1618,6 +1619,49 @@ impl Parser {
             );
             return Err(());
         }
+        let body = self.parse_brace_body()?;
+        Ok(Statement::StructDecl {
+            modifiers,
+            token: Box::new(token),
+            name: Box::new(name),
+            body,
+            scope: None,
+            ty: None,
+        })
+    }
+
+    fn parse_class_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+        let Some(token) = self.next() else {
+            return Err(());
+        };
+        let Some(name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidStructName,
+                "Expected class name after 'class'",
+                &token,
+            );
+            return Err(());
+        };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidStructName,
+                format!("Expected class name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
+        let body = self.parse_brace_body()?;
+        Ok(Statement::ClassDecl {
+            modifiers,
+            token: Box::new(token),
+            name: Box::new(name),
+            body,
+            scope: None,
+            ty: None,
+        })
+    }
+
+    fn parse_brace_body(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>, ()> {
         let mut body = Vec::new();
         if let Some(token) = self.peek()
             && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
@@ -1636,7 +1680,7 @@ impl Parser {
             let Some(next) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
-                    "Expected '}' to close struct body",
+                    "Expected '}' to close body",
                     &self.tokens[self.index.saturating_sub(1)],
                 );
                 return Err(());
@@ -1652,19 +1696,12 @@ impl Parser {
         } else {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
-                "Expected '{' to open struct body",
+                "Expected '{' to open body",
                 &self.tokens[self.index.saturating_sub(1)],
             );
             return Err(());
         }
-        Ok(Statement::StructDecl {
-            modifiers,
-            token: Box::new(token),
-            name: Box::new(name),
-            body,
-            scope: None,
-            ty: None,
-        })
+        Ok(body)
     }
 
     fn parse_enum_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
