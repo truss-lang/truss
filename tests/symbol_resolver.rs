@@ -449,3 +449,111 @@ fn test_type_instantiation_symbol() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
 }
+
+#[test]
+fn test_class_field_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Point { let x: Int32 let y: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 2);
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_class_method_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Math { func square(x: Int32) -> Int32 { return x * x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Math");
+        assert_eq!(body.len(), 1);
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_class_init_deinit_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Point { let x: Int32 init(x: Int32) { } deinit { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 3);
+        if let Statement::VariableDecl {
+            name: field_name, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(field_name.value, "x");
+        } else {
+            panic!("Expected VariableDecl for field x");
+        }
+        if let Statement::InitDecl { parameters, .. } = &*body[1].borrow() {
+            assert_eq!(parameters.len(), 1);
+            assert_eq!(parameters[0].borrow().name.value, "x");
+        } else {
+            panic!("Expected InitDecl");
+        }
+        if let Statement::DeinitDecl { .. } = &*body[2].borrow() {
+        } else {
+            panic!("Expected DeinitDecl");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}

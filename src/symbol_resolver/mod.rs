@@ -190,6 +190,125 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
+            Statement::ClassDecl {
+                name, body, scope, ..
+            } => {
+                let class_symbol = Rc::new(RefCell::new(Symbol::Struct {
+                    name: name.value.clone(),
+                    decl: stmt.clone(),
+                    fields: vec![],
+                    methods: vec![],
+                    constructors: vec![],
+                    destrcutor: None,
+                }));
+                self.enter(class_symbol.clone(), name);
+                let Symbol::Struct {
+                    fields,
+                    methods,
+                    constructors,
+                    destrcutor,
+                    ..
+                } = &mut *class_symbol.borrow_mut()
+                else {
+                    return;
+                };
+
+                *scope = Some(self.enter_scope(None));
+                for field_stmt in body {
+                    if let Statement::VariableDecl {
+                        name: field_name, ..
+                    } = &*field_stmt.borrow()
+                    {
+                        let field_symbol = Rc::new(RefCell::new(Symbol::StructField {
+                            name: field_name.value.clone(),
+                            parent: WeakSymbol(Rc::downgrade(&class_symbol)),
+                            decl: Some(field_stmt.clone()),
+                        }));
+                        fields.push(field_symbol.clone());
+                        self.enter(field_symbol, field_name);
+                    } else if let Statement::FunctionDecl {
+                        name: method_name, ..
+                    } = &*field_stmt.borrow()
+                    {
+                        let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                            name: method_name.value.clone(),
+                            parent: WeakSymbol(Rc::downgrade(&class_symbol)),
+                            decl: Some(field_stmt.clone()),
+                        }));
+                        methods.push(method_symbol.clone());
+                        self.enter(method_symbol, method_name);
+                        if let Statement::FunctionDecl {
+                            body: method_body, ..
+                        } = &*field_stmt.borrow()
+                        {
+                            match &*method_body.borrow() {
+                                FunctionBody::Statements(stmts) => {
+                                    for s in stmts {
+                                        self.register_symbols(s.clone());
+                                    }
+                                }
+                                FunctionBody::Expression(expr) => {
+                                    self.register_function_symbols_in_expr(expr.clone());
+                                }
+                                FunctionBody::None => {}
+                            }
+                        }
+                    } else if let Statement::InitDecl { body, .. } = &*field_stmt.borrow() {
+                        let init_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                            name: "init".to_string(),
+                            parent: WeakSymbol(Rc::downgrade(&class_symbol)),
+                            decl: Some(field_stmt.clone()),
+                        }));
+                        constructors.push(init_symbol.clone());
+                        let init_token = {
+                            let stmt = field_stmt.borrow();
+                            if let Statement::InitDecl { token, .. } = &*stmt {
+                                Box::new(token.clone())
+                            } else {
+                                unreachable!()
+                            }
+                        };
+                        self.enter(init_symbol, &init_token);
+                        if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                            for s in stmts {
+                                self.register_symbols(s.clone());
+                            }
+                        }
+                    } else if let Statement::DeinitDecl { body, .. } = &*field_stmt.borrow() {
+                        let deinit_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                            name: "deinit".to_string(),
+                            parent: WeakSymbol(Rc::downgrade(&class_symbol)),
+                            decl: Some(field_stmt.clone()),
+                        }));
+                        let deinit_token = {
+                            let stmt = field_stmt.borrow();
+                            if let Statement::DeinitDecl { token, .. } = &*stmt {
+                                token.as_ref().clone()
+                            } else {
+                                unreachable!()
+                            }
+                        };
+                        if destrcutor.is_none() {
+                            *destrcutor = Some(deinit_symbol.clone());
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::DuplicateFunction,
+                                "Duplicate deinit function",
+                                &deinit_token,
+                            );
+                        }
+                        self.enter(deinit_symbol, &deinit_token);
+                        if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                            for s in stmts {
+                                self.register_symbols(s.clone());
+                            }
+                        }
+                    } else {
+                        self.register_symbols(field_stmt.clone());
+                    }
+                }
+                self.leave_scope();
+            }
             Statement::EnumDecl {
                 name, cases: ast_cases, body, scope, ..
             } => {
@@ -351,6 +470,13 @@ impl SymbolResolver {
                 }
             }
             Statement::StructDecl { body, scope, .. } => {
+                self.enter_scope(scope.clone());
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
+                self.leave_scope();
+            }
+            Statement::ClassDecl { body, scope, .. } => {
                 self.enter_scope(scope.clone());
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
