@@ -463,6 +463,7 @@ impl Parser {
             }
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::If => self.parse_if(),
+                KeywordType::Case => self.parse_case_expression(),
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
@@ -1969,6 +1970,126 @@ impl Parser {
             condition: Rc::new(RefCell::new(condition)),
             then: Rc::new(RefCell::new(then)),
             else_: else_.map(RefCell::new).map(Rc::new),
+        })
+    }
+    fn parse_case_expression(&mut self) -> Result<Expression, ()> {
+        let case_token = self.next().unwrap();
+
+        let Some(enum_type_token) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedType,
+                "Expected enum type name after 'case'",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if enum_type_token.ty != TokenType::Identifier {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedType,
+                format!("Expected enum type name but found '{}'", enum_type_token.value),
+                &enum_type_token,
+            );
+            return Err(());
+        }
+
+        let Some(dot) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '.' after enum type name",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !OperatorType::is_operator(&dot, OperatorType::Dot) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '.' but found '{}'", dot.value),
+                &dot,
+            );
+            return Err(());
+        }
+
+        let Some(case_name_token) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected case name after '.'",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if case_name_token.ty != TokenType::Identifier {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected case name but found '{}'", case_name_token.value),
+                &case_name_token,
+            );
+            return Err(());
+        }
+
+        let mut bindings = Vec::new();
+        if let Some(next) = self.peek()
+            && SeparatorType::is_separator(&next, SeparatorType::OpenParen)
+        {
+            self.index += 1;
+            loop {
+                if let Some(next) = self.peek()
+                    && SeparatorType::is_separator(&next, SeparatorType::CloseParen)
+                {
+                    break;
+                }
+                bindings.push(self.parse_pattern()?);
+                if let Some(next) = self.peek()
+                    && SeparatorType::is_separator(&next, SeparatorType::Comma)
+                {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+            let Some(close_paren) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected ')' to close case bindings",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close_paren, SeparatorType::CloseParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected ')' but found '{}'", close_paren.value),
+                    &close_paren,
+                );
+                return Err(());
+            }
+        }
+
+        let Some(equals) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '=' after case pattern",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !OperatorType::is_operator(&equals, OperatorType::Assign) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '=' but found '{}'", equals.value),
+                &equals,
+            );
+            return Err(());
+        }
+
+        let expression = self.parse_expression()?;
+
+        Ok(Expression::Case {
+            token: Box::new(case_token),
+            enum_type: Box::new(enum_type_token),
+            case_name: Box::new(case_name_token),
+            bindings,
+            expression: Rc::new(RefCell::new(expression)),
+            ty: None,
         })
     }
 

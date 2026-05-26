@@ -2484,3 +2484,222 @@ fn test_parse_enum_case_constructor() {
         panic!("Expected FunctionDecl -> VariableDecl -> Call -> MemberAccess, got: {:?}", program.statements);
     }
 }
+
+#[test]
+fn test_parse_if_case_no_bindings() {
+    let code = r#"
+        enum Option { case none case some }
+        func test(x: Option) {
+            if case Option.none = x {}
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::If { condition, then, .. } = &*expression.borrow()
+        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+    {
+        assert_eq!(enum_type.value, "Option");
+        assert_eq!(case_name.value, "none");
+        assert!(bindings.is_empty());
+        if let Expression::Block { statements: then_stmts, .. } = &*then.borrow() {
+            assert!(then_stmts.is_empty());
+        } else {
+            panic!("Expected block expression for then branch");
+        }
+    } else {
+        panic!("Expected If with Case condition, got: {:?}", program.statements);
+    }
+}
+
+#[test]
+fn test_parse_if_case_with_bindings() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) {
+            if case Option.some(val) = x {}
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::If { condition, .. } = &*expression.borrow()
+        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+    {
+        assert_eq!(enum_type.value, "Option");
+        assert_eq!(case_name.value, "some");
+        assert_eq!(bindings.len(), 1);
+        if let Pattern::Identifier(token) = &bindings[0] {
+            assert_eq!(token.value, "val");
+        } else {
+            panic!("Expected Identifier pattern");
+        }
+    } else {
+        panic!("Expected If with Case condition, got: {:?}", program.statements);
+    }
+}
+
+#[test]
+fn test_parse_if_case_with_else() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) {
+            if case Option.some(val) = x {
+                let _ = val
+            } else {
+                let _ = 0
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::If { condition, else_, .. } = &*expression.borrow()
+        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+    {
+        assert_eq!(enum_type.value, "Option");
+        assert_eq!(case_name.value, "some");
+        assert_eq!(bindings.len(), 1);
+        assert!(else_.is_some());
+    } else {
+        panic!("Expected If with Case condition and else, got: {:?}", program.statements);
+    }
+}
+
+#[test]
+fn test_parse_if_case_else_if() {
+    let code = r#"
+        enum Status { case idle case loading case done }
+        func test(s: Status) {
+            if case Status.idle = s {
+                let _ = 1
+            } else if case Status.loading = s {
+                let _ = 2
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::If { condition, else_, .. } = &*expression.borrow()
+        && let Expression::Case { enum_type, case_name, .. } = &*condition.borrow()
+    {
+        assert_eq!(enum_type.value, "Status");
+        assert_eq!(case_name.value, "idle");
+        assert!(else_.is_some());
+        if let Some(else_expr) = else_ {
+            if let Expression::If { condition: else_cond, .. } = &*else_expr.borrow()
+                && let Expression::Case { enum_type: else_enum_type, case_name: else_case_name, .. } = &*else_cond.borrow()
+            {
+                assert_eq!(else_enum_type.value, "Status");
+                assert_eq!(else_case_name.value, "loading");
+            } else {
+                panic!("Expected If with Case condition in else branch");
+            }
+        }
+    } else {
+        panic!("Expected If with Case condition, got: {:?}", program.statements);
+    }
+}
+
+#[test]
+fn test_parse_if_case_multiple_bindings() {
+    let code = r#"
+        enum Status { case error(Int32, Bool) }
+        func test(s: Status) {
+            if case Status.error(code, flag) = s {}
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::If { condition, .. } = &*expression.borrow()
+        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+    {
+        assert_eq!(enum_type.value, "Status");
+        assert_eq!(case_name.value, "error");
+        assert_eq!(bindings.len(), 2);
+    } else {
+        panic!("Expected If with Case condition, got: {:?}", program.statements);
+    }
+}
+
+#[test]
+fn test_parse_if_case_normal_if_still_works() {
+    let code = "func test(x: Bool) { if x {} }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+    {
+        assert!(matches!(&*expression.borrow(), Expression::If { .. }));
+    } else {
+        panic!("Expected regular If expression");
+    }
+}
+
+#[test]
+fn test_parse_case_alone() {
+    let code = r#"
+        enum Option { case none case some }
+        func test(x: Option) -> Bool {
+            return case Option.none = x
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::Return { value: Some(value), .. } = &*statements[0].borrow()
+    {
+        assert!(matches!(&*value.borrow(), Expression::Case { .. }));
+    } else {
+        panic!("Expected Return with Case expression, got: {:?}", program.statements);
+    }
+}

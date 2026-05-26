@@ -4,7 +4,7 @@ use crate::{
     ast::{
         expression::Expression,
         node::Program,
-        statement::{AccessorKind, FunctionBody, Statement},
+        statement::{AccessorKind, FunctionBody, Pattern, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     krate::{Crate, Module},
@@ -466,7 +466,78 @@ impl SymbolResolver {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())
             }
+            Expression::If {
+                condition,
+                then,
+                else_,
+            } => {
+                self.resolve_expression(condition.clone());
+
+                let case_bindings = {
+                    let cond = condition.borrow();
+                    if let Expression::Case { bindings, .. } = &*cond {
+                        bindings.clone()
+                    } else {
+                        Vec::new()
+                    }
+                };
+
+                if !case_bindings.is_empty() {
+                    if let Expression::Block {
+                        statements,
+                        scope,
+                    } = &mut *then.borrow_mut()
+                    {
+                        if let Some(existing_scope) = scope.as_ref() {
+                            self.enter_scope(Some(existing_scope.clone()));
+                        } else {
+                            let new_scope = self.enter_scope(None);
+                            *scope = Some(new_scope);
+                        }
+                        Self::resolve_pattern_bindings(&case_bindings, self);
+                        for stmt in statements {
+                            self.resolve_statement(stmt.clone());
+                        }
+                        self.leave_scope();
+                    } else {
+                        self.resolve_expression(then.clone());
+                    }
+                } else {
+                    self.resolve_expression(then.clone());
+                }
+
+                if let Some(else_) = else_ {
+                    self.resolve_expression(else_.clone());
+                }
+            }
+            Expression::Case { expression, .. } => {
+                self.resolve_expression(expression.clone());
+            }
             _ => {}
+        }
+    }
+
+    fn resolve_pattern_bindings(
+        bindings: &[Pattern],
+        resolver: &mut SymbolResolver,
+    ) {
+        for binding in bindings {
+            match binding {
+                Pattern::Identifier(name) => {
+                    if name.value != "_" {
+                        let sym = Rc::new(RefCell::new(Symbol::Variable {
+                            name: name.value.clone(),
+                            decl: None,
+                            parameter: None,
+                        }));
+                        resolver.enter(sym, name);
+                    }
+                }
+                Pattern::Tuple(items) => {
+                    Self::resolve_pattern_bindings(items, resolver);
+                }
+                Pattern::Ignore => {}
+            }
         }
     }
 

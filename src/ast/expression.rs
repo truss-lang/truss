@@ -94,6 +94,14 @@ pub enum Expression {
         then: Rc<RefCell<Expression>>,
         else_: Option<Rc<RefCell<Expression>>>,
     },
+    Case {
+        token: Box<Token>,
+        enum_type: Box<Token>,
+        case_name: Box<Token>,
+        bindings: Vec<super::statement::Pattern>,
+        expression: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     Cast {
         token: Box<Token>,
         kind_tokens: Option<(Box<Token>, Box<Token>)>,
@@ -147,6 +155,7 @@ impl Expression {
             Expression::Call { callee, .. } => callee.borrow().token(),
             Expression::Assignment { left, .. } => left.borrow().token(),
             Expression::If { condition, .. } => condition.borrow().token(),
+            Expression::Case { token, .. } => (**token).clone(),
             Expression::Cast {
                 token,
                 kind_tokens,
