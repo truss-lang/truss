@@ -13,7 +13,7 @@ use crate::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{Accessor, AccessorKind, FunctionBody, Statement, VariadicKind},
+        statement::{Accessor, AccessorKind, FunctionBody, Pattern, Statement, VariadicKind},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{Token, TokenType},
@@ -1924,49 +1924,239 @@ impl<'ctx> IRGenerator<'ctx> {
                     .unwrap()
                     .get_parent()
                     .unwrap();
-                let cond_bb = self.context.append_basic_block(fn_val, "if_cond");
-                let then_bb = self.context.append_basic_block(fn_val, "if_then");
-                let else_bb = if else_.is_some() {
-                    Some(self.context.append_basic_block(fn_val, "if_else"))
-                } else {
-                    None
-                };
-                let exit_bb = self.context.append_basic_block(fn_val, "if_exit");
 
-                self.builder.build_unconditional_branch(cond_bb)?;
-                self.builder.position_at_end(cond_bb);
-
-                let cond_val = self
-                    .resolve_expression(condition.clone())?
-                    .unwrap()
-                    .into_int_value();
-                self.builder.build_conditional_branch(
-                    cond_val,
-                    then_bb,
-                    if let Some(else_bb) = else_bb {
-                        else_bb
+                if let Expression::Case {
+                    enum_type,
+                    case_name,
+                    bindings,
+                    expression,
+                    ..
+                } = &*condition.borrow()
+                {
+                    let then_bb = self.context.append_basic_block(fn_val, "if_then");
+                    let else_bb = if else_.is_some() {
+                        Some(self.context.append_basic_block(fn_val, "if_else"))
                     } else {
-                        exit_bb
-                    },
-                )?;
+                        None
+                    };
+                    let exit_bb = self.context.append_basic_block(fn_val, "if_exit");
+                    let case_match_bb =
+                        self.context.append_basic_block(fn_val, "case_match");
 
-                self.builder.position_at_end(then_bb);
-                let terminates = self.resolve_block_expression(then.clone())?;
-                if !terminates {
-                    self.builder.build_unconditional_branch(exit_bb)?;
-                }
+                    self.builder.build_unconditional_branch(case_match_bb)?;
+                    self.builder.position_at_end(case_match_bb);
 
-                if let Some(else_) = else_ {
-                    self.builder.position_at_end(else_bb.unwrap());
-                    let terminates = self.resolve_block_expression(else_.clone())?;
+                    let subject_val =
+                        self.resolve_expression(expression.clone())?.unwrap();
+                    let subject_alloca = self
+                        .builder
+                        .build_alloca(subject_val.get_type(), "")?;
+                    self.builder.build_store(subject_alloca, subject_val)?;
+
+                    let enum_name = &enum_type.value;
+                    let case_idx =
+                        self.get_enum_case_index(enum_name, &case_name.value)?;
+
+                    let enum_types = self.enum_types.borrow();
+                    let enum_llvm_type =
+                        enum_types.get(enum_name).copied().ok_or_else(|| {
+                            anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                        })?;
+                    drop(enum_types);
+
+                    let tag_ptr = self.builder.build_struct_gep(
+                        enum_llvm_type,
+                        subject_alloca,
+                        0,
+                        "",
+                    )?;
+                    let tag_val =
+                        self.builder.build_load(self.context.i8_type(), tag_ptr, "")?;
+                    let expected_tag = self
+                        .context
+                        .i8_type()
+                        .const_int(case_idx as u64, false);
+                    let match_result = self.builder.build_int_compare(
+                        inkwell::IntPredicate::EQ,
+                        tag_val.into_int_value(),
+                        expected_tag,
+                        "",
+                    )?;
+
+                    self.builder.build_conditional_branch(
+                        match_result,
+                        then_bb,
+                        if let Some(else_bb) = else_bb {
+                            else_bb
+                        } else {
+                            exit_bb
+                        },
+                    )?;
+
+                    self.builder.position_at_end(then_bb);
+
+                    if !bindings.is_empty() {
+                        let enum_payloads = self.enum_payload_types.borrow();
+                        if let Some(payload_type) =
+                            enum_payloads.get(enum_name)
+                        {
+                            let payload_union_ptr = self.builder.build_struct_gep(
+                                enum_llvm_type,
+                                subject_alloca,
+                                1,
+                                "",
+                            )?;
+                            let case_payload_ptr = self.builder.build_struct_gep(
+                                *payload_type,
+                                payload_union_ptr,
+                                case_idx as u32,
+                                "",
+                            )?;
+                            let case_payload_ty = payload_type
+                                .get_field_type_at_index(case_idx as u32)
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Case payload field not found at index {}",
+                                        case_idx
+                                    )
+                                })?;
+                            let case_payload_struct_ty =
+                                case_payload_ty.into_struct_type();
+
+                            self.enter_scope();
+                            for (i, binding) in bindings.iter().enumerate() {
+                                match binding {
+                                    Pattern::Identifier(token) => {
+                                        let field_ptr = self
+                                            .builder
+                                            .build_struct_gep(
+                                                case_payload_struct_ty,
+                                                case_payload_ptr,
+                                                i as u32,
+                                                "",
+                                            )?;
+                                        let field_ty = case_payload_struct_ty
+                                            .get_field_type_at_index(i as u32)
+                                            .ok_or_else(|| {
+                                                anyhow::anyhow!(
+                                                    "Binding field not found at index {}",
+                                                    i
+                                                )
+                                            })?;
+                                        let field_val = self.builder.build_load(
+                                            field_ty,
+                                            field_ptr,
+                                            "",
+                                        )?;
+                                        let var_ptr = self.builder.build_alloca(
+                                            field_ty,
+                                            &token.value,
+                                        )?;
+                                        self.builder
+                                            .build_store(var_ptr, field_val)?;
+                                        self.declare_variable(
+                                            token.value.clone(),
+                                            var_ptr,
+                                        );
+                                    }
+                                    Pattern::Ignore => {}
+                                    _ => {}
+                                }
+                            }
+                            let terminates =
+                                self.resolve_block_expression(then.clone())?;
+                            if !terminates {
+                                self.builder
+                                    .build_unconditional_branch(exit_bb)?;
+                            }
+                            self.exit_scope();
+                        } else {
+                            let terminates =
+                                self.resolve_block_expression(then.clone())?;
+                            if !terminates {
+                                self.builder
+                                    .build_unconditional_branch(exit_bb)?;
+                            }
+                        }
+                    } else {
+                        let terminates =
+                            self.resolve_block_expression(then.clone())?;
+                        if !terminates {
+                            self.builder.build_unconditional_branch(exit_bb)?;
+                        }
+                    }
+
+                    if let Some(else_) = else_ {
+                        self.builder.position_at_end(else_bb.unwrap());
+                        let terminates = match &*else_.borrow() {
+                            Expression::Block { .. } => {
+                                self.resolve_block_expression(else_.clone())?
+                            }
+                            _ => {
+                                self.resolve_expression(else_.clone())?;
+                                false
+                            }
+                        };
+                        if !terminates {
+                            self.builder
+                                .build_unconditional_branch(exit_bb)?;
+                        }
+                    }
+
+                    self.builder.position_at_end(exit_bb);
+
+                    Ok(None)
+                } else {
+                    let cond_bb =
+                        self.context.append_basic_block(fn_val, "if_cond");
+                    let then_bb =
+                        self.context.append_basic_block(fn_val, "if_then");
+                    let else_bb = if else_.is_some() {
+                        Some(self.context.append_basic_block(fn_val, "if_else"))
+                    } else {
+                        None
+                    };
+                    let exit_bb =
+                        self.context.append_basic_block(fn_val, "if_exit");
+
+                    self.builder.build_unconditional_branch(cond_bb)?;
+                    self.builder.position_at_end(cond_bb);
+
+                    let cond_val = self
+                        .resolve_expression(condition.clone())?
+                        .unwrap()
+                        .into_int_value();
+                    self.builder.build_conditional_branch(
+                        cond_val,
+                        then_bb,
+                        if let Some(else_bb) = else_bb {
+                            else_bb
+                        } else {
+                            exit_bb
+                        },
+                    )?;
+
+                    self.builder.position_at_end(then_bb);
+                    let terminates =
+                        self.resolve_block_expression(then.clone())?;
                     if !terminates {
                         self.builder.build_unconditional_branch(exit_bb)?;
                     }
+
+                    if let Some(else_) = else_ {
+                        self.builder.position_at_end(else_bb.unwrap());
+                        let terminates =
+                            self.resolve_block_expression(else_.clone())?;
+                        if !terminates {
+                            self.builder
+                                .build_unconditional_branch(exit_bb)?;
+                        }
+                    }
+
+                    self.builder.position_at_end(exit_bb);
+
+                    Ok(None)
                 }
-
-                self.builder.position_at_end(exit_bb);
-
-                Ok(None)
             }
             Expression::Cast {
                 expression,

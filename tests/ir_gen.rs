@@ -971,3 +971,145 @@ fn test_irgen_enum_variable() {
     assert!(llvm_ir.contains("%enum.Option"));
     assert!(llvm_ir.contains("i32 99"));
 }
+
+#[test]
+fn test_irgen_if_case_no_bindings() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) {
+            if case Option.none = x {}
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("if_then"));
+    assert!(llvm_ir.contains("if_exit"));
+    assert!(llvm_ir.contains("case_match"));
+}
+
+#[test]
+fn test_irgen_if_case_with_bindings() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) {
+            if case Option.some(val) = x {
+                let _ = val
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    match result {
+        Ok(module) => {
+            let llvm_ir = module.print_to_string().to_string();
+            if !llvm_ir.contains("val") {
+                panic!("IR does not contain 'val':\n{}", llvm_ir);
+            }
+        }
+        Err(e) => {
+            panic!("IR generation panicked");
+        }
+    }
+}
+
+#[test]
+fn test_irgen_if_case_with_else() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) {
+            if case Option.some(val) = x {
+                let _ = val
+            } else {
+                let _ = 42
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("if_then"));
+    assert!(llvm_ir.contains("if_else"));
+    assert!(llvm_ir.contains("if_exit"));
+    assert!(llvm_ir.contains("case_match"));
+}
+
+#[test]
+fn test_irgen_if_case_else_if() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) {
+            if case Option.none = x {
+                let _ = 1
+            } else if case Option.some(val) = x {
+                let _ = val
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("case_match"));
+    assert!(llvm_ir.contains("val"));
+}
