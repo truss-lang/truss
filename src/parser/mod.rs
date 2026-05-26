@@ -1599,6 +1599,49 @@ impl Parser {
         Ok(accessors)
     }
 
+    fn ensure_memberwise_init(&self, body: &mut Vec<Rc<RefCell<Statement>>>, type_name: &Token) {
+        let has_init = body.iter().any(|stmt| matches!(&*stmt.borrow(), Statement::InitDecl { .. }));
+        if has_init {
+            return;
+        }
+        let mut parameters = Vec::new();
+        for stmt in body.iter() {
+            if let Statement::VariableDecl {
+                name,
+                type_expression: Some(type_expr),
+                ..
+            } = &*stmt.borrow()
+            {
+                let param = Rc::new(RefCell::new(Parameter {
+                    label: None,
+                    name: Box::new(name.as_ref().clone()),
+                    type_expression: type_expr.clone(),
+                    ty: None,
+                    variadic_kind: VariadicKind::NotVariadic,
+                }));
+                parameters.push(param);
+            }
+        }
+        if parameters.is_empty() {
+            return;
+        }
+        let init_token = Box::new(Token::new(
+            "init".to_string(),
+            TokenType::Keyword { keyword: KeywordType::Init },
+            type_name.position.clone(),
+            type_name.file.clone(),
+        ));
+        let init_decl = Statement::InitDecl {
+            modifiers: vec![],
+            token: init_token,
+            parameters,
+            body: Rc::new(RefCell::new(FunctionBody::None)),
+            scope: None,
+            ty: None,
+        };
+        body.push(Rc::new(RefCell::new(init_decl)));
+    }
+
     fn parse_struct_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
@@ -1619,7 +1662,8 @@ impl Parser {
             );
             return Err(());
         }
-        let body = self.parse_brace_body()?;
+        let mut body = self.parse_brace_body()?;
+        self.ensure_memberwise_init(&mut body, &name);
         Ok(Statement::StructDecl {
             modifiers,
             token: Box::new(token),
@@ -1650,7 +1694,8 @@ impl Parser {
             );
             return Err(());
         }
-        let body = self.parse_brace_body()?;
+        let mut body = self.parse_brace_body()?;
+        self.ensure_memberwise_init(&mut body, &name);
         Ok(Statement::ClassDecl {
             modifiers,
             token: Box::new(token),

@@ -1108,7 +1108,7 @@ fn test_parse_struct_decl_with_fields() {
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert_eq!(body.len(), 2);
+        assert_eq!(body.len(), 3);
         if let Statement::VariableDecl {
             name: field_name, ..
         } = &*body[0].borrow()
@@ -1172,7 +1172,7 @@ fn test_parse_struct_decl_mixed_members() {
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Person");
-        assert_eq!(body.len(), 3);
+        assert_eq!(body.len(), 4);
         if let Statement::VariableDecl {
             name: field_name, ..
         } = &*body[0].borrow()
@@ -1197,6 +1197,7 @@ fn test_parse_struct_decl_mixed_members() {
         } else {
             panic!("Expected FunctionDecl for method greet");
         }
+        assert!(matches!(&*body[3].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!();
     }
@@ -1702,7 +1703,7 @@ fn test_parse_private_struct_field() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
-        assert_eq!(body.len(), 1);
+        assert_eq!(body.len(), 2);
         if let Statement::VariableDecl { name, .. } = &*body[0].borrow() {
             assert_eq!(name.value, "name");
             assert_has_access_modifier(&body[0].borrow(), AccessModifier::Private);
@@ -2735,7 +2736,7 @@ fn test_parse_class_decl_with_fields() {
     let program = parser.parse();
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert_eq!(body.len(), 2);
+        assert_eq!(body.len(), 3);
         if let Statement::VariableDecl {
             name: field_name, ..
         } = &*body[0].borrow()
@@ -2752,6 +2753,7 @@ fn test_parse_class_decl_with_fields() {
         } else {
             panic!("Expected VariableDecl for field y");
         }
+        assert!(matches!(&*body[2].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!();
     }
