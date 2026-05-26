@@ -42,6 +42,8 @@ pub struct IRGenerator<'ctx> {
     scope_stack: Rc<RefCell<Vec<Scope<'ctx>>>>,
     alloca_namer: Rc<RefCell<HashMap<String, u32>>>,
     struct_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
+    enum_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
+    enum_payload_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     program_scope: Rc<RefCell<Option<Rc<RefCell<TrussScope>>>>>,
     current_struct: Rc<RefCell<Option<String>>>,
     current_accessor_struct: Rc<RefCell<Option<(String, PointerValue<'ctx>)>>>,
@@ -59,6 +61,8 @@ impl<'ctx> IRGenerator<'ctx> {
             scope_stack: Rc::new(RefCell::new(vec![Scope::new()])),
             alloca_namer: Rc::new(RefCell::new(HashMap::new())),
             struct_types: Rc::new(RefCell::new(HashMap::new())),
+            enum_types: Rc::new(RefCell::new(HashMap::new())),
+            enum_payload_types: Rc::new(RefCell::new(HashMap::new())),
             program_scope: Rc::new(RefCell::new(None)),
             current_struct: Rc::new(RefCell::new(None)),
             current_accessor_struct: Rc::new(RefCell::new(None)),
@@ -155,7 +159,15 @@ impl<'ctx> IRGenerator<'ctx> {
         }
 
         for stmt in &program.statements {
+            self.declare_enum_types(stmt.clone());
+        }
+
+        for stmt in &program.statements {
             self.create_struct_type_bodies(stmt.clone());
+        }
+
+        for stmt in &program.statements {
+            self.create_enum_type_bodies(stmt.clone());
         }
 
         for stmt in &program.statements {
@@ -216,6 +228,70 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn declare_enum_types(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::EnumDecl { name, .. } = &*statement.borrow() {
+            let enum_name = &name.value;
+            if !self.enum_types.borrow().contains_key(enum_name) {
+                let enum_type = self
+                    .context
+                    .opaque_struct_type(&format!("enum.{}", enum_name));
+                self.enum_types
+                    .borrow_mut()
+                    .insert(enum_name.clone(), enum_type);
+
+                let payload_type = self
+                    .context
+                    .opaque_struct_type(&format!("enum.{}.payloads", enum_name));
+                self.enum_payload_types
+                    .borrow_mut()
+                    .insert(enum_name.clone(), payload_type);
+            }
+        }
+    }
+
+    fn create_enum_type_bodies(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::EnumDecl { name, cases, .. } = &*statement.borrow() {
+            let enum_name = &name.value;
+            if let Some(enum_type) = self.enum_types.borrow().get(enum_name).cloned() {
+                let mut case_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+                for case in cases {
+                    let param_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = case
+                        .parameters
+                        .iter()
+                        .filter_map(|param| {
+                            let expr = param.type_expression.borrow();
+                            let ty = expr.get_ty().ok().flatten();
+                            ty.and_then(|ty| self.resolve_type(ty).ok())
+                        })
+                        .collect();
+                    if param_types.is_empty() {
+                        case_types.push(self.context.struct_type(&[], false).as_basic_type_enum());
+                    } else {
+                        case_types.push(
+                            self.context
+                                .struct_type(&param_types, false)
+                                .as_basic_type_enum(),
+                        );
+                    }
+                }
+
+                if let Some(payload_type) = self.enum_payload_types.borrow().get(enum_name).cloned() {
+                    payload_type.set_body(&case_types, false);
+                }
+
+                let tag_type = self.context.i8_type();
+                if case_types.is_empty() {
+                    enum_type.set_body(&[], false);
+                } else if let Some(payload_type) =
+                    self.enum_payload_types.borrow().get(enum_name).cloned()
+                {
+                    let field_types = vec![tag_type.as_basic_type_enum(), payload_type.as_basic_type_enum()];
+                    enum_type.set_body(&field_types, false);
+                }
+            }
+        }
+    }
+
     fn get_stored_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
@@ -238,6 +314,20 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
         anyhow::bail!("Stored field '{}' not found in struct '{}'", field_name, struct_name)
+    }
+
+    fn get_enum_case_index(&self, enum_name: &str, case_name: &str) -> Result<usize> {
+        if let Some(scope) = self.program_scope.borrow().as_ref()
+            && let Some(symbol) = scope.borrow().get_symbol(enum_name)
+            && let Symbol::Enum { cases, .. } = &*symbol.borrow()
+        {
+            for (i, case) in cases.iter().enumerate() {
+                if case.borrow().name().as_ref().ok() == Some(&case_name.to_string()) {
+                    return Ok(i);
+                }
+            }
+        }
+        anyhow::bail!("Case '{}' not found in enum '{}'", case_name, enum_name)
     }
 
     fn create_function_declarations(&self, statement: Rc<RefCell<Statement>>) {
@@ -301,6 +391,23 @@ impl<'ctx> IRGenerator<'ctx> {
                         let llvm_name = format!("{}.{}", name.value, "init");
                         self.module.add_function(&llvm_name, function_type, None);
                     }
+                }
+            }
+        }
+        if let Statement::EnumDecl { name, body, .. } = &*statement.borrow() {
+            for stmt in body {
+                if let Statement::FunctionDecl {
+                    name: method_name,
+                    ty,
+                    ..
+                } = &*stmt.borrow()
+                    && let Some(ty) = ty
+                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
+                {
+                    let llvm_name = format!("{}.{}", name.value, method_name.value);
+                    self.module.add_function(&llvm_name, function_type, None);
                 }
             }
         }
@@ -874,6 +981,18 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Statement::ExternDecl { .. } => Ok(false),
             Statement::StructDecl { name, body, .. } => {
+                let prev = self.current_struct.borrow_mut().take();
+                self.current_struct.borrow_mut().replace(name.value.clone());
+                let result = (|| -> Result<bool> {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone())?;
+                    }
+                    Ok(false)
+                })();
+                *self.current_struct.borrow_mut() = prev;
+                result
+            }
+            Statement::EnumDecl { name, body, .. } => {
                 let prev = self.current_struct.borrow_mut().take();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
@@ -1912,7 +2031,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 let object_ty = object_expr.get_ty_ref()?.clone();
                 drop(object_expr);
 
-                if let Some(ty) = object_ty
+                if let Some(ty) = &object_ty
                     && let Type::Struct(struct_name, _) = &*ty.borrow()
                 {
                     let struct_name = struct_name.clone();
@@ -1956,6 +2075,29 @@ impl<'ctx> IRGenerator<'ctx> {
                     return Ok(Some(field_val));
                 }
 
+                if let Some(ty) = &object_ty
+                    && let Type::Enum(enum_name, _) = &*ty.borrow()
+                {
+                    let case_name = member.value.clone();
+                    let enum_name = enum_name.clone();
+                    let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
+
+                    let enum_types = self.enum_types.borrow();
+                    let enum_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
+                        anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                    })?;
+                    drop(enum_types);
+
+                    let alloca = self.builder.build_alloca(enum_llvm_type.as_basic_type_enum(), "")?;
+
+                    let tag_ptr = self.builder.build_struct_gep(enum_llvm_type, alloca, 0, "")?;
+                    let tag_val = self.context.i8_type().const_int(case_index as u64, false);
+                    self.builder.build_store(tag_ptr, tag_val)?;
+
+                    let val = self.builder.build_load(enum_llvm_type.as_basic_type_enum(), alloca, "")?;
+                    return Ok(Some(val));
+                }
+
                 self.emit_error(
                     TrussDiagnosticCode::UnsupportedFeature,
                     "Member access on non-struct type",
@@ -1980,17 +2122,50 @@ impl<'ctx> IRGenerator<'ctx> {
                         let object_ty = object_expr.get_ty_ref()?.clone();
                         drop(object_expr);
 
-                        if let Some(ty) = object_ty
+                        if let Some(ty) = &object_ty
                             && let Type::Struct(struct_name, _) = &*ty.borrow()
                         {
                             (format!("{}.{}", struct_name, member.value), false)
+                        } else if let Some(ty) = &object_ty
+                            && let Type::Enum(enum_name, _) = &*ty.borrow()
+                        {
+                            let case_name = member.value.clone();
+                            let enum_name = enum_name.clone();
+                            let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
+
+                            let enum_types = self.enum_types.borrow();
+                            let case_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
+                                anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                            })?;
+                            drop(enum_types);
+
+                            let alloca = self.builder.build_alloca(case_llvm_type.as_basic_type_enum(), "")?;
+
+                            let tag_ptr = self.builder.build_struct_gep(case_llvm_type, alloca, 0, "")?;
+                            let tag_val = self.context.i8_type().const_int(case_index as u64, false);
+                            self.builder.build_store(tag_ptr, tag_val)?;
+
+                            if !parameters.is_empty() {
+                                let payload_ptr = self.builder.build_struct_gep(case_llvm_type, alloca, 1, "")?;
+                                let enum_payloads = self.enum_payload_types.borrow();
+                                if let Some(payload_type) = enum_payloads.get(&enum_name) {
+                                    for (i, param) in parameters.iter().enumerate() {
+                                        let field_ptr = self.builder.build_struct_gep(*payload_type, payload_ptr, i as u32, "")?;
+                                        let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                        self.builder.build_store(field_ptr, arg_val)?;
+                                    }
+                                }
+                            }
+
+                            let val = self.builder.build_load(case_llvm_type.as_basic_type_enum(), alloca, "")?;
+                            return Ok(Some(val));
                         } else {
                             self.emit_error(
                                 TrussDiagnosticCode::UnsupportedFeature,
-                                "Method call on non-struct type",
+                                "Method call on non-struct/enum type",
                                 Some(member.as_ref()),
                             );
-                            anyhow::bail!("Method call on non-struct type");
+                            anyhow::bail!("Method call on non-struct/enum type");
                         }
                     }
                     _ => {
@@ -2127,12 +2302,16 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Type::Enum(name, _) => {
-                self.emit_error(
-                    TrussDiagnosticCode::EnumTypeNotSupported,
-                    format!("Enum type '{}' is not supported in IR generation yet", name),
-                    None,
-                );
-                anyhow::bail!("Enum type not supported");
+                if let Some(enum_type) = self.enum_types.borrow().get(name) {
+                    enum_type.as_basic_type_enum()
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::EnumTypeNotSupported,
+                        format!("Enum type '{}' not found in IR generation", name),
+                        None,
+                    );
+                    anyhow::bail!("Enum type not found");
+                }
             }
         };
         Ok(resolved)
