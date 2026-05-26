@@ -474,7 +474,7 @@ fn test_class_field_symbol() {
 
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert_eq!(body.len(), 3);
+        assert_eq!(body.len(), 2);
     } else {
         panic!("Expected ClassDecl");
     }

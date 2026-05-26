@@ -1694,8 +1694,7 @@ impl Parser {
             );
             return Err(());
         }
-        let mut body = self.parse_brace_body()?;
-        self.ensure_memberwise_init(&mut body, &name);
+        let body = self.parse_brace_body()?;
         Ok(Statement::ClassDecl {
             modifiers,
             token: Box::new(token),

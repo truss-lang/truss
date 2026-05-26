@@ -2736,7 +2736,7 @@ fn test_parse_class_decl_with_fields() {
     let program = parser.parse();
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert_eq!(body.len(), 3);
+        assert_eq!(body.len(), 2);
         if let Statement::VariableDecl {
             name: field_name, ..
         } = &*body[0].borrow()
@@ -2753,7 +2753,6 @@ fn test_parse_class_decl_with_fields() {
         } else {
             panic!("Expected VariableDecl for field y");
         }
-        assert!(matches!(&*body[2].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!();
     }
