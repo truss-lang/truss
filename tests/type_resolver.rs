@@ -1505,7 +1505,7 @@ fn test_struct_decl_type_resolve() {
 
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert_eq!(body.len(), 2);
+        assert_eq!(body.len(), 3);
     } else {
         panic!("Expected StructDecl");
     }

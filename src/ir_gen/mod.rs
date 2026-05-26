@@ -13,7 +13,7 @@ use crate::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{Accessor, AccessorKind, FunctionBody, Pattern, Statement, VariadicKind},
+        statement::{Accessor, AccessorKind, FunctionBody, Parameter, Pattern, Statement, VariadicKind},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{Token, TokenType},
@@ -275,6 +275,64 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
 
                 class_type.set_body(&field_types, false);
+            }
+        }
+    }
+
+    fn auto_assign_init_fields(
+        &self,
+        struct_name: &str,
+        self_ptr: PointerValue<'ctx>,
+        parameters: &[Rc<RefCell<Parameter>>],
+    ) {
+        let is_class = self.class_types.borrow().contains_key(struct_name);
+        let binding = self.program_scope.borrow();
+        let Some(scope) = binding.as_ref() else { return };
+        let Some(symbol) = scope.borrow().get_symbol(struct_name) else { return };
+        let Symbol::Struct { fields, .. } = &*symbol.borrow() else { return };
+
+        for param in parameters {
+            let param_name = param.borrow().name.value.clone();
+            let mut stored_idx = 0usize;
+            for field in fields.iter() {
+                let Ok(field_name) = field.borrow().name() else { continue };
+                let Ok(Some(decl)) = field.borrow().get_decl() else { continue };
+                let decl_ref = decl.borrow();
+                let Statement::VariableDecl { accessors, ty: field_ty, .. } = &*decl_ref else { continue };
+                let has_get_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+                if has_get_set {
+                    stored_idx += 1;
+                    continue;
+                }
+                let Some(field_ty) = field_ty else { stored_idx += 1; continue };
+                if field_name == param_name {
+                    let gep_idx = if is_class { stored_idx + 1 } else { stored_idx };
+                    if is_class {
+                        if let Some(class_type) = self.class_types.borrow().get(struct_name).copied() {
+                            if let Ok(field_ptr) = self.builder.build_struct_gep(class_type, self_ptr, gep_idx as u32, "") {
+                                if let Some(param_ptr) = self.lookup_variable(&param_name) {
+                                    if let Ok(llvm_ty) = self.resolve_type(field_ty.clone()) {
+                                        if let Ok(param_val) = self.builder.build_load(llvm_ty, param_ptr, "") {
+                                            let _ = self.builder.build_store(field_ptr, param_val);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if let Some(struct_type) = self.struct_types.borrow().get(struct_name).copied() {
+                        if let Ok(field_ptr) = self.builder.build_struct_gep(struct_type, self_ptr, gep_idx as u32, "") {
+                            if let Some(param_ptr) = self.lookup_variable(&param_name) {
+                                if let Ok(llvm_ty) = self.resolve_type(field_ty.clone()) {
+                                    if let Ok(param_val) = self.builder.build_load(llvm_ty, param_ptr, "") {
+                                        let _ = self.builder.build_store(field_ptr, param_val);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                stored_idx += 1;
             }
         }
     }
@@ -1026,7 +1084,8 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     self.enter_scope();
                     let self_ptr = function.get_nth_param(0).unwrap();
-                    self.declare_variable("self".to_string(), self_ptr.into_pointer_value());
+                    let self_ptr = self_ptr.into_pointer_value();
+                    self.declare_variable("self".to_string(), self_ptr);
                     for (i, param) in parameters.iter().enumerate() {
                         let param_name = &param.borrow().name.value;
                         let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
@@ -1036,6 +1095,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.builder.build_store(ptr, param_value)?;
                         self.declare_variable(param_name.clone(), ptr);
                     }
+
+                    let struct_name_clone = struct_name.clone();
+                    self.auto_assign_init_fields(&struct_name_clone, self_ptr, parameters);
 
                     match &*body.borrow() {
                         FunctionBody::Statements(stmts) => {
@@ -2566,7 +2628,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 ptr_ty,
                                 "",
                             )?;
-                            let class_ptr_ty = class_type.as_basic_type_enum().ptr_type(inkwell::AddressSpace::from(0));
+                            let class_ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                             let null_class_ptr = self.builder.build_pointer_cast(null_i8, class_ptr_ty, "")?;
                             let size_val = unsafe {
                                 let gep = self.builder.build_gep(

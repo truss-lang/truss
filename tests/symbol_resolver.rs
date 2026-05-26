@@ -164,7 +164,7 @@ fn test_struct_field_symbol() {
 
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert_eq!(body.len(), 2);
+        assert_eq!(body.len(), 3);
     } else {
         panic!("Expected StructDecl");
     }
@@ -474,7 +474,7 @@ fn test_class_field_symbol() {
 
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert_eq!(body.len(), 2);
+        assert_eq!(body.len(), 3);
     } else {
         panic!("Expected ClassDecl");
     }

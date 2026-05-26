@@ -1038,7 +1038,7 @@ fn test_irgen_if_case_with_bindings() {
                 panic!("IR does not contain 'val':\n{}", llvm_ir);
             }
         }
-        Err(e) => {
+        Err(_) => {
             panic!("IR generation panicked");
         }
     }
