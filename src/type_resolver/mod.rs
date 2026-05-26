@@ -195,6 +195,82 @@ impl TypeResolver {
                 }
                 self.leave_scope();
             }
+            Statement::ClassDecl {
+                name, body, scope, ..
+            } => {
+                let Some(symbol) = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().name_table.get(&name.value).cloned())
+                else {
+                    return;
+                };
+
+                let class_ty = Rc::new(RefCell::new(Type::Class(
+                    name.value.clone(),
+                    WeakSymbol(Rc::downgrade(&symbol)),
+                )));
+                self.current_scope
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_type(name.value.clone(), class_ty);
+
+                self.enter_scope(scope.as_ref().unwrap().clone());
+                for stmt in body {
+                    let method_info: MethodInfo = {
+                        if let Statement::FunctionDecl {
+                            name: method_name,
+                            parameters,
+                            return_type,
+                            ..
+                        } = &*stmt.borrow()
+                        {
+                            let ret_type = if let Some(return_type_expr) = return_type {
+                                self.infer_type(return_type_expr.clone())
+                                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                            } else {
+                                Rc::new(RefCell::new(Type::Void))
+                            };
+
+                            let mut parameter_types = Vec::new();
+                            let mut is_vararg = false;
+                            for param in parameters.iter() {
+                                if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                    is_vararg = true;
+                                    continue;
+                                }
+                                let param_type =
+                                    self.infer_type(param.borrow().type_expression.clone());
+                                if let Some(ref param_type) = param_type {
+                                    param.borrow_mut().ty = Some(param_type.clone());
+                                    parameter_types.push(param_type.clone());
+                                }
+                                if param.borrow().variadic_kind != VariadicKind::NotVariadic {
+                                    is_vararg = true;
+                                }
+                            }
+
+                            let fn_type = Rc::new(RefCell::new(Type::Function(
+                                parameter_types.clone(),
+                                ret_type,
+                                is_vararg,
+                            )));
+                            Some((method_name.value.clone(), fn_type, parameter_types))
+                        } else {
+                            None
+                        }
+                    };
+
+                    if let Some((_method_name, fn_type, _)) = method_info
+                        && let Statement::FunctionDecl { ty, .. } = &mut *stmt.borrow_mut()
+                    {
+                        *ty = Some(fn_type.clone());
+                    }
+                    self.process_decl(stmt.clone());
+                }
+                self.leave_scope();
+            }
             Statement::EnumDecl {
                 name, cases: ast_cases, body, scope, ..
             } => {
@@ -651,6 +727,11 @@ impl TypeResolver {
                     self.resolve_statement(stmt.clone());
                 }
             }
+            Statement::ClassDecl { body, .. } => {
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
+            }
             Statement::EnumDecl { body, .. } => {
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
@@ -892,6 +973,64 @@ impl TypeResolver {
                         let init_params_info = {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
                             if let Some(symbol) = scope.get_symbol(struct_name)
+                                && let Symbol::Struct { constructors, .. } = &*symbol.borrow()
+                            {
+                                constructors.iter().find_map(|constructor| {
+                                    if let Ok(Some(decl)) = constructor.borrow().get_decl()
+                                        && let Statement::InitDecl {
+                                            ty: Some(init_ty), ..
+                                        } = &*decl.borrow()
+                                        && let Type::Function(param_tys, _, is_vararg) =
+                                            &*init_ty.borrow()
+                                    {
+                                        Some((decl.clone(), param_tys.clone(), *is_vararg))
+                                    } else {
+                                        None
+                                    }
+                                })
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some((decl, param_tys, is_vararg)) = init_params_info {
+                            if !is_vararg && parameters.len() != param_tys.len() {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ArgumentCountMismatch,
+                                    format!(
+                                        "Expected {} arguments but found {}",
+                                        param_tys.len(),
+                                        parameters.len()
+                                    ),
+                                    &callee.borrow().token(),
+                                );
+                            } else if is_vararg && parameters.len() < param_tys.len() {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ArgumentCountMismatch,
+                                    format!(
+                                        "Expected at least {} arguments but found {}",
+                                        param_tys.len(),
+                                        parameters.len()
+                                    ),
+                                    &callee.borrow().token(),
+                                );
+                            }
+                            for (i, param) in parameters.iter().enumerate() {
+                                if i < param_tys.len() {
+                                    let expected_ty = param_tys[i].clone();
+                                    self.infer_expression_type(
+                                        param.expression.clone(),
+                                        expected_ty,
+                                    );
+                                    self.check_parameter_label(param, &decl, i);
+                                }
+                            }
+                        }
+                        callee_type.clone()
+                    }
+                    Type::Class(class_name, _) => {
+                        let init_params_info = {
+                            let scope = self.current_scope.as_ref().unwrap().borrow();
+                            if let Some(symbol) = scope.get_symbol(class_name)
                                 && let Symbol::Struct { constructors, .. } = &*symbol.borrow()
                             {
                                 constructors.iter().find_map(|constructor| {
@@ -1227,6 +1366,88 @@ impl TypeResolver {
                             self.emit_error(
                                 TrussDiagnosticCode::FieldNotFound,
                                 format!("Struct symbol '{}' not found", struct_name),
+                                token,
+                            );
+                            return None;
+                        }
+                    }
+                    Type::Class(class_name, _) => {
+                        let scope = self.current_scope.as_ref().unwrap().borrow();
+                        if let Some(symbol) = scope.get_symbol(class_name)
+                            && let Symbol::Struct {
+                                fields, methods, ..
+                            } = &*symbol.borrow()
+                        {
+                            if !self.is_member_accessible(&symbol.borrow(), member) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::InaccessibleMember,
+                                    format!(
+                                        "'{}' is inaccessible due to '{}' level",
+                                        member.value,
+                                        symbol
+                                            .borrow()
+                                            .get_decl()
+                                            .unwrap()
+                                            .unwrap()
+                                            .borrow()
+                                            .access_modifier()
+                                            .map_or(String::from("internal"), |m| m
+                                                .map(|m| m.token.value.clone())
+                                                .unwrap_or(String::from("internal")))
+                                    ),
+                                    member,
+                                );
+                                return None;
+                            }
+                            for field in fields {
+                                if field.borrow().name().as_ref().ok() == Some(&member.value)
+                                    && let Some(decl) = field.borrow().get_decl().ok().flatten()
+                                    && let Statement::VariableDecl { ty: field_ty, .. } =
+                                        &*decl.borrow()
+                                    && let Some(t) = field_ty
+                                {
+                                    *ty = Some(t.clone());
+                                    return Some(t.clone());
+                                }
+                            }
+                            for method in methods {
+                                if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                    && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                {
+                                    let method_ty = {
+                                        let decl_ref = decl.borrow();
+                                        if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                            ty.clone()
+                                        } else if let Statement::InitDecl { ty, .. } = &*decl_ref {
+                                            ty.clone()
+                                        } else if let Statement::DeinitDecl { ty, .. } = &*decl_ref
+                                        {
+                                            ty.clone()
+                                        } else {
+                                            continue;
+                                        }
+                                    };
+                                    if let Some(t) = method_ty {
+                                        *ty = Some(t.clone());
+                                        return Some(t.clone());
+                                    }
+                                }
+                            }
+                            let token = &*member;
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!(
+                                    "Field '{}' not found on class '{}'",
+                                    member.value, class_name
+                                ),
+                                token,
+                            );
+                            return None;
+                        } else {
+                            let token = &*member;
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!("Class symbol '{}' not found", class_name),
                                 token,
                             );
                             return None;
