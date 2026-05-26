@@ -42,6 +42,7 @@ pub struct IRGenerator<'ctx> {
     scope_stack: Rc<RefCell<Vec<Scope<'ctx>>>>,
     alloca_namer: Rc<RefCell<HashMap<String, u32>>>,
     struct_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
+    class_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     enum_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     enum_payload_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     program_scope: Rc<RefCell<Option<Rc<RefCell<TrussScope>>>>>,
@@ -61,6 +62,7 @@ impl<'ctx> IRGenerator<'ctx> {
             scope_stack: Rc::new(RefCell::new(vec![Scope::new()])),
             alloca_namer: Rc::new(RefCell::new(HashMap::new())),
             struct_types: Rc::new(RefCell::new(HashMap::new())),
+            class_types: Rc::new(RefCell::new(HashMap::new())),
             enum_types: Rc::new(RefCell::new(HashMap::new())),
             enum_payload_types: Rc::new(RefCell::new(HashMap::new())),
             program_scope: Rc::new(RefCell::new(None)),
@@ -159,11 +161,19 @@ impl<'ctx> IRGenerator<'ctx> {
         }
 
         for stmt in &program.statements {
+            self.declare_class_types(stmt.clone());
+        }
+
+        for stmt in &program.statements {
             self.declare_enum_types(stmt.clone());
         }
 
         for stmt in &program.statements {
             self.create_struct_type_bodies(stmt.clone());
+        }
+
+        for stmt in &program.statements {
+            self.create_class_type_bodies(stmt.clone());
         }
 
         for stmt in &program.statements {
@@ -224,6 +234,47 @@ impl<'ctx> IRGenerator<'ctx> {
                     .collect();
 
                 struct_type.set_body(&field_types, false);
+            }
+        }
+    }
+
+    fn declare_class_types(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::ClassDecl { name, .. } = &*statement.borrow() {
+            let class_name = &name.value;
+            if !self.class_types.borrow().contains_key(class_name) {
+                let class_type = self
+                    .context
+                    .opaque_struct_type(&format!("class.{}", class_name));
+                self.class_types
+                    .borrow_mut()
+                    .insert(class_name.clone(), class_type);
+            }
+        }
+    }
+
+    fn create_class_type_bodies(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::ClassDecl { name, body, .. } = &*statement.borrow() {
+            let class_name = &name.value;
+            if let Some(class_type) = self.class_types.borrow().get(class_name).cloned() {
+                let ref_count_ty = self.context.i64_type().into();
+                let mut field_types: Vec<BasicTypeEnum<'ctx>> = vec![ref_count_ty];
+                field_types.extend(
+                    body.iter()
+                        .filter(|stmt| self.is_stored_field(stmt))
+                        .filter_map(|stmt| {
+                            if let Statement::VariableDecl { ty, .. } = &*stmt.borrow()
+                                && let Some(ty) = ty
+                            {
+                                match self.resolve_type(ty.clone()) {
+                                    Ok(llvm_ty) => return Some(llvm_ty),
+                                    Err(_) => return None,
+                                }
+                            }
+                            None
+                        }),
+                );
+
+                class_type.set_body(&field_types, false);
             }
         }
     }
@@ -316,6 +367,30 @@ impl<'ctx> IRGenerator<'ctx> {
         anyhow::bail!("Stored field '{}' not found in struct '{}'", field_name, struct_name)
     }
 
+    fn get_stored_class_field_index(&self, class_name: &str, field_name: &str) -> Result<usize> {
+        if let Some(scope) = self.program_scope.borrow().as_ref()
+            && let Some(symbol) = scope.borrow().get_symbol(class_name)
+            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
+        {
+            let mut stored_idx = 0;
+            for field in fields.iter() {
+                if let Some(decl) = field.borrow().get_decl().ok().flatten()
+                    && let Statement::VariableDecl { accessors, .. } = &*decl.borrow()
+                {
+                    let has_get_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+                    if has_get_set {
+                        continue;
+                    }
+                    if field.borrow().name().as_ref().ok() == Some(&field_name.to_string()) {
+                        return Ok(stored_idx + 1);
+                    }
+                    stored_idx += 1;
+                }
+            }
+        }
+        anyhow::bail!("Stored field '{}' not found in class '{}'", field_name, class_name)
+    }
+
     fn get_enum_case_index(&self, enum_name: &str, case_name: &str) -> Result<usize> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(enum_name)
@@ -363,6 +438,38 @@ impl<'ctx> IRGenerator<'ctx> {
             let _ = self.create_extern_declaration(statement.clone());
         }
         if let Statement::StructDecl { name, body, .. } = &*statement.borrow() {
+            for stmt in body {
+                if let Statement::FunctionDecl {
+                    name: method_name,
+                    ty,
+                    ..
+                } = &*stmt.borrow()
+                    && let Some(ty) = ty
+                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
+                {
+                    let llvm_name = format!("{}.{}", name.value, method_name.value);
+                    self.module.add_function(&llvm_name, function_type, None);
+                }
+                if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    let mut all_param_types = vec![self_param];
+                    all_param_types.extend(param_types.iter().cloned());
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
+                    {
+                        let llvm_name = format!("{}.{}", name.value, "init");
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
+            }
+        }
+        if let Statement::ClassDecl { name, body, .. } = &*statement.borrow() {
             for stmt in body {
                 if let Statement::FunctionDecl {
                     name: method_name,
@@ -981,6 +1088,18 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Statement::ExternDecl { .. } => Ok(false),
             Statement::StructDecl { name, body, .. } => {
+                let prev = self.current_struct.borrow_mut().take();
+                self.current_struct.borrow_mut().replace(name.value.clone());
+                let result = (|| -> Result<bool> {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone())?;
+                    }
+                    Ok(false)
+                })();
+                *self.current_struct.borrow_mut() = prev;
+                result
+            }
+            Statement::ClassDecl { name, body, .. } => {
                 let prev = self.current_struct.borrow_mut().take();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
@@ -1740,10 +1859,34 @@ impl<'ctx> IRGenerator<'ctx> {
                             let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
                             let val = self.builder.build_load(field_ty, field_ptr, "")?;
                             (field_ptr, Some(val))
+                        } else if let Type::Class(class_name, _) = &*ty.borrow() {
+                            let class_name = class_name.clone();
+                            let field_name = member.value.clone();
+
+                            let object_val = self.resolve_expression(object.clone())?.unwrap();
+
+                            let class_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                                ptr
+                            } else {
+                                let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(ptr, object_val)?;
+                                ptr
+                            };
+
+                            let field_index = self.get_stored_class_field_index(&class_name, &field_name)?;
+                            let field_ptr = self.builder.build_struct_gep(
+                                *self.class_types.borrow().get(&class_name).unwrap(),
+                                class_ptr,
+                                field_index as u32,
+                                "",
+                            )?;
+                            let field_ty = self.get_struct_field_type(&class_name, &field_name)?;
+                            let val = self.builder.build_load(field_ty, field_ptr, "")?;
+                            (field_ptr, Some(val))
                         } else {
                             self.emit_error(
                                 TrussDiagnosticCode::UnsupportedFeature,
-                                "Member access on non-struct type",
+                                "Member access on non-struct/class type",
                                 Some(member.as_ref()),
                             );
                             anyhow::bail!("Member access on non-struct type");
@@ -2266,6 +2409,36 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 if let Some(ty) = &object_ty
+                    && let Type::Class(class_name, _) = &*ty.borrow()
+                {
+                    let class_name = class_name.clone();
+                    let field_name = member.value.clone();
+
+                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+
+                    let class_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                        ptr
+                    } else {
+                        let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                        self.builder.build_store(ptr, object_val)?;
+                        ptr
+                    };
+
+                    let field_index = self.get_stored_class_field_index(&class_name, &field_name)?;
+
+                    let field_ptr = self.builder.build_struct_gep(
+                        *self.class_types.borrow().get(&class_name).unwrap(),
+                        class_ptr,
+                        field_index as u32,
+                        "",
+                    )?;
+
+                    let field_ty = self.get_struct_field_type(&class_name, &field_name)?;
+                    let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                    return Ok(Some(field_val));
+                }
+
+                if let Some(ty) = &object_ty
                     && let Type::Enum(enum_name, _) = &*ty.borrow()
                 {
                     let case_name = member.value.clone();
@@ -2316,6 +2489,10 @@ impl<'ctx> IRGenerator<'ctx> {
                             && let Type::Struct(struct_name, _) = &*ty.borrow()
                         {
                             (format!("{}.{}", struct_name, member.value), false)
+                        } else if let Some(ty) = &object_ty
+                            && let Type::Class(class_name, _) = &*ty.borrow()
+                        {
+                            (format!("{}.{}", class_name, member.value), false)
                         } else if let Some(ty) = &object_ty
                             && let Type::Enum(enum_name, _) = &*ty.borrow()
                         {
@@ -2379,17 +2556,60 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
 
-                let instantiation_ptr = if is_init_call {
+                let instantiation_ptr: Option<(BasicTypeEnum<'ctx>, PointerValue<'ctx>)> = if is_init_call {
                     if let Some(struct_name) = function_name.strip_suffix(".init") {
-                        self.struct_types
-                            .borrow()
-                            .get(struct_name)
-                            .cloned()
-                            .map(|st| {
-                                let ptr = self.builder.build_alloca(st, "").unwrap();
-                                args.push(ptr.into());
-                                (st, ptr)
-                            })
+                        if let Some(class_type) = self.class_types.borrow().get(struct_name).cloned() {
+                            let i64_ty = self.context.i64_type();
+                            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                            let null_i8 = self.builder.build_int_to_ptr(
+                                i64_ty.const_int(0, false),
+                                ptr_ty,
+                                "",
+                            )?;
+                            let class_ptr_ty = class_type.as_basic_type_enum().ptr_type(inkwell::AddressSpace::from(0));
+                            let null_class_ptr = self.builder.build_pointer_cast(null_i8, class_ptr_ty, "")?;
+                            let size_val = unsafe {
+                                let gep = self.builder.build_gep(
+                                    class_type.as_basic_type_enum(),
+                                    null_class_ptr,
+                                    &[i64_ty.const_int(1, false)],
+                                    "",
+                                )?;
+                                self.builder.build_ptr_to_int(gep, i64_ty, "")?
+                            };
+                            let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+                                let fn_ty = self.context.i64_type().fn_type(&[self.context.i64_type().into()], false);
+                                self.module.add_function("malloc", fn_ty, None)
+                            });
+                            let malloc_result = self.builder.build_call(
+                                malloc_fn,
+                                &[size_val.into()],
+                                "",
+                            )?;
+                            let heap_ptr = match malloc_result.try_as_basic_value() {
+                                inkwell::values::ValueKind::Basic(inkwell::values::BasicValueEnum::PointerValue(p)) => p,
+                                _ => anyhow::bail!("malloc expected to return a pointer"),
+                            };
+                            let class_ptr = self.builder.build_pointer_cast(
+                                heap_ptr,
+                                class_ptr_ty,
+                                "",
+                            )?;
+                            let rc_ptr = self.builder.build_struct_gep(class_type, class_ptr, 0, "")?;
+                            self.builder.build_store(rc_ptr, i64_ty.const_int(1, false))?;
+                            args.push(class_ptr.into());
+                            Some((class_type.as_basic_type_enum(), class_ptr))
+                        } else {
+                            self.struct_types
+                                .borrow()
+                                .get(struct_name)
+                                .cloned()
+                                .map(|st| {
+                                    let ptr = self.builder.build_alloca(st, "").unwrap();
+                                    args.push(ptr.into());
+                                    (st.as_basic_type_enum(), ptr)
+                                })
+                        }
                     } else {
                         None
                     }
@@ -2404,9 +2624,16 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 let call_result = self.builder.build_call(function, &args, "")?;
 
-                if let Some((struct_type, ptr)) = instantiation_ptr {
-                    let val = self.builder.build_load(struct_type, ptr, "")?;
-                    Ok(Some(val))
+                if let Some((_, ptr)) = instantiation_ptr {
+                    if self.class_types.borrow().contains_key(
+                        function_name.strip_suffix(".init").unwrap_or("")
+                    ) {
+                        let val: BasicValueEnum<'ctx> = ptr.into();
+                        Ok(Some(val))
+                    } else {
+                        let val = self.builder.build_load(ptr.get_type(), ptr, "")?;
+                        Ok(Some(val))
+                    }
                 } else {
                     match call_result.try_as_basic_value() {
                         inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
@@ -2489,6 +2716,20 @@ impl<'ctx> IRGenerator<'ctx> {
                         None,
                     );
                     anyhow::bail!("Struct type not found");
+                }
+            }
+            Type::Class(name, _) => {
+                let ptr_type: BasicTypeEnum<'ctx> =
+                    self.context.ptr_type(inkwell::AddressSpace::from(0)).into();
+                if self.class_types.borrow().contains_key(name) {
+                    ptr_type
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::StructTypeNotSupported,
+                        format!("Class type '{}' not found in IR generation", name),
+                        None,
+                    );
+                    anyhow::bail!("Class type not found");
                 }
             }
             Type::Enum(name, _) => {
