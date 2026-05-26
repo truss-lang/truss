@@ -4,7 +4,7 @@ use crate::{
     ast::{
         expression::{BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{AccessModifier, AccessorKind, FunctionBody, ModifierType, Statement, VariadicKind},
+        statement::{AccessModifier, AccessorKind, FunctionBody, ModifierType, Pattern, Statement, VariadicKind},
     },
     diag::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
@@ -985,13 +985,41 @@ impl TypeResolver {
                 ..
             } => {
                 let cond_ty = self.infer_type(condition.clone())?;
-                if *cond_ty.borrow() != Type::Bool {
+
+                let binding_types = {
+                    let cond = condition.borrow();
+                    if let Expression::Case { enum_type, case_name, bindings, .. } = &*cond {
+                        if !bindings.is_empty() {
+                            self.get_enum_case_parameter_types(
+                                &enum_type.value,
+                                &case_name.value,
+                            )
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(ref param_types) = binding_types {
+                    if let Expression::Block { scope, .. } = &mut *then.borrow_mut() {
+                        if let Some(block_scope) = scope {
+                            if let Expression::Case { bindings, .. } = &*condition.borrow() {
+                                Self::set_binding_types(bindings, param_types, block_scope);
+                            }
+                        }
+                    }
+                }
+
+                if *cond_ty.borrow() != Type::Bool && binding_types.is_none() {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
                         format!("If condition must be Bool, found {}", cond_ty.borrow()),
                         &condition.borrow().token(),
                     );
                 }
+
                 let then_ty = self.infer_type(then.clone())?;
                 if let Some(else_expr) = else_ {
                     let else_ty = self.infer_type(else_expr.clone())?;
@@ -1008,6 +1036,49 @@ impl TypeResolver {
                     }
                 }
                 then_ty
+            }
+            Expression::Case {
+                enum_type,
+                case_name,
+                expression,
+                ty,
+                ..
+            } => {
+                let _expr_ty = self.infer_type(expression.clone());
+
+                if let Some(current_scope) = &self.current_scope {
+                    let scope = current_scope.borrow();
+                    if let Some(symbol) = scope.get_symbol(&enum_type.value) {
+                        if let Symbol::Enum { cases, .. } = &*symbol.borrow() {
+                            let found = cases.iter().any(|c| {
+                                c.borrow().name().as_ref().ok() == Some(&case_name.value)
+                            });
+                            if !found {
+                                self.emit_error(
+                                    TrussDiagnosticCode::FieldNotFound,
+                                    format!("Enum '{}' has no case '{}'", enum_type.value, case_name.value),
+                                    case_name.as_ref(),
+                                );
+                            }
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::TypeError,
+                                format!("'{}' is not an enum type", enum_type.value),
+                                enum_type.as_ref(),
+                            );
+                        }
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnknownType,
+                            format!("Unknown type '{}'", enum_type.value),
+                            enum_type.as_ref(),
+                        );
+                    }
+                }
+
+                let case_ty = Rc::new(RefCell::new(Type::Bool));
+                *ty = Some(case_ty.clone());
+                case_ty
             }
             Expression::VoidLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
             Expression::NullLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
@@ -1656,6 +1727,48 @@ impl TypeResolver {
                 // self.is_within_owner_scope(symbol)
                 // TODO: implement is_within_owner_scope
                 true
+            }
+        }
+    }
+
+    fn get_enum_case_parameter_types(
+        &self,
+        enum_name: &str,
+        case_name: &str,
+    ) -> Option<Vec<Rc<RefCell<Type>>>> {
+        let scope = self.current_scope.as_ref()?;
+        let scope_ref = scope.borrow();
+        let symbol = scope_ref.get_symbol(enum_name)?;
+        let symbol_ref = symbol.borrow();
+        if let Symbol::Enum { cases, .. } = &*symbol_ref {
+            for case in cases {
+                if case.borrow().name().as_ref().ok() == Some(&case_name.to_string()) {
+                    if let Symbol::EnumCase { parameter_types, .. } = &*case.borrow() {
+                        return Some(parameter_types.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn set_binding_types(
+        bindings: &[Pattern],
+        param_types: &[Rc<RefCell<Type>>],
+        block_scope: &Rc<RefCell<Scope>>,
+    ) {
+        let mut scope_ref = block_scope.borrow_mut();
+        for (i, binding) in bindings.iter().enumerate() {
+            if i >= param_types.len() {
+                break;
+            }
+            match binding {
+                Pattern::Identifier(name) => {
+                    if name.value != "_" {
+                        scope_ref.set_type(name.value.clone(), param_types[i].clone());
+                    }
+                }
+                _ => {}
             }
         }
     }
