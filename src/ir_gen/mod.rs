@@ -2915,6 +2915,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("Enum type not found");
                 }
             }
+            Type::Tuple(_) => {
+                todo!("Tuple types are not yet supported in IR generation")
+            }
         };
         Ok(resolved)
     }

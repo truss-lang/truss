@@ -478,26 +478,86 @@ impl Parser {
                 SeparatorType::OpenBrace => self.parse_block(),
                 SeparatorType::OpenParen => {
                     self.index += 1;
-                    let Some(t) = self.next() else {
-                        self.emit_error(
-                            TrussDiagnosticCode::UnexpectedToken,
-                            "Expected closing parenthesis",
-                            &token,
-                        );
-                        return Err(());
-                    };
-                    if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+                    let left = token;
+
+                    if let Some(t) = self.peek()
+                        && SeparatorType::is_separator(&t, SeparatorType::CloseParen)
+                    {
+                        let right = self.next().unwrap();
                         Ok(Expression::VoidLiteral {
-                            left: Box::new(token),
-                            right: Box::new(t),
+                            left: Box::new(left),
+                            right: Box::new(right),
                         })
                     } else {
-                        self.emit_error(
-                            TrussDiagnosticCode::UnexpectedToken,
-                            format!("Expected ')' but found '{}'", t.value),
-                            &t,
-                        );
-                        Err(())
+                        let first = self.parse_expression()?;
+
+                        if let Some(t) = self.peek()
+                            && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                        {
+                            self.index += 1;
+                            let mut elements = vec![Rc::new(RefCell::new(first))];
+
+                            loop {
+                                let next_expr = self.parse_expression()?;
+                                elements.push(Rc::new(RefCell::new(next_expr)));
+
+                                if let Some(t) = self.peek()
+                                    && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                                {
+                                    self.index += 1;
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            let Some(right) = self.next() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnexpectedToken,
+                                    "Expected closing parenthesis",
+                                    &left,
+                                );
+                                return Err(());
+                            };
+                            if !SeparatorType::is_separator(
+                                &right,
+                                SeparatorType::CloseParen,
+                            ) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnexpectedToken,
+                                    format!("Expected ')' but found '{}'", right.value),
+                                    &right,
+                                );
+                                return Err(());
+                            }
+
+                            Ok(Expression::TupleLiteral {
+                                left: Box::new(left),
+                                elements,
+                                right: Box::new(right),
+                            })
+                        } else {
+                            let Some(right) = self.next() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnexpectedToken,
+                                    "Expected closing parenthesis",
+                                    &left,
+                                );
+                                return Err(());
+                            };
+                            if !SeparatorType::is_separator(
+                                &right,
+                                SeparatorType::CloseParen,
+                            ) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnexpectedToken,
+                                    format!("Expected ')' but found '{}'", right.value),
+                                    &right,
+                                );
+                                return Err(());
+                            }
+
+                            Ok(first)
+                        }
                     }
                 }
                 _ => {
@@ -616,19 +676,16 @@ impl Parser {
 
         if SeparatorType::is_separator(&token, SeparatorType::OpenParen) {
             self.index += 1;
-            let Some(t) = self.next() else {
-                self.emit_error(
-                    TrussDiagnosticCode::UnexpectedToken,
-                    "Expected closing parenthesis",
-                    &token,
-                );
-                return Err(());
-            };
-            if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+            let left = token;
+
+            if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::CloseParen)
+            {
+                let right = self.next().unwrap();
                 let void_token = Token::new(
                     "Void".to_string(),
                     TokenType::Identifier,
-                    token.position,
+                    right.position,
                     self.file.clone(),
                 );
                 return Ok(Expression::Type {
@@ -636,14 +693,95 @@ impl Parser {
                     type_parameters: None,
                     ty: None,
                 });
-            } else {
+            }
+
+            let first = self.parse_type_expression()?;
+
+            if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Comma)
+            {
+                self.index += 1;
+                let mut elements = vec![Rc::new(RefCell::new(first))];
+
+                loop {
+                    let next_type = self.parse_type_expression()?;
+                    elements.push(Rc::new(RefCell::new(next_type)));
+
+                    if let Some(t) = self.peek()
+                        && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                    {
+                        self.index += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                let Some(right) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        "Expected closing parenthesis",
+                        &left,
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&right, SeparatorType::CloseParen) {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        format!("Expected ')' but found '{}'", right.value),
+                        &right,
+                    );
+                    return Err(());
+                }
+
+                let mut tuple_type_expr: Expression = Expression::TupleType {
+                    left: Box::new(left),
+                    elements,
+                    right: Box::new(right),
+                };
+
+                while let Some(token) = self.peek()
+                    && OperatorType::is_operator(&token, OperatorType::Multiply)
+                {
+                    self.index += 1;
+                    tuple_type_expr = Expression::PointerType {
+                        base: Box::new(Rc::new(RefCell::new(tuple_type_expr))),
+                        ty: None,
+                    };
+                }
+
+                return Ok(tuple_type_expr);
+            }
+
+            let Some(right) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::UnexpectedToken,
-                    format!("Expected ')' but found '{}'", t.value),
-                    &t,
+                    "Expected closing parenthesis",
+                    &left,
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&right, SeparatorType::CloseParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    format!("Expected ')' but found '{}'", right.value),
+                    &right,
                 );
                 return Err(());
             }
+
+            let mut type_expr = first;
+
+            while let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::Multiply)
+            {
+                self.index += 1;
+                type_expr = Expression::PointerType {
+                    base: Box::new(Rc::new(RefCell::new(type_expr))),
+                    ty: None,
+                };
+            }
+
+            return Ok(type_expr);
         }
 
         let Some(name) = self.next() else {

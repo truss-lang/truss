@@ -1715,8 +1715,6 @@ fn test_parse_private_struct_field() {
     }
 }
 
-// =================== Accessor / Getter/Set/WillSet/DidSet tests ===================
-
 #[test]
 fn test_parse_var_get_shorthand() {
     let engine = create_engine();
@@ -2081,8 +2079,6 @@ fn engine_has_error(
 ) -> bool {
     engine.borrow().get_errors().iter().any(|e| e.code == code)
 }
-
-// =================== Modifier validity tests ===================
 
 #[test]
 fn test_duplicate_access_modifier() {
@@ -2474,7 +2470,6 @@ fn test_parse_enum_case_constructor() {
     {
         assert_eq!(member.value, "success");
         assert_eq!(parameters.len(), 1);
-        // object can be Type or Variable depending on how it's parsed
         match &*object.borrow() {
             Expression::Type { name, .. } | Expression::Variable { name, .. } => {
                 assert_eq!(name.value, "Result");
@@ -2958,6 +2953,223 @@ fn test_parse_class_decl_with_superclass_type_parameters() {
             panic!("Expected superclass to be a Type expression");
         }
         assert!(body.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_void_literal_empty_parens() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a: () = ()".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert!(!program.statements.is_empty(), "program should have statements");
+    if let Statement::VariableDecl {
+        type_expression: Some(type_expr),
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert!(matches!(*type_expr.borrow(), Expression::Type { .. }));
+        assert!(matches!(*init.borrow(), Expression::VoidLiteral { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_grouped_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = (1)".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert!(matches!(
+            *init.borrow(),
+            Expression::IntegerLiteral { value: 1, .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_tuple_literal_two_elements() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = (1, 2)".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::TupleLiteral { elements, .. } = &*init.borrow()
+    {
+        assert_eq!(elements.len(), 2);
+        assert!(matches!(
+            *elements[0].borrow(),
+            Expression::IntegerLiteral { value: 1, .. }
+        ));
+        assert!(matches!(
+            *elements[1].borrow(),
+            Expression::IntegerLiteral { value: 2, .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_tuple_literal_three_elements() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = (1, 2, 3)".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::TupleLiteral { elements, .. } = &*init.borrow()
+    {
+        assert_eq!(elements.len(), 3);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_tuple_type_in_variable_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: (Int32, Bool) }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression: Some(type_expr),
+            ..
+        } = &*statements[0].borrow()
+        && let Expression::TupleType { elements, .. } = &*type_expr.borrow()
+    {
+        assert_eq!(elements.len(), 2);
+        assert!(matches!(
+            *elements[0].borrow(),
+            Expression::Type { .. }
+        ));
+        assert!(matches!(
+            *elements[1].borrow(),
+            Expression::Type { .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_grouped_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: (Int32) }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression: Some(type_expr),
+            ..
+        } = &*statements[0].borrow()
+    {
+        assert!(matches!(
+            *type_expr.borrow(),
+            Expression::Type { .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_tuple_pointer_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: (Int32, Bool)* }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression: Some(type_expr),
+            ..
+        } = &*statements[0].borrow()
+        && let Expression::PointerType { base, .. } = &*type_expr.borrow()
+        && let Expression::TupleType { elements, .. } = &*base.borrow()
+    {
+        assert_eq!(elements.len(), 2);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_nested_tuple_literal() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = ((1, 2), 3)".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::TupleLiteral { elements, .. } = &*init.borrow()
+    {
+        assert_eq!(elements.len(), 2);
+        assert!(matches!(
+            *elements[0].borrow(),
+            Expression::TupleLiteral { .. }
+        ));
+        assert!(matches!(
+            *elements[1].borrow(),
+            Expression::IntegerLiteral { value: 3, .. }
+        ));
     } else {
         panic!();
     }

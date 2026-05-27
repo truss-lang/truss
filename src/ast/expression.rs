@@ -110,6 +110,16 @@ pub enum Expression {
         kind: CastKind,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    TupleLiteral {
+        left: Box<Token>,
+        elements: Vec<Rc<RefCell<Expression>>>,
+        right: Box<Token>,
+    },
+    TupleType {
+        left: Box<Token>,
+        elements: Vec<Rc<RefCell<Expression>>>,
+        right: Box<Token>,
+    },
 }
 
 impl Expression {
@@ -211,6 +221,8 @@ impl Expression {
                 }
             }
             Expression::MemberAccess { object, .. } => object.borrow().token(),
+            Expression::TupleLiteral { left, .. } => (**left).clone(),
+            Expression::TupleType { left, .. } => (**left).clone(),
         }
     }
 }
