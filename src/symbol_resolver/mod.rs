@@ -589,6 +589,9 @@ impl SymbolResolver {
             Expression::MemberAccess { object, .. } => {
                 self.resolve_expression(object.clone());
             }
+            Expression::TupleIndexAccess { object, .. } => {
+                self.resolve_expression(object.clone());
+            }
             Expression::Binary { left, right, .. } => {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())
