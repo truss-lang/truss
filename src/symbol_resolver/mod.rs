@@ -4,7 +4,7 @@ use crate::{
     ast::{
         expression::Expression,
         node::Program,
-        statement::{AccessorKind, FunctionBody, Pattern, Statement},
+        statement::{AccessorKind, FunctionBody, Pattern, ProtocolMember, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     krate::{Crate, Module},
@@ -395,13 +395,76 @@ impl SymbolResolver {
                 self.register_symbols(statement.clone());
             }
             Statement::ProtocolDecl {
-                name, ..
+                name, members, scope, ..
             } => {
-                let symbol = Rc::new(RefCell::new(Symbol::Protocol {
+                let protocol_symbol = Rc::new(RefCell::new(Symbol::Protocol {
                     name: name.value.clone(),
                     decl: stmt.clone(),
+                    methods: vec![],
+                    properties: vec![],
                 }));
-                self.enter(symbol, name);
+                self.enter(protocol_symbol.clone(), name);
+                let Symbol::Protocol {
+                    methods,
+                    properties,
+                    ..
+                } = &mut *protocol_symbol.borrow_mut()
+                else {
+                    return;
+                };
+
+                *scope = Some(self.enter_scope(None));
+                for member in members {
+                    match member {
+                        ProtocolMember::Method { decl, .. } => {
+                            let name_token = {
+                                let d = decl.borrow();
+                                if let Statement::FunctionDecl {
+                                    name: fn_name, ..
+                                } = &*d
+                                {
+                                    fn_name.clone()
+                                } else {
+                                    continue;
+                                }
+                            };
+                            let method_name = name_token.value.clone();
+                            let method_symbol = Rc::new(RefCell::new(Symbol::ProtocolMethod {
+                                name: method_name,
+                                parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
+                                decl: Some(decl.clone()),
+                            }));
+                            methods.push(method_symbol.clone());
+                            self.enter(method_symbol, &name_token);
+                            if let Statement::FunctionDecl {
+                                body: method_body, ..
+                            } = &*decl.borrow()
+                            {
+                                match &*method_body.borrow() {
+                                    FunctionBody::Statements(stmts) => {
+                                        for s in stmts {
+                                            self.register_symbols(s.clone());
+                                        }
+                                    }
+                                    FunctionBody::Expression(expr) => {
+                                        self.register_function_symbols_in_expr(expr.clone());
+                                    }
+                                    FunctionBody::None => {}
+                                }
+                            }
+                        }
+                        ProtocolMember::Property { name: prop_name, .. } => {
+                            let prop_symbol = Rc::new(RefCell::new(Symbol::ProtocolProperty {
+                                name: prop_name.value.clone(),
+                                parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
+                                decl: None,
+                            }));
+                            properties.push(prop_symbol.clone());
+                            self.enter(prop_symbol, prop_name);
+                        }
+                    }
+                }
+                self.leave_scope();
             }
             _ => {}
         }
@@ -564,12 +627,49 @@ impl SymbolResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.resolve_statement(statement.clone());
             }
-            Statement::ProtocolDecl { conformances, .. } => {
+            Statement::ProtocolDecl { conformances, scope, members, .. } => {
                 for conformance in conformances {
                     if let Expression::Type { name, .. } = &*conformance.borrow() {
                         let _ = self.resolve_symbol(name);
                     }
                 }
+                self.enter_scope(scope.clone());
+                for member in members {
+                    match member {
+                        ProtocolMember::Method { decl, .. } => {
+                            if let Statement::FunctionDecl {
+                                parameters,
+                                return_type,
+                                body,
+                                scope: fn_scope,
+                                ..
+                            } = &mut *decl.borrow_mut()
+                            {
+                                *fn_scope = Some(self.enter_scope(None));
+                                for parameter in parameters {
+                                    let name = parameter.borrow().name.value.clone();
+                                    if name != "_" {
+                                        let symbol = Rc::new(RefCell::new(Symbol::Variable {
+                                            name,
+                                            decl: None,
+                                            parameter: Some(parameter.clone()),
+                                        }));
+                                        self.enter(symbol, &parameter.borrow().name);
+                                    }
+                                }
+                                if let Some(return_type) = return_type {
+                                    self.resolve_expression(return_type.clone());
+                                }
+                                self.resolve_function_body(body.clone());
+                                self.leave_scope();
+                            }
+                        }
+                        ProtocolMember::Property { type_expression, .. } => {
+                            self.resolve_expression(type_expression.clone());
+                        }
+                    }
+                }
+                self.leave_scope();
             }
             Statement::ExpressionStatement { expression } => {
                 self.resolve_expression(expression.clone())

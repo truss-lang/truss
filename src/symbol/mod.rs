@@ -73,6 +73,18 @@ pub enum Symbol {
     Protocol {
         name: String,
         decl: Rc<RefCell<Statement>>,
+        methods: Vec<Rc<RefCell<Symbol>>>,
+        properties: Vec<Rc<RefCell<Symbol>>>,
+    },
+    ProtocolMethod {
+        name: String,
+        parent: WeakSymbol,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
+    ProtocolProperty {
+        name: String,
+        parent: WeakSymbol,
+        decl: Option<Rc<RefCell<Statement>>>,
     },
 }
 
@@ -90,6 +102,8 @@ impl Symbol {
             Self::Enum { name, .. } => Ok(name.clone()),
             Self::EnumCase { name, .. } => Ok(name.clone()),
             Self::Protocol { name, .. } => Ok(name.clone()),
+            Self::ProtocolMethod { name, .. } => Ok(name.clone()),
+            Self::ProtocolProperty { name, .. } => Ok(name.clone()),
         }
     }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
@@ -105,6 +119,8 @@ impl Symbol {
             Self::Enum { decl, .. } => Ok(Some(decl.clone())),
             Self::EnumCase { decl, .. } => Ok(decl.clone()),
             Self::Protocol { decl, .. } => Ok(Some(decl.clone())),
+            Self::ProtocolMethod { decl, .. } => Ok(decl.clone()),
+            Self::ProtocolProperty { decl, .. } => Ok(decl.clone()),
         }
     }
     pub fn parent(&self) -> Option<Rc<RefCell<Symbol>>> {
@@ -113,7 +129,9 @@ impl Symbol {
             | Self::StructMethod { parent, .. }
             | Self::ClassField { parent, .. }
             | Self::ClassMethod { parent, .. }
-            | Self::EnumCase { parent, .. } => Some(parent.0.upgrade().unwrap()),
+            | Self::EnumCase { parent, .. }
+            | Self::ProtocolMethod { parent, .. }
+            | Self::ProtocolProperty { parent, .. } => Some(parent.0.upgrade().unwrap()),
             _ => None,
         }
     }
