@@ -276,7 +276,7 @@ fn test_irgen_struct_method_call() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("@Point.f"));
-    assert!(llvm_ir.contains("call i64 @Point.f()"));
+    assert!(llvm_ir.contains("call i64 @Point.f(ptr"));
 }
 
 #[test]
@@ -1308,6 +1308,74 @@ fn test_irgen_tuple_type_annotation() {
 }
 
 #[test]
+fn test_irgen_self_return_in_struct_method() {
+    let code = r#"
+        struct Point {
+            let x: Int32
+            func identity() -> Point {
+                return self
+            }
+        }
+        func test() -> Point {
+            var p: Point
+            return p.identity()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("@Point.identity"), "Expected Point.identity function:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_self_in_init() {
+    let code = r#"
+        struct Point {
+            let x: Int32
+            init(x: Int32) {
+            }
+        }
+        func test() -> Point {
+            return Point(x: 42)
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("@Point.init"), "Expected Point.init function:\n{}", llvm_ir);
+}
+
+#[test]
 fn test_irgen_tuple_literal() {
     let code = "func test() -> Int32 { let a = (1, 2); return a.0 }";
     let engine = create_engine();
@@ -1383,3 +1451,4 @@ fn test_irgen_tuple_literal_as_return() {
     assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
     assert!(llvm_ir.contains("{ i32, i1 }"), "Expected tuple layout (Int32, Bool) in IR:\n{}", llvm_ir);
 }
+

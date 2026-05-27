@@ -613,11 +613,18 @@ impl<'ctx> IRGenerator<'ctx> {
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
                     && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
-                    && let Ok(function_type) =
-                        self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
                 {
-                    let llvm_name = format!("{}.{}", name.value, method_name.value);
-                    self.module.add_function(&llvm_name, function_type, None);
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    let mut all_param_types = vec![self_param];
+                    all_param_types.extend(param_types.iter().cloned());
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
+                    {
+                        let llvm_name = format!("{}.{}", name.value, method_name.value);
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
                     && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
@@ -645,11 +652,18 @@ impl<'ctx> IRGenerator<'ctx> {
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
                     && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
-                    && let Ok(function_type) =
-                        self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
                 {
-                    let llvm_name = format!("{}.{}", name.value, method_name.value);
-                    self.module.add_function(&llvm_name, function_type, None);
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    let mut all_param_types = vec![self_param];
+                    all_param_types.extend(param_types.iter().cloned());
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
+                    {
+                        let llvm_name = format!("{}.{}", name.value, method_name.value);
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
                     && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
@@ -1132,17 +1146,53 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.builder.position_at_end(entry_block);
 
                     self.enter_scope();
-                    for (i, param) in parameters.iter().enumerate() {
-                        if param.borrow().variadic_kind == VariadicKind::BareVariadic {
-                            continue;
+                    if let Some(struct_name) = &*self.current_struct.borrow() {
+                        let is_class_method = self.class_types.borrow().contains_key(struct_name);
+                        let is_struct_method = self.struct_types.borrow().contains_key(struct_name);
+                        if is_struct_method || is_class_method {
+                            let self_ptr = function.get_nth_param(0).unwrap();
+                            let self_ptr = self_ptr.into_pointer_value();
+                            self.declare_variable("self".to_string(), self_ptr);
+                            let param_offset = 1;
+                            for (i, param) in parameters.iter().enumerate() {
+                                if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                    continue;
+                                }
+                                let param_name = &param.borrow().name.value;
+                                let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                                let alloca_name = self.unique_alloca_name(param_name);
+                                let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
+                                let param_value = function.get_nth_param((i + param_offset) as u32).unwrap();
+                                self.builder.build_store(ptr, param_value)?;
+                                self.declare_variable(param_name.clone(), ptr);
+                            }
+                        } else {
+                            for (i, param) in parameters.iter().enumerate() {
+                                if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                    continue;
+                                }
+                                let param_name = &param.borrow().name.value;
+                                let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                                let alloca_name = self.unique_alloca_name(param_name);
+                                let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
+                                let param_value = function.get_nth_param(i as u32).unwrap();
+                                self.builder.build_store(ptr, param_value)?;
+                                self.declare_variable(param_name.clone(), ptr);
+                            }
                         }
-                        let param_name = &param.borrow().name.value;
-                        let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
-                        let alloca_name = self.unique_alloca_name(param_name);
-                        let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
-                        let param_value = function.get_nth_param(i as u32).unwrap();
-                        self.builder.build_store(ptr, param_value)?;
-                        self.declare_variable(param_name.clone(), ptr);
+                    } else {
+                        for (i, param) in parameters.iter().enumerate() {
+                            if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                continue;
+                            }
+                            let param_name = &param.borrow().name.value;
+                            let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                            let alloca_name = self.unique_alloca_name(param_name);
+                            let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
+                            let param_value = function.get_nth_param(i as u32).unwrap();
+                            self.builder.build_store(ptr, param_value)?;
+                            self.declare_variable(param_name.clone(), ptr);
+                        }
                     }
 
                     let is_void = matches!(&*return_type.borrow(), Type::Void);
@@ -1406,6 +1456,29 @@ impl<'ctx> IRGenerator<'ctx> {
                         Some(name),
                     );
                     anyhow::bail!("Undefined variable: {}", name.value);
+                }
+            }
+            Expression::SelfKeyword { ty, token, .. } => {
+                if let Some(ptr) = self.lookup_variable("self") {
+                    let llvm_type = if let Some(ty) = ty {
+                        self.resolve_type(ty.clone())?
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeInferenceFailed,
+                            "Cannot infer type for 'self'",
+                            Some(token),
+                        );
+                        anyhow::bail!("Cannot infer type for 'self'");
+                    };
+                    let val = self.builder.build_load(llvm_type, ptr, "")?;
+                    Ok(Some(val))
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedVariable,
+                        "'self' is only available inside methods",
+                        Some(token),
+                    );
+                    anyhow::bail!("'self' is only available inside methods");
                 }
             }
             Expression::Binary {
@@ -2642,6 +2715,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Call {
                 callee, parameters, ..
             } => {
+                let mut method_self_ptr: Option<PointerValue<'ctx>> = None;
                 let (function_name, is_init_call) = match &*callee.borrow() {
                     Expression::Variable { name, .. } => {
                         let name = name.value.clone();
@@ -2659,10 +2733,28 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let Some(ty) = &object_ty
                             && let Type::Struct(struct_name, _) = &*ty.borrow()
                         {
+                            let object_val = self.resolve_expression(object.clone())?.unwrap();
+                            let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                p
+                            } else {
+                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(p, object_val)?;
+                                p
+                            };
+                            method_self_ptr = Some(ptr);
                             (format!("{}.{}", struct_name, member.value), false)
                         } else if let Some(ty) = &object_ty
                             && let Type::Class(class_name, _) = &*ty.borrow()
                         {
+                            let object_val = self.resolve_expression(object.clone())?.unwrap();
+                            let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                p
+                            } else {
+                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(p, object_val)?;
+                                p
+                            };
+                            method_self_ptr = Some(ptr);
                             (format!("{}.{}", class_name, member.value), false)
                         } else if let Some(ty) = &object_ty
                             && let Type::Enum(enum_name, _) = &*ty.borrow()
@@ -2787,6 +2879,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 } else {
                     None
                 };
+
+                if let Some(ptr) = method_self_ptr {
+                    args.push(ptr.into());
+                }
 
                 for param in parameters {
                     let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
