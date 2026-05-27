@@ -26,6 +26,7 @@ pub enum Type {
     Struct(String, WeakSymbol),
     Class(String, WeakSymbol),
     Enum(String, WeakSymbol),
+    Protocol(String, WeakSymbol),
 }
 
 impl fmt::Display for Type {
@@ -77,6 +78,7 @@ impl fmt::Display for Type {
             Type::Struct(name, _) => write!(f, "Struct({})", name),
             Type::Class(name, _) => write!(f, "Class({})", name),
             Type::Enum(name, _) => write!(f, "Enum({})", name),
+            Type::Protocol(name, _) => write!(f, "Protocol({})", name),
         }
     }
 }

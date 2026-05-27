@@ -394,6 +394,15 @@ impl SymbolResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.register_symbols(statement.clone());
             }
+            Statement::ProtocolDecl {
+                name, ..
+            } => {
+                let symbol = Rc::new(RefCell::new(Symbol::Protocol {
+                    name: name.value.clone(),
+                    decl: stmt.clone(),
+                }));
+                self.enter(symbol, name);
+            }
             _ => {}
         }
     }
@@ -497,10 +506,15 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Statement::ClassDecl { body, scope, superclass, .. } => {
+            Statement::ClassDecl { body, scope, superclass, conformances, .. } => {
                 if let Some(superclass_expr) = superclass {
                     if let Expression::Type { name: super_name, .. } = &*superclass_expr.borrow() {
                         let _ = self.resolve_symbol(super_name);
+                    }
+                }
+                for conformance in conformances {
+                    if let Expression::Type { name, .. } = &*conformance.borrow() {
+                        let _ = self.resolve_symbol(name);
                     }
                 }
                 self.enter_scope(scope.clone());
@@ -549,6 +563,13 @@ impl SymbolResolver {
             }
             Statement::ExternDecl { statement, .. } => {
                 self.resolve_statement(statement.clone());
+            }
+            Statement::ProtocolDecl { conformances, .. } => {
+                for conformance in conformances {
+                    if let Expression::Type { name, .. } = &*conformance.borrow() {
+                        let _ = self.resolve_symbol(name);
+                    }
+                }
             }
             Statement::ExpressionStatement { expression } => {
                 self.resolve_expression(expression.clone())

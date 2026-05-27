@@ -70,6 +70,10 @@ pub enum Symbol {
         decl: Option<Rc<RefCell<Statement>>>,
         parameter_types: Vec<Rc<RefCell<Type>>>,
     },
+    Protocol {
+        name: String,
+        decl: Rc<RefCell<Statement>>,
+    },
 }
 
 impl Symbol {
@@ -85,6 +89,7 @@ impl Symbol {
             Self::ClassMethod { name, .. } => Ok(name.clone()),
             Self::Enum { name, .. } => Ok(name.clone()),
             Self::EnumCase { name, .. } => Ok(name.clone()),
+            Self::Protocol { name, .. } => Ok(name.clone()),
         }
     }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
@@ -99,6 +104,7 @@ impl Symbol {
             Self::ClassMethod { decl, .. } => Ok(decl.clone()),
             Self::Enum { decl, .. } => Ok(Some(decl.clone())),
             Self::EnumCase { decl, .. } => Ok(decl.clone()),
+            Self::Protocol { decl, .. } => Ok(Some(decl.clone())),
         }
     }
     pub fn parent(&self) -> Option<Rc<RefCell<Symbol>>> {

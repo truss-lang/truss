@@ -10,7 +10,8 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, Accessor, AccessorKind, EnumCase, EnumCaseParameter, FunctionBody,
-            Modifier, ModifierType, Parameter, Pattern, Statement, VariadicKind,
+            Modifier, ModifierType, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember,
+            Statement, VariadicKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -103,6 +104,7 @@ impl Parser {
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false, modifiers),
                 KeywordType::Struct => self.parse_struct_decl(modifiers),
                 KeywordType::Class => self.parse_class_decl(modifiers),
+                KeywordType::Protocol => self.parse_protocol_decl(modifiers),
                 KeywordType::Enum => self.parse_enum_decl(modifiers),
                 KeywordType::Extern => self.parse_extern(modifiers),
                 KeywordType::Init => self.parse_function_decl(false, modifiers),
@@ -1880,20 +1882,27 @@ impl Parser {
             );
             return Err(());
         }
-        let superclass = if let Some(next) = self.peek()
+        let mut superclass = None;
+        let mut conformances = Vec::new();
+        if let Some(next) = self.peek()
             && SeparatorType::is_separator(&next, SeparatorType::Colon)
         {
             self.index += 1;
-            Some(Rc::new(RefCell::new(self.parse_type_expression()?)))
-        } else {
-            None
-        };
+            superclass = Some(Rc::new(RefCell::new(self.parse_type_expression()?)));
+            while let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Comma)
+            {
+                self.index += 1;
+                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+            }
+        }
         let body = self.parse_brace_body()?;
         Ok(Statement::ClassDecl {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
             superclass,
+            conformances,
             body,
             scope: None,
             ty: None,
@@ -2100,6 +2109,223 @@ impl Parser {
             name: Box::new(name),
             cases,
             body,
+            scope: None,
+            ty: None,
+        })
+    }
+
+    fn parse_protocol_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+        let Some(token) = self.next() else {
+            return Err(());
+        };
+        let Some(name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidStructName,
+                "Expected protocol name after 'protocol'",
+                &token,
+            );
+            return Err(());
+        };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidStructName,
+                format!("Expected protocol name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
+        let generic_parameters = Vec::new();
+        let mut conformances = Vec::new();
+        if let Some(next) = self.peek()
+            && SeparatorType::is_separator(&next, SeparatorType::Colon)
+        {
+            self.index += 1;
+            conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+            while let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Comma)
+            {
+                self.index += 1;
+                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+            }
+        }
+        let mut members = Vec::new();
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+        {
+            self.index += 1;
+            while let Some(t) = self.peek() {
+                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                    break;
+                }
+                let member_modifiers = self.parse_modifiers()?;
+                let Some(peek_token) = self.peek() else { break };
+                match peek_token.ty {
+                    TokenType::Keyword { keyword } if keyword == KeywordType::Func => {
+                        let func_decl = self.parse_function_decl(false, member_modifiers)?;
+                        if let Statement::FunctionDecl { .. } = &func_decl {
+                            members.push(ProtocolMember::Method {
+                                modifiers: vec![],
+                                decl: Rc::new(RefCell::new(func_decl)),
+                            });
+                        }
+                    }
+                    TokenType::Keyword { keyword }
+                        if keyword == KeywordType::Let || keyword == KeywordType::Var =>
+                    {
+                        let _is_mutable = keyword == KeywordType::Var;
+                        let prop_token = self.next().unwrap();
+                        let Some(prop_name) = self.next() else {
+                            self.emit_error(
+                                TrussDiagnosticCode::InvalidVariableName,
+                                "Expected property name",
+                                &prop_token,
+                            );
+                            return Err(());
+                        };
+                        if TokenType::Identifier != prop_name.ty {
+                            self.emit_error(
+                                TrussDiagnosticCode::InvalidVariableName,
+                                format!(
+                                    "Expected property name but found '{}'",
+                                    prop_name.value
+                                ),
+                                &prop_name,
+                            );
+                            return Err(());
+                        }
+                        let Some(colon) = self.next() else {
+                            self.emit_error(
+                                TrussDiagnosticCode::MissingSeparator,
+                                "Expected ':' after property name",
+                                &prop_token,
+                            );
+                            return Err(());
+                        };
+                        if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
+                            self.emit_error(
+                                TrussDiagnosticCode::MissingSeparator,
+                                format!("Expected ':' but found '{}'", colon.value),
+                                &colon,
+                            );
+                            return Err(());
+                        }
+                        let type_expression = self.parse_type_expression()?;
+                        let mut get = false;
+                        let mut set = false;
+                        if let Some(next) = self.peek()
+                            && SeparatorType::is_separator(&next, SeparatorType::OpenBrace)
+                        {
+                            self.index += 1;
+                            while let Some(t) = self.peek() {
+                                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                                    break;
+                                }
+                                if let TokenType::Identifier = t.ty {
+                                    match t.value.as_str() {
+                                        "get" => {
+                                            get = true;
+                                            self.index += 1;
+                                        }
+                                        "set" => {
+                                            set = true;
+                                            self.index += 1;
+                                        }
+                                        _ => {
+                                            self.emit_error(
+                                                TrussDiagnosticCode::UnexpectedToken,
+                                                format!(
+                                                    "Expected 'get' or 'set' in protocol property accessor, found '{}'",
+                                                    t.value
+                                                ),
+                                                &t,
+                                            );
+                                            return Err(());
+                                        }
+                                    }
+                                } else {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::UnexpectedToken,
+                                        format!(
+                                            "Expected 'get' or 'set' in protocol property accessor, found '{}'",
+                                            t.value
+                                        ),
+                                        &t,
+                                    );
+                                    return Err(());
+                                }
+                            }
+                            let Some(close) = self.next() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::MissingSeparator,
+                                    "Expected '}' to close accessor requirements",
+                                    &self.tokens[self.index.saturating_sub(1)],
+                                );
+                                return Err(());
+                            };
+                            if !SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::MissingSeparator,
+                                    format!("Expected '}}' but found '{}'", close.value),
+                                    &close,
+                                );
+                                return Err(());
+                            }
+                        }
+                        if !get && !set {
+                            get = true;
+                        }
+                        members.push(ProtocolMember::Property {
+                            modifiers: member_modifiers,
+                            token: Box::new(prop_token),
+                            name: Box::new(prop_name),
+                            type_expression: Rc::new(RefCell::new(type_expression)),
+                            accessors: ProtocolAccessorSet { get, set },
+                        });
+                    }
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            format!(
+                                "Expected 'func' or 'let'/'var' in protocol body, found '{}'",
+                                peek_token.value
+                            ),
+                            &peek_token,
+                        );
+                        return Err(());
+                    }
+                }
+            }
+            let Some(next) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '}' to close protocol body",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '}}' but found '{}'", next.value),
+                    &next,
+                );
+                return Err(());
+            }
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' to open protocol body",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        }
+        Ok(Statement::ProtocolDecl {
+            modifiers,
+            token: Box::new(token),
+            name: Box::new(name),
+            generic_parameters,
+            conformances,
+            members,
             scope: None,
             ty: None,
         })

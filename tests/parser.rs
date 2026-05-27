@@ -5,7 +5,7 @@ use truss::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         statement::{
             AccessModifier, AccessorKind, FunctionBody, Modifier, ModifierType, Parameter, Pattern,
-            Statement, VariadicKind,
+            ProtocolMember, Statement, VariadicKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -3422,6 +3422,331 @@ fn test_parse_named_tuple_type() {
         assert_eq!(lit_elements.len(), 2);
         assert_eq!(lit_elements[0].0.as_deref(), Some("x"));
         assert_eq!(lit_elements[1].0.as_deref(), Some("y"));
+    } else {
+        panic!();
+    }
+}
+
+// --- Protocol tests ---
+
+#[test]
+fn test_parse_protocol_empty() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("protocol MyProtocol {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl {
+        name,
+        members,
+        conformances,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyProtocol");
+        assert!(members.is_empty());
+        assert!(conformances.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_with_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public protocol MyProtocol {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl { name, modifiers, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "MyProtocol");
+        assert_eq!(modifiers.len(), 1);
+        assert_eq!(
+            modifiers[0].ty,
+            ModifierType::Access(AccessModifier::Public)
+        );
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_with_conformances() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol: SomeProtocol, AnotherProtocol {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl {
+        name, conformances, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyProtocol");
+        assert_eq!(conformances.len(), 2);
+        if let Expression::Type { name: first, .. } = &*conformances[0].borrow() {
+            assert_eq!(first.value, "SomeProtocol");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_with_method_requirement() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { func doSomething() -> Void }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl {
+        name, members, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyProtocol");
+        assert_eq!(members.len(), 1);
+        if let ProtocolMember::Method { decl, .. } = &members[0] {
+            if let Statement::FunctionDecl {
+                name: func_name,
+                return_type,
+                ..
+            } = &*decl.borrow()
+            {
+                assert_eq!(func_name.value, "doSomething");
+                assert!(return_type.is_some());
+            } else {
+                panic!();
+            }
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_with_default_implementation() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { func greet() -> Int32 { return 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl {
+        name, members, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyProtocol");
+        assert_eq!(members.len(), 1);
+        if let ProtocolMember::Method { decl, .. } = &members[0] {
+            if let Statement::FunctionDecl {
+                name: func_name,
+                body,
+                ..
+            } = &*decl.borrow()
+            {
+                assert_eq!(func_name.value, "greet");
+                assert!(matches!(&*body.borrow(), FunctionBody::Statements(_)));
+            } else {
+                panic!();
+            }
+        } else {
+        panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_with_property_requirements() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { var name: String { get } var age: Int32 { get set } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl {
+        name, members, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyProtocol");
+        assert_eq!(members.len(), 2);
+
+        if let ProtocolMember::Property {
+            name: first_name,
+            accessors: first_accessors,
+            ..
+        } = &members[0]
+        {
+            assert_eq!(first_name.value, "name");
+            assert!(first_accessors.get);
+            assert!(!first_accessors.set);
+        } else {
+            panic!("Expected property member");
+        }
+
+        if let ProtocolMember::Property {
+            name: second_name,
+            accessors: second_accessors,
+            ..
+        } = &members[1]
+        {
+            assert_eq!(second_name.value, "age");
+            assert!(second_accessors.get);
+            assert!(second_accessors.set);
+        } else {
+            panic!("Expected property member");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_with_mixed_members() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { func doit() -> Void var x: Int32 { get set } func greet() -> Int32 { return 0 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl {
+        name, members, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyProtocol");
+        assert_eq!(members.len(), 3);
+        assert!(matches!(members[0], ProtocolMember::Method { .. }));
+        assert!(matches!(members[1], ProtocolMember::Property { .. }));
+        assert!(matches!(members[2], ProtocolMember::Method { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_property_get_only_default() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { var x: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
+        assert_eq!(members.len(), 1);
+        if let ProtocolMember::Property {
+            accessors, ..
+        } = &members[0]
+        {
+            assert!(accessors.get);
+            assert!(!accessors.set);
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+// --- Class conformance tests ---
+
+#[test]
+fn test_parse_class_with_protocol_conformance() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class MyClass: MyProtocol {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name,
+        superclass,
+        conformances,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyClass");
+        assert!(superclass.is_some());
+        assert!(conformances.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_class_with_superclass_and_protocols() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class MyClass: SuperClass, SomeProtocol, AnotherProtocol {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name,
+        superclass,
+        conformances,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyClass");
+        assert!(superclass.is_some());
+        if let Expression::Type { name: super_name, .. } = &*superclass.as_ref().unwrap().borrow() {
+            assert_eq!(super_name.value, "SuperClass");
+        } else {
+            panic!();
+        }
+        assert_eq!(conformances.len(), 2);
+        if let Expression::Type { name: first, .. } = &*conformances[0].borrow() {
+            assert_eq!(first.value, "SomeProtocol");
+        } else {
+            panic!();
+        }
     } else {
         panic!();
     }

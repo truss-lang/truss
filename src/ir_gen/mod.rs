@@ -3306,6 +3306,14 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("Enum type not found");
                 }
             }
+            Type::Protocol(name, _) => {
+                self.emit_error(
+                    TrussDiagnosticCode::UnsupportedFeature,
+                    format!("Protocol type '{}' cannot be used directly in IR generation", name),
+                    None,
+                );
+                anyhow::bail!("Protocol type not supported");
+            }
             Type::Tuple(elements) => {
                 let type_key = self.get_tuple_struct_key(elements);
                 if let Some(struct_type) = self.struct_types.borrow().get(&type_key) {

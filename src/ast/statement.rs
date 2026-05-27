@@ -40,7 +40,18 @@ pub enum Statement {
         token: Box<Token>,
         name: Box<Token>,
         superclass: Option<Rc<RefCell<Expression>>>,
+        conformances: Vec<Rc<RefCell<Expression>>>,
         body: Vec<Rc<RefCell<Statement>>>,
+        scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+    ProtocolDecl {
+        modifiers: Vec<Modifier>,
+        token: Box<Token>,
+        name: Box<Token>,
+        generic_parameters: Vec<GenericParameter>,
+        conformances: Vec<Rc<RefCell<Expression>>>,
+        members: Vec<ProtocolMember>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
@@ -134,6 +145,7 @@ impl Statement {
             Self::EmptyStatement { token } => (**token).clone(),
             Self::ExternBlock { token, .. } => (**token).clone(),
             Self::ExternDecl { token, .. } => (**token).clone(),
+            Self::ProtocolDecl { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -145,6 +157,7 @@ impl Statement {
             Self::EnumDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::InitDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::DeinitDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::ProtocolDecl { modifiers, .. } => Ok(modifiers.clone()),
             _ => anyhow::bail!(""),
         }
     }
@@ -237,4 +250,25 @@ pub struct EnumCase {
 pub struct EnumCaseParameter {
     pub label: Option<Box<Token>>,
     pub type_expression: Rc<RefCell<Expression>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProtocolMember {
+    Method {
+        modifiers: Vec<Modifier>,
+        decl: Rc<RefCell<Statement>>,
+    },
+    Property {
+        modifiers: Vec<Modifier>,
+        token: Box<Token>,
+        name: Box<Token>,
+        type_expression: Rc<RefCell<Expression>>,
+        accessors: ProtocolAccessorSet,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ProtocolAccessorSet {
+    pub get: bool,
+    pub set: bool,
 }

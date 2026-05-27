@@ -202,7 +202,7 @@ impl TypeResolver {
                 self.leave_scope();
             }
             Statement::ClassDecl {
-                name, body, scope, superclass, ..
+                name, body, scope, superclass, conformances, ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -225,6 +225,9 @@ impl TypeResolver {
 
                 if let Some(superclass_expr) = superclass {
                     self.infer_type(superclass_expr.clone());
+                }
+                for conformance in conformances {
+                    self.infer_type(conformance.clone());
                 }
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
@@ -480,6 +483,33 @@ impl TypeResolver {
             }
             Statement::ExternDecl { statement, .. } => {
                 self.process_decl(statement.clone());
+            }
+            Statement::ProtocolDecl {
+                name,
+                conformances,
+                ..
+            } => {
+                let Some(symbol) = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().name_table.get(&name.value).cloned())
+                else {
+                    return;
+                };
+
+                let protocol_ty = Rc::new(RefCell::new(Type::Protocol(
+                    name.value.clone(),
+                    WeakSymbol(Rc::downgrade(&symbol)),
+                )));
+                self.current_scope
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_type(name.value.clone(), protocol_ty);
+
+                for conformance in conformances {
+                    self.infer_type(conformance.clone());
+                }
             }
             _ => {}
         }
@@ -743,10 +773,16 @@ impl TypeResolver {
                     self.resolve_statement(stmt.clone());
                 }
             }
-            Statement::ClassDecl { body, .. } => {
+            Statement::ClassDecl { body, conformances, .. } => {
+                for conformance in conformances {
+                    self.infer_type(conformance.clone());
+                }
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
                 }
+            }
+            Statement::ProtocolDecl { .. } => {
+                // Protocol declarations are processed in process_decl only
             }
             Statement::EnumDecl { body, .. } => {
                 for stmt in body {
