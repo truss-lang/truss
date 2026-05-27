@@ -610,3 +610,83 @@ fn test_class_undefined_superclass_error() {
     let errors = engine_ref.get_errors();
     assert!(!errors.is_empty(), "Should have symbol error for undefined superclass");
 }
+
+#[test]
+fn test_self_keyword_outside_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { self }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty(), "Should emit error for 'self' outside method");
+}
+
+#[test]
+fn test_self_keyword_in_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { func method() { self } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+}
+
+#[test]
+fn test_self_keyword_member_access() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { var x: Int32; func method() { self.x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+}
+
+#[test]
+fn test_self_keyword_method_call() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { func method() { self.other() } func other() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+}

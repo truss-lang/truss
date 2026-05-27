@@ -606,6 +606,18 @@ impl SymbolResolver {
             Expression::TupleIndexAccess { object, .. } => {
                 self.resolve_expression(object.clone());
             }
+            Expression::SelfKeyword { token, symbol, .. } => {
+                match self.resolve_symbol(token) {
+                    Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
+                    Err(_) => {
+                        self.emit_error(
+                            TrussDiagnosticCode::UndefinedVariable,
+                            format!("'self' is only available inside methods"),
+                            token.as_ref(),
+                        );
+                    }
+                }
+            }
             Expression::Binary { left, right, .. } => {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())
