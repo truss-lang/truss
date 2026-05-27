@@ -52,6 +52,7 @@ pub enum KeywordType {
     Internal,
     Fileprivate,
     Private,
+    SelfKw,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -138,6 +139,7 @@ impl KeywordType {
             KeywordType::Internal => "internal",
             KeywordType::Fileprivate => "fileprivate",
             KeywordType::Private => "private",
+            KeywordType::SelfKw => "self",
         }
         .to_string()
     }

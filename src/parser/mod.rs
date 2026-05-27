@@ -465,6 +465,14 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::If => self.parse_if(),
                 KeywordType::Case => self.parse_case_expression(),
+                KeywordType::SelfKw => {
+                    self.index += 1;
+                    Ok(Expression::SelfKeyword {
+                        token: Box::new(token),
+                        ty: None,
+                        symbol: None,
+                    })
+                }
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,

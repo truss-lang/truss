@@ -1617,6 +1617,10 @@ impl TypeResolver {
                     }
                 }
             }
+            Expression::SelfKeyword { ty, .. } => {
+                *ty = Some(Rc::new(RefCell::new(Type::Int32)));
+                ty.clone().unwrap()
+            }
         };
         Some(result)
     }

@@ -127,6 +127,11 @@ pub enum Expression {
         index_value: u64,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    SelfKeyword {
+        token: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
+        symbol: Option<WeakSymbol>,
+    },
 }
 
 impl Expression {
@@ -137,6 +142,7 @@ impl Expression {
             Self::Type { ty, .. } => Ok(ty.clone()),
             Self::Cast { ty, .. } => Ok(ty.clone()),
             Self::TupleLiteral { ty, .. } => Ok(ty.clone()),
+            Self::SelfKeyword { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -147,6 +153,7 @@ impl Expression {
             Self::Type { ty, .. } => Ok(ty),
             Self::Cast { ty, .. } => Ok(ty),
             Self::TupleLiteral { ty, .. } => Ok(ty),
+            Self::SelfKeyword { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -157,6 +164,7 @@ impl Expression {
             Self::Type { ty, .. } => Ok(ty),
             Self::Cast { ty, .. } => Ok(ty),
             Self::TupleLiteral { ty, .. } => Ok(ty),
+            Self::SelfKeyword { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -236,6 +244,7 @@ impl Expression {
             Expression::TupleLiteral { left, .. } => (**left).clone(),
             Expression::TupleType { left, .. } => (**left).clone(),
             Expression::TupleIndexAccess { index, .. } => (**index).clone(),
+            Expression::SelfKeyword { token, .. } => (**token).clone(),
         }
     }
 }
