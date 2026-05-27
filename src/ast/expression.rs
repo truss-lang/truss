@@ -112,13 +112,13 @@ pub enum Expression {
     },
     TupleLiteral {
         left: Box<Token>,
-        elements: Vec<Rc<RefCell<Expression>>>,
+        elements: Vec<(Option<String>, Rc<RefCell<Expression>>)>,
         right: Box<Token>,
         ty: Option<Rc<RefCell<Type>>>,
     },
     TupleType {
         left: Box<Token>,
-        elements: Vec<Rc<RefCell<Expression>>>,
+        elements: Vec<(Option<String>, Rc<RefCell<Expression>>)>,
         right: Box<Token>,
     },
     TupleIndexAccess {

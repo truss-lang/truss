@@ -2705,6 +2705,43 @@ impl<'ctx> IRGenerator<'ctx> {
                     return Ok(Some(val));
                 }
 
+                if let Some(ty) = &object_ty
+                    && let Type::Tuple(elements) = &*ty.borrow()
+                {
+                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+                    let tuple_llvm = self.resolve_type(object_ty.clone().unwrap())?.into_struct_type();
+
+                    let struct_ptr = match object_val {
+                        BasicValueEnum::PointerValue(ptr) => ptr,
+                        val => {
+                            let ptr = self.builder.build_alloca(val.get_type(), "")?;
+                            self.builder.build_store(ptr, val)?;
+                            ptr
+                        }
+                    };
+
+                    // Try to find by name first
+                    let member_name = &member.value;
+                    let idx = if let Some(idx) = elements.iter().position(|(n, _)| {
+                        n.as_ref().map_or(false, |name| name == member_name)
+                    }) {
+                        idx
+                    } else if let Ok(numeric_idx) = member_name.parse::<usize>() {
+                        if numeric_idx < elements.len() {
+                            numeric_idx
+                        } else {
+                            anyhow::bail!("Tuple index {} out of bounds", numeric_idx);
+                        }
+                    } else {
+                        anyhow::bail!("Field '{}' not found on tuple", member_name);
+                    };
+
+                    let element_ty = self.resolve_type(elements[idx].1.clone())?;
+                    let field_ptr = self.builder.build_struct_gep(tuple_llvm, struct_ptr, idx as u32, "")?;
+                    let val = self.builder.build_load(element_ty, field_ptr, "")?;
+                    return Ok(Some(val));
+                }
+
                 self.emit_error(
                     TrussDiagnosticCode::UnsupportedFeature,
                     "Member access on non-struct type",
@@ -2915,7 +2952,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 {
                     let tuple_llvm = self.resolve_type(ty.clone())?.into_struct_type();
                     let alloca = self.builder.build_alloca(tuple_llvm, "")?;
-                    for (i, element) in elements.iter().enumerate() {
+                    for (i, (_, element)) in elements.iter().enumerate() {
                         let val = self.resolve_expression(element.clone())?.unwrap();
                         let field_ptr =
                             self.builder.build_struct_gep(tuple_llvm, alloca, i as u32, "")?;
@@ -2940,7 +2977,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     if idx >= elements.len() {
                         anyhow::bail!("Tuple index {} out of bounds", idx);
                     }
-                    let element_ty = self.resolve_type(elements[idx].clone())?;
+                    let element_ty = self.resolve_type(elements[idx].1.clone())?;
                     let object_val = self.resolve_expression(object.clone())?.unwrap();
                     let tuple_llvm = self.resolve_type(object_ty.clone())?.into_struct_type();
                     let struct_ptr = match object_val {
@@ -3069,7 +3106,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 } else {
                     let field_types: Vec<BasicTypeEnum<'ctx>> = elements
                         .iter()
-                        .map(|e| self.resolve_type(e.clone()))
+                        .map(|(_, e)| self.resolve_type(e.clone()))
                         .collect::<Result<Vec<_>>>()?;
                     let struct_type =
                         self.context.opaque_struct_type(&format!("tuple.{}", type_key));
@@ -3084,9 +3121,9 @@ impl<'ctx> IRGenerator<'ctx> {
         Ok(resolved)
     }
 
-    fn get_tuple_struct_key(&self, elements: &[Rc<RefCell<Type>>]) -> String {
+    fn get_tuple_struct_key(&self, elements: &[(Option<String>, Rc<RefCell<Type>>)]) -> String {
         let mut key = String::from("__tuple_");
-        for (i, elem) in elements.iter().enumerate() {
+        for (i, (_, elem)) in elements.iter().enumerate() {
             if i > 0 {
                 key.push('_');
             }

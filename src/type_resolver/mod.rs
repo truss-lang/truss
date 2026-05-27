@@ -1551,6 +1551,41 @@ impl TypeResolver {
                             return None;
                         }
                     }
+                    Type::Tuple(elements) => {
+                        let member_name = &member.value;
+                        // Try to find by name in named tuple fields
+                        if let Some((_, element_ty)) = elements.iter().enumerate().find_map(|(i, (n, t))| {
+                            n.as_ref().and_then(|name| {
+                                if name == member_name {
+                                    Some((i, t.clone()))
+                                } else {
+                                    None
+                                }
+                            })
+                        }) {
+                            *ty = Some(element_ty.clone());
+                            return Some(element_ty.clone());
+                        }
+                        // Also try numeric index via member name (e.g. "0", "1")
+                        if let Ok(idx) = member_name.parse::<usize>() {
+                            if idx < elements.len() {
+                                let element_ty = elements[idx].1.clone();
+                                *ty = Some(element_ty.clone());
+                                return Some(element_ty);
+                            }
+                        }
+                        let token = &*member;
+                        self.emit_error(
+                            TrussDiagnosticCode::FieldNotFound,
+                            format!(
+                                "Field '{}' not found on tuple type '{}'",
+                                member.value,
+                                object_ty.borrow()
+                            ),
+                            token,
+                        );
+                        return None;
+                    }
                     _ => {
                         let token = &*member;
                         self.emit_error(
@@ -1570,9 +1605,9 @@ impl TypeResolver {
                 elements, ty, ..
             } => {
                 let mut element_types = Vec::new();
-                for elem in elements {
+                for (name, elem) in elements {
                     if let Some(t) = self.infer_type(elem.clone()) {
-                        element_types.push(t);
+                        element_types.push((name.clone(), t));
                     }
                 }
                 let tuple_ty = Rc::new(RefCell::new(Type::Tuple(element_types)));
@@ -1581,9 +1616,9 @@ impl TypeResolver {
             }
             Expression::TupleType { elements, .. } => {
                 let mut element_types = Vec::new();
-                for elem in elements {
+                for (name, elem) in elements {
                     if let Some(t) = self.infer_type(elem.clone()) {
-                        element_types.push(t);
+                        element_types.push((name.clone(), t));
                     }
                 }
                 Rc::new(RefCell::new(Type::Tuple(element_types)))
@@ -1599,7 +1634,7 @@ impl TypeResolver {
                     Type::Tuple(elements) => {
                         let idx = *index_value as usize;
                         if idx < elements.len() {
-                            let element_ty = elements[idx].clone();
+                            let element_ty = elements[idx].1.clone();
                             *ty = Some(element_ty.clone());
                             element_ty
                         } else {

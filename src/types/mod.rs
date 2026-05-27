@@ -22,7 +22,7 @@ pub enum Type {
     Bool,
     Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool),
     Pointer(Rc<RefCell<Type>>),
-    Tuple(Vec<Rc<RefCell<Type>>>),
+    Tuple(Vec<(Option<String>, Rc<RefCell<Type>>)>),
     Struct(String, WeakSymbol),
     Class(String, WeakSymbol),
     Enum(String, WeakSymbol),
@@ -63,9 +63,12 @@ impl fmt::Display for Type {
             Type::Pointer(inner) => write!(f, "{}*", inner.borrow()),
             Type::Tuple(elements) => {
                 write!(f, "(")?;
-                for (i, element) in elements.iter().enumerate() {
+                for (i, (name, element)) in elements.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
+                    }
+                    if let Some(name) = name {
+                        write!(f, "{}: ", name)?;
                     }
                     write!(f, "{}", element.borrow())?;
                 }

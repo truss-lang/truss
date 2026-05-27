@@ -497,24 +497,28 @@ impl Parser {
                             right: Box::new(right),
                         })
                     } else {
-                        let first = self.parse_expression()?;
+                        let (first_name, first_expr) = self.parse_maybe_named_expr()?;
+                        let first = Rc::new(RefCell::new(first_expr));
+                        let has_comma = self.peek().map_or(false, |t| {
+                            SeparatorType::is_separator(&t, SeparatorType::Comma)
+                        });
 
-                        if let Some(t) = self.peek()
-                            && SeparatorType::is_separator(&t, SeparatorType::Comma)
-                        {
-                            self.index += 1;
-                            let mut elements = vec![Rc::new(RefCell::new(first))];
+                        if first_name.is_some() || has_comma {
+                            let mut elements = vec![(first_name, first)];
 
-                            loop {
-                                let next_expr = self.parse_expression()?;
-                                elements.push(Rc::new(RefCell::new(next_expr)));
+                            if has_comma {
+                                self.index += 1;
+                                loop {
+                                    let (name, expr) = self.parse_maybe_named_expr()?;
+                                    elements.push((name, Rc::new(RefCell::new(expr))));
 
-                                if let Some(t) = self.peek()
-                                    && SeparatorType::is_separator(&t, SeparatorType::Comma)
-                                {
-                                    self.index += 1;
-                                } else {
-                                    break;
+                                    if let Some(t) = self.peek()
+                                        && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                                    {
+                                        self.index += 1;
+                                    } else {
+                                        break;
+                                    }
                                 }
                             }
 
@@ -565,7 +569,7 @@ impl Parser {
                                 return Err(());
                             }
 
-                            Ok(first)
+                            Ok(Rc::try_unwrap(first).ok().unwrap().into_inner())
                         }
                     }
                 }
@@ -735,24 +739,28 @@ impl Parser {
                 });
             }
 
-            let first = self.parse_type_expression()?;
+            let (first_name, first_type) = self.parse_maybe_named_type()?;
+            let first = Rc::new(RefCell::new(first_type));
+            let has_comma = self.peek().map_or(false, |t| {
+                SeparatorType::is_separator(&t, SeparatorType::Comma)
+            });
 
-            if let Some(t) = self.peek()
-                && SeparatorType::is_separator(&t, SeparatorType::Comma)
-            {
-                self.index += 1;
-                let mut elements = vec![Rc::new(RefCell::new(first))];
+            if first_name.is_some() || has_comma {
+                let mut elements = vec![(first_name, first)];
 
-                loop {
-                    let next_type = self.parse_type_expression()?;
-                    elements.push(Rc::new(RefCell::new(next_type)));
+                if has_comma {
+                    self.index += 1;
+                    loop {
+                        let (name, type_expr) = self.parse_maybe_named_type()?;
+                        elements.push((name, Rc::new(RefCell::new(type_expr))));
 
-                    if let Some(t) = self.peek()
-                        && SeparatorType::is_separator(&t, SeparatorType::Comma)
-                    {
-                        self.index += 1;
-                    } else {
-                        break;
+                        if let Some(t) = self.peek()
+                            && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                        {
+                            self.index += 1;
+                        } else {
+                            break;
+                        }
                     }
                 }
 
@@ -809,7 +817,7 @@ impl Parser {
                 return Err(());
             }
 
-            let mut type_expr = first;
+            let mut type_expr = Rc::try_unwrap(first).ok().unwrap().into_inner();
 
             while let Some(token) = self.peek()
                 && OperatorType::is_operator(&token, OperatorType::Multiply)
@@ -2526,6 +2534,38 @@ impl Parser {
                 Err(())
             }
         }
+    }
+
+    /// Parse a tuple element that may be named: `name: expr` or just `expr`.
+    fn parse_maybe_named_expr(&mut self) -> Result<(Option<String>, Expression), ()> {
+        if let Some(name_token) = self.peek()
+            && let TokenType::Identifier = name_token.ty
+            && let Some(colon_token) = self.peek2()
+            && SeparatorType::is_separator(&colon_token, SeparatorType::Colon)
+        {
+            self.index += 2;
+            let name = name_token.value.clone();
+            let expr = self.parse_expression()?;
+            return Ok((Some(name), expr));
+        }
+        let expr = self.parse_expression()?;
+        Ok((None, expr))
+    }
+
+    /// Parse a tuple type element that may be named: `name: Type` or just `Type`.
+    fn parse_maybe_named_type(&mut self) -> Result<(Option<String>, Expression), ()> {
+        if let Some(name_token) = self.peek()
+            && let TokenType::Identifier = name_token.ty
+            && let Some(colon_token) = self.peek2()
+            && SeparatorType::is_separator(&colon_token, SeparatorType::Colon)
+        {
+            self.index += 2;
+            let name = name_token.value.clone();
+            let type_expr = self.parse_type_expression()?;
+            return Ok((Some(name), type_expr));
+        }
+        let type_expr = self.parse_type_expression()?;
+        Ok((None, type_expr))
     }
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {

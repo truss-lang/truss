@@ -3021,11 +3021,11 @@ fn test_parse_tuple_literal_two_elements() {
     {
         assert_eq!(elements.len(), 2);
         assert!(matches!(
-            *elements[0].borrow(),
+            *elements[0].1.borrow(),
             Expression::IntegerLiteral { value: 1, .. }
         ));
         assert!(matches!(
-            *elements[1].borrow(),
+            *elements[1].1.borrow(),
             Expression::IntegerLiteral { value: 2, .. }
         ));
     } else {
@@ -3077,11 +3077,11 @@ fn test_parse_tuple_type_in_variable_decl() {
     {
         assert_eq!(elements.len(), 2);
         assert!(matches!(
-            *elements[0].borrow(),
+            *elements[0].1.borrow(),
             Expression::Type { .. }
         ));
         assert!(matches!(
-            *elements[1].borrow(),
+            *elements[1].1.borrow(),
             Expression::Type { .. }
         ));
     } else {
@@ -3163,11 +3163,11 @@ fn test_parse_nested_tuple_literal() {
     {
         assert_eq!(elements.len(), 2);
         assert!(matches!(
-            *elements[0].borrow(),
+            *elements[0].1.borrow(),
             Expression::TupleLiteral { .. }
         ));
         assert!(matches!(
-            *elements[1].borrow(),
+            *elements[1].1.borrow(),
             Expression::IntegerLiteral { value: 3, .. }
         ));
     } else {
@@ -3336,6 +3336,92 @@ fn test_parse_self_as_expression_statement() {
             *expression.borrow(),
             Expression::SelfKeyword { .. }
         ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_named_tuple_literal() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = (x: 1, y: 2)".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::TupleLiteral { elements, .. } = &*init.borrow()
+    {
+        assert_eq!(elements.len(), 2);
+        assert_eq!(elements[0].0.as_deref(), Some("x"));
+        assert!(matches!(
+            *elements[0].1.borrow(),
+            Expression::IntegerLiteral { value: 1, .. }
+        ));
+        assert_eq!(elements[1].0.as_deref(), Some("y"));
+        assert!(matches!(
+            *elements[1].1.borrow(),
+            Expression::IntegerLiteral { value: 2, .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_single_element_named_tuple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = (x: 1)".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::TupleLiteral { elements, .. } = &*init.borrow()
+    {
+        assert_eq!(elements.len(), 1);
+        assert_eq!(elements[0].0.as_deref(), Some("x"));
+        assert!(matches!(
+            *elements[0].1.borrow(),
+            Expression::IntegerLiteral { value: 1, .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_named_tuple_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a: (x: Int32, y: Bool) = (x: 1, y: true)".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        type_expression: Some(type_expr),
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::TupleType { elements: type_elements, .. } = &*type_expr.borrow()
+        && let Expression::TupleLiteral { elements: lit_elements, .. } = &*init.borrow()
+    {
+        assert_eq!(type_elements.len(), 2);
+        assert_eq!(type_elements[0].0.as_deref(), Some("x"));
+        assert_eq!(type_elements[1].0.as_deref(), Some("y"));
+
+        assert_eq!(lit_elements.len(), 2);
+        assert_eq!(lit_elements[0].0.as_deref(), Some("x"));
+        assert_eq!(lit_elements[1].0.as_deref(), Some("y"));
     } else {
         panic!();
     }
