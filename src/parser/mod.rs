@@ -534,6 +534,7 @@ impl Parser {
                                 left: Box::new(left),
                                 elements,
                                 right: Box::new(right),
+                                ty: None,
                             })
                         } else {
                             let Some(right) = self.next() else {

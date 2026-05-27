@@ -114,6 +114,7 @@ pub enum Expression {
         left: Box<Token>,
         elements: Vec<Rc<RefCell<Expression>>>,
         right: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     TupleType {
         left: Box<Token>,
@@ -135,6 +136,7 @@ impl Expression {
             Self::Variable { ty, .. } => Ok(ty.clone()),
             Self::Type { ty, .. } => Ok(ty.clone()),
             Self::Cast { ty, .. } => Ok(ty.clone()),
+            Self::TupleLiteral { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -143,6 +145,8 @@ impl Expression {
             Self::IntegerLiteral { ty, .. } => Ok(ty),
             Self::Variable { ty, .. } => Ok(ty),
             Self::Type { ty, .. } => Ok(ty),
+            Self::Cast { ty, .. } => Ok(ty),
+            Self::TupleLiteral { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -151,6 +155,8 @@ impl Expression {
             Self::IntegerLiteral { ty, .. } => Ok(ty),
             Self::Variable { ty, .. } => Ok(ty),
             Self::Type { ty, .. } => Ok(ty),
+            Self::Cast { ty, .. } => Ok(ty),
+            Self::TupleLiteral { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }

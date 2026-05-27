@@ -2812,6 +2812,57 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
+            Expression::TupleLiteral { elements, .. } => {
+                let ty_ref = expr.borrow().get_ty_ref()?.clone();
+                if let Some(ty) = ty_ref
+                    && let Type::Tuple(_) = &*ty.borrow()
+                {
+                    let tuple_llvm = self.resolve_type(ty.clone())?.into_struct_type();
+                    let alloca = self.builder.build_alloca(tuple_llvm, "")?;
+                    for (i, element) in elements.iter().enumerate() {
+                        let val = self.resolve_expression(element.clone())?.unwrap();
+                        let field_ptr =
+                            self.builder.build_struct_gep(tuple_llvm, alloca, i as u32, "")?;
+                        self.builder.build_store(field_ptr, val)?;
+                    }
+                    let val = self.builder.build_load(tuple_llvm.as_basic_type_enum(), alloca, "")?;
+                    Ok(Some(val))
+                } else {
+                    anyhow::bail!("Tuple literal has no type info");
+                }
+            }
+            Expression::TupleIndexAccess {
+                object,
+                index_value,
+                ..
+            } => {
+                let object_ty_ref = object.borrow().get_ty_ref()?.clone();
+                if let Some(object_ty) = object_ty_ref
+                    && let Type::Tuple(elements) = &*object_ty.borrow()
+                {
+                    let idx = *index_value as usize;
+                    if idx >= elements.len() {
+                        anyhow::bail!("Tuple index {} out of bounds", idx);
+                    }
+                    let element_ty = self.resolve_type(elements[idx].clone())?;
+                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+                    let tuple_llvm = self.resolve_type(object_ty.clone())?.into_struct_type();
+                    let struct_ptr = match object_val {
+                        BasicValueEnum::PointerValue(ptr) => ptr,
+                        val => {
+                            let ptr = self.builder.build_alloca(val.get_type(), "")?;
+                            self.builder.build_store(ptr, val)?;
+                            ptr
+                        }
+                    };
+                    let field_ptr =
+                        self.builder.build_struct_gep(tuple_llvm, struct_ptr, idx as u32, "")?;
+                    let val = self.builder.build_load(element_ty, field_ptr, "")?;
+                    Ok(Some(val))
+                } else {
+                    anyhow::bail!("TupleIndexAccess on non-tuple type");
+                }
+            }
             _ => anyhow::bail!("Expression type not implemented"),
         }
     }
@@ -2915,11 +2966,37 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("Enum type not found");
                 }
             }
-            Type::Tuple(_) => {
-                todo!("Tuple types are not yet supported in IR generation")
+            Type::Tuple(elements) => {
+                let type_key = self.get_tuple_struct_key(elements);
+                if let Some(struct_type) = self.struct_types.borrow().get(&type_key) {
+                    struct_type.as_basic_type_enum()
+                } else {
+                    let field_types: Vec<BasicTypeEnum<'ctx>> = elements
+                        .iter()
+                        .map(|e| self.resolve_type(e.clone()))
+                        .collect::<Result<Vec<_>>>()?;
+                    let struct_type =
+                        self.context.opaque_struct_type(&format!("tuple.{}", type_key));
+                    struct_type.set_body(&field_types, false);
+                    self.struct_types
+                        .borrow_mut()
+                        .insert(type_key, struct_type);
+                    struct_type.as_basic_type_enum()
+                }
             }
         };
         Ok(resolved)
+    }
+
+    fn get_tuple_struct_key(&self, elements: &[Rc<RefCell<Type>>]) -> String {
+        let mut key = String::from("__tuple_");
+        for (i, elem) in elements.iter().enumerate() {
+            if i > 0 {
+                key.push('_');
+            }
+            key.push_str(&elem.borrow().to_string());
+        }
+        key
     }
 
     fn get_struct_field_type(

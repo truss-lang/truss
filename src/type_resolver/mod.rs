@@ -1554,14 +1554,18 @@ impl TypeResolver {
                     }
                 }
             }
-            Expression::TupleLiteral { elements, .. } => {
+            Expression::TupleLiteral {
+                elements, ty, ..
+            } => {
                 let mut element_types = Vec::new();
                 for elem in elements {
                     if let Some(t) = self.infer_type(elem.clone()) {
                         element_types.push(t);
                     }
                 }
-                Rc::new(RefCell::new(Type::Tuple(element_types)))
+                let tuple_ty = Rc::new(RefCell::new(Type::Tuple(element_types)));
+                *ty = Some(tuple_ty.clone());
+                tuple_ty
             }
             Expression::TupleType { elements, .. } => {
                 let mut element_types = Vec::new();

@@ -1281,3 +1281,105 @@ fn test_irgen_class_inheritance_multi_level() {
     assert!(llvm_ir.contains("{ i64, i32, i32, i32 }"), "Expected Dog type [ref_count, a, b, c] in IR:\n{}", llvm_ir);
     assert!(llvm_ir.contains("getelementptr"), "Expected GEP instructions in IR:\n{}", llvm_ir);
 }
+
+#[test]
+fn test_irgen_tuple_type_annotation() {
+    let code = "func test() { let a: (Int32, Bool) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ i32, i1 }"), "Expected tuple layout (Int32, Bool) in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_tuple_literal() {
+    let code = "func test() -> Int32 { let a = (1, 2); return a.0 }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("tuple.__tuple_Int32_Int32"), "Expected tuple struct type in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ i32, i32 }"), "Expected tuple layout (Int32, Int32) in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("getelementptr"), "Expected GEP for field access in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_tuple_index_access() {
+    let code = "func test() -> Bool { let a = (1, true); return a.1 }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ i32, i1 }"), "Expected tuple layout (Int32, Bool) in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("getelementptr"), "Expected GEP for field access in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_tuple_literal_as_return() {
+    let code = "func test() -> (Int32, Bool) { return (1, true) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ i32, i1 }"), "Expected tuple layout (Int32, Bool) in IR:\n{}", llvm_ir);
+}

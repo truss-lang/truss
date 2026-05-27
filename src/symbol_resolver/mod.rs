@@ -387,6 +387,10 @@ impl SymbolResolver {
             for stmt in statements {
                 self.register_symbols(stmt.clone());
             }
+        } else if let Expression::TupleLiteral { elements, .. } = &*expr.borrow() {
+            for element in elements {
+                self.register_function_symbols_in_expr(element.clone());
+            }
         }
     }
 
@@ -588,6 +592,16 @@ impl SymbolResolver {
             }
             Expression::MemberAccess { object, .. } => {
                 self.resolve_expression(object.clone());
+            }
+            Expression::TupleLiteral { elements, .. } => {
+                for element in elements {
+                    self.resolve_expression(element.clone());
+                }
+            }
+            Expression::TupleType { elements, .. } => {
+                for element in elements {
+                    self.resolve_expression(element.clone());
+                }
             }
             Expression::TupleIndexAccess { object, .. } => {
                 self.resolve_expression(object.clone());
