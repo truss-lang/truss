@@ -4,7 +4,7 @@ use crate::{
     ast::{
         expression::{BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{AccessModifier, AccessorKind, FunctionBody, ModifierType, Pattern, Statement, VariadicKind},
+        statement::{AccessModifier, AccessorKind, FunctionBody, ModifierType, Pattern, ProtocolMember, Statement, VariadicKind},
     },
     diag::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
@@ -487,6 +487,8 @@ impl TypeResolver {
             Statement::ProtocolDecl {
                 name,
                 conformances,
+                members,
+                scope,
                 ..
             } => {
                 let Some(symbol) = self
@@ -510,6 +512,85 @@ impl TypeResolver {
                 for conformance in conformances {
                     self.infer_type(conformance.clone());
                 }
+
+                self.enter_scope(scope.as_ref().unwrap().clone());
+                for member in members {
+                    match member {
+                        ProtocolMember::Method { decl, .. } => {
+                            if let Statement::FunctionDecl {
+                                name: _method_name,
+                                parameters,
+                                return_type,
+                                body,
+                                scope: fn_scope,
+                                ty,
+                                ..
+                            } = &mut *decl.borrow_mut()
+                            {
+                                let ret_type = if let Some(return_type_expr) = return_type {
+                                    self.infer_type(return_type_expr.clone())
+                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                                } else {
+                                    Rc::new(RefCell::new(Type::Void))
+                                };
+
+                                let mut parameter_types = Vec::new();
+                                let mut is_vararg = false;
+                                for param in parameters.iter() {
+                                    if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                        is_vararg = true;
+                                        continue;
+                                    }
+                                    let param_type =
+                                        self.infer_type(param.borrow().type_expression.clone());
+                                    if let Some(ref param_type) = param_type {
+                                        param.borrow_mut().ty = Some(param_type.clone());
+                                        parameter_types.push(param_type.clone());
+                                    }
+                                    if param.borrow().variadic_kind != VariadicKind::NotVariadic {
+                                        is_vararg = true;
+                                    }
+                                }
+
+                                let fn_type = Rc::new(RefCell::new(Type::Function(
+                                    parameter_types,
+                                    ret_type,
+                                    is_vararg,
+                                )));
+                                *ty = Some(fn_type.clone());
+
+                                self.enter_scope(fn_scope.as_ref().unwrap().clone());
+                                match &*body.borrow() {
+                                    FunctionBody::Statements(stmts) => {
+                                        for s in stmts {
+                                            self.process_decl(s.clone());
+                                        }
+                                    }
+                                    FunctionBody::Expression(expr) => {
+                                        self.process_function_decl_in_expr(expr.clone());
+                                    }
+                                    FunctionBody::None => {}
+                                }
+                                self.leave_scope();
+                            }
+                        }
+                        ProtocolMember::Property {
+                            name: prop_name,
+                            type_expression,
+                            ..
+                        } => {
+                            let prop_ty = self.infer_type(type_expression.clone());
+                            if let Some(prop_ty) = prop_ty {
+                                self.current_scope
+                                    .as_ref()
+                                    .unwrap()
+                                    .borrow_mut()
+                                    .set_type(prop_name.value.clone(), prop_ty);
+                            }
+                        }
+                    }
+                }
+                self.leave_scope();
             }
             _ => {}
         }
@@ -781,8 +862,54 @@ impl TypeResolver {
                     self.resolve_statement(stmt.clone());
                 }
             }
-            Statement::ProtocolDecl { .. } => {
-                // Protocol declarations are processed in process_decl only
+            Statement::ProtocolDecl { scope, members, .. } => {
+                self.enter_scope(scope.as_ref().unwrap().clone());
+                for member in members {
+                    match member {
+                        ProtocolMember::Method { decl, .. } => {
+                            if let Statement::FunctionDecl {
+                                parameters,
+                                body,
+                                scope: fn_scope,
+                                ty,
+                                ..
+                            } = &mut *decl.borrow_mut()
+                            {
+                                let last_return_type = self.current_return_type.clone();
+                                let fn_type = if ty.is_some() {
+                                    ty.clone().unwrap()
+                                } else {
+                                    Rc::new(RefCell::new(Type::Function(
+                                        vec![],
+                                        Rc::new(RefCell::new(Type::Void)),
+                                        false,
+                                    )))
+                                };
+                                let ret_type = if let Type::Function(_, ret, _) = &*fn_type.borrow() {
+                                    ret.clone()
+                                } else {
+                                    Rc::new(RefCell::new(Type::Void))
+                                };
+                                self.current_return_type = Some(ret_type.clone());
+                                self.enter_scope(fn_scope.as_ref().unwrap().clone());
+                                for param in parameters.iter() {
+                                    if let Some(param_ty) = param.borrow().ty.clone() {
+                                        self.current_scope
+                                            .as_ref()
+                                            .unwrap()
+                                            .borrow_mut()
+                                            .set_type(param.borrow().name.value.clone(), param_ty);
+                                    }
+                                }
+                                self.resolve_function_body(body.clone());
+                                self.leave_scope();
+                                self.current_return_type = last_return_type;
+                            }
+                        }
+                        ProtocolMember::Property { .. } => {}
+                    }
+                }
+                self.leave_scope();
             }
             Statement::EnumDecl { body, .. } => {
                 for stmt in body {

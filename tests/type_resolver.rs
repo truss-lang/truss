@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::Expression,
-        statement::{FunctionBody, Statement},
+        statement::{FunctionBody, ProtocolMember, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
     krate::Crate,
@@ -2052,4 +2052,209 @@ fn test_self_keyword_type_in_class_method() {
     } else {
         panic!("Expected ClassDecl");
     }
+}
+
+// --- Protocol type resolver tests ---
+
+#[test]
+fn test_protocol_type_registered() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_type_with_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { func doSomething() -> Void }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ProtocolDecl {
+        name, members, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyProtocol");
+        assert_eq!(members.len(), 1);
+        if let ProtocolMember::Method { decl, .. } = &members[0] {
+            if let Statement::FunctionDecl { ty, .. } = &*decl.borrow() {
+                assert!(ty.is_some());
+                if let Type::Function(params, ret, _) = &*ty.as_ref().unwrap().borrow() {
+                    assert!(params.is_empty());
+                    assert_eq!(*ret.borrow(), Type::Void);
+                } else {
+                    panic!("Expected Function type");
+                }
+            } else {
+                panic!("Expected FunctionDecl");
+            }
+        } else {
+            panic!("Expected Method member");
+        }
+    } else {
+        panic!("Expected ProtocolDecl");
+    }
+}
+
+#[test]
+fn test_protocol_type_with_property() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { var name: Int32 { get } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_type_with_method_params() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { func greet(name: Int32) -> Int64 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
+        if let ProtocolMember::Method { decl, .. } = &members[0] {
+            if let Statement::FunctionDecl { ty, .. } = &*decl.borrow() {
+                assert!(ty.is_some());
+                if let Type::Function(params, ret, _) = &*ty.as_ref().unwrap().borrow() {
+                    assert_eq!(params.len(), 1);
+                    assert_eq!(*params[0].borrow(), Type::Int32);
+                    assert_eq!(*ret.borrow(), Type::Int64);
+                } else {
+                    panic!("Expected Function type");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_protocol_type_with_default_impl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol { func greet() -> Int32 { return 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_conformance_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Drawable { func draw() -> Void }
+             class Circle: Drawable {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_refinement_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Base {}
+             protocol Derived: Base {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
 }
