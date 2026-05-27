@@ -13,7 +13,7 @@ use crate::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{Accessor, AccessorKind, FunctionBody, Parameter, Pattern, Statement, VariadicKind},
+        statement::{Accessor, AccessorKind, FunctionBody, Parameter, Pattern, ProtocolMember, Statement, VariadicKind},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{Token, TokenType},
@@ -713,6 +713,28 @@ impl<'ctx> IRGenerator<'ctx> {
                 {
                     let llvm_name = format!("{}.{}", name.value, method_name.value);
                     self.module.add_function(&llvm_name, function_type, None);
+                }
+            }
+        }
+        if let Statement::ProtocolDecl { name, members, .. } = &*statement.borrow() {
+            for member in members {
+                if let ProtocolMember::Method { decl, .. } = member
+                    && let Statement::FunctionDecl {
+                        name: method_name,
+                        ty,
+                        body,
+                        ..
+                    } = &*decl.borrow()
+                    && let Some(ty) = ty
+                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && !matches!(&*body.borrow(), FunctionBody::None)
+                {
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
+                    {
+                        let llvm_name = format!("{}.{}", name.value, method_name.value);
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
                 }
             }
         }
@@ -1479,6 +1501,25 @@ impl<'ctx> IRGenerator<'ctx> {
                 let result = (|| -> Result<bool> {
                     for stmt in body {
                         self.resolve_statement(stmt.clone())?;
+                    }
+                    Ok(false)
+                })();
+                *self.current_struct.borrow_mut() = prev;
+                result
+            }
+            Statement::ProtocolDecl { name, members, .. } => {
+                let prev = self.current_struct.borrow_mut().take();
+                self.current_struct.borrow_mut().replace(name.value.clone());
+                let result = (|| -> Result<bool> {
+                    for member in members {
+                        if let ProtocolMember::Method { decl, .. } = member
+                            && let Statement::FunctionDecl {
+                                body, ..
+                            } = &*decl.borrow()
+                            && !matches!(&*body.borrow(), FunctionBody::None)
+                        {
+                            self.resolve_statement(decl.clone())?;
+                        }
                     }
                     Ok(false)
                 })();
