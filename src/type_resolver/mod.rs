@@ -1572,24 +1572,45 @@ impl TypeResolver {
                 }
                 Rc::new(RefCell::new(Type::Tuple(element_types)))
             }
-            Expression::TupleIndexAccess { object, index, .. } => {
-                let object_ty = self.infer_type(object.clone());
-                if let Some(ty) = object_ty
-                    && let Type::Tuple(elements) = &*ty.borrow()
-                {
-                    let idx = index.value.parse::<usize>().unwrap_or(usize::MAX);
-                    if idx < elements.len() {
-                        elements[idx].clone()
-                    } else {
+            Expression::TupleIndexAccess {
+                object,
+                index,
+                index_value,
+                ty,
+            } => {
+                let object_ty = self.infer_type(object.clone())?;
+                match &*object_ty.borrow() {
+                    Type::Tuple(elements) => {
+                        let idx = *index_value as usize;
+                        if idx < elements.len() {
+                            let element_ty = elements[idx].clone();
+                            *ty = Some(element_ty.clone());
+                            element_ty
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::TypeError,
+                                format!(
+                                    "Index {} out of bounds for tuple of length {}",
+                                    idx,
+                                    elements.len()
+                                ),
+                                index.as_ref(),
+                            );
+                            return None;
+                        }
+                    }
+                    other => {
                         self.emit_error(
                             TrussDiagnosticCode::TypeError,
-                            format!("Index {} out of bounds for tuple of length {}", idx, elements.len()),
+                            format!(
+                                "Cannot index into non-tuple type '{}' with .{}",
+                                other,
+                                index_value
+                            ),
                             index.as_ref(),
                         );
                         return None;
                     }
-                } else {
-                    Rc::new(RefCell::new(Type::Never))
                 }
             }
         };
