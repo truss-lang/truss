@@ -6,7 +6,7 @@ use inkwell::{
     context::Context,
     module::Module,
     types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum},
-    values::{BasicValueEnum, PointerValue},
+    values::{BasicValue, BasicValueEnum, PointerValue},
 };
 
 use crate::{
@@ -48,6 +48,9 @@ pub struct IRGenerator<'ctx> {
     program_scope: Rc<RefCell<Option<Rc<RefCell<TrussScope>>>>>,
     current_struct: Rc<RefCell<Option<String>>>,
     current_accessor_struct: Rc<RefCell<Option<(String, PointerValue<'ctx>)>>>,
+    vtable_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
+    vtable_globals: Rc<RefCell<HashMap<String, inkwell::values::GlobalValue<'ctx>>>>,
+    vtable_method_lists: Rc<RefCell<HashMap<String, Vec<(String, String)>>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -68,6 +71,9 @@ impl<'ctx> IRGenerator<'ctx> {
             program_scope: Rc::new(RefCell::new(None)),
             current_struct: Rc::new(RefCell::new(None)),
             current_accessor_struct: Rc::new(RefCell::new(None)),
+            vtable_types: Rc::new(RefCell::new(HashMap::new())),
+            vtable_globals: Rc::new(RefCell::new(HashMap::new())),
+            vtable_method_lists: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -169,6 +175,10 @@ impl<'ctx> IRGenerator<'ctx> {
         }
 
         for stmt in &program.statements {
+            self.create_vtable_types(stmt.clone());
+        }
+
+        for stmt in &program.statements {
             self.create_struct_type_bodies(stmt.clone());
         }
 
@@ -182,6 +192,10 @@ impl<'ctx> IRGenerator<'ctx> {
 
         for stmt in &program.statements {
             self.create_function_declarations(stmt.clone());
+        }
+
+        for stmt in &program.statements {
+            self.create_vtable_instances(stmt.clone());
         }
 
         for stmt in &program.statements {
@@ -257,7 +271,10 @@ impl<'ctx> IRGenerator<'ctx> {
             let class_name = &name.value;
             if let Some(class_type) = self.class_types.borrow().get(class_name).cloned() {
                 let ref_count_ty = self.context.i64_type().into();
-                let mut field_types: Vec<BasicTypeEnum<'ctx>> = vec![ref_count_ty];
+                let vtable_ptr_ty: BasicTypeEnum<'ctx> =
+                    self.context.ptr_type(inkwell::AddressSpace::from(0)).into();
+                let mut field_types: Vec<BasicTypeEnum<'ctx>> = vec![ref_count_ty, vtable_ptr_ty];
+
                 field_types.extend(self.collect_class_stored_field_types(class_name));
 
                 class_type.set_body(&field_types, false);
@@ -354,7 +371,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 let Some(field_ty) = field_ty else { stored_idx += 1; continue };
                 if field_name == param_name {
-                    let gep_idx = if is_class { stored_idx + 1 + superclass_field_count } else { stored_idx };
+                    let gep_idx = if is_class { stored_idx + 2 + superclass_field_count } else { stored_idx };
                     if is_class {
                         if let Some(class_type) = self.class_types.borrow().get(struct_name).copied() {
                             if let Ok(field_ptr) = self.builder.build_struct_gep(class_type, self_ptr, gep_idx as u32, "") {
@@ -511,7 +528,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         continue;
                     }
                     if field.borrow().name().as_ref().ok() == Some(&field_name.to_string()) {
-                        return Ok(stored_idx + 1 + superclass_field_count);
+                        return Ok(stored_idx + 2 + superclass_field_count);
                     }
                     stored_idx += 1;
                 }
@@ -734,6 +751,130 @@ impl<'ctx> IRGenerator<'ctx> {
             self.module.add_function(&name.value, function_type, None);
         }
         Ok(())
+    }
+
+    fn compute_vtable_method_list(&self, class_name: &str) -> Vec<(String, String)> {
+        if let Some(cached) = self.vtable_method_lists.borrow().get(class_name) {
+            return cached.clone();
+        }
+        let scope = self.program_scope.borrow();
+        let Some(scope_ref) = scope.as_ref() else { return vec![] };
+        let Some(symbol) = scope_ref.borrow().get_symbol(class_name) else { return vec![] };
+        let sym_borrow = symbol.borrow();
+        let Symbol::Class { methods, superclass, .. } = &*sym_borrow else { return vec![] };
+        let own_method_names: Vec<String> = methods.iter().filter_map(|m| m.borrow().name().ok()).collect();
+
+        let result = if let Some(super_weak) = superclass {
+            if let Some(super_sym) = super_weak.0.upgrade() {
+                let super_borrow = super_sym.borrow();
+                if let Symbol::Class { name: super_name, .. } = &*super_borrow {
+                    let super_methods = self.compute_vtable_method_list(&super_name);
+                    let mut merged: Vec<(String, String)> = Vec::new();
+                    for (method_name, owner) in super_methods {
+                        if own_method_names.contains(&method_name) {
+                            merged.push((method_name.clone(), class_name.to_string()));
+                        } else {
+                            merged.push((method_name, owner));
+                        }
+                    }
+                    for method_name in &own_method_names {
+                        if !merged.iter().any(|(n, _)| n == method_name) {
+                            merged.push((method_name.clone(), class_name.to_string()));
+                        }
+                    }
+                    merged
+                } else {
+                    own_method_names.iter().map(|n| (n.clone(), class_name.to_string())).collect()
+                }
+            } else {
+                own_method_names.iter().map(|n| (n.clone(), class_name.to_string())).collect()
+            }
+        } else {
+            own_method_names.iter().map(|n| (n.clone(), class_name.to_string())).collect()
+        };
+
+        drop(sym_borrow);
+
+        self.vtable_method_lists
+            .borrow_mut()
+            .insert(class_name.to_string(), result.clone());
+        result
+    }
+
+    fn class_has_vtable_methods(&self, class_name: &str) -> bool {
+        !self.compute_vtable_method_list(class_name).is_empty()
+    }
+
+    fn create_vtable_types(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::ClassDecl { name, .. } = &*statement.borrow() {
+            let class_name = &name.value;
+            if !self.class_has_vtable_methods(class_name) {
+                return;
+            }
+            let method_list = self.compute_vtable_method_list(class_name);
+            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+            let mut field_types: Vec<BasicTypeEnum<'ctx>> = Vec::new();
+
+            for _ in &method_list {
+                field_types.push(ptr_ty.into());
+            }
+
+            let vtable_name = format!("vtable.{}", class_name);
+            let vtable_type = self.context.opaque_struct_type(&vtable_name);
+            vtable_type.set_body(&field_types, false);
+            self.vtable_types
+                .borrow_mut()
+                .insert(class_name.clone(), vtable_type);
+        }
+    }
+
+    fn get_vtable_slot_index(&self, class_name: &str, method_name: &str) -> Option<u32> {
+        let method_list = self.compute_vtable_method_list(class_name);
+        method_list
+            .iter()
+            .position(|(name, _)| name == method_name)
+            .map(|i| i as u32)
+    }
+
+    fn create_vtable_instances(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::ClassDecl { name, .. } = &*statement.borrow() {
+            let class_name = &name.value;
+            let method_list = self.compute_vtable_method_list(class_name);
+            if method_list.is_empty() {
+                return;
+            }
+            let Some(vtable_type) = self.vtable_types.borrow().get(class_name).copied() else {
+                return;
+            };
+
+            let vtable_name = format!("__vtable.{}", class_name);
+            if self.module.get_global(&vtable_name).is_some() {
+                return;
+            }
+
+            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+            let mut const_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
+
+            for (method_name, owner) in &method_list {
+                let fn_name = format!("{}.{}", owner, method_name);
+                if let Some(func) = self.module.get_function(&fn_name) {
+                    let fn_ptr = func.as_global_value().as_pointer_value();
+                    const_vals.push(fn_ptr.as_basic_value_enum());
+                } else {
+                    const_vals.push(ptr_ty.const_null().as_basic_value_enum());
+                }
+            }
+
+            let init_val = vtable_type.const_named_struct(&const_vals);
+            let global = self.module.add_global(vtable_type, None, &vtable_name);
+            global.set_initializer(&init_val);
+            global.set_constant(true);
+            global.set_linkage(inkwell::module::Linkage::Internal);
+
+            self.vtable_globals
+                .borrow_mut()
+                .insert(class_name.clone(), global);
+        }
     }
 
     fn generate_accessor_function(
@@ -2791,8 +2932,62 @@ impl<'ctx> IRGenerator<'ctx> {
                                 self.builder.build_store(p, object_val)?;
                                 p
                             };
+                            let method_name = &member.value;
+
+                            if let Some(slot_idx) = self.get_vtable_slot_index(class_name, method_name) {
+                                let class_type = *self.class_types.borrow().get(class_name).unwrap();
+                                let vtable_ptr_ptr = self.builder.build_struct_gep(
+                                    class_type, ptr, 1, "",
+                                )?;
+                                let vtable_ptr = self.builder.build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    vtable_ptr_ptr, "",
+                                )?.into_pointer_value();
+
+                                let vtable_type = *self.vtable_types.borrow().get(class_name).unwrap();
+                                let fn_ptr_ptr = self.builder.build_struct_gep(
+                                    vtable_type, vtable_ptr, slot_idx, "",
+                                )?;
+                                let fn_ptr_val = self.builder.build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    fn_ptr_ptr, "",
+                                )?.into_pointer_value();
+
+                                let Some(owner) = self.compute_vtable_method_list(class_name)
+                                    .iter()
+                                    .find(|(n, _)| n == method_name)
+                                    .map(|(_, owner)| owner.clone())
+                                else {
+                                    anyhow::bail!("Method {} not found in vtable for {}", method_name, class_name);
+                                };
+                                let fn_name = format!("{}.{}", owner, method_name);
+                                let declared_fn = self.module.get_function(&fn_name).ok_or_else(|| {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::UndefinedFunction,
+                                        format!("Undefined function: '{}'", fn_name),
+                                        None,
+                                    );
+                                    anyhow::anyhow!("Undefined function: {}", fn_name)
+                                })?;
+                                let fn_type = declared_fn.get_type();
+
+                                let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                                args.push(ptr.into());
+                                for param in parameters {
+                                    let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                    args.push(arg_val.into());
+                                }
+                                let call_result = self.builder.build_indirect_call(
+                                    fn_type, fn_ptr_val, &args, "",
+                                )?;
+                                match call_result.try_as_basic_value() {
+                                    inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
+                                    _ => return Ok(None),
+                                }
+                            }
+
                             method_self_ptr = Some(ptr);
-                            (format!("{}.{}", class_name, member.value), false)
+                            (format!("{}.{}", class_name, method_name), false)
                         } else if let Some(ty) = &object_ty
                             && let Type::Enum(enum_name, _) = &*ty.borrow()
                         {
@@ -2897,6 +3092,18 @@ impl<'ctx> IRGenerator<'ctx> {
                             )?;
                             let rc_ptr = self.builder.build_struct_gep(class_type, class_ptr, 0, "")?;
                             self.builder.build_store(rc_ptr, i64_ty.const_int(1, false))?;
+
+                            let vtable_global = self.vtable_globals.borrow().get(struct_name).copied();
+                            if let Some(vt_global) = vtable_global {
+                                let vtable_ptr_gep = self.builder.build_struct_gep(
+                                    class_type, class_ptr, 1, "",
+                                )?;
+                                self.builder.build_store(
+                                    vtable_ptr_gep,
+                                    vt_global.as_pointer_value(),
+                                )?;
+                            }
+
                             args.push(class_ptr.into());
                             Some((class_type.as_basic_type_enum(), class_ptr))
                         } else {

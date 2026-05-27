@@ -1182,6 +1182,122 @@ fn test_irgen_class_method_call() {
 }
 
 #[test]
+fn test_irgen_class_vtable_global() {
+    let code = r#"
+        class Animal {
+            func speak() -> Int32 { return 1 }
+            func eat() -> Int32 { return 2 }
+        }
+        func test() -> Int32 {
+            var a: Animal
+            return a.speak()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("vtable.Animal"), "Expected vtable type in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__vtable.Animal"), "Expected vtable global in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("Animal.speak"), "Expected Animal.speak in vtable:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("Animal.eat"), "Expected Animal.eat in vtable:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_class_vtable_method_call_is_indirect() {
+    let code = r#"
+        class Greeter {
+            func greet() -> Int32 { return 42 }
+        }
+        func test() -> Int32 {
+            var g: Greeter
+            return g.greet()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    // Method should be called through vtable (indirect call), not directly
+    assert!(llvm_ir.contains("vtable.Greeter"), "Expected vtable type:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__vtable.Greeter"), "Expected vtable global:\n{}", llvm_ir);
+    // The call is indirect via ptr, not direct call to Greeter.greet
+    assert!(llvm_ir.contains("call"), "Expected a call instruction:\n{}", llvm_ir);
+    // Greeter.greet function should still exist
+    assert!(llvm_ir.contains("Greeter.greet"), "Expected Greeter.greet function:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_class_inheritance_vtable_inherited_methods() {
+    let code = r#"
+        class Animal {
+            func speak() -> Int32 { return 1 }
+        }
+        class Dog: Animal {
+            func speak() -> Int32 { return 2 }
+        }
+        func test() -> Int32 {
+            var d: Dog
+            return d.speak()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("vtable.Animal"), "Expected vtable.Animal:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("vtable.Dog"), "Expected vtable.Dog:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__vtable.Animal"), "Expected __vtable.Animal:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__vtable.Dog"), "Expected __vtable.Dog:\n{}", llvm_ir);
+    // Dog's vtable should reference Dog.speak (override)
+    assert!(llvm_ir.contains("Dog.speak"), "Expected Dog.speak in IR:\n{}", llvm_ir);
+    // Animal's vtable should reference Animal.speak
+    assert!(llvm_ir.contains("Animal.speak"), "Expected Animal.speak in IR:\n{}", llvm_ir);
+}
+
+#[test]
 fn test_irgen_class_inheritance_field_layout() {
     let code = r#"
         class Animal { let name: Int32 }
@@ -1210,7 +1326,7 @@ fn test_irgen_class_inheritance_field_layout() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i64, i32, i32 }"), "Expected Dog type [ref_count, name, breed] in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ i64, ptr, i32, i32 }"), "Expected Dog type [ref_count, vtable_ptr, name, breed] in IR:\n{}", llvm_ir);
 }
 
 #[test]
@@ -1278,7 +1394,7 @@ fn test_irgen_class_inheritance_multi_level() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i64, i32, i32, i32 }"), "Expected Dog type [ref_count, a, b, c] in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ i64, ptr, i32, i32, i32 }"), "Expected Dog type [ref_count, vtable_ptr, a, b, c] in IR:\n{}", llvm_ir);
     assert!(llvm_ir.contains("getelementptr"), "Expected GEP instructions in IR:\n{}", llvm_ir);
 }
 
