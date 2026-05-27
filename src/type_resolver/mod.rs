@@ -134,6 +134,7 @@ impl TypeResolver {
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
                 )));
+                let self_ty = struct_ty.clone();
                 self.current_scope
                     .as_ref()
                     .unwrap()
@@ -141,6 +142,11 @@ impl TypeResolver {
                     .set_type(name.value.clone(), struct_ty);
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
+                self.current_scope
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_type("self".to_string(), self_ty);
                 for stmt in body {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
@@ -210,6 +216,7 @@ impl TypeResolver {
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
                 )));
+                let self_ty = class_ty.clone();
                 self.current_scope
                     .as_ref()
                     .unwrap()
@@ -221,6 +228,11 @@ impl TypeResolver {
                 }
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
+                self.current_scope
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_type("self".to_string(), self_ty);
                 for stmt in body {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
@@ -1617,9 +1629,23 @@ impl TypeResolver {
                     }
                 }
             }
-            Expression::SelfKeyword { ty, .. } => {
-                *ty = Some(Rc::new(RefCell::new(Type::Int32)));
-                ty.clone().unwrap()
+            Expression::SelfKeyword { token, ty, .. } => {
+                let t = self
+                    .current_scope
+                    .as_ref()
+                    .ok_or_else(|| {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeError,
+                            "No type environment available",
+                            token.as_ref(),
+                        );
+                    })
+                    .ok()?
+                    .borrow()
+                    .get_type("self");
+                let t = t?;
+                *ty = Some(t.clone());
+                t
             }
         };
         Some(result)

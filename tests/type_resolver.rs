@@ -1969,3 +1969,87 @@ fn test_class_superclass_type() {
         panic!("Expected ClassDecl for Dog");
     }
 }
+
+#[test]
+fn test_self_keyword_type_in_struct_method() {
+    let code = r#"
+        struct Point { let x: Int32 func get_self() -> Point { return self } }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        if let Statement::FunctionDecl { body: fn_body, .. } = &*body[1].borrow()
+            && let FunctionBody::Statements(statements) = &*fn_body.borrow()
+            && let Statement::Return { value, .. } = &*statements[0].borrow()
+            && let Some(value) = value
+            && let Expression::SelfKeyword { ty, .. } = &*value.borrow()
+        {
+            let self_ty = ty.as_ref().expect("self should have a type");
+            match &*self_ty.borrow() {
+                Type::Struct(name, _) => assert_eq!(name, "Point"),
+                other => panic!("Expected Struct type for self, got {:?}", other),
+            }
+        } else {
+            panic!("Unexpected AST structure");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_self_keyword_type_in_class_method() {
+    let code = r#"
+        class Animal { func get_self() -> Animal { return self } }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ClassDecl { body, .. } = &*program.statements[0].borrow() {
+        if let Statement::FunctionDecl { body: fn_body, .. } = &*body[0].borrow()
+            && let FunctionBody::Statements(statements) = &*fn_body.borrow()
+            && let Statement::Return { value, .. } = &*statements[0].borrow()
+            && let Some(value) = value
+            && let Expression::SelfKeyword { ty, .. } = &*value.borrow()
+        {
+            let self_ty = ty.as_ref().expect("self should have a type");
+            match &*self_ty.borrow() {
+                Type::Class(name, _) => assert_eq!(name, "Animal"),
+                other => panic!("Expected Class type for self, got {:?}", other),
+            }
+        } else {
+            panic!("Unexpected AST structure");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}

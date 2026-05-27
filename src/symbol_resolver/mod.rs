@@ -95,6 +95,14 @@ impl SymbolResolver {
                 };
 
                 *scope = Some(self.enter_scope(None));
+                {
+                    let self_sym = Rc::new(RefCell::new(Symbol::Variable {
+                        name: "self".to_string(),
+                        decl: None,
+                        parameter: None,
+                    }));
+                    self.enter(self_sym, name);
+                }
                 for field_stmt in body {
                     if let Statement::VariableDecl {
                         name: field_name, ..
@@ -215,6 +223,14 @@ impl SymbolResolver {
                 };
 
                 *scope = Some(self.enter_scope(None));
+                {
+                    let self_sym = Rc::new(RefCell::new(Symbol::Variable {
+                        name: "self".to_string(),
+                        decl: None,
+                        parameter: None,
+                    }));
+                    self.enter(self_sym, name);
+                }
                 for field_stmt in body {
                     if let Statement::VariableDecl {
                         name: field_name, ..
