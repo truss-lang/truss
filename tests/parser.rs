@@ -2835,3 +2835,130 @@ fn test_parse_public_class() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_class_decl_with_superclass() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("class Dog: Animal {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name,
+        superclass,
+        body,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Dog");
+        assert!(superclass.is_some());
+        if let Expression::Type {
+            name: super_name, ..
+        } = &*superclass.as_ref().unwrap().borrow()
+        {
+            assert_eq!(super_name.value, "Animal");
+        } else {
+            panic!("Expected superclass to be a type reference");
+        }
+        assert!(body.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_class_decl_with_superclass_and_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Dog: Animal { func bark() -> Int32 { 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name,
+        superclass,
+        body,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Dog");
+        assert!(superclass.is_some());
+        if let Expression::Type {
+            name: super_name, ..
+        } = &*superclass.as_ref().unwrap().borrow()
+        {
+            assert_eq!(super_name.value, "Animal");
+        } else {
+            panic!("Expected superclass to be a type reference");
+        }
+        assert_eq!(body.len(), 1);
+        assert!(matches!(&*body[0].borrow(), Statement::FunctionDecl { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_class_decl_without_superclass() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("class Empty {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name, superclass, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Empty");
+        assert!(superclass.is_none());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_class_decl_with_superclass_type_parameters() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Box: Array<Int32> {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name,
+        superclass,
+        body,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Box");
+        assert!(superclass.is_some());
+        if let Expression::Type {
+            name: super_name,
+            type_parameters,
+            ..
+        } = &*superclass.as_ref().unwrap().borrow()
+        {
+            assert_eq!(super_name.value, "Array");
+            assert!(type_parameters.is_some());
+            assert_eq!(type_parameters.as_ref().unwrap().len(), 1);
+        } else {
+            panic!("Expected superclass to be a Type expression");
+        }
+        assert!(body.is_empty());
+    } else {
+        panic!();
+    }
+}

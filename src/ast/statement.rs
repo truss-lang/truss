@@ -39,6 +39,7 @@ pub enum Statement {
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
+        superclass: Option<Rc<RefCell<Expression>>>,
         body: Vec<Rc<RefCell<Statement>>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,

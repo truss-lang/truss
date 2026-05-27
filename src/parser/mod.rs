@@ -1694,11 +1694,20 @@ impl Parser {
             );
             return Err(());
         }
+        let superclass = if let Some(next) = self.peek()
+            && SeparatorType::is_separator(&next, SeparatorType::Colon)
+        {
+            self.index += 1;
+            Some(Rc::new(RefCell::new(self.parse_type_expression()?)))
+        } else {
+            None
+        };
         let body = self.parse_brace_body()?;
         Ok(Statement::ClassDecl {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
+            superclass,
             body,
             scope: None,
             ty: None,
