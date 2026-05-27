@@ -366,6 +366,30 @@ fn test_parse_return() {
 }
 
 #[test]
+fn test_parse_return_without_value_before_brace() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { return }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        assert!(matches!(
+            &*statements[0].borrow(),
+            Statement::Return { value: None, .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_for() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

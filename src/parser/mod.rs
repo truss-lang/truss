@@ -1268,6 +1268,8 @@ impl Parser {
         let return_token = token;
         let value = if let Some(token) = self.peek()
             && current_line == token.position.line
+            && !SeparatorType::is_separator(&token, SeparatorType::CloseBrace)
+            && !SeparatorType::is_separator(&token, SeparatorType::SemiColon)
         {
             Some(self.parse_expression()?)
         } else {

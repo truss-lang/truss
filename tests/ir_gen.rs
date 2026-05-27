@@ -1745,7 +1745,7 @@ fn test_irgen_protocol_default_implementation() {
 
 #[test]
 fn test_irgen_protocol_default_impl_no_crash() {
-    let code = "protocol Helper { func help() -> Int32 { return 42 } func need() -> Int32 { return 0 } }";
+    let code = "protocol Helper { func help() -> Int32 { return 42 } func need() -> Void { return } }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
