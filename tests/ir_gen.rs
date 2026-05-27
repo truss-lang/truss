@@ -1180,3 +1180,104 @@ fn test_irgen_class_method_call() {
 
     assert!(llvm_ir.contains("Point.f"), "Expected Point.f in IR:\n{}", llvm_ir);
 }
+
+#[test]
+fn test_irgen_class_inheritance_field_layout() {
+    let code = r#"
+        class Animal { let name: Int32 }
+        class Dog: Animal { let breed: Int32 }
+        func test() -> Int32 {
+            var d: Dog
+            return d.name
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ i64, i32, i32 }"), "Expected Dog type [ref_count, name, breed] in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_class_inheritance_field_access() {
+    let code = r#"
+        class Animal { let name: Int32 }
+        class Dog: Animal { let breed: Int32 }
+        func test() -> Int32 {
+            var d: Dog
+            let val = d.name
+            return val
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("load"), "Expected load instruction in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_class_inheritance_multi_level() {
+    let code = r#"
+        class Animal { let a: Int32 }
+        class Mammal: Animal { let b: Int32 }
+        class Dog: Mammal { let c: Int32 }
+        func test() -> Int32 {
+            var d: Dog
+            let v1 = d.a
+            let v2 = d.b
+            return v1
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ i64, i32, i32, i32 }"), "Expected Dog type [ref_count, a, b, c] in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("getelementptr"), "Expected GEP instructions in IR:\n{}", llvm_ir);
+}

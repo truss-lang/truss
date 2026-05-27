@@ -11,7 +11,7 @@ use crate::{
         secondary_label_from_token,
     },
     krate::{Crate, Module},
-    lexer::token::Token,
+    lexer::token::{Token, TokenType},
     scope::Scope,
     symbol::{Symbol, WeakSymbol},
     types::Type,
@@ -1449,6 +1449,33 @@ impl TypeResolver {
                                     }
                                 }
                             }
+
+                            let decl = symbol.borrow().get_decl().ok().flatten();
+                            let super_info = decl.as_ref().and_then(|decl| {
+                                if let Statement::ClassDecl { superclass: Some(super_expr), .. } = &*decl.borrow() {
+                                    if let Expression::Type { name: super_name, .. } = &*super_expr.borrow() {
+                                        return Some((super_name.value.clone(), super_name.position.clone(), super_name.file.clone()));
+                                    }
+                                }
+                                None
+                            });
+                            drop(binding);
+                            drop(scope);
+
+                            if let Some((super_name, pos, file)) = super_info {
+                                let super_object = Rc::new(RefCell::new(Expression::Variable {
+                                    name: Box::new(Token::new(super_name, TokenType::Identifier, pos, file)),
+                                    ty: None,
+                                    symbol: None,
+                                }));
+                                let member_expr = Rc::new(RefCell::new(Expression::MemberAccess {
+                                    object: super_object,
+                                    member: Box::new(member.as_ref().clone()),
+                                    ty: None,
+                                }));
+                                return self.infer_type(member_expr);
+                            }
+
                             let token = &*member;
                             self.emit_error(
                                 TrussDiagnosticCode::FieldNotFound,

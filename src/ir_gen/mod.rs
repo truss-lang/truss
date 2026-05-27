@@ -253,30 +253,52 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_class_type_bodies(&self, statement: Rc<RefCell<Statement>>) {
-        if let Statement::ClassDecl { name, body, .. } = &*statement.borrow() {
+        if let Statement::ClassDecl { name, .. } = &*statement.borrow() {
             let class_name = &name.value;
             if let Some(class_type) = self.class_types.borrow().get(class_name).cloned() {
                 let ref_count_ty = self.context.i64_type().into();
                 let mut field_types: Vec<BasicTypeEnum<'ctx>> = vec![ref_count_ty];
-                field_types.extend(
-                    body.iter()
-                        .filter(|stmt| self.is_stored_field(stmt))
-                        .filter_map(|stmt| {
-                            if let Statement::VariableDecl { ty, .. } = &*stmt.borrow()
-                                && let Some(ty) = ty
-                            {
-                                match self.resolve_type(ty.clone()) {
-                                    Ok(llvm_ty) => return Some(llvm_ty),
-                                    Err(_) => return None,
-                                }
-                            }
-                            None
-                        }),
-                );
+                field_types.extend(self.collect_class_stored_field_types(class_name));
 
                 class_type.set_body(&field_types, false);
             }
         }
+    }
+
+    fn collect_class_stored_field_types(&self, class_name: &str) -> Vec<BasicTypeEnum<'ctx>> {
+        let binding = self.program_scope.borrow();
+        let Some(scope) = binding.as_ref() else { return vec![] };
+        let Some(symbol) = scope.borrow().get_symbol(class_name) else { return vec![] };
+
+        let sym_borrow = symbol.borrow();
+        let (decl, fields) = match &*sym_borrow {
+            Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
+            _ => return vec![],
+        };
+        drop(sym_borrow);
+
+        let mut field_types = Vec::new();
+
+        if let Statement::ClassDecl { superclass: Some(super_expr), .. } = &*decl.borrow() {
+            if let Expression::Type { name: super_name, .. } = &*super_expr.borrow() {
+                field_types.extend(self.collect_class_stored_field_types(&super_name.value));
+            }
+        }
+
+        for field in fields.iter() {
+            if let Ok(Some(field_decl)) = field.borrow().get_decl() {
+                if let Statement::VariableDecl { accessors, ty: Some(ty), .. } = &*field_decl.borrow() {
+                    let has_get_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+                    if !has_get_set {
+                        if let Ok(llvm_ty) = self.resolve_type(ty.clone()) {
+                            field_types.push(llvm_ty);
+                        }
+                    }
+                }
+            }
+        }
+
+        field_types
     }
 
     fn auto_assign_init_fields(
@@ -290,9 +312,31 @@ impl<'ctx> IRGenerator<'ctx> {
         let Some(scope) = binding.as_ref() else { return };
         let Some(symbol) = scope.borrow().get_symbol(struct_name) else { return };
         let sym_borrow = symbol.borrow();
-        let fields = match &*sym_borrow {
-            Symbol::Struct { fields, .. } | Symbol::Class { fields, .. } => fields,
+        let (decl, fields) = match &*sym_borrow {
+            Symbol::Struct { decl, fields, .. } => (decl.clone(), fields.clone()),
+            Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
             _ => return,
+        };
+        drop(sym_borrow);
+
+        let superclass_name = if is_class {
+            if let Statement::ClassDecl { superclass: Some(super_expr), .. } = &*decl.borrow() {
+                if let Expression::Type { name: super_name, .. } = &*super_expr.borrow() {
+                    Some(super_name.value.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let superclass_field_count = if let Some(ref super_name) = superclass_name {
+            self.get_class_stored_field_count(super_name)
+        } else {
+            0
         };
 
         for param in parameters {
@@ -300,8 +344,8 @@ impl<'ctx> IRGenerator<'ctx> {
             let mut stored_idx = 0usize;
             for field in fields.iter() {
                 let Ok(field_name) = field.borrow().name() else { continue };
-                let Ok(Some(decl)) = field.borrow().get_decl() else { continue };
-                let decl_ref = decl.borrow();
+                let Ok(Some(field_decl)) = field.borrow().get_decl() else { continue };
+                let decl_ref = field_decl.borrow();
                 let Statement::VariableDecl { accessors, ty: field_ty, .. } = &*decl_ref else { continue };
                 let has_get_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
                 if has_get_set {
@@ -310,7 +354,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 let Some(field_ty) = field_ty else { stored_idx += 1; continue };
                 if field_name == param_name {
-                    let gep_idx = if is_class { stored_idx + 1 } else { stored_idx };
+                    let gep_idx = if is_class { stored_idx + 1 + superclass_field_count } else { stored_idx };
                     if is_class {
                         if let Some(class_type) = self.class_types.borrow().get(struct_name).copied() {
                             if let Ok(field_ptr) = self.builder.build_struct_gep(class_type, self_ptr, gep_idx as u32, "") {
@@ -434,27 +478,84 @@ impl<'ctx> IRGenerator<'ctx> {
             && let Some(symbol) = scope.borrow().get_symbol(class_name)
         {
             let binding = symbol.borrow();
-            let fields = match &*binding {
-                Symbol::Struct { fields, .. } | Symbol::Class { fields, .. } => fields,
+            let (decl, fields) = match &*binding {
+                Symbol::Struct { decl, fields, .. } => (decl.clone(), fields.clone()),
+                Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
                 _ => return Err(anyhow::anyhow!("Symbol '{}' is not a struct or class", class_name)),
             };
+            drop(binding);
+
+            let superclass_name = if let Statement::ClassDecl { superclass: Some(super_expr), .. } = &*decl.borrow() {
+                if let Expression::Type { name: super_name, .. } = &*super_expr.borrow() {
+                    Some(super_name.value.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let superclass_field_count = if let Some(ref super_name) = superclass_name {
+                self.get_class_stored_field_count(super_name)
+            } else {
+                0
+            };
+
             let mut stored_idx = 0;
             for field in fields.iter() {
-                if let Some(decl) = field.borrow().get_decl().ok().flatten()
-                    && let Statement::VariableDecl { accessors, .. } = &*decl.borrow()
+                if let Some(field_decl) = field.borrow().get_decl().ok().flatten()
+                    && let Statement::VariableDecl { accessors, .. } = &*field_decl.borrow()
                 {
                     let has_get_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
                     if has_get_set {
                         continue;
                     }
                     if field.borrow().name().as_ref().ok() == Some(&field_name.to_string()) {
-                        return Ok(stored_idx + 1);
+                        return Ok(stored_idx + 1 + superclass_field_count);
                     }
                     stored_idx += 1;
                 }
             }
+
+            if let Some(super_name) = superclass_name {
+                return self.get_stored_class_field_index(&super_name, field_name);
+            }
         }
         anyhow::bail!("Stored field '{}' not found in class '{}'", field_name, class_name)
+    }
+
+    fn get_class_stored_field_count(&self, class_name: &str) -> usize {
+        let binding = self.program_scope.borrow();
+        let Some(scope) = binding.as_ref() else { return 0 };
+        let Some(symbol) = scope.borrow().get_symbol(class_name) else { return 0 };
+
+        let sym_borrow = symbol.borrow();
+        let (decl, fields) = match &*sym_borrow {
+            Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
+            _ => return 0,
+        };
+        drop(sym_borrow);
+
+        let mut count = 0;
+
+        if let Statement::ClassDecl { superclass: Some(super_expr), .. } = &*decl.borrow() {
+            if let Expression::Type { name: super_name, .. } = &*super_expr.borrow() {
+                count += self.get_class_stored_field_count(&super_name.value);
+            }
+        }
+
+        for field in fields.iter() {
+            if let Ok(Some(field_decl)) = field.borrow().get_decl() {
+                if let Statement::VariableDecl { accessors, .. } = &*field_decl.borrow() {
+                    let has_get_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+                    if !has_get_set {
+                        count += 1;
+                    }
+                }
+            }
+        }
+
+        count
     }
 
     fn get_enum_case_index(&self, enum_name: &str, case_name: &str) -> Result<usize> {
@@ -2827,17 +2928,25 @@ impl<'ctx> IRGenerator<'ctx> {
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
         {
             let binding = symbol.borrow();
-            let fields = match &*binding {
-                Symbol::Struct { fields, .. } | Symbol::Class { fields, .. } => fields,
+            let (decl, fields) = match &*binding {
+                Symbol::Struct { decl, fields, .. } => (decl.clone(), fields.clone()),
+                Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
                 _ => return Err(anyhow::anyhow!("Symbol '{}' is not a struct or class", struct_name)),
             };
+            drop(binding);
+
             for field in fields.iter() {
                 if field.borrow().name().as_ref().ok() == Some(&field_name.to_string())
-                    && let Some(decl) = field.borrow().get_decl().ok().flatten()
-                    && let Statement::VariableDecl { ty, .. } = &*decl.borrow()
-                    && let Some(ty) = ty
+                    && let Some(field_decl) = field.borrow().get_decl().ok().flatten()
+                    && let Statement::VariableDecl { ty: Some(ty), .. } = &*field_decl.borrow()
                 {
                     return self.resolve_type(ty.clone());
+                }
+            }
+
+            if let Statement::ClassDecl { superclass: Some(super_expr), .. } = &*decl.borrow() {
+                if let Expression::Type { name: super_name, .. } = &*super_expr.borrow() {
+                    return self.get_struct_field_type(&super_name.value, field_name);
                 }
             }
         }
