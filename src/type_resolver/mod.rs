@@ -196,7 +196,7 @@ impl TypeResolver {
                 self.leave_scope();
             }
             Statement::ClassDecl {
-                name, body, scope, ..
+                name, body, scope, superclass, ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -215,6 +215,10 @@ impl TypeResolver {
                     .unwrap()
                     .borrow_mut()
                     .set_type(name.value.clone(), class_ty);
+
+                if let Some(superclass_expr) = superclass {
+                    self.infer_type(superclass_expr.clone());
+                }
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for stmt in body {
@@ -1030,9 +1034,12 @@ impl TypeResolver {
                     Type::Class(class_name, _) => {
                         let init_params_info = {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
-                            if let Some(symbol) = scope.get_symbol(class_name)
-                                && let Symbol::Struct { constructors, .. } = &*symbol.borrow()
-                            {
+                            if let Some(symbol) = scope.get_symbol(class_name) {
+                                let constructors = match &*symbol.borrow() {
+                                    Symbol::Struct { constructors, .. }
+                                    | Symbol::Class { constructors, .. } => constructors.clone(),
+                                    _ => return Some(callee_type.clone()),
+                                };
                                 constructors.iter().find_map(|constructor| {
                                     if let Ok(Some(decl)) = constructor.borrow().get_decl()
                                         && let Statement::InitDecl {
@@ -1373,11 +1380,20 @@ impl TypeResolver {
                     }
                     Type::Class(class_name, _) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
-                        if let Some(symbol) = scope.get_symbol(class_name)
-                            && let Symbol::Struct {
-                                fields, methods, ..
-                            } = &*symbol.borrow()
-                        {
+                        if let Some(symbol) = scope.get_symbol(class_name) {
+                            let binding = symbol.borrow();
+                            let (fields, methods) = match &*binding {
+                                Symbol::Struct { fields, methods, .. }
+                                | Symbol::Class { fields, methods, .. } => (fields, methods),
+                                _ => {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::FieldNotFound,
+                                        format!("Class symbol '{}' has unexpected type", class_name),
+                                        member,
+                                    );
+                                    return None;
+                                }
+                            };
                             if !self.is_member_accessible(&symbol.borrow(), member) {
                                 self.emit_error(
                                     TrussDiagnosticCode::InaccessibleMember,

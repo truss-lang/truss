@@ -39,6 +39,25 @@ pub enum Symbol {
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
     },
+    Class {
+        name: String,
+        decl: Rc<RefCell<Statement>>,
+        fields: Vec<Rc<RefCell<Symbol>>>,
+        methods: Vec<Rc<RefCell<Symbol>>>,
+        constructors: Vec<Rc<RefCell<Symbol>>>,
+        destrcutor: Option<Rc<RefCell<Symbol>>>,
+        superclass: Option<WeakSymbol>,
+    },
+    ClassField {
+        name: String,
+        parent: WeakSymbol,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
+    ClassMethod {
+        name: String,
+        parent: WeakSymbol,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
     Enum {
         name: String,
         decl: Rc<RefCell<Statement>>,
@@ -61,6 +80,9 @@ impl Symbol {
             Self::Struct { name, .. } => Ok(name.clone()),
             Self::StructField { name, .. } => Ok(name.clone()),
             Self::StructMethod { name, .. } => Ok(name.clone()),
+            Self::Class { name, .. } => Ok(name.clone()),
+            Self::ClassField { name, .. } => Ok(name.clone()),
+            Self::ClassMethod { name, .. } => Ok(name.clone()),
             Self::Enum { name, .. } => Ok(name.clone()),
             Self::EnumCase { name, .. } => Ok(name.clone()),
         }
@@ -72,6 +94,9 @@ impl Symbol {
             Self::Struct { decl, .. } => Ok(Some(decl.clone())),
             Self::StructField { decl, .. } => Ok(decl.clone()),
             Self::StructMethod { decl, .. } => Ok(decl.clone()),
+            Self::Class { decl, .. } => Ok(Some(decl.clone())),
+            Self::ClassField { decl, .. } => Ok(decl.clone()),
+            Self::ClassMethod { decl, .. } => Ok(decl.clone()),
             Self::Enum { decl, .. } => Ok(Some(decl.clone())),
             Self::EnumCase { decl, .. } => Ok(decl.clone()),
         }
@@ -80,6 +105,8 @@ impl Symbol {
         match self {
             Self::StructField { parent, .. }
             | Self::StructMethod { parent, .. }
+            | Self::ClassField { parent, .. }
+            | Self::ClassMethod { parent, .. }
             | Self::EnumCase { parent, .. } => Some(parent.0.upgrade().unwrap()),
             _ => None,
         }

@@ -289,7 +289,11 @@ impl<'ctx> IRGenerator<'ctx> {
         let binding = self.program_scope.borrow();
         let Some(scope) = binding.as_ref() else { return };
         let Some(symbol) = scope.borrow().get_symbol(struct_name) else { return };
-        let Symbol::Struct { fields, .. } = &*symbol.borrow() else { return };
+        let sym_borrow = symbol.borrow();
+        let fields = match &*sym_borrow {
+            Symbol::Struct { fields, .. } | Symbol::Class { fields, .. } => fields,
+            _ => return,
+        };
 
         for param in parameters {
             let param_name = param.borrow().name.value.clone();
@@ -428,8 +432,12 @@ impl<'ctx> IRGenerator<'ctx> {
     fn get_stored_class_field_index(&self, class_name: &str, field_name: &str) -> Result<usize> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(class_name)
-            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
         {
+            let binding = symbol.borrow();
+            let fields = match &*binding {
+                Symbol::Struct { fields, .. } | Symbol::Class { fields, .. } => fields,
+                _ => return Err(anyhow::anyhow!("Symbol '{}' is not a struct or class", class_name)),
+            };
             let mut stored_idx = 0;
             for field in fields.iter() {
                 if let Some(decl) = field.borrow().get_decl().ok().flatten()
@@ -2817,8 +2825,12 @@ impl<'ctx> IRGenerator<'ctx> {
     ) -> Result<BasicTypeEnum<'ctx>> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
-            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
         {
+            let binding = symbol.borrow();
+            let fields = match &*binding {
+                Symbol::Struct { fields, .. } | Symbol::Class { fields, .. } => fields,
+                _ => return Err(anyhow::anyhow!("Symbol '{}' is not a struct or class", struct_name)),
+            };
             for field in fields.iter() {
                 if field.borrow().name().as_ref().ok() == Some(&field_name.to_string())
                     && let Some(decl) = field.borrow().get_decl().ok().flatten()

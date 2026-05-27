@@ -193,16 +193,17 @@ impl SymbolResolver {
             Statement::ClassDecl {
                 name, body, scope, ..
             } => {
-                let class_symbol = Rc::new(RefCell::new(Symbol::Struct {
+                let class_symbol = Rc::new(RefCell::new(Symbol::Class {
                     name: name.value.clone(),
                     decl: stmt.clone(),
                     fields: vec![],
                     methods: vec![],
                     constructors: vec![],
                     destrcutor: None,
+                    superclass: None,
                 }));
                 self.enter(class_symbol.clone(), name);
-                let Symbol::Struct {
+                let Symbol::Class {
                     fields,
                     methods,
                     constructors,
@@ -219,7 +220,7 @@ impl SymbolResolver {
                         name: field_name, ..
                     } = &*field_stmt.borrow()
                     {
-                        let field_symbol = Rc::new(RefCell::new(Symbol::StructField {
+                        let field_symbol = Rc::new(RefCell::new(Symbol::ClassField {
                             name: field_name.value.clone(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
@@ -230,7 +231,7 @@ impl SymbolResolver {
                         name: method_name, ..
                     } = &*field_stmt.borrow()
                     {
-                        let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                        let method_symbol = Rc::new(RefCell::new(Symbol::ClassMethod {
                             name: method_name.value.clone(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
@@ -254,7 +255,7 @@ impl SymbolResolver {
                             }
                         }
                     } else if let Statement::InitDecl { body, .. } = &*field_stmt.borrow() {
-                        let init_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                        let init_symbol = Rc::new(RefCell::new(Symbol::ClassMethod {
                             name: "init".to_string(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
@@ -275,7 +276,7 @@ impl SymbolResolver {
                             }
                         }
                     } else if let Statement::DeinitDecl { body, .. } = &*field_stmt.borrow() {
-                        let deinit_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                        let deinit_symbol = Rc::new(RefCell::new(Symbol::ClassMethod {
                             name: "deinit".to_string(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
@@ -476,7 +477,12 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Statement::ClassDecl { body, scope, .. } => {
+            Statement::ClassDecl { body, scope, superclass, .. } => {
+                if let Some(superclass_expr) = superclass {
+                    if let Expression::Type { name: super_name, .. } = &*superclass_expr.borrow() {
+                        let _ = self.resolve_symbol(super_name);
+                    }
+                }
                 self.enter_scope(scope.clone());
                 for stmt in body {
                     self.resolve_statement(stmt.clone());

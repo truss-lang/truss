@@ -1936,3 +1936,36 @@ fn test_if_case_else_branch() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
 }
+
+#[test]
+fn test_class_superclass_type() {
+    let code = "class Animal {} class Dog: Animal {}";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have type errors, got: {:?}", errors);
+
+    if let Statement::ClassDecl { name, superclass, .. } = &*program.statements[1].borrow() {
+        assert_eq!(name.value, "Dog");
+        assert!(superclass.is_some());
+        if let Expression::Type { name: super_name, .. } = &*superclass.as_ref().unwrap().borrow() {
+            assert_eq!(super_name.value, "Animal");
+        } else {
+            panic!("Expected superclass to be a Type expression");
+        }
+    } else {
+        panic!("Expected ClassDecl for Dog");
+    }
+}
