@@ -120,6 +120,12 @@ pub enum Expression {
         elements: Vec<Rc<RefCell<Expression>>>,
         right: Box<Token>,
     },
+    TupleIndexAccess {
+        object: Rc<RefCell<Expression>>,
+        index: Box<Token>,
+        index_value: u64,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 impl Expression {
@@ -223,6 +229,7 @@ impl Expression {
             Expression::MemberAccess { object, .. } => object.borrow().token(),
             Expression::TupleLiteral { left, .. } => (**left).clone(),
             Expression::TupleType { left, .. } => (**left).clone(),
+            Expression::TupleIndexAccess { index, .. } => (**index).clone(),
         }
     }
 }

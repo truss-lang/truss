@@ -3174,3 +3174,73 @@ fn test_parse_nested_tuple_literal() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_tuple_index_access_dot() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = (1, 2).0".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::TupleIndexAccess {
+            object,
+            index_value: 0,
+            ..
+        } = &*init.borrow()
+        && let Expression::TupleLiteral { elements, .. } = &*object.borrow()
+    {
+        assert_eq!(elements.len(), 2);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_tuple_index_access_second_element() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = (1, 2).1".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::TupleIndexAccess {
+            index_value: 1,
+            ..
+        } = &*init.borrow()
+    {
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_member_access_still_works() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let a = obj.field".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+        && let Expression::MemberAccess { member, .. } = &*init.borrow()
+    {
+        assert_eq!(member.value, "field");
+    } else {
+        panic!();
+    }
+}

@@ -1572,6 +1572,26 @@ impl TypeResolver {
                 }
                 Rc::new(RefCell::new(Type::Tuple(element_types)))
             }
+            Expression::TupleIndexAccess { object, index, .. } => {
+                let object_ty = self.infer_type(object.clone());
+                if let Some(ty) = object_ty
+                    && let Type::Tuple(elements) = &*ty.borrow()
+                {
+                    let idx = index.value.parse::<usize>().unwrap_or(usize::MAX);
+                    if idx < elements.len() {
+                        elements[idx].clone()
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeError,
+                            format!("Index {} out of bounds for tuple of length {}", idx, elements.len()),
+                            index.as_ref(),
+                        );
+                        return None;
+                    }
+                } else {
+                    Rc::new(RefCell::new(Type::Never))
+                }
+            }
         };
         Some(result)
     }

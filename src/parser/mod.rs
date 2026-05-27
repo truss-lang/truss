@@ -604,19 +604,50 @@ impl Parser {
                             );
                             return Err(());
                         };
-                        if TokenType::Identifier != member_token.ty {
+                        if let TokenType::IntegerLiteral { value } = member_token.ty {
+                            if value < 0 {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ExpectedExpression,
+                                    "Index cannot be negative",
+                                    &member_token,
+                                );
+                                return Err(());
+                            }
+                            expression = Expression::TupleIndexAccess {
+                                object: Rc::new(RefCell::new(expression)),
+                                index: Box::new(member_token),
+                                index_value: value as u64,
+                                ty: None,
+                            };
+                        } else if let TokenType::DecimalLiteral { value } = member_token.ty {
+                            if value.fract() != 0.0 || value < 0.0 {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ExpectedExpression,
+                                    "Tuple index must be an integer",
+                                    &member_token,
+                                );
+                                return Err(());
+                            }
+                            expression = Expression::TupleIndexAccess {
+                                object: Rc::new(RefCell::new(expression)),
+                                index: Box::new(member_token),
+                                index_value: value as u64,
+                                ty: None,
+                            };
+                        } else if TokenType::Identifier == member_token.ty {
+                            expression = Expression::MemberAccess {
+                                object: Rc::new(RefCell::new(expression)),
+                                member: Box::new(member_token),
+                                ty: None,
+                            };
+                        } else {
                             self.emit_error(
                                 TrussDiagnosticCode::ExpectedIdentifier,
-                                format!("Expected member name but found '{}'", member_token.value),
+                                format!("Expected member name or index but found '{}'", member_token.value),
                                 &member_token,
                             );
                             return Err(());
                         }
-                        expression = Expression::MemberAccess {
-                            object: Rc::new(RefCell::new(expression)),
-                            member: Box::new(member_token),
-                            ty: None,
-                        };
                     }
                     OperatorType::Less
                         if matches!(
