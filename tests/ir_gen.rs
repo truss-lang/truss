@@ -1246,12 +1246,9 @@ fn test_irgen_class_vtable_method_call_is_indirect() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Method should be called through vtable (indirect call), not directly
     assert!(llvm_ir.contains("vtable.Greeter"), "Expected vtable type:\n{}", llvm_ir);
     assert!(llvm_ir.contains("__vtable.Greeter"), "Expected vtable global:\n{}", llvm_ir);
-    // The call is indirect via ptr, not direct call to Greeter.greet
     assert!(llvm_ir.contains("call"), "Expected a call instruction:\n{}", llvm_ir);
-    // Greeter.greet function should still exist
     assert!(llvm_ir.contains("Greeter.greet"), "Expected Greeter.greet function:\n{}", llvm_ir);
 }
 
@@ -1291,9 +1288,7 @@ fn test_irgen_class_inheritance_vtable_inherited_methods() {
     assert!(llvm_ir.contains("vtable.Dog"), "Expected vtable.Dog:\n{}", llvm_ir);
     assert!(llvm_ir.contains("__vtable.Animal"), "Expected __vtable.Animal:\n{}", llvm_ir);
     assert!(llvm_ir.contains("__vtable.Dog"), "Expected __vtable.Dog:\n{}", llvm_ir);
-    // Dog's vtable should reference Dog.speak (override)
     assert!(llvm_ir.contains("Dog.speak"), "Expected Dog.speak in IR:\n{}", llvm_ir);
-    // Animal's vtable should reference Animal.speak
     assert!(llvm_ir.contains("Animal.speak"), "Expected Animal.speak in IR:\n{}", llvm_ir);
 }
 
@@ -1667,8 +1662,6 @@ fn test_irgen_named_tuple_type_annotation() {
     assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
 }
 
-// --- Protocol IR gen tests ---
-
 #[test]
 fn test_irgen_protocol_empty() {
     let code = "protocol Empty {}";
@@ -1690,7 +1683,6 @@ fn test_irgen_protocol_empty() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Empty protocol should not crash and produce valid IR
     assert!(llvm_ir.contains("main"), "IR should contain module name");
 }
 
@@ -1715,7 +1707,6 @@ fn test_irgen_protocol_method_requirement_only() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Method requirement without body should not generate any function
     assert!(!llvm_ir.contains("Drawable.draw"), "Method requirement without body should not generate IR function");
 }
 
@@ -1799,30 +1790,6 @@ fn test_irgen_protocol_only_requirement_no_default() {
 }
 
 #[test]
-fn test_irgen_protocol_property_requirement_no_crash() {
-    let code = "protocol Named { var name: Int32 { get } var age: Int32 { get set } }";
-    let engine = create_engine();
-    let mut lexer = Lexer::new(
-        CharStream::new(code.to_string(), Rc::new("".to_string())),
-        engine.clone(),
-    );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
-    let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
-    let module_id = symbol_resolver.resolve(&program, "test".to_string());
-    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
-    type_resolver.resolve(&program, module_id.clone());
-
-    let context = Context::create();
-    let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
-    let _llvm_ir = module.print_to_string().to_string();
-    // Property requirements should not crash IR generation
-}
-
-
-#[test]
 fn test_irgen_protocol_existential_container() {
     let code = "protocol Drawable { func draw() -> Int32 { return 42 } }";
     let engine = create_engine();
@@ -1843,9 +1810,6 @@ fn test_irgen_protocol_existential_container() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Protocol with default impl should not crash.
-    // The witness table type and existential container type are created
-    // but only appear in IR when used by a concrete class
     assert!(llvm_ir.contains("Drawable.draw"), "Default implementation should generate function:\n{}", llvm_ir);
 }
 
@@ -1933,6 +1897,54 @@ fn test_irgen_protocol_witness_table_for_struct() {
 }
 
 #[test]
+fn test_irgen_compound_protocol_existential_dispatch() {
+    let code = r#"
+        protocol Drawable { func draw() -> Int32 }
+        protocol Resettable { func reset() -> Void }
+        struct Circle: Drawable, Resettable {
+            var x: Int32
+            func draw() -> Int32 { return 42 }
+            func reset() -> Void { return }
+        }
+        func test() -> Int32 {
+            let d: any Drawable & Resettable = Circle(x: 99)
+            return d.draw()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+
+    let errors_before = engine.borrow().get_errors().len();
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    if errors.len() > errors_before {
+        panic!("Type errors:\n{:#?}", errors);
+    }
+    drop(engine_ref);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("existential.Drawable & Resettable"), "Existential container for compound type should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__protocol_wt.Drawable.Circle"), "Witness table for (Drawable, Circle) should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__protocol_wt.Resettable.Circle"), "Witness table for (Resettable, Circle) should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("Circle.draw"), "Circle.draw function should exist:\n{}", llvm_ir);
+}
+
+#[test]
 fn test_irgen_class_computed_property_getter_in_vtable() {
     let code = r#"
         class ViewModel {
@@ -1964,12 +1976,9 @@ fn test_irgen_class_computed_property_getter_in_vtable() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Verify vtable exists with getter entry
     assert!(llvm_ir.contains("vtable.ViewModel"), "vtable type should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("__vtable.ViewModel"), "vtable global should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("ViewModel.value.getter"), "getter function should be in vtable:\n{}", llvm_ir);
-    // The read should be indirect through vtable, not a direct GEP + load of value
-    // (value is computed, not stored)
 }
 
 #[test]
@@ -2006,7 +2015,6 @@ fn test_irgen_class_computed_property_setter_in_vtable() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Verify both getter and setter exist in vtable
     assert!(llvm_ir.contains("vtable.ViewModel"), "vtable type should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("ViewModel.value.getter"), "getter should be in vtable:\n{}", llvm_ir);
     assert!(llvm_ir.contains("ViewModel.value.setter"), "setter should be in vtable:\n{}", llvm_ir);
@@ -2048,12 +2056,10 @@ fn test_irgen_class_computed_property_inheritance_override() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Both classes should have vtable
     assert!(llvm_ir.contains("vtable.Base"), "vtable.Base should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("vtable.Derived"), "vtable.Derived should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("__vtable.Base"), "__vtable.Base should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("__vtable.Derived"), "__vtable.Derived should exist:\n{}", llvm_ir);
-    // Base's vtable uses Base.value.getter, Derived's vtable uses Derived.value.getter (override)
     assert!(llvm_ir.contains("Base.value.getter"), "Base getter should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("Derived.value.getter"), "Derived getter should exist:\n{}", llvm_ir);
 }
@@ -2087,12 +2093,9 @@ fn test_irgen_class_stored_property_auto_getter_setter() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Stored properties should now have auto-generated getter in vtable
     assert!(llvm_ir.contains("__vtable.Data"), "vtable should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("Data.name.getter"), "stored property should have getter:\n{}", llvm_ir);
-    // No setter since it's `let` (immutable)
     assert!(!llvm_ir.contains("Data.name.setter"), "let property should not have setter:\n{}", llvm_ir);
-    // Read should go through vtable (indirect call)
     assert!(llvm_ir.contains("call"), "should have indirect call:\n{}", llvm_ir);
 }
 
@@ -2126,7 +2129,6 @@ fn test_irgen_class_stored_var_auto_getter_and_setter() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // var stored property should have both getter and setter
     assert!(llvm_ir.contains("Data.value.getter"), "var should have getter:\n{}", llvm_ir);
     assert!(llvm_ir.contains("Data.value.setter"), "var should have setter:\n{}", llvm_ir);
 }

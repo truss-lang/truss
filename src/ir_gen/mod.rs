@@ -715,22 +715,15 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
-                // Declare accessor functions for all class fields so they exist
-                // when vtable instances are created (phase 11).
-                // For stored properties (no explicit get/set), also declare getter/setter.
                 if let Statement::VariableDecl { name: field_name, accessors, ty: Some(ty), token, .. } = &*stmt.borrow() {
                     let has_explicit_get = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get));
                     let has_explicit_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
                     if let Ok(llvm_ty) = self.resolve_type(ty.clone()) {
                         if has_explicit_get || has_explicit_set {
-                            // Computed property — declare user-defined accessors
                             self.declare_accessor_functions(&name.value, &field_name.value, accessors, llvm_ty);
                         } else {
-                            // Stored property or willSet/didSet — declare auto-generated getter + setter
                             let is_var = matches!(&token.ty, TokenType::Keyword { keyword: KeywordType::Var });
-                            // Declare getter (always)
                             self.declare_accessor_fn(&name.value, &field_name.value, true, llvm_ty);
-                            // Declare setter if var
                             if is_var {
                                 self.declare_accessor_fn(&name.value, &field_name.value, false, llvm_ty);
                             }
@@ -826,10 +819,6 @@ impl<'ctx> IRGenerator<'ctx> {
         let Symbol::Class { methods, fields, superclass, .. } = &*sym_borrow else { return vec![] };
         let own_method_names: Vec<String> = methods.iter().filter_map(|m| m.borrow().name().ok()).collect();
 
-        // Collect property getter/setter entries for this class.
-        // For stored properties (no explicit get/set), auto-generate entries:
-        //   let → getter only, var → getter + setter.
-        // For computed properties (with explicit get/set), use the explicit ones.
         let mut own_property_entry_names: Vec<String> = Vec::new();
         for field in fields {
             if let Ok(Some(field_decl)) = field.borrow().get_decl()
@@ -840,7 +829,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 let has_explicit_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
 
                 if has_explicit_get || has_explicit_set {
-                    // Computed property with explicit getter/setter
                     if has_explicit_get {
                         own_property_entry_names.push(format!("{}.getter", field_name));
                     }
@@ -848,7 +836,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         own_property_entry_names.push(format!("{}.setter", field_name));
                     }
                 } else {
-                    // Stored property or willSet/didSet only — auto-generate getter/setter
                     let is_var = matches!(&token.ty, TokenType::Keyword { keyword: KeywordType::Var });
                     own_property_entry_names.push(format!("{}.getter", field_name));
                     if is_var {
@@ -864,7 +851,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Symbol::Class { name: super_name, .. } = &*super_borrow {
                     let super_entries = self.compute_vtable_method_list(&super_name);
                     let mut merged: Vec<(String, String)> = Vec::new();
-                    // Inherit entries from superclass, overriding if this class defines the same name
                     for (entry_name, owner) in super_entries {
                         if own_method_names.contains(&entry_name) || own_property_entry_names.contains(&entry_name) {
                             merged.push((entry_name.clone(), class_name.to_string()));
@@ -872,13 +858,11 @@ impl<'ctx> IRGenerator<'ctx> {
                             merged.push((entry_name, owner));
                         }
                     }
-                    // Add own methods not already merged
                     for method_name in &own_method_names {
                         if !merged.iter().any(|(n, _)| n == method_name) {
                             merged.push((method_name.clone(), class_name.to_string()));
                         }
                     }
-                    // Add own property entries not already merged
                     for prop_entry in &own_property_entry_names {
                         if !merged.iter().any(|(n, _)| n == prop_entry) {
                             merged.push((prop_entry.clone(), class_name.to_string()));
@@ -1026,6 +1010,19 @@ impl<'ctx> IRGenerator<'ctx> {
         entries
     }
 
+    fn get_compound_protocol_names(&self, types: &[Rc<RefCell<Type>>]) -> Vec<String> {
+        types.iter().filter_map(|t| {
+            match &*t.borrow() {
+                Type::Protocol(name, _) => Some(name.clone()),
+                _ => None,
+            }
+        }).collect()
+    }
+
+    fn build_compound_protocol_key(&self, names: &[String]) -> String {
+        names.join(" & ")
+    }
+
     fn create_protocol_witness_table_types(&self, statement: Rc<RefCell<Statement>>) {
         if let Statement::ProtocolDecl { name, .. } = &*statement.borrow() {
             let protocol_name = &name.value;
@@ -1064,6 +1061,33 @@ impl<'ctx> IRGenerator<'ctx> {
             self.existential_container_types
                 .borrow_mut()
                 .insert(protocol_name.clone(), container_type);
+        }
+    }
+
+    fn get_or_create_existential_container_for_compound(&self, compound_ty: &Type) -> Option<inkwell::types::StructType<'ctx>> {
+        if let Type::Compound(types) = compound_ty {
+            let names = self.get_compound_protocol_names(types);
+            if names.is_empty() { return None; }
+            let key = self.build_compound_protocol_key(&names);
+            if let Some(ct) = self.existential_container_types.borrow().get(&key).copied() {
+                return Some(ct);
+            }
+            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+            let n_fields = 1 + names.len();
+            let mut field_types = Vec::with_capacity(n_fields);
+            field_types.push(ptr_ty.into());
+            for _ in &names {
+                field_types.push(ptr_ty.into());
+            }
+            let container_name = format!("existential.{}", key);
+            let container_type = self.context.opaque_struct_type(&container_name);
+            container_type.set_body(&field_types, false);
+            self.existential_container_types
+                .borrow_mut()
+                .insert(key.clone(), container_type);
+            Some(container_type)
+        } else {
+            None
         }
     }
 
@@ -1546,38 +1570,81 @@ impl<'ctx> IRGenerator<'ctx> {
                 };
 
                 if let Some(ptr) = self.lookup_variable(&name.value) {
-                    let is_protocol_ty = ty.as_ref().map_or(false, |t| matches!(&*t.borrow(), Type::Protocol(..)));
+                    let is_existential_ty = ty.as_ref().map_or(false, |t| {
+                        matches!(&*t.borrow(), Type::Protocol(..))
+                            || matches!(&*t.borrow(), Type::Compound(..))
+                    });
 
-                    if is_protocol_ty {
+                    if is_existential_ty {
                         if let Some(init) = initializer
                             && let Some(init_val) = self.resolve_expression(init.clone())?
                         {
-                            if let Some(ty) = ty
-                                && let Type::Protocol(protocol_name, _) = &*ty.borrow()
-                            {
-                                let protocol_name = protocol_name.clone();
-                                if let Some(ct) = self.existential_container_types.borrow().get(&protocol_name).copied() {
-                                    let class_ptr = if let BasicValueEnum::PointerValue(p) = init_val { p } else {
-                                        let p = self.builder.build_alloca(init_val.get_type(), "")?;
-                                        self.builder.build_store(p, init_val)?;
-                                        p
-                                    };
-                                    let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
-                                    self.builder.build_store(value_field, class_ptr)?;
+                            if let Some(ty) = ty {
+                                let ty_borrow = ty.borrow();
+                                match &*ty_borrow {
+                                    Type::Protocol(protocol_name, _) => {
+                                        let protocol_name = protocol_name.clone();
+                                        drop(ty_borrow);
+                                        if let Some(ct) = self.existential_container_types.borrow().get(&protocol_name).copied() {
+                                            let class_ptr = if let BasicValueEnum::PointerValue(p) = init_val { p } else {
+                                                let p = self.builder.build_alloca(init_val.get_type(), "")?;
+                                                self.builder.build_store(p, init_val)?;
+                                                p
+                                            };
+                                            let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                                            self.builder.build_store(value_field, class_ptr)?;
 
-                                    if let Some(init_expr) = initializer
-                                        && let Expression::Call { callee, .. } = &*init_expr.borrow()
-                                        && let Expression::Variable { name: callee_name, .. } = &*callee.borrow()
-                                    {
-                                        let class_name = &callee_name.value;
-                                        let key = (protocol_name.clone(), class_name.to_string());
-                                        if let Some(wt_global) = self.protocol_witness_tables.borrow().get(&key).copied() {
-                                            let wt_field = self.builder.build_struct_gep(ct, ptr, 1, "")?;
-                                            self.builder.build_store(wt_field, wt_global.as_pointer_value())?;
+                                            if let Some(init_expr) = initializer
+                                                && let Expression::Call { callee, .. } = &*init_expr.borrow()
+                                                && let Expression::Variable { name: callee_name, .. } = &*callee.borrow()
+                                            {
+                                                let class_name = &callee_name.value;
+                                                let key = (protocol_name.clone(), class_name.to_string());
+                                                if let Some(wt_global) = self.protocol_witness_tables.borrow().get(&key).copied() {
+                                                    let wt_field = self.builder.build_struct_gep(ct, ptr, 1, "")?;
+                                                    self.builder.build_store(wt_field, wt_global.as_pointer_value())?;
+                                                }
+                                            }
+                                        } else {
+                                            self.builder.build_store(ptr, init_val)?;
                                         }
                                     }
-                                } else {
-                                    self.builder.build_store(ptr, init_val)?;
+                                    Type::Compound(types) => {
+                                        let names = self.get_compound_protocol_names(types);
+                                        if !names.is_empty() {
+                                            let compound_key = self.build_compound_protocol_key(&names);
+                                            if let Some(ct) = self.existential_container_types.borrow().get(&compound_key).copied() {
+                                                let class_ptr = if let BasicValueEnum::PointerValue(p) = init_val { p } else {
+                                                    let p = self.builder.build_alloca(init_val.get_type(), "")?;
+                                                    self.builder.build_store(p, init_val)?;
+                                                    p
+                                                };
+                                                let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                                                self.builder.build_store(value_field, class_ptr)?;
+
+                                                if let Some(init_expr) = initializer
+                                                    && let Expression::Call { callee, .. } = &*init_expr.borrow()
+                                                    && let Expression::Variable { name: callee_name, .. } = &*callee.borrow()
+                                                {
+                                                    let concrete_name = &callee_name.value;
+                                                    for (i, pname) in names.iter().enumerate() {
+                                                        let key = (pname.clone(), concrete_name.to_string());
+                                                        if let Some(wt_global) = self.protocol_witness_tables.borrow().get(&key).copied() {
+                                                            let wt_field = self.builder.build_struct_gep(ct, ptr, (i + 1) as u32, "")?;
+                                                            self.builder.build_store(wt_field, wt_global.as_pointer_value())?;
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                self.builder.build_store(ptr, init_val)?;
+                                            }
+                                        } else {
+                                            self.builder.build_store(ptr, init_val)?;
+                                        }
+                                    }
+                                    _ => {
+                                        self.builder.build_store(ptr, init_val)?;
+                                    }
                                 }
                             }
                         }
@@ -1627,13 +1694,11 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.generate_auto_accessor(&fn_prefix, &name.value, false, llvm_var_type, sname, accessors)?;
                         }
                     } else if !accessors.is_empty() {
-                        // Struct member with willSet/didSet only
                         for accessor in accessors {
                             self.generate_accessor_function(&fn_prefix, &name.value, accessor, llvm_var_type, Some(sname))?;
                         }
                     }
                 } else if !accessors.is_empty() {
-                    // Top-level variable with explicit accessors
                     let fn_prefix = name.value.clone();
                     for accessor in accessors {
                         self.generate_accessor_function(&fn_prefix, &name.value, accessor, llvm_var_type, None)?;
@@ -2740,7 +2805,6 @@ impl<'ctx> IRGenerator<'ctx> {
                                 ptr
                             };
 
-                            // Check vtable for computed property setter
                             let setter_entry = format!("{}.setter", field_name);
                             if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, &setter_entry) {
                                 let class_type = *self.class_types.borrow().get(&class_name).unwrap();
@@ -3331,7 +3395,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         ptr
                     };
 
-                    // Check vtable for computed property getter
                     let getter_entry = format!("{}.getter", field_name);
                     if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, &getter_entry) {
                         let class_type = *self.class_types.borrow().get(&class_name).unwrap();
@@ -3375,7 +3438,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         return Ok(Some(result_val));
                     }
 
-                    // Fall back to direct field access (stored property)
                     let field_index = self.get_stored_class_field_index(&class_name, &field_name)?;
 
                     let field_ptr = self.builder.build_struct_gep(
@@ -3388,6 +3450,71 @@ impl<'ctx> IRGenerator<'ctx> {
                     let field_ty = self.get_struct_field_type(&class_name, &field_name)?;
                     let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
                     return Ok(Some(field_val));
+                }
+
+                if let Some(ty) = &object_ty {
+                    let is_compound_protocol = matches!(&*ty.borrow(), Type::Compound(types) if types.iter().all(|t| matches!(&*t.borrow(), Type::Protocol(..))));
+                    if is_compound_protocol {
+                        if let Type::Compound(types) = &*ty.borrow() {
+                            let names = self.get_compound_protocol_names(types);
+                            let compound_key = self.build_compound_protocol_key(&names);
+                            let field_name = member.value.clone();
+                            let object_val = self.resolve_expression(object.clone())?.unwrap();
+
+                            let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                p
+                            } else {
+                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(p, object_val)?;
+                                p
+                            };
+
+                            if let Some(ct) = self.existential_container_types.borrow().get(&compound_key).copied() {
+                                let value_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                                let value_ptr = self.builder.build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    value_ptr_ptr, "",
+                                )?.into_pointer_value();
+
+                                for (slot, pname) in names.iter().enumerate() {
+                                    let entries = self.compute_protocol_witness_table_entries(pname);
+                                    let getter_entry = format!("{}.getter", field_name);
+                                    if let Some(slot_idx) = entries.iter().position(|(n, _)| n == &getter_entry).map(|i| i as u32) {
+                                        if let Some(wt) = self.protocol_witness_table_types.borrow().get(pname).copied() {
+                                            let wt_ptr_ptr = self.builder.build_struct_gep(ct, ptr, (slot + 1) as u32, "")?;
+                                            let wt_ptr = self.builder.build_load(
+                                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                                wt_ptr_ptr, "",
+                                            )?.into_pointer_value();
+
+                                            let fn_ptr_ptr = self.builder.build_struct_gep(wt, wt_ptr, slot_idx, "")?;
+                                            let fn_ptr_val = self.builder.build_load(
+                                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                                fn_ptr_ptr, "",
+                                            )?.into_pointer_value();
+
+                                            let getter_name = format!("{}.{}.getter", pname, field_name);
+                                            if let Some(getter_fn) = self.module.get_function(&getter_name)
+                                                .or_else(|| self.module.get_function(&format!("some.{}.getter", getter_name)))
+                                            {
+                                                let fn_type = getter_fn.get_type();
+                                                let result = self.builder.build_indirect_call(
+                                                    fn_type, fn_ptr_val, &[value_ptr.into()], "",
+                                                )?;
+                                                let result_val = match result.try_as_basic_value() {
+                                                    inkwell::values::ValueKind::Basic(val) => val,
+                                                    _ => anyhow::bail!("Getter call did not return a value"),
+                                                };
+                                                return Ok(Some(result_val));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                            return Ok(Some(ptr_ty.const_null().into()));
+                        }
+                    }
                 }
 
                 if let Some(ty) = &object_ty
@@ -3489,7 +3616,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     };
 
-                    // Try to find by name first
                     let member_name = &member.value;
                     let idx = if let Some(idx) = elements.iter().position(|(n, _)| {
                         n.as_ref().map_or(false, |name| name == member_name)
@@ -3617,68 +3743,140 @@ impl<'ctx> IRGenerator<'ctx> {
                             method_self_ptr = Some(ptr);
                             (format!("{}.{}", class_name, method_name), false)
                         } else if let Some(ty) = &object_ty
-                            && let Type::Protocol(protocol_name, _) = &*ty.borrow()
+                            && (matches!(&*ty.borrow(), Type::Compound(..)) || matches!(&*ty.borrow(), Type::Protocol(..)))
                         {
-                            let protocol_name = protocol_name.clone();
-                            let object_val = self.resolve_expression(object.clone())?.unwrap();
-                            let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
-                                p
-                            } else {
-                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
-                                self.builder.build_store(p, object_val)?;
-                                p
-                            };
-                            let method_name = &member.value;
+                            let is_compound = matches!(&*ty.borrow(), Type::Compound(types) if types.iter().all(|t| matches!(&*t.borrow(), Type::Protocol(..))));
+                            if is_compound {
+                                if let Type::Compound(types) = &*ty.borrow() {
+                                    let names = self.get_compound_protocol_names(types);
+                                    let compound_key = self.build_compound_protocol_key(&names);
+                                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+                                    let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                        p
+                                    } else {
+                                        let alloca = self.builder.build_alloca(object_val.get_type(), "")?;
+                                        self.builder.build_store(alloca, object_val)?;
+                                        alloca
+                                    };
+                                    let method_name = &member.value;
 
-                            let container_type = self.existential_container_types.borrow().get(&protocol_name).copied();
-                            let wt_type = self.protocol_witness_table_types.borrow().get(&protocol_name).copied();
-                            let entries = self.compute_protocol_witness_table_entries(&protocol_name);
+                                    if let Some(ct) = self.existential_container_types.borrow().get(&compound_key).copied() {
+                                        let value_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                                        let value_ptr = self.builder.build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            value_ptr_ptr, "",
+                                        )?.into_pointer_value();
 
-                            if let (Some(ct), Some(wt)) = (container_type, wt_type) {
-                                let value_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 0, "")?;
-                                let value_ptr = self.builder.build_load(
-                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                    value_ptr_ptr, "",
-                                )?.into_pointer_value();
+                                        for (slot, pname) in names.iter().enumerate() {
+                                            if let Some(wt) = self.protocol_witness_table_types.borrow().get(pname).copied() {
+                                                let entries = self.compute_protocol_witness_table_entries(pname);
+                                                if let Some(slot_idx) = entries.iter().position(|(n, k)| *k == "method" && n == method_name).map(|i| i as u32) {
+                                                    let wt_ptr_ptr = self.builder.build_struct_gep(ct, ptr, (slot + 1) as u32, "")?;
+                                                    let wt_ptr = self.builder.build_load(
+                                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                                        wt_ptr_ptr, "",
+                                                    )?.into_pointer_value();
 
-                                let wt_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 1, "")?;
-                                let wt_ptr = self.builder.build_load(
-                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                    wt_ptr_ptr, "",
-                                )?.into_pointer_value();
+                                                    let fn_ptr_ptr = self.builder.build_struct_gep(wt, wt_ptr, slot_idx, "")?;
+                                                    let fn_ptr_val = self.builder.build_load(
+                                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                                        fn_ptr_ptr, "",
+                                                    )?.into_pointer_value();
 
-                                if let Some(slot_idx) = entries.iter().position(|(n, k)| *k == "method" && n == method_name).map(|i| i as u32) {
-                                    let fn_ptr_ptr = self.builder.build_struct_gep(wt, wt_ptr, slot_idx, "")?;
-                                    let fn_ptr_val = self.builder.build_load(
+                                                    let fn_name = format!("{}.{}", pname, method_name);
+                                                    let declared_fn = self.module.get_function(&fn_name).or_else(|| {
+                                                        self.module.get_function(&format!("some.{}.{}", pname, method_name))
+                                                    });
+                                                    if let Some(f) = declared_fn {
+                                                        let fn_type = f.get_type();
+                                                        let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                                                        args.push(value_ptr.into());
+                                                        for param in parameters {
+                                                            let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                                            args.push(arg_val.into());
+                                                        }
+                                                        let call_result = self.builder.build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
+                                                        match call_result.try_as_basic_value() {
+                                                            inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
+                                                            _ => return Ok(None),
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        method_self_ptr = Some(value_ptr);
+                                        (format!("{}.{}", compound_key, method_name), false)
+                                    } else {
+                                        method_self_ptr = Some(ptr);
+                                        (format!("{}.{}", compound_key, method_name), false)
+                                    }
+                                } else {
+                                    anyhow::bail!("Internal error: expected Compound type");
+                                }
+                            } else if let Type::Protocol(protocol_name, _) = &*ty.borrow() {
+                                let protocol_name = protocol_name.clone();
+                                let object_val = self.resolve_expression(object.clone())?.unwrap();
+                                let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                    p
+                                } else {
+                                    let alloca = self.builder.build_alloca(object_val.get_type(), "")?;
+                                    self.builder.build_store(alloca, object_val)?;
+                                    alloca
+                                };
+                                let method_name = &member.value;
+
+                                let container_type = self.existential_container_types.borrow().get(&protocol_name).copied();
+                                let wt_type = self.protocol_witness_table_types.borrow().get(&protocol_name).copied();
+                                let entries = self.compute_protocol_witness_table_entries(&protocol_name);
+
+                                if let (Some(ct), Some(wt)) = (container_type, wt_type) {
+                                    let value_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                                    let value_ptr = self.builder.build_load(
                                         self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                        fn_ptr_ptr, "",
+                                        value_ptr_ptr, "",
                                     )?.into_pointer_value();
 
-                                    let fn_name = format!("{}.{}", protocol_name, method_name);
-                                    let declared_fn = self.module.get_function(&fn_name).or_else(|| {
-                                        self.module.get_function(&format!("some.{}.{}", protocol_name, method_name))
-                                    });
-                                    if let Some(f) = declared_fn {
-                                        let fn_type = f.get_type();
-                                        let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
-                                        args.push(value_ptr.into());
-                                        for param in parameters {
-                                            let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
-                                            args.push(arg_val.into());
-                                        }
-                                        let call_result = self.builder.build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
-                                        match call_result.try_as_basic_value() {
-                                            inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
-                                            _ => return Ok(None),
+                                    let wt_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 1, "")?;
+                                    let wt_ptr = self.builder.build_load(
+                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                        wt_ptr_ptr, "",
+                                    )?.into_pointer_value();
+
+                                    if let Some(slot_idx) = entries.iter().position(|(n, k)| *k == "method" && n == method_name).map(|i| i as u32) {
+                                        let fn_ptr_ptr = self.builder.build_struct_gep(wt, wt_ptr, slot_idx, "")?;
+                                        let fn_ptr_val = self.builder.build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            fn_ptr_ptr, "",
+                                        )?.into_pointer_value();
+
+                                        let fn_name = format!("{}.{}", protocol_name, method_name);
+                                        let declared_fn = self.module.get_function(&fn_name).or_else(|| {
+                                            self.module.get_function(&format!("some.{}.{}", protocol_name, method_name))
+                                        });
+                                        if let Some(f) = declared_fn {
+                                            let fn_type = f.get_type();
+                                            let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                                            args.push(value_ptr.into());
+                                            for param in parameters {
+                                                let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                                args.push(arg_val.into());
+                                            }
+                                            let call_result = self.builder.build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
+                                            match call_result.try_as_basic_value() {
+                                                inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
+                                                _ => return Ok(None),
+                                            }
                                         }
                                     }
-                                }
 
-                                method_self_ptr = Some(value_ptr);
-                                (format!("{}.{}", protocol_name, method_name), false)
+                                    method_self_ptr = Some(value_ptr);
+                                    (format!("{}.{}", protocol_name, method_name), false)
+                                } else {
+                                    method_self_ptr = Some(ptr);
+                                    (format!("{}.{}", protocol_name, method_name), false)
+                                }
                             } else {
-                                method_self_ptr = Some(ptr);
-                                (format!("{}.{}", protocol_name, method_name), false)
+                                anyhow::bail!("Unsupported object type for method call");
                             }
                         } else if let Some(ty) = &object_ty
                             && let Type::Enum(enum_name, _) = &*ty.borrow()
@@ -4005,8 +4203,18 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
                 }
             }
-            Type::Compound(..) => {
-                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+            Type::Compound(types) => {
+                let all_protocols = types.iter().all(|t| matches!(&*t.borrow(), Type::Protocol(..)));
+                if all_protocols {
+                    let compound = Type::Compound(types.clone());
+                    if let Some(ct) = self.get_or_create_existential_container_for_compound(&compound) {
+                        ct.as_basic_type_enum()
+                    } else {
+                        self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+                    }
+                } else {
+                    self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+                }
             }
             Type::Tuple(elements) => {
                 let type_key = self.get_tuple_struct_key(elements);
