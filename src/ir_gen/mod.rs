@@ -51,6 +51,9 @@ pub struct IRGenerator<'ctx> {
     vtable_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     vtable_globals: Rc<RefCell<HashMap<String, inkwell::values::GlobalValue<'ctx>>>>,
     vtable_method_lists: Rc<RefCell<HashMap<String, Vec<(String, String)>>>>,
+    protocol_witness_table_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
+    protocol_witness_tables: Rc<RefCell<HashMap<(String, String), inkwell::values::GlobalValue<'ctx>>>>,
+    existential_container_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -74,6 +77,9 @@ impl<'ctx> IRGenerator<'ctx> {
             vtable_types: Rc::new(RefCell::new(HashMap::new())),
             vtable_globals: Rc::new(RefCell::new(HashMap::new())),
             vtable_method_lists: Rc::new(RefCell::new(HashMap::new())),
+            protocol_witness_table_types: Rc::new(RefCell::new(HashMap::new())),
+            protocol_witness_tables: Rc::new(RefCell::new(HashMap::new())),
+            existential_container_types: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -179,11 +185,19 @@ impl<'ctx> IRGenerator<'ctx> {
         }
 
         for stmt in &program.statements {
+            self.create_protocol_witness_table_types(stmt.clone());
+        }
+
+        for stmt in &program.statements {
             self.create_struct_type_bodies(stmt.clone());
         }
 
         for stmt in &program.statements {
             self.create_class_type_bodies(stmt.clone());
+        }
+
+        for stmt in &program.statements {
+            self.create_existential_container_types(stmt.clone());
         }
 
         for stmt in &program.statements {
@@ -196,6 +210,10 @@ impl<'ctx> IRGenerator<'ctx> {
 
         for stmt in &program.statements {
             self.create_vtable_instances(stmt.clone());
+        }
+
+        for stmt in &program.statements {
+            self.create_protocol_witness_tables(stmt.clone());
         }
 
         for stmt in &program.statements {
@@ -899,6 +917,125 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn compute_protocol_witness_table_entries(&self, protocol_name: &str) -> Vec<(String, &'static str)> {
+        let scope = self.program_scope.borrow();
+        let Some(scope_ref) = scope.as_ref() else { return vec![] };
+        let Some(symbol) = scope_ref.borrow().get_symbol(protocol_name) else { return vec![] };
+        let sym_borrow = symbol.borrow();
+        let Symbol::Protocol { methods, properties, .. } = &*sym_borrow else { return vec![] };
+        let mut entries = Vec::new();
+        for m in methods {
+            if let Ok(name) = m.borrow().name() {
+                entries.push((name, "method"));
+            }
+        }
+        for p in properties {
+            if let Ok(name) = p.borrow().name() {
+                if let Some(decl) = p.borrow().get_decl().ok().flatten() {
+                    let decl_borrow = decl.borrow();
+                    if let Statement::VariableDecl { accessors, .. } = &*decl_borrow {
+                        let has_get = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get));
+                        let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
+                        if has_get { entries.push((format!("{}.getter", name), "getter")); }
+                        if has_set { entries.push((format!("{}.setter", name), "setter")); }
+                    }
+                }
+            }
+        }
+        drop(sym_borrow);
+        entries
+    }
+
+    fn create_protocol_witness_table_types(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::ProtocolDecl { name, .. } = &*statement.borrow() {
+            let protocol_name = &name.value;
+            if self.protocol_witness_table_types.borrow().contains_key(protocol_name) {
+                return;
+            }
+            let entries = self.compute_protocol_witness_table_entries(protocol_name);
+            if entries.is_empty() {
+                return;
+            }
+            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+            let mut field_types: Vec<BasicTypeEnum<'ctx>> = Vec::new();
+            for _ in &entries {
+                field_types.push(ptr_ty.into());
+            }
+            let wt_name = format!("protocol_wt.{}", protocol_name);
+            let wt_type = self.context.opaque_struct_type(&wt_name);
+            wt_type.set_body(&field_types, false);
+            self.protocol_witness_table_types
+                .borrow_mut()
+                .insert(protocol_name.clone(), wt_type);
+        }
+    }
+
+    fn create_existential_container_types(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::ProtocolDecl { name, .. } = &*statement.borrow() {
+            let protocol_name = &name.value;
+            if self.existential_container_types.borrow().contains_key(protocol_name) {
+                return;
+            }
+            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+            let field_types: Vec<BasicTypeEnum<'ctx>> = vec![ptr_ty.into(), ptr_ty.into()];
+            let container_name = format!("existential.{}", protocol_name);
+            let container_type = self.context.opaque_struct_type(&container_name);
+            container_type.set_body(&field_types, false);
+            self.existential_container_types
+                .borrow_mut()
+                .insert(protocol_name.clone(), container_type);
+        }
+    }
+
+    fn create_protocol_witness_tables(&self, statement: Rc<RefCell<Statement>>) {
+        if let Statement::ClassDecl { name, conformances, .. } = &*statement.borrow() {
+            let class_name = &name.value;
+            for conformance in conformances {
+                let conformance_expr = conformance.borrow();
+                let protocol_name = if let Expression::Type { name: pn, .. } = &*conformance_expr {
+                    pn.value.clone()
+                } else if let Expression::AnyType { inner, .. } = &*conformance_expr {
+                    if let Expression::Type { name: pn, .. } = &*inner.borrow() {
+                        pn.value.clone()
+                    } else { continue; }
+                } else { continue; };
+                drop(conformance_expr);
+
+                let Some(wt_type) = self.protocol_witness_table_types.borrow().get(&protocol_name).copied() else { continue; };
+                let entries = self.compute_protocol_witness_table_entries(&protocol_name);
+                if entries.is_empty() { continue; }
+
+                let key = (protocol_name.clone(), class_name.clone());
+                let wt_global_name = format!("__protocol_wt.{}.{}", protocol_name, class_name);
+                if self.module.get_global(&wt_global_name).is_some() {
+                    continue;
+                }
+
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                let mut const_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
+                for (entry_name, entry_kind) in &entries {
+                    let fn_name = match *entry_kind {
+                        "method" => format!("{}.{}", class_name, entry_name),
+                        "getter" => format!("{}.{}", class_name, entry_name),
+                        "setter" => format!("{}.{}", class_name, entry_name),
+                        _ => continue,
+                    };
+                    if let Some(func) = self.module.get_function(&fn_name) {
+                        const_vals.push(func.as_global_value().as_pointer_value().as_basic_value_enum());
+                    } else {
+                        const_vals.push(ptr_ty.const_null().as_basic_value_enum());
+                    }
+                }
+                let init_val = wt_type.const_named_struct(&const_vals);
+                let global = self.module.add_global(wt_type, None, &wt_global_name);
+                global.set_initializer(&init_val);
+                global.set_constant(true);
+                global.set_linkage(inkwell::module::Linkage::Internal);
+                self.protocol_witness_tables.borrow_mut().insert(key, global);
+            }
+        }
+    }
+
     fn generate_accessor_function(
         &self,
         fn_prefix: &str,
@@ -1158,7 +1295,42 @@ impl<'ctx> IRGenerator<'ctx> {
                 };
 
                 if let Some(ptr) = self.lookup_variable(&name.value) {
-                    if let Some(init) = initializer
+                    let is_protocol_ty = ty.as_ref().map_or(false, |t| matches!(&*t.borrow(), Type::Protocol(..)));
+
+                    if is_protocol_ty {
+                        if let Some(init) = initializer
+                            && let Some(init_val) = self.resolve_expression(init.clone())?
+                        {
+                            if let Some(ty) = ty
+                                && let Type::Protocol(protocol_name, _) = &*ty.borrow()
+                            {
+                                let protocol_name = protocol_name.clone();
+                                if let Some(ct) = self.existential_container_types.borrow().get(&protocol_name).copied() {
+                                    let class_ptr = if let BasicValueEnum::PointerValue(p) = init_val { p } else {
+                                        let p = self.builder.build_alloca(init_val.get_type(), "")?;
+                                        self.builder.build_store(p, init_val)?;
+                                        p
+                                    };
+                                    let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                                    self.builder.build_store(value_field, class_ptr)?;
+
+                                    if let Some(init_expr) = initializer
+                                        && let Expression::Call { callee, .. } = &*init_expr.borrow()
+                                        && let Expression::Variable { name: callee_name, .. } = &*callee.borrow()
+                                    {
+                                        let class_name = &callee_name.value;
+                                        let key = (protocol_name.clone(), class_name.to_string());
+                                        if let Some(wt_global) = self.protocol_witness_tables.borrow().get(&key).copied() {
+                                            let wt_field = self.builder.build_struct_gep(ct, ptr, 1, "")?;
+                                            self.builder.build_store(wt_field, wt_global.as_pointer_value())?;
+                                        }
+                                    }
+                                } else {
+                                    self.builder.build_store(ptr, init_val)?;
+                                }
+                            }
+                        }
+                    } else if let Some(init) = initializer
                         && let Expression::Call {
                             callee, parameters, ..
                         } = &*init.borrow()
@@ -2865,6 +3037,67 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 if let Some(ty) = &object_ty
+                    && let Type::Protocol(protocol_name, _) = &*ty.borrow()
+                {
+                    let protocol_name = protocol_name.clone();
+                    let field_name = member.value.clone();
+                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+
+                    let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                        p
+                    } else {
+                        let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                        self.builder.build_store(p, object_val)?;
+                        p
+                    };
+
+                    let ct = self.existential_container_types.borrow().get(&protocol_name).copied();
+                    let wt_type = self.protocol_witness_table_types.borrow().get(&protocol_name).copied();
+                    let entries = self.compute_protocol_witness_table_entries(&protocol_name);
+
+                    if let (Some(ct), Some(wt)) = (ct, wt_type) {
+                        let value_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                        let value_ptr = self.builder.build_load(
+                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                            value_ptr_ptr, "",
+                        )?.into_pointer_value();
+
+                        let wt_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 1, "")?;
+                        let wt_ptr = self.builder.build_load(
+                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                            wt_ptr_ptr, "",
+                        )?.into_pointer_value();
+
+                        let getter_entry = format!("{}.getter", field_name);
+                        if let Some(slot_idx) = entries.iter().position(|(n, _)| n == &getter_entry).map(|i| i as u32) {
+                            let fn_ptr_ptr = self.builder.build_struct_gep(wt, wt_ptr, slot_idx, "")?;
+                            let fn_ptr_val = self.builder.build_load(
+                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                fn_ptr_ptr, "",
+                            )?.into_pointer_value();
+
+                            let getter_name = format!("{}.{}.getter", protocol_name, field_name);
+                            if let Some(getter_fn) = self.module.get_function(&getter_name)
+                                .or_else(|| self.module.get_function(&format!("some.{}.getter", getter_name)))
+                            {
+                                let fn_type = getter_fn.get_type();
+                                let result = self.builder.build_indirect_call(
+                                    fn_type, fn_ptr_val, &[value_ptr.into()], "",
+                                )?;
+                                let result_val = match result.try_as_basic_value() {
+                                    inkwell::values::ValueKind::Basic(val) => val,
+                                    _ => anyhow::bail!("Getter call did not return a value"),
+                                };
+                                return Ok(Some(result_val));
+                            }
+                        }
+                    }
+
+                    let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                    return Ok(Some(ptr_ty.const_null().into()));
+                }
+
+                if let Some(ty) = &object_ty
                     && let Type::Enum(enum_name, _) = &*ty.borrow()
                 {
                     let case_name = member.value.clone();
@@ -3029,6 +3262,70 @@ impl<'ctx> IRGenerator<'ctx> {
 
                             method_self_ptr = Some(ptr);
                             (format!("{}.{}", class_name, method_name), false)
+                        } else if let Some(ty) = &object_ty
+                            && let Type::Protocol(protocol_name, _) = &*ty.borrow()
+                        {
+                            let protocol_name = protocol_name.clone();
+                            let object_val = self.resolve_expression(object.clone())?.unwrap();
+                            let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                p
+                            } else {
+                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(p, object_val)?;
+                                p
+                            };
+                            let method_name = &member.value;
+
+                            let container_type = self.existential_container_types.borrow().get(&protocol_name).copied();
+                            let wt_type = self.protocol_witness_table_types.borrow().get(&protocol_name).copied();
+                            let entries = self.compute_protocol_witness_table_entries(&protocol_name);
+
+                            if let (Some(ct), Some(wt)) = (container_type, wt_type) {
+                                let value_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                                let value_ptr = self.builder.build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    value_ptr_ptr, "",
+                                )?.into_pointer_value();
+
+                                let wt_ptr_ptr = self.builder.build_struct_gep(ct, ptr, 1, "")?;
+                                let wt_ptr = self.builder.build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    wt_ptr_ptr, "",
+                                )?.into_pointer_value();
+
+                                if let Some(slot_idx) = entries.iter().position(|(n, k)| *k == "method" && n == method_name).map(|i| i as u32) {
+                                    let fn_ptr_ptr = self.builder.build_struct_gep(wt, wt_ptr, slot_idx, "")?;
+                                    let fn_ptr_val = self.builder.build_load(
+                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                        fn_ptr_ptr, "",
+                                    )?.into_pointer_value();
+
+                                    let fn_name = format!("{}.{}", protocol_name, method_name);
+                                    let declared_fn = self.module.get_function(&fn_name).or_else(|| {
+                                        self.module.get_function(&format!("some.{}.{}", protocol_name, method_name))
+                                    });
+                                    if let Some(f) = declared_fn {
+                                        let fn_type = f.get_type();
+                                        let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                                        args.push(value_ptr.into());
+                                        for param in parameters {
+                                            let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                            args.push(arg_val.into());
+                                        }
+                                        let call_result = self.builder.build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
+                                        match call_result.try_as_basic_value() {
+                                            inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
+                                            _ => return Ok(None),
+                                        }
+                                    }
+                                }
+
+                                method_self_ptr = Some(value_ptr);
+                                (format!("{}.{}", protocol_name, method_name), false)
+                            } else {
+                                method_self_ptr = Some(ptr);
+                                (format!("{}.{}", protocol_name, method_name), false)
+                            }
                         } else if let Some(ty) = &object_ty
                             && let Type::Enum(enum_name, _) = &*ty.borrow()
                         {
@@ -3348,12 +3645,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Type::Protocol(name, _) => {
-                self.emit_error(
-                    TrussDiagnosticCode::UnsupportedFeature,
-                    format!("Protocol type '{}' cannot be used directly in IR generation", name),
-                    None,
-                );
-                anyhow::bail!("Protocol type not supported");
+                if let Some(container_type) = self.existential_container_types.borrow().get(name) {
+                    container_type.as_basic_type_enum()
+                } else {
+                    self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+                }
+            }
+            Type::Compound(..) => {
+                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
             Type::Tuple(elements) => {
                 let type_key = self.get_tuple_struct_key(elements);
@@ -3372,14 +3671,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         .insert(type_key, struct_type);
                     struct_type.as_basic_type_enum()
                 }
-            }
-            Type::Compound(..) => {
-                self.emit_error(
-                    TrussDiagnosticCode::UnsupportedFeature,
-                    "Compound type cannot be used directly in IR generation",
-                    None,
-                );
-                anyhow::bail!("Compound type not supported");
             }
         };
         Ok(resolved)
