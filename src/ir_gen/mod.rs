@@ -1068,51 +1068,64 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_protocol_witness_tables(&self, statement: Rc<RefCell<Statement>>) {
-        if let Statement::ClassDecl { name, conformances, .. } = &*statement.borrow() {
-            let class_name = &name.value;
-            for conformance in conformances {
-                let conformance_expr = conformance.borrow();
-                let protocol_name = if let Expression::Type { name: pn, .. } = &*conformance_expr {
+        let type_name = if let Statement::ClassDecl { name, conformances, .. } = &*statement.borrow() {
+            if conformances.is_empty() { return; }
+            name.value.clone()
+        } else if let Statement::StructDecl { name, conformances, .. } = &*statement.borrow() {
+            if conformances.is_empty() { return; }
+            name.value.clone()
+        } else {
+            return;
+        };
+        let type_name = &type_name;
+        let conformances: Vec<Rc<RefCell<Expression>>> = if let Statement::ClassDecl { conformances, .. } = &*statement.borrow() {
+            conformances.clone()
+        } else if let Statement::StructDecl { conformances, .. } = &*statement.borrow() {
+            conformances.clone()
+        } else { return; };
+
+        for conformance in &conformances {
+            let conformance_expr = conformance.borrow();
+            let protocol_name = if let Expression::Type { name: pn, .. } = &*conformance_expr {
+                pn.value.clone()
+            } else if let Expression::AnyType { inner, .. } = &*conformance_expr {
+                if let Expression::Type { name: pn, .. } = &*inner.borrow() {
                     pn.value.clone()
-                } else if let Expression::AnyType { inner, .. } = &*conformance_expr {
-                    if let Expression::Type { name: pn, .. } = &*inner.borrow() {
-                        pn.value.clone()
-                    } else { continue; }
-                } else { continue; };
-                drop(conformance_expr);
+                } else { continue; }
+            } else { continue; };
+            drop(conformance_expr);
 
-                let Some(wt_type) = self.protocol_witness_table_types.borrow().get(&protocol_name).copied() else { continue; };
-                let entries = self.compute_protocol_witness_table_entries(&protocol_name);
-                if entries.is_empty() { continue; }
+            let Some(wt_type) = self.protocol_witness_table_types.borrow().get(&protocol_name).copied() else { continue; };
+            let entries = self.compute_protocol_witness_table_entries(&protocol_name);
+            if entries.is_empty() { continue; }
 
-                let key = (protocol_name.clone(), class_name.clone());
-                let wt_global_name = format!("__protocol_wt.{}.{}", protocol_name, class_name);
-                if self.module.get_global(&wt_global_name).is_some() {
-                    continue;
-                }
-
-                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
-                let mut const_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
-                for (entry_name, entry_kind) in &entries {
-                    let fn_name = match *entry_kind {
-                        "method" => format!("{}.{}", class_name, entry_name),
-                        "getter" => format!("{}.{}", class_name, entry_name),
-                        "setter" => format!("{}.{}", class_name, entry_name),
-                        _ => continue,
-                    };
-                    if let Some(func) = self.module.get_function(&fn_name) {
-                        const_vals.push(func.as_global_value().as_pointer_value().as_basic_value_enum());
-                    } else {
-                        const_vals.push(ptr_ty.const_null().as_basic_value_enum());
-                    }
-                }
-                let init_val = wt_type.const_named_struct(&const_vals);
-                let global = self.module.add_global(wt_type, None, &wt_global_name);
-                global.set_initializer(&init_val);
-                global.set_constant(true);
-                global.set_linkage(inkwell::module::Linkage::Internal);
-                self.protocol_witness_tables.borrow_mut().insert(key, global);
+            let key = (protocol_name.clone(), type_name.clone());
+            let wt_global_name = format!("__protocol_wt.{}.{}", protocol_name, type_name);
+            if self.module.get_global(&wt_global_name).is_some() {
+                continue;
             }
+
+            let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+            let mut const_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
+            for (entry_name, entry_kind) in &entries {
+                let fn_name = match *entry_kind {
+                    "method" => format!("{}.{}", type_name, entry_name),
+                    "getter" => format!("{}.{}", type_name, entry_name),
+                    "setter" => format!("{}.{}", type_name, entry_name),
+                    _ => continue,
+                };
+                if let Some(func) = self.module.get_function(&fn_name) {
+                    const_vals.push(func.as_global_value().as_pointer_value().as_basic_value_enum());
+                } else {
+                    const_vals.push(ptr_ty.const_null().as_basic_value_enum());
+                }
+            }
+            let init_val = wt_type.const_named_struct(&const_vals);
+            let global = self.module.add_global(wt_type, None, &wt_global_name);
+            global.set_initializer(&init_val);
+            global.set_constant(true);
+            global.set_linkage(inkwell::module::Linkage::Internal);
+            self.protocol_witness_tables.borrow_mut().insert(key, global);
         }
     }
 
