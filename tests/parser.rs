@@ -3777,6 +3777,101 @@ fn test_parse_class_with_superclass_and_protocols() {
 }
 
 #[test]
+fn test_parse_struct_with_protocol_conformance() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyStruct: MyProtocol {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl {
+        name,
+        conformances,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyStruct");
+        assert_eq!(conformances.len(), 1);
+        if let Expression::Type { name: first, .. } = &*conformances[0].borrow() {
+            assert_eq!(first.value, "MyProtocol");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_with_multiple_protocol_conformances() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyStruct: SomeProtocol, AnotherProtocol, YetAnother {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl {
+        name,
+        conformances,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyStruct");
+        assert_eq!(conformances.len(), 3);
+        if let Expression::Type { name: first, .. } = &*conformances[0].borrow() {
+            assert_eq!(first.value, "SomeProtocol");
+        } else {
+            panic!();
+        }
+        if let Expression::Type { name: second, .. } = &*conformances[1].borrow() {
+            assert_eq!(second.value, "AnotherProtocol");
+        } else {
+            panic!();
+        }
+        if let Expression::Type { name: third, .. } = &*conformances[2].borrow() {
+            assert_eq!(third.value, "YetAnother");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_without_conformances_still_works() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Empty {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl {
+        name,
+        conformances,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Empty");
+        assert!(conformances.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_any_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

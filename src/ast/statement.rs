@@ -31,6 +31,7 @@ pub enum Statement {
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
+        conformances: Vec<Rc<RefCell<Expression>>>,
         body: Vec<Rc<RefCell<Statement>>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,

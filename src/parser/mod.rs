@@ -1898,12 +1898,29 @@ impl Parser {
             );
             return Err(());
         }
+        let mut conformances = Vec::new();
+        if let Some(next) = self.peek()
+            && SeparatorType::is_separator(&next, SeparatorType::Colon)
+        {
+            self.index += 1;
+            loop {
+                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+        }
         let mut body = self.parse_brace_body()?;
         self.ensure_memberwise_init(&mut body, &name);
         Ok(Statement::StructDecl {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
+            conformances,
             body,
             scope: None,
             ty: None,
