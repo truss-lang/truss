@@ -3451,8 +3451,6 @@ fn test_parse_named_tuple_type() {
     }
 }
 
-// --- Protocol tests ---
-
 #[test]
 fn test_parse_protocol_empty() {
     let engine = create_engine();
@@ -3709,8 +3707,6 @@ fn test_parse_protocol_property_get_only_default() {
         panic!();
     }
 }
-
-// --- Class conformance tests ---
 
 #[test]
 fn test_parse_class_with_protocol_conformance() {

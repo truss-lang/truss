@@ -2827,7 +2827,6 @@ impl Parser {
         }
     }
 
-    /// Parse a tuple element that may be named: `name: expr` or just `expr`.
     fn parse_maybe_named_expr(&mut self) -> Result<(Option<String>, Expression), ()> {
         if let Some(name_token) = self.peek()
             && let TokenType::Identifier = name_token.ty
@@ -2843,7 +2842,6 @@ impl Parser {
         Ok((None, expr))
     }
 
-    /// Parse a tuple type element that may be named: `name: Type` or just `Type`.
     fn parse_maybe_named_type(&mut self) -> Result<(Option<String>, Expression), ()> {
         if let Some(name_token) = self.peek()
             && let TokenType::Identifier = name_token.ty
