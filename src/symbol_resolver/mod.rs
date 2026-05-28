@@ -562,7 +562,12 @@ impl SymbolResolver {
                     }
                 }
             }
-            Statement::StructDecl { body, scope, .. } => {
+            Statement::StructDecl { body, scope, conformances, .. } => {
+                for conformance in conformances {
+                    if let Expression::Type { name, .. } = &*conformance.borrow() {
+                        let _ = self.resolve_symbol(name);
+                    }
+                }
                 self.enter_scope(scope.clone());
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
