@@ -54,6 +54,7 @@ pub enum KeywordType {
     Private,
     SelfKw,
     Protocol,
+    Any,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -142,6 +143,7 @@ impl KeywordType {
             KeywordType::Private => "private",
             KeywordType::SelfKw => "self",
             KeywordType::Protocol => "protocol",
+            KeywordType::Any => "any",
         }
         .to_string()
     }

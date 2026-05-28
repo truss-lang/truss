@@ -3775,3 +3775,39 @@ fn test_parse_class_with_superclass_and_protocols() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_any_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let x: any MyProtocol".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name,
+        type_expression: Some(ty_expr),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "x");
+        assert!(
+            matches!(&*ty_expr.borrow(), Expression::AnyType { .. }),
+            "Expected AnyType, got {:?}",
+            &*ty_expr.borrow()
+        );
+        if let Expression::AnyType { inner, .. } = &*ty_expr.borrow() {
+            assert!(
+                matches!(&*inner.borrow(), Expression::Type { name, .. } if name.value == "MyProtocol"),
+                "Expected Type(MyProtocol), got {:?}",
+                &*inner.borrow()
+            );
+        }
+    } else {
+        panic!();
+    }
+}

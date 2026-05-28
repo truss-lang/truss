@@ -1424,6 +1424,20 @@ impl TypeResolver {
                 *ty = Some(pointer_ty.clone());
                 pointer_ty
             }
+            Expression::AnyType { inner, ty } => {
+                let inner_ty = self.infer_type(inner.clone())?;
+                if !matches!(&*inner_ty.borrow(), Type::Protocol(..)) {
+                    let token = inner.borrow().token();
+                    self.emit_error(
+                        TrussDiagnosticCode::TypeError,
+                        format!("'any' must be used with a protocol type, but '{}' is not a protocol", inner_ty.borrow()),
+                        &token,
+                    );
+                    return None;
+                }
+                *ty = Some(inner_ty.clone());
+                inner_ty
+            }
             Expression::Cast {
                 expression,
                 target_type,

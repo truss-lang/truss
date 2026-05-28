@@ -711,6 +711,18 @@ impl Parser {
     }
 
     fn parse_type_expression(&mut self) -> Result<Expression, ()> {
+        if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::Any)
+        {
+            self.index += 1;
+            let inner = self.parse_type_expression()?;
+
+            return Ok(Expression::AnyType {
+                inner: Rc::new(RefCell::new(inner)),
+                ty: None,
+            });
+        }
+
         let Some(token) = self.peek() else {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedType,
