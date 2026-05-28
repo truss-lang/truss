@@ -691,8 +691,6 @@ fn test_self_keyword_method_call() {
     resolver.resolve(&program, "test".to_string());
 }
 
-// --- Protocol symbol resolver tests ---
-
 #[test]
 fn test_protocol_symbol_registered() {
     let engine = create_engine();

@@ -1433,14 +1433,30 @@ impl TypeResolver {
             }
             Expression::AnyType { inner, ty } => {
                 let inner_ty = self.infer_type(inner.clone())?;
-                if !matches!(&*inner_ty.borrow(), Type::Protocol(..)) {
-                    let token = inner.borrow().token();
-                    self.emit_error(
-                        TrussDiagnosticCode::TypeError,
-                        format!("'any' must be used with a protocol type, but '{}' is not a protocol", inner_ty.borrow()),
-                        &token,
-                    );
-                    return None;
+                match &*inner_ty.borrow() {
+                    Type::Protocol(..) => {}
+                    Type::Compound(types) => {
+                        for t in types {
+                            if !matches!(&*t.borrow(), Type::Protocol(..)) {
+                                let token = inner.borrow().token();
+                                self.emit_error(
+                                    TrussDiagnosticCode::TypeError,
+                                    format!("'any' must be used with a protocol type, but '{}' is not a protocol", inner_ty.borrow()),
+                                    &token,
+                                );
+                                return None;
+                            }
+                        }
+                    }
+                    _ => {
+                        let token = inner.borrow().token();
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeError,
+                            format!("'any' must be used with a protocol type, but '{}' is not a protocol", inner_ty.borrow()),
+                            &token,
+                        );
+                        return None;
+                    }
                 }
                 *ty = Some(inner_ty.clone());
                 inner_ty
@@ -1750,7 +1766,6 @@ impl TypeResolver {
                     }
                     Type::Tuple(elements) => {
                         let member_name = &member.value;
-                        // Try to find by name in named tuple fields
                         if let Some((_, element_ty)) = elements.iter().enumerate().find_map(|(i, (n, t))| {
                             n.as_ref().and_then(|name| {
                                 if name == member_name {
@@ -1763,7 +1778,6 @@ impl TypeResolver {
                             *ty = Some(element_ty.clone());
                             return Some(element_ty.clone());
                         }
-                        // Also try numeric index via member name (e.g. "0", "1")
                         if let Ok(idx) = member_name.parse::<usize>() {
                             if idx < elements.len() {
                                 let element_ty = elements[idx].1.clone();
@@ -1826,6 +1840,62 @@ impl TypeResolver {
                             );
                             return None;
                         }
+                    }
+                    Type::Compound(types) => {
+                        let protocol_names: Vec<String> = types.iter().filter_map(|t| {
+                            if let Type::Protocol(name, _) = &*t.borrow() {
+                                Some(name.clone())
+                            } else {
+                                None
+                            }
+                        }).collect();
+                        for protocol_name in &protocol_names {
+                            let scope = self.current_scope.as_ref().unwrap().borrow();
+                            if let Some(symbol) = scope.get_symbol(protocol_name)
+                                && let Symbol::Protocol { methods, properties, .. } = &*symbol.borrow()
+                            {
+                                for method in methods {
+                                    if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                        && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                    {
+                                        let method_ty = {
+                                            let decl_ref = decl.borrow();
+                                            if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                                ty.clone()
+                                            } else {
+                                                continue;
+                                            }
+                                        };
+                                        if let Some(t) = method_ty {
+                                            *ty = Some(t.clone());
+                                            return Some(t.clone());
+                                        }
+                                    }
+                                }
+                                for prop in properties {
+                                    if prop.borrow().name().as_ref().ok() == Some(&member.value)
+                                        && let Some(decl) = prop.borrow().get_decl().ok().flatten()
+                                        && let Statement::VariableDecl { ty: prop_ty, .. } = &*decl.borrow()
+                                        && let Some(t) = prop_ty
+                                    {
+                                        *ty = Some(t.clone());
+                                        return Some(t.clone());
+                                    }
+                                }
+                            }
+                            drop(scope);
+                        }
+                        let token = &*member;
+                        self.emit_error(
+                            TrussDiagnosticCode::FieldNotFound,
+                            format!(
+                                "Member '{}' not found on compound protocol type '{}'",
+                                member.value,
+                                object_ty.borrow()
+                            ),
+                            token,
+                        );
+                        return None;
                     }
                     _ => {
                         let token = &*member;
