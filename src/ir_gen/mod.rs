@@ -731,6 +731,24 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
+            // Generate default init for classes without explicit init declarations
+            let init_name = format!("{}.init", name.value);
+            if self.module.get_function(&init_name).is_none() {
+                let void_ty = Rc::new(RefCell::new(Type::Void));
+                let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                    Type::Void,
+                )))));
+                if let Ok(fn_type) = self.get_function_type(void_ty, vec![self_param], false) {
+                    let f = self.module.add_function(&init_name, fn_type, None);
+                    let entry = self.context.append_basic_block(f, "entry");
+                    let current_block = self.builder.get_insert_block();
+                    self.builder.position_at_end(entry);
+                    let _ = self.builder.build_return(None);
+                    if let Some(block) = current_block {
+                        self.builder.position_at_end(block);
+                    }
+                }
+            }
         }
         if let Statement::EnumDecl { name, body, .. } = &*statement.borrow() {
             for stmt in body {
@@ -1661,18 +1679,41 @@ impl<'ctx> IRGenerator<'ctx> {
                         } = &*callee.borrow()
                         && self.module.get_function(&callee_name.value).is_none()
                     {
-                        let struct_name = &callee_name.value;
-                        let fn_name = format!("{}.init", struct_name);
+                        let type_name = &callee_name.value;
+                        let fn_name = format!("{}.init", type_name);
                         if let Some(function) = self.module.get_function(&fn_name) {
-                            let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
-                                Vec::new();
-                            args.push(ptr.into());
-                            for param in parameters {
-                                let arg_val =
-                                    self.resolve_expression(param.expression.clone())?.unwrap();
-                                args.push(arg_val.into());
+                            if let Some(class_type) = self.class_types.borrow().get(type_name).cloned() {
+                                let class_ptr = self.heap_allocate(class_type.as_basic_type_enum())?;
+                                let vtable_global = self.vtable_globals.borrow().get(type_name).copied();
+                                if let Some(vt_global) = vtable_global {
+                                    let vtable_ptr_gep = self.builder.build_struct_gep(
+                                        class_type, class_ptr, 0, "",
+                                    )?;
+                                    self.builder.build_store(
+                                        vtable_ptr_gep,
+                                        vt_global.as_pointer_value(),
+                                    )?;
+                                }
+                                let i64_ty = self.context.i64_type();
+                                let rc_ptr = self.builder.build_struct_gep(class_type, class_ptr, 1, "")?;
+                                self.builder.build_store(rc_ptr, i64_ty.const_int(1, false))?;
+                                let mut args = Vec::new();
+                                args.push(class_ptr.into());
+                                for param in parameters {
+                                    let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                    args.push(arg_val.into());
+                                }
+                                self.builder.build_call(function, &args, "")?;
+                                self.builder.build_store(ptr, class_ptr)?;
+                            } else {
+                                let mut args = Vec::new();
+                                args.push(ptr.into());
+                                for param in parameters {
+                                    let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                    args.push(arg_val.into());
+                                }
+                                self.builder.build_call(function, &args, "")?;
                             }
-                            self.builder.build_call(function, &args, "")?;
                         }
                     } else if let Some(init) = initializer
                         && let Some(init_val) = self.resolve_expression(init.clone())?
