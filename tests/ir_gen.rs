@@ -1890,3 +1890,165 @@ fn test_irgen_protocol_witness_table_for_class() {
     assert!(llvm_ir.contains("__protocol_wt.Drawable.Circle"), "Witness table for (Drawable, Circle) should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("existential.Drawable"), "Existential container type should exist:\n{}", llvm_ir);
 }
+
+#[test]
+fn test_irgen_class_computed_property_getter_in_vtable() {
+    let code = r#"
+        class ViewModel {
+            var _val: Int32
+            var value: Int32 {
+                get { return _val }
+            }
+        }
+        func test() -> Int32 {
+            var vm: ViewModel
+            return vm.value
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    // Verify vtable exists with getter entry
+    assert!(llvm_ir.contains("vtable.ViewModel"), "vtable type should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__vtable.ViewModel"), "vtable global should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("ViewModel.value.getter"), "getter function should be in vtable:\n{}", llvm_ir);
+    // The read should be indirect through vtable, not a direct GEP + load of value
+    // (value is computed, not stored)
+}
+
+#[test]
+fn test_irgen_class_computed_property_setter_in_vtable() {
+    let code = r#"
+        class ViewModel {
+            var _val: Int32
+            var value: Int32 {
+                get { return _val }
+                set { _val = newValue }
+            }
+        }
+        func test() -> Int32 {
+            var vm: ViewModel
+            vm.value = 42
+            return vm.value
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    // Verify both getter and setter exist in vtable
+    assert!(llvm_ir.contains("vtable.ViewModel"), "vtable type should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("ViewModel.value.getter"), "getter should be in vtable:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("ViewModel.value.setter"), "setter should be in vtable:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_class_computed_property_inheritance_override() {
+    let code = r#"
+        class Base {
+            var value: Int32 {
+                get { return 1 }
+            }
+        }
+        class Derived: Base {
+            var value: Int32 {
+                get { return 2 }
+            }
+        }
+        func test() -> Int32 {
+            var d: Derived
+            return d.value
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    // Both classes should have vtable
+    assert!(llvm_ir.contains("vtable.Base"), "vtable.Base should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("vtable.Derived"), "vtable.Derived should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__vtable.Base"), "__vtable.Base should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__vtable.Derived"), "__vtable.Derived should exist:\n{}", llvm_ir);
+    // Base's vtable uses Base.value.getter, Derived's vtable uses Derived.value.getter (override)
+    assert!(llvm_ir.contains("Base.value.getter"), "Base getter should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("Derived.value.getter"), "Derived getter should exist:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_class_computed_property_stored_field_unchanged() {
+    let code = r#"
+        class Data {
+            let name: Int32
+        }
+        func test() -> Int32 {
+            var d: Data
+            return d.name
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    // Stored properties should not have getter/setter in vtable
+    assert!(!llvm_ir.contains("name.getter"), "Stored property should not have getter:\n{}", llvm_ir);
+    assert!(!llvm_ir.contains("name.setter"), "Stored property should not have setter:\n{}", llvm_ir);
+    // Direct field access via GEP should still work
+    assert!(llvm_ir.contains("getelementptr"), "Stored field should use GEP:\n{}", llvm_ir);
+}

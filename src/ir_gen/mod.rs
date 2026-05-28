@@ -715,6 +715,15 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
+                // Declare accessor functions for computed properties so they exist
+                // when vtable instances are created (phase 11).
+                if let Statement::VariableDecl { name: field_name, accessors, ty: Some(ty), .. } = &*stmt.borrow()
+                    && !accessors.is_empty()
+                {
+                    if let Ok(llvm_ty) = self.resolve_type(ty.clone()) {
+                        self.declare_accessor_functions(&name.value, &field_name.value, accessors, llvm_ty);
+                    }
+                }
             }
         }
         if let Statement::EnumDecl { name, body, .. } = &*statement.borrow() {
@@ -801,36 +810,80 @@ impl<'ctx> IRGenerator<'ctx> {
         let Some(scope_ref) = scope.as_ref() else { return vec![] };
         let Some(symbol) = scope_ref.borrow().get_symbol(class_name) else { return vec![] };
         let sym_borrow = symbol.borrow();
-        let Symbol::Class { methods, superclass, .. } = &*sym_borrow else { return vec![] };
+        let Symbol::Class { methods, fields, superclass, .. } = &*sym_borrow else { return vec![] };
         let own_method_names: Vec<String> = methods.iter().filter_map(|m| m.borrow().name().ok()).collect();
 
-        let result = if let Some(super_weak) = superclass {
+        // Collect computed property getter/setter entries for this class.
+        let mut own_property_entry_names: Vec<String> = Vec::new();
+        for field in fields {
+            if let Ok(Some(field_decl)) = field.borrow().get_decl()
+                && let Ok(field_name) = field.borrow().name()
+                && let Statement::VariableDecl { accessors, .. } = &*field_decl.borrow()
+            {
+                let has_get = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get));
+                let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
+                if has_get {
+                    own_property_entry_names.push(format!("{}.getter", field_name));
+                }
+                if has_set {
+                    own_property_entry_names.push(format!("{}.setter", field_name));
+                }
+            }
+        }
+
+        let result: Vec<(String, String)> = if let Some(super_weak) = superclass {
             if let Some(super_sym) = super_weak.0.upgrade() {
                 let super_borrow = super_sym.borrow();
                 if let Symbol::Class { name: super_name, .. } = &*super_borrow {
-                    let super_methods = self.compute_vtable_method_list(&super_name);
+                    let super_entries = self.compute_vtable_method_list(&super_name);
                     let mut merged: Vec<(String, String)> = Vec::new();
-                    for (method_name, owner) in super_methods {
-                        if own_method_names.contains(&method_name) {
-                            merged.push((method_name.clone(), class_name.to_string()));
+                    // Inherit entries from superclass, overriding if this class defines the same name
+                    for (entry_name, owner) in super_entries {
+                        if own_method_names.contains(&entry_name) || own_property_entry_names.contains(&entry_name) {
+                            merged.push((entry_name.clone(), class_name.to_string()));
                         } else {
-                            merged.push((method_name, owner));
+                            merged.push((entry_name, owner));
                         }
                     }
+                    // Add own methods not already merged
                     for method_name in &own_method_names {
                         if !merged.iter().any(|(n, _)| n == method_name) {
                             merged.push((method_name.clone(), class_name.to_string()));
                         }
                     }
+                    // Add own property entries not already merged
+                    for prop_entry in &own_property_entry_names {
+                        if !merged.iter().any(|(n, _)| n == prop_entry) {
+                            merged.push((prop_entry.clone(), class_name.to_string()));
+                        }
+                    }
                     merged
                 } else {
-                    own_method_names.iter().map(|n| (n.clone(), class_name.to_string())).collect()
+                    let mut all: Vec<(String, String)> = own_method_names.iter()
+                        .map(|n| (n.clone(), class_name.to_string()))
+                        .collect();
+                    for pe in &own_property_entry_names {
+                        all.push((pe.clone(), class_name.to_string()));
+                    }
+                    all
                 }
             } else {
-                own_method_names.iter().map(|n| (n.clone(), class_name.to_string())).collect()
+                let mut all: Vec<(String, String)> = own_method_names.iter()
+                    .map(|n| (n.clone(), class_name.to_string()))
+                    .collect();
+                for pe in &own_property_entry_names {
+                    all.push((pe.clone(), class_name.to_string()));
+                }
+                all
             }
         } else {
-            own_method_names.iter().map(|n| (n.clone(), class_name.to_string())).collect()
+            let mut all: Vec<(String, String)> = own_method_names.iter()
+                .map(|n| (n.clone(), class_name.to_string()))
+                .collect();
+            for pe in &own_property_entry_names {
+                all.push((pe.clone(), class_name.to_string()));
+            }
+            all
         };
 
         drop(sym_borrow);
@@ -1033,6 +1086,46 @@ impl<'ctx> IRGenerator<'ctx> {
                 global.set_linkage(inkwell::module::Linkage::Internal);
                 self.protocol_witness_tables.borrow_mut().insert(key, global);
             }
+        }
+    }
+
+    fn declare_accessor_functions(
+        &self,
+        struct_name: &str,
+        field_name: &str,
+        accessors: &[Accessor],
+        llvm_field_type: BasicTypeEnum<'ctx>,
+    ) {
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::from(0));
+        let fn_prefix = format!("{}.{}", struct_name, field_name);
+
+        for accessor in accessors {
+            let fn_name = match accessor.kind {
+                AccessorKind::Get => format!("{}.getter", fn_prefix),
+                AccessorKind::Set => format!("{}.setter", fn_prefix),
+                AccessorKind::WillSet => format!("{}.willSet", fn_prefix),
+                AccessorKind::DidSet => format!("{}.didSet", fn_prefix),
+            };
+
+            if self.module.get_function(&fn_name).is_some() {
+                continue;
+            }
+
+            let is_getter = matches!(accessor.kind, AccessorKind::Get);
+            let has_param = !is_getter;
+
+            let mut param_types: Vec<BasicMetadataTypeEnum<'ctx>> = vec![ptr_type.into()];
+            if has_param {
+                param_types.push(llvm_field_type.into());
+            }
+
+            let fn_type = if is_getter {
+                llvm_field_type.fn_type(&param_types, false)
+            } else {
+                self.context.void_type().fn_type(&param_types, false)
+            };
+
+            self.module.add_function(&fn_name, fn_type, None);
         }
     }
 
@@ -2471,6 +2564,46 @@ impl<'ctx> IRGenerator<'ctx> {
                                 ptr
                             };
 
+                            // Check vtable for computed property setter
+                            let setter_entry = format!("{}.setter", field_name);
+                            if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, &setter_entry) {
+                                let class_type = *self.class_types.borrow().get(&class_name).unwrap();
+                                let vtable_ptr_ptr = self.builder.build_struct_gep(
+                                    class_type, class_ptr, 0, "",
+                                )?;
+                                let vtable_ptr = self.builder.build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    vtable_ptr_ptr,
+                                    "",
+                                )?.into_pointer_value();
+
+                                let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
+                                let fn_ptr_ptr = self.builder.build_struct_gep(
+                                    vtable_type, vtable_ptr, slot_idx, "",
+                                )?;
+                                let fn_ptr_val = self.builder.build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    fn_ptr_ptr,
+                                    "",
+                                )?.into_pointer_value();
+
+                                let method_list = self.compute_vtable_method_list(&class_name);
+                                let (_, owner) = method_list
+                                    .iter()
+                                    .find(|(n, _)| n == &setter_entry)
+                                    .unwrap();
+                                let declared_fn_name = format!("{}.{}.setter", owner, field_name);
+                                let declared_fn = self.module.get_function(&declared_fn_name).ok_or_else(|| {
+                                    anyhow::anyhow!("Setter function {} not found", declared_fn_name)
+                                })?;
+                                let fn_type = declared_fn.get_type();
+
+                                self.builder.build_indirect_call(
+                                    fn_type, fn_ptr_val, &[class_ptr.into(), right_val.into()], "",
+                                )?;
+                                return Ok(Some(right_val));
+                            }
+
                             let field_index = self.get_stored_class_field_index(&class_name, &field_name)?;
                             let field_ptr = self.builder.build_struct_gep(
                                 *self.class_types.borrow().get(&class_name).unwrap(),
@@ -3022,6 +3155,51 @@ impl<'ctx> IRGenerator<'ctx> {
                         ptr
                     };
 
+                    // Check vtable for computed property getter
+                    let getter_entry = format!("{}.getter", field_name);
+                    if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, &getter_entry) {
+                        let class_type = *self.class_types.borrow().get(&class_name).unwrap();
+                        let vtable_ptr_ptr = self.builder.build_struct_gep(
+                            class_type, class_ptr, 0, "",
+                        )?;
+                        let vtable_ptr = self.builder.build_load(
+                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                            vtable_ptr_ptr,
+                            "",
+                        )?.into_pointer_value();
+
+                        let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
+                        let fn_ptr_ptr = self.builder.build_struct_gep(
+                            vtable_type, vtable_ptr, slot_idx, "",
+                        )?;
+                        let fn_ptr_val = self.builder.build_load(
+                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                            fn_ptr_ptr,
+                            "",
+                        )?.into_pointer_value();
+
+                        let method_list = self.compute_vtable_method_list(&class_name);
+                        let (_, owner) = method_list
+                            .iter()
+                            .find(|(n, _)| n == &getter_entry)
+                            .unwrap();
+                        let declared_fn_name = format!("{}.{}.getter", owner, field_name);
+                        let declared_fn = self.module.get_function(&declared_fn_name).ok_or_else(|| {
+                            anyhow::anyhow!("Getter function {} not found", declared_fn_name)
+                        })?;
+                        let fn_type = declared_fn.get_type();
+
+                        let result = self.builder.build_indirect_call(
+                            fn_type, fn_ptr_val, &[class_ptr.into()], "",
+                        )?;
+                        let result_val = match result.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => val,
+                            _ => anyhow::bail!("Getter call did not return a value"),
+                        };
+                        return Ok(Some(result_val));
+                    }
+
+                    // Fall back to direct field access (stored property)
                     let field_index = self.get_stored_class_field_index(&class_name, &field_name)?;
 
                     let field_ptr = self.builder.build_struct_gep(
