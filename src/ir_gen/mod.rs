@@ -1594,15 +1594,14 @@ impl<'ctx> IRGenerator<'ctx> {
                                             let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
                                             self.builder.build_store(value_field, class_ptr)?;
 
-                                            if let Some(init_expr) = initializer
-                                                && let Expression::Call { callee, .. } = &*init_expr.borrow()
-                                                && let Expression::Variable { name: callee_name, .. } = &*callee.borrow()
-                                            {
-                                                let class_name = &callee_name.value;
-                                                let key = (protocol_name.clone(), class_name.to_string());
-                                                if let Some(wt_global) = self.protocol_witness_tables.borrow().get(&key).copied() {
-                                                    let wt_field = self.builder.build_struct_gep(ct, ptr, 1, "")?;
-                                                    self.builder.build_store(wt_field, wt_global.as_pointer_value())?;
+                                            if let Some(init_expr) = initializer {
+                                                let concrete_name = self.extract_concrete_type_name(init_expr);
+                                                if let Some(ref concrete_name) = concrete_name {
+                                                    let key = (protocol_name.clone(), concrete_name.clone());
+                                                    if let Some(wt_global) = self.protocol_witness_tables.borrow().get(&key).copied() {
+                                                        let wt_field = self.builder.build_struct_gep(ct, ptr, 1, "")?;
+                                                        self.builder.build_store(wt_field, wt_global.as_pointer_value())?;
+                                                    }
                                                 }
                                             }
                                         } else {
@@ -1622,16 +1621,15 @@ impl<'ctx> IRGenerator<'ctx> {
                                                 let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
                                                 self.builder.build_store(value_field, class_ptr)?;
 
-                                                if let Some(init_expr) = initializer
-                                                    && let Expression::Call { callee, .. } = &*init_expr.borrow()
-                                                    && let Expression::Variable { name: callee_name, .. } = &*callee.borrow()
-                                                {
-                                                    let concrete_name = &callee_name.value;
-                                                    for (i, pname) in names.iter().enumerate() {
-                                                        let key = (pname.clone(), concrete_name.to_string());
-                                                        if let Some(wt_global) = self.protocol_witness_tables.borrow().get(&key).copied() {
-                                                            let wt_field = self.builder.build_struct_gep(ct, ptr, (i + 1) as u32, "")?;
-                                                            self.builder.build_store(wt_field, wt_global.as_pointer_value())?;
+                                                if let Some(init_expr) = initializer {
+                                                    let concrete_name = self.extract_concrete_type_name(init_expr);
+                                                    if let Some(ref concrete_name) = concrete_name {
+                                                        for (i, pname) in names.iter().enumerate() {
+                                                            let key = (pname.clone(), concrete_name.clone());
+                                                            if let Some(wt_global) = self.protocol_witness_tables.borrow().get(&key).copied() {
+                                                                let wt_field = self.builder.build_struct_gep(ct, ptr, (i + 1) as u32, "")?;
+                                                                self.builder.build_store(wt_field, wt_global.as_pointer_value())?;
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -3783,12 +3781,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                                         fn_ptr_ptr, "",
                                                     )?.into_pointer_value();
 
-                                                    let fn_name = format!("{}.{}", pname, method_name);
-                                                    let declared_fn = self.module.get_function(&fn_name).or_else(|| {
-                                                        self.module.get_function(&format!("some.{}.{}", pname, method_name))
-                                                    });
-                                                    if let Some(f) = declared_fn {
-                                                        let fn_type = f.get_type();
+                                                    let method_fn = self.get_protocol_method_fn_type(pname, method_name);
+                                                    if let Some(fn_type) = method_fn {
                                                         let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
                                                         args.push(value_ptr.into());
                                                         for param in parameters {
@@ -3849,12 +3843,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                             fn_ptr_ptr, "",
                                         )?.into_pointer_value();
 
-                                        let fn_name = format!("{}.{}", protocol_name, method_name);
-                                        let declared_fn = self.module.get_function(&fn_name).or_else(|| {
-                                            self.module.get_function(&format!("some.{}.{}", protocol_name, method_name))
-                                        });
-                                        if let Some(f) = declared_fn {
-                                            let fn_type = f.get_type();
+                                        let method_fn = self.get_protocol_method_fn_type(&protocol_name, &method_name);
+                                        if let Some(fn_type) = method_fn {
                                             let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
                                             args.push(value_ptr.into());
                                             for param in parameters {
@@ -4115,6 +4105,54 @@ impl<'ctx> IRGenerator<'ctx> {
         } else {
             let return_basic_type = self.resolve_type(return_type.clone())?;
             Ok(return_basic_type.fn_type(&param_basic_types, is_vararg))
+        }
+    }
+
+    fn get_protocol_method_fn_type(
+        &self,
+        protocol_name: &str,
+        method_name: &str,
+    ) -> Option<inkwell::types::FunctionType<'ctx>> {
+        let scope = self.program_scope.borrow();
+        let scope_ref = scope.as_ref()?;
+        let symbol = scope_ref.borrow().get_symbol(protocol_name)?;
+        let Symbol::Protocol { methods, .. } = &*symbol.borrow() else { return None };
+
+        let method_types: Vec<_> = methods.iter().filter_map(|m| {
+            let m_borrow = m.borrow();
+            let Ok(name) = m_borrow.name() else { return None };
+            if name != method_name { return None }
+            let Ok(Some(decl)) = m_borrow.get_decl() else { return None };
+            drop(m_borrow);
+            let decl_borrow = decl.borrow();
+            let Statement::FunctionDecl { ty, .. } = &*decl_borrow else { return None };
+            let Some(ty) = ty else { return None };
+            let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() else { return None };
+            Some((return_type.clone(), param_types.clone(), *is_vararg))
+        }).collect();
+
+        let (return_type, param_types, is_vararg) = method_types.into_iter().next()?;
+        self.get_function_type(return_type, param_types, is_vararg).ok()
+    }
+
+    fn extract_concrete_type_name(&self, expr: &Rc<RefCell<Expression>>) -> Option<String> {
+        let e = expr.borrow();
+        match &*e {
+            Expression::Call { callee, .. } => {
+                if let Expression::Variable { name: callee_name, .. } = &*callee.borrow() {
+                    Some(callee_name.value.clone())
+                } else {
+                    None
+                }
+            }
+            Expression::Variable { ty, .. } => {
+                let ty = ty.as_ref()?;
+                match &*ty.borrow() {
+                    Type::Struct(name, _) | Type::Class(name, _) => Some(name.clone()),
+                    _ => None,
+                }
+            }
+            _ => None,
         }
     }
     fn resolve_type(&self, ty: Rc<RefCell<Type>>) -> Result<BasicTypeEnum<'ctx>> {
