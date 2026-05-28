@@ -1586,13 +1586,16 @@ impl<'ctx> IRGenerator<'ctx> {
                                         let protocol_name = protocol_name.clone();
                                         drop(ty_borrow);
                                         if let Some(ct) = self.existential_container_types.borrow().get(&protocol_name).copied() {
-                                            let class_ptr = if let BasicValueEnum::PointerValue(p) = init_val { p } else {
-                                                let p = self.builder.build_alloca(init_val.get_type(), "")?;
-                                                self.builder.build_store(p, init_val)?;
-                                                p
+                                            let data_ptr = match init_val {
+                                                BasicValueEnum::PointerValue(p) => p,
+                                                val => {
+                                                    let heap = self.heap_allocate(val.get_type())?;
+                                                    self.builder.build_store(heap, val)?;
+                                                    heap
+                                                }
                                             };
                                             let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
-                                            self.builder.build_store(value_field, class_ptr)?;
+                                            self.builder.build_store(value_field, data_ptr)?;
 
                                             if let Some(init_expr) = initializer {
                                                 let concrete_name = self.extract_concrete_type_name(init_expr);
@@ -1613,13 +1616,16 @@ impl<'ctx> IRGenerator<'ctx> {
                                         if !names.is_empty() {
                                             let compound_key = self.build_compound_protocol_key(&names);
                                             if let Some(ct) = self.existential_container_types.borrow().get(&compound_key).copied() {
-                                                let class_ptr = if let BasicValueEnum::PointerValue(p) = init_val { p } else {
-                                                    let p = self.builder.build_alloca(init_val.get_type(), "")?;
-                                                    self.builder.build_store(p, init_val)?;
-                                                    p
+                                                let data_ptr = match init_val {
+                                                    BasicValueEnum::PointerValue(p) => p,
+                                                    val => {
+                                                        let heap = self.heap_allocate(val.get_type())?;
+                                                        self.builder.build_store(heap, val)?;
+                                                        heap
+                                                    }
                                                 };
                                                 let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
-                                                self.builder.build_store(value_field, class_ptr)?;
+                                                self.builder.build_store(value_field, data_ptr)?;
 
                                                 if let Some(init_expr) = initializer {
                                                     let concrete_name = self.extract_concrete_type_name(init_expr);
@@ -4155,6 +4161,28 @@ impl<'ctx> IRGenerator<'ctx> {
             _ => None,
         }
     }
+
+    fn heap_allocate(&self, llvm_type: BasicTypeEnum<'ctx>) -> Result<PointerValue<'ctx>> {
+        let i64_ty = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+        let null_ptr = self.builder.build_int_to_ptr(i64_ty.const_int(0, false), ptr_ty, "")?;
+        let size_val = unsafe {
+            let gep = self.builder.build_gep(llvm_type, null_ptr, &[i64_ty.const_int(1, false)], "")?;
+            self.builder.build_ptr_to_int(gep, i64_ty, "")?
+        };
+        let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+            let fn_ty = ptr_ty.fn_type(&[i64_ty.into()], false);
+            self.module.add_function("malloc", fn_ty, None)
+        });
+        let result = self.builder.build_call(malloc_fn, &[size_val.into()], "")?;
+        match result.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(inkwell::values::BasicValueEnum::PointerValue(p)) => {
+                Ok(p)
+            }
+            _ => anyhow::bail!("malloc expected to return a pointer"),
+        }
+    }
+
     fn resolve_type(&self, ty: Rc<RefCell<Type>>) -> Result<BasicTypeEnum<'ctx>> {
         let resolved = match &*ty.borrow() {
             Type::Int8 => self.context.i8_type().into(),
