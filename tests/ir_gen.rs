@@ -2132,3 +2132,171 @@ fn test_irgen_class_stored_var_auto_getter_and_setter() {
     assert!(llvm_ir.contains("Data.value.getter"), "var should have getter:\n{}", llvm_ir);
     assert!(llvm_ir.contains("Data.value.setter"), "var should have setter:\n{}", llvm_ir);
 }
+
+#[test]
+fn test_irgen_struct_auto_deinit() {
+    let code = r#"
+        struct Data {
+            var value: Int32
+        }
+        func test() -> Int32 {
+            var d = Data(value: 42)
+            return d.value
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("Data.deinit"), "struct should have deinit function:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_enum_auto_deinit() {
+    let code = r#"
+        enum Option {
+            case none
+            case some(Int32)
+        }
+        func test() -> Int32 {
+            var e = Option.some(42)
+            return 0
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("Option.deinit"), "enum should have deinit function:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_struct_deinit_called_on_scope_exit() {
+    let code = r#"
+        struct Counter {
+            var value: Int32
+        }
+        func test() -> Int32 {
+            var c = Counter(value: 42)
+            return c.value
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("Counter.deinit"), "struct deinit function should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("call void @Counter.deinit"), "deinit should be called on scope exit:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_user_defined_struct_deinit() {
+    let code = r#"
+        struct Data {
+            var value: Int32
+            deinit {
+                var dummy = 1
+            }
+        }
+        func test() -> Int32 {
+            var d: Data
+            return 0
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("Data.deinit"), "struct deinit function should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("call void @Data.deinit"), "deinit should be called on scope exit:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_enum_deinit_called_on_scope_exit() {
+    let code = r#"
+        enum Option {
+            case none
+            case some(Int32)
+        }
+        func test() -> Int32 {
+            var e = Option.some(42)
+            return 0
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("Option.deinit"), "enum deinit function should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("call void @Option.deinit"), "deinit should be called on scope exit:\n{}", llvm_ir);
+}

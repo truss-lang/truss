@@ -24,12 +24,14 @@ use crate::{
 
 struct Scope<'ctx> {
     variables: HashMap<String, PointerValue<'ctx>>,
+    deferred_vars: Vec<(PointerValue<'ctx>, String)>,
 }
 
 impl<'ctx> Scope<'ctx> {
     fn new() -> Self {
         Self {
             variables: HashMap::new(),
+            deferred_vars: Vec::new(),
         }
     }
 }
@@ -125,6 +127,21 @@ impl<'ctx> IRGenerator<'ctx> {
                 let alloca_name = self.unique_alloca_name(&name.value);
                 let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
                 self.declare_variable(name.value.clone(), ptr);
+
+                if let Some(ty) = ty {
+                    let ty_borrow = ty.borrow();
+                    if let Type::Struct(type_name, _) = &*ty_borrow {
+                        let type_name = type_name.clone();
+                        drop(ty_borrow);
+                        let mut stack = self.scope_stack.borrow_mut();
+                        stack.last_mut().unwrap().deferred_vars.push((ptr, type_name));
+                    } else if let Type::Enum(type_name, _) = &*ty_borrow {
+                        let type_name = type_name.clone();
+                        drop(ty_borrow);
+                        let mut stack = self.scope_stack.borrow_mut();
+                        stack.last_mut().unwrap().deferred_vars.push((ptr, type_name));
+                    }
+                }
             }
         }
 
@@ -147,7 +164,16 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn exit_scope(&self) {
-        self.scope_stack.borrow_mut().pop();
+        let mut stack = self.scope_stack.borrow_mut();
+        if let Some(scope) = stack.last() {
+            for (var_ptr, type_name) in &scope.deferred_vars {
+                let deinit_name = format!("{}.deinit", type_name);
+                if let Some(deinit_fn) = self.module.get_function(&deinit_name) {
+                    let _ = self.builder.build_call(deinit_fn, &[(*var_ptr).into()], "");
+                }
+            }
+        }
+        stack.pop();
     }
 
     fn declare_variable(&self, name: String, ptr: PointerValue<'ctx>) {
@@ -680,6 +706,36 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
+                if let Statement::DeinitDecl { ty: Some(ty), .. } = &*stmt.borrow()
+                    && let Type::Function(_, return_type, _) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), vec![self_param], false)
+                    {
+                        let llvm_name = format!("{}.deinit", name.value);
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
+            }
+            let deinit_name = format!("{}.deinit", name.value);
+            if self.module.get_function(&deinit_name).is_none() {
+                let void_ty = Rc::new(RefCell::new(Type::Void));
+                let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                    Type::Void,
+                )))));
+                if let Ok(fn_type) = self.get_function_type(void_ty, vec![self_param], false) {
+                    let f = self.module.add_function(&deinit_name, fn_type, None);
+                    let entry = self.context.append_basic_block(f, "entry");
+                    let current_block = self.builder.get_insert_block();
+                    self.builder.position_at_end(entry);
+                    let _ = self.builder.build_return(None);
+                    if let Some(block) = current_block {
+                        self.builder.position_at_end(block);
+                    }
+                }
             }
         }
         if let Statement::ClassDecl { name, body, .. } = &*statement.borrow() {
@@ -734,6 +790,19 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                 }
+                if let Statement::DeinitDecl { ty: Some(ty), .. } = &*stmt.borrow()
+                    && let Type::Function(_, return_type, _) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), vec![self_param], false)
+                    {
+                        let llvm_name = format!("{}.deinit", name.value);
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
             }
             let init_name = format!("{}.init", name.value);
             if self.module.get_function(&init_name).is_none() {
@@ -784,6 +853,36 @@ impl<'ctx> IRGenerator<'ctx> {
                 {
                     let llvm_name = format!("{}.{}", name.value, method_name.value);
                     self.module.add_function(&llvm_name, function_type, None);
+                }
+                if let Statement::DeinitDecl { ty: Some(ty), .. } = &*stmt.borrow()
+                    && let Type::Function(_, return_type, _) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), vec![self_param], false)
+                    {
+                        let llvm_name = format!("{}.deinit", name.value);
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
+            }
+            let deinit_name = format!("{}.deinit", name.value);
+            if self.module.get_function(&deinit_name).is_none() {
+                let void_ty = Rc::new(RefCell::new(Type::Void));
+                let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                    Type::Void,
+                )))));
+                if let Ok(fn_type) = self.get_function_type(void_ty, vec![self_param], false) {
+                    let f = self.module.add_function(&deinit_name, fn_type, None);
+                    let entry = self.context.append_basic_block(f, "entry");
+                    let current_block = self.builder.get_insert_block();
+                    self.builder.position_at_end(entry);
+                    let _ = self.builder.build_return(None);
+                    if let Some(block) = current_block {
+                        self.builder.position_at_end(block);
+                    }
                 }
             }
         }
@@ -2014,6 +2113,52 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     let struct_name_clone = struct_name.clone();
                     self.auto_assign_init_fields(&struct_name_clone, self_ptr, parameters);
+
+                    match &*body.borrow() {
+                        FunctionBody::Statements(stmts) => {
+                            self.enter_scope_with_stmts(stmts)?;
+                            for stmt in stmts {
+                                let terminates = self.resolve_statement(stmt.clone())?;
+                                if terminates {
+                                    break;
+                                }
+                            }
+                            self.builder.build_return(None)?;
+                            self.exit_scope();
+                        }
+                        FunctionBody::Expression(expr) => {
+                            self.resolve_expression(expr.clone())?;
+                            self.builder.build_return(None)?;
+                        }
+                        FunctionBody::None => {
+                            self.builder.build_return(None)?;
+                        }
+                    }
+
+                    if let Some(block) = current_block {
+                        self.builder.position_at_end(block);
+                    }
+                }
+                Ok(false)
+            }
+            Statement::DeinitDecl {
+                ty: Some(ty),
+                body,
+                ..
+            } => {
+                if let Type::Function(_, _return_type, _) = &*ty.borrow() {
+                    let struct_name = self.current_struct.borrow().clone().unwrap();
+                    let fn_name = format!("{}.deinit", struct_name);
+                    let function = self.module.get_function(&fn_name).unwrap();
+
+                    let current_block = self.builder.get_insert_block();
+                    let entry_block = self.context.append_basic_block(function, "entry");
+                    self.builder.position_at_end(entry_block);
+
+                    self.enter_scope();
+                    let self_ptr = function.get_nth_param(0).unwrap();
+                    let self_ptr = self_ptr.into_pointer_value();
+                    self.declare_variable("self".to_string(), self_ptr);
 
                     match &*body.borrow() {
                         FunctionBody::Statements(stmts) => {
