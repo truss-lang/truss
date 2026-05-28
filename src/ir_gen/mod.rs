@@ -6,7 +6,7 @@ use inkwell::{
     context::Context,
     module::Module,
     types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum},
-    values::{BasicValue, BasicValueEnum, PointerValue},
+    values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue},
 };
 
 use crate::{
@@ -15,8 +15,8 @@ use crate::{
         node::Program,
         statement::{Accessor, AccessorKind, FunctionBody, Parameter, Pattern, ProtocolMember, Statement, VariadicKind},
     },
-    diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
-    lexer::token::{Token, TokenType},
+    diag::{TrussDiagnosticEngine, new_diagnostic, primary_label_from_token, TrussDiagnosticCode},
+    lexer::token::{KeywordType, Token, TokenType},
     scope::Scope as TrussScope,
     symbol::Symbol,
     types::Type,
@@ -715,13 +715,26 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
-                // Declare accessor functions for computed properties so they exist
+                // Declare accessor functions for all class fields so they exist
                 // when vtable instances are created (phase 11).
-                if let Statement::VariableDecl { name: field_name, accessors, ty: Some(ty), .. } = &*stmt.borrow()
-                    && !accessors.is_empty()
-                {
+                // For stored properties (no explicit get/set), also declare getter/setter.
+                if let Statement::VariableDecl { name: field_name, accessors, ty: Some(ty), token, .. } = &*stmt.borrow() {
+                    let has_explicit_get = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get));
+                    let has_explicit_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
                     if let Ok(llvm_ty) = self.resolve_type(ty.clone()) {
-                        self.declare_accessor_functions(&name.value, &field_name.value, accessors, llvm_ty);
+                        if has_explicit_get || has_explicit_set {
+                            // Computed property — declare user-defined accessors
+                            self.declare_accessor_functions(&name.value, &field_name.value, accessors, llvm_ty);
+                        } else {
+                            // Stored property or willSet/didSet — declare auto-generated getter + setter
+                            let is_var = matches!(&token.ty, TokenType::Keyword { keyword: KeywordType::Var });
+                            // Declare getter (always)
+                            self.declare_accessor_fn(&name.value, &field_name.value, true, llvm_ty);
+                            // Declare setter if var
+                            if is_var {
+                                self.declare_accessor_fn(&name.value, &field_name.value, false, llvm_ty);
+                            }
+                        }
                     }
                 }
             }
@@ -813,20 +826,34 @@ impl<'ctx> IRGenerator<'ctx> {
         let Symbol::Class { methods, fields, superclass, .. } = &*sym_borrow else { return vec![] };
         let own_method_names: Vec<String> = methods.iter().filter_map(|m| m.borrow().name().ok()).collect();
 
-        // Collect computed property getter/setter entries for this class.
+        // Collect property getter/setter entries for this class.
+        // For stored properties (no explicit get/set), auto-generate entries:
+        //   let → getter only, var → getter + setter.
+        // For computed properties (with explicit get/set), use the explicit ones.
         let mut own_property_entry_names: Vec<String> = Vec::new();
         for field in fields {
             if let Ok(Some(field_decl)) = field.borrow().get_decl()
                 && let Ok(field_name) = field.borrow().name()
-                && let Statement::VariableDecl { accessors, .. } = &*field_decl.borrow()
+                && let Statement::VariableDecl { accessors, token, .. } = &*field_decl.borrow()
             {
-                let has_get = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get));
-                let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
-                if has_get {
+                let has_explicit_get = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get));
+                let has_explicit_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
+
+                if has_explicit_get || has_explicit_set {
+                    // Computed property with explicit getter/setter
+                    if has_explicit_get {
+                        own_property_entry_names.push(format!("{}.getter", field_name));
+                    }
+                    if has_explicit_set {
+                        own_property_entry_names.push(format!("{}.setter", field_name));
+                    }
+                } else {
+                    // Stored property or willSet/didSet only — auto-generate getter/setter
+                    let is_var = matches!(&token.ty, TokenType::Keyword { keyword: KeywordType::Var });
                     own_property_entry_names.push(format!("{}.getter", field_name));
-                }
-                if has_set {
-                    own_property_entry_names.push(format!("{}.setter", field_name));
+                    if is_var {
+                        own_property_entry_names.push(format!("{}.setter", field_name));
+                    }
                 }
             }
         }
@@ -1129,6 +1156,35 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn declare_accessor_fn(
+        &self,
+        struct_name: &str,
+        field_name: &str,
+        is_getter: bool,
+        llvm_field_type: BasicTypeEnum<'ctx>,
+    ) {
+        let fn_name = if is_getter {
+            format!("{}.{}.getter", struct_name, field_name)
+        } else {
+            format!("{}.{}.setter", struct_name, field_name)
+        };
+        if self.module.get_function(&fn_name).is_some() {
+            return;
+        }
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::from(0));
+        let param_types: Vec<BasicMetadataTypeEnum<'ctx>> = if is_getter {
+            vec![ptr_type.into()]
+        } else {
+            vec![ptr_type.into(), llvm_field_type.into()]
+        };
+        let fn_type = if is_getter {
+            llvm_field_type.fn_type(&param_types, false)
+        } else {
+            self.context.void_type().fn_type(&param_types, false)
+        };
+        self.module.add_function(&fn_name, fn_type, None);
+    }
+
     fn generate_accessor_function(
         &self,
         fn_prefix: &str,
@@ -1197,10 +1253,14 @@ impl<'ctx> IRGenerator<'ctx> {
             self.context.void_type().fn_type(&param_types, false)
         };
 
-        if self.module.get_function(&fn_name).is_some() {
-            return Ok(());
-        }
-        let function = self.module.add_function(&fn_name, fn_type, None);
+        let function: FunctionValue<'ctx> = if let Some(existing_fn) = self.module.get_function(&fn_name) {
+            if existing_fn.get_first_basic_block().is_some() {
+                return Ok(());
+            }
+            existing_fn
+        } else {
+            self.module.add_function(&fn_name, fn_type, None)
+        };
         let current_block = self.builder.get_insert_block();
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
@@ -1248,6 +1308,91 @@ impl<'ctx> IRGenerator<'ctx> {
         self.exit_scope();
 
         *self.current_accessor_struct.borrow_mut() = None;
+
+        if let Some(block) = current_block {
+            self.builder.position_at_end(block);
+        }
+        Ok(())
+    }
+
+    fn generate_auto_accessor(
+        &self,
+        fn_prefix: &str,
+        field_name: &str,
+        is_getter: bool,
+        llvm_var_type: BasicTypeEnum<'ctx>,
+        struct_name: &str,
+        accessors: &[Accessor],
+    ) -> Result<()> {
+        let fn_name = if is_getter {
+            format!("{}.getter", fn_prefix)
+        } else {
+            format!("{}.setter", fn_prefix)
+        };
+
+        let function: FunctionValue<'ctx> = if let Some(existing_fn) = self.module.get_function(&fn_name) {
+            if existing_fn.get_first_basic_block().is_some() {
+                return Ok(());
+            }
+            existing_fn
+        } else {
+            let ptr_type = self.context.ptr_type(inkwell::AddressSpace::from(0));
+            let param_types: Vec<BasicMetadataTypeEnum<'ctx>> = if is_getter {
+                vec![ptr_type.into()]
+            } else {
+                vec![ptr_type.into(), llvm_var_type.into()]
+            };
+            let fn_type = if is_getter {
+                llvm_var_type.fn_type(&param_types, false)
+            } else {
+                self.context.void_type().fn_type(&param_types, false)
+            };
+            self.module.add_function(&fn_name, fn_type, None)
+        };
+        let current_block = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+
+        let ptr_param = function.get_nth_param(0).unwrap();
+        let class_ptr = ptr_param.into_pointer_value();
+
+        let field_index = self.get_stored_class_field_index(struct_name, field_name)?;
+        let class_type = *self.class_types.borrow().get(struct_name).unwrap();
+        let field_ptr = self.builder.build_struct_gep(class_type, class_ptr, field_index as u32, "")?;
+
+        if is_getter {
+            let val = self.builder.build_load(llvm_var_type, field_ptr, "")?;
+            self.builder.build_return(Some(&val))?;
+        } else {
+            let new_val = function.get_nth_param(1).unwrap();
+
+            let has_willset = accessors.iter().any(|a| matches!(a.kind, AccessorKind::WillSet));
+            let has_didset = accessors.iter().any(|a| matches!(a.kind, AccessorKind::DidSet));
+
+            let old_val = if has_didset {
+                Some(self.builder.build_load(llvm_var_type, field_ptr, "")?)
+            } else {
+                None
+            };
+
+            if has_willset {
+                let willset_name = format!("{}.willSet", fn_prefix);
+                if let Some(willset_fn) = self.module.get_function(&willset_name) {
+                    self.builder.build_call(willset_fn, &[class_ptr.into(), new_val.into()], "")?;
+                }
+            }
+
+            self.builder.build_store(field_ptr, new_val)?;
+
+            if let Some(old) = old_val {
+                let didset_name = format!("{}.didSet", fn_prefix);
+                if let Some(didset_fn) = self.module.get_function(&didset_name) {
+                    self.builder.build_call(didset_fn, &[class_ptr.into(), old.into()], "")?;
+                }
+            }
+
+            self.builder.build_return(None)?;
+        }
 
         if let Some(block) = current_block {
             self.builder.position_at_end(block);
@@ -1379,7 +1524,7 @@ impl<'ctx> IRGenerator<'ctx> {
     fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<bool> {
         match &*statement.borrow() {
             Statement::VariableDecl {
-                name, initializer, ty, accessors, ..
+                name, initializer, ty, accessors, token, ..
             } => {
                 let llvm_var_type = if let Some(ty) = ty {
                     self.resolve_type(ty.clone())?
@@ -1452,15 +1597,33 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
 
-                if !accessors.is_empty() {
-                    let struct_name_opt = self.current_struct.borrow().clone();
-                    let (fn_prefix, backing_name) = if let Some(ref sname) = struct_name_opt {
-                        (format!("{}.{}", sname, name.value), name.value.clone())
-                    } else {
-                        (name.value.clone(), name.value.clone())
-                    };
+                if let Some(ref sname) = *self.current_struct.borrow() {
+                    let is_class = self.class_types.borrow().contains_key(sname);
+                    let fn_prefix = format!("{}.{}", sname, name.value);
+                    let has_explicit_get = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get));
+                    let has_explicit_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
+
+                    if has_explicit_get || has_explicit_set {
+                        for accessor in accessors {
+                            self.generate_accessor_function(&fn_prefix, &name.value, accessor, llvm_var_type, Some(sname))?;
+                        }
+                    } else if is_class {
+                        let is_var = matches!(&token.ty, TokenType::Keyword { keyword: KeywordType::Var });
+                        self.generate_auto_accessor(&fn_prefix, &name.value, true, llvm_var_type, sname, accessors)?;
+                        if is_var {
+                            self.generate_auto_accessor(&fn_prefix, &name.value, false, llvm_var_type, sname, accessors)?;
+                        }
+                    } else if !accessors.is_empty() {
+                        // Struct member with willSet/didSet only
+                        for accessor in accessors {
+                            self.generate_accessor_function(&fn_prefix, &name.value, accessor, llvm_var_type, Some(sname))?;
+                        }
+                    }
+                } else if !accessors.is_empty() {
+                    // Top-level variable with explicit accessors
+                    let fn_prefix = name.value.clone();
                     for accessor in accessors {
-                        self.generate_accessor_function(&fn_prefix, &backing_name, accessor, llvm_var_type, struct_name_opt.as_deref())?;
+                        self.generate_accessor_function(&fn_prefix, &name.value, accessor, llvm_var_type, None)?;
                     }
                 }
                 Ok(false)

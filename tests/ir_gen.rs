@@ -2018,7 +2018,7 @@ fn test_irgen_class_computed_property_inheritance_override() {
 }
 
 #[test]
-fn test_irgen_class_computed_property_stored_field_unchanged() {
+fn test_irgen_class_stored_property_auto_getter_setter() {
     let code = r#"
         class Data {
             let name: Int32
@@ -2046,9 +2046,46 @@ fn test_irgen_class_computed_property_stored_field_unchanged() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    // Stored properties should not have getter/setter in vtable
-    assert!(!llvm_ir.contains("name.getter"), "Stored property should not have getter:\n{}", llvm_ir);
-    assert!(!llvm_ir.contains("name.setter"), "Stored property should not have setter:\n{}", llvm_ir);
-    // Direct field access via GEP should still work
-    assert!(llvm_ir.contains("getelementptr"), "Stored field should use GEP:\n{}", llvm_ir);
+    // Stored properties should now have auto-generated getter in vtable
+    assert!(llvm_ir.contains("__vtable.Data"), "vtable should exist:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("Data.name.getter"), "stored property should have getter:\n{}", llvm_ir);
+    // No setter since it's `let` (immutable)
+    assert!(!llvm_ir.contains("Data.name.setter"), "let property should not have setter:\n{}", llvm_ir);
+    // Read should go through vtable (indirect call)
+    assert!(llvm_ir.contains("call"), "should have indirect call:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_class_stored_var_auto_getter_and_setter() {
+    let code = r#"
+        class Data {
+            var value: Int32
+        }
+        func test() -> Int32 {
+            var d: Data
+            d.value = 42
+            return d.value
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    // var stored property should have both getter and setter
+    assert!(llvm_ir.contains("Data.value.getter"), "var should have getter:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("Data.value.setter"), "var should have setter:\n{}", llvm_ir);
 }
