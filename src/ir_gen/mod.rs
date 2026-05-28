@@ -752,6 +752,23 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
+            let deinit_name = format!("{}.deinit", name.value);
+            if self.module.get_function(&deinit_name).is_none() {
+                let void_ty = Rc::new(RefCell::new(Type::Void));
+                let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                    Type::Void,
+                )))));
+                if let Ok(fn_type) = self.get_function_type(void_ty, vec![self_param], false) {
+                    let f = self.module.add_function(&deinit_name, fn_type, None);
+                    let entry = self.context.append_basic_block(f, "entry");
+                    let current_block = self.builder.get_insert_block();
+                    self.builder.position_at_end(entry);
+                    let _ = self.builder.build_return(None);
+                    if let Some(block) = current_block {
+                        self.builder.position_at_end(block);
+                    }
+                }
+            }
         }
         if let Statement::EnumDecl { name, body, .. } = &*statement.borrow() {
             for stmt in body {
@@ -837,8 +854,9 @@ impl<'ctx> IRGenerator<'ctx> {
         let Some(scope_ref) = scope.as_ref() else { return vec![] };
         let Some(symbol) = scope_ref.borrow().get_symbol(class_name) else { return vec![] };
         let sym_borrow = symbol.borrow();
-        let Symbol::Class { methods, fields, superclass, .. } = &*sym_borrow else { return vec![] };
+        let Symbol::Class { methods, fields, superclass, destrcutor, .. } = &*sym_borrow else { return vec![] };
         let own_method_names: Vec<String> = methods.iter().filter_map(|m| m.borrow().name().ok()).collect();
+        let _has_destrcutor = destrcutor.is_some();
 
         let mut own_property_entry_names: Vec<String> = Vec::new();
         for field in fields {
@@ -919,6 +937,9 @@ impl<'ctx> IRGenerator<'ctx> {
         };
 
         drop(sym_borrow);
+
+        let mut result = result;
+        result.insert(0, ("deinit".to_string(), class_name.to_string()));
 
         self.vtable_method_lists
             .borrow_mut()
@@ -1859,8 +1880,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 ..
             } => {
                 if let Type::Function(_parameter_types, return_type, _) = &*ty.borrow() {
-                    // Temporarily clear current_struct so local variables inside
-                    // method bodies are not treated as struct/class fields
                     let saved_struct = self.current_struct.borrow_mut().take();
                     self.class_refs.borrow_mut().clear();
                     self.container_refs.borrow_mut().clear();
@@ -1958,7 +1977,6 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Some(block) = current_block {
                         self.builder.position_at_end(block);
                     }
-                    // Restore current_struct after method body is processed
                     if let Some(sname) = saved_struct {
                         self.current_struct.borrow_mut().replace(sname);
                     }
@@ -4302,7 +4320,6 @@ impl<'ctx> IRGenerator<'ctx> {
         let saved = self.builder.get_insert_block();
         self.builder.position_at_end(entry);
         let obj = f.get_nth_param(0).unwrap().into_pointer_value();
-        // refcount is at offset 8 (after vtable ptr at offset 0)
         let rc_ptr = unsafe {
             self.builder.build_gep(i8_ty, obj, &[i64_ty.const_int(8, false)], "").unwrap()
         };
@@ -4324,12 +4341,15 @@ impl<'ctx> IRGenerator<'ctx> {
         let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
         let i64_ty = self.context.i64_type();
         let i8_ty = self.context.i8_type();
-        let fn_ty = self.context.void_type().fn_type(&[ptr_ty.into()], false);
-        let f = self.module.add_function(fn_name, fn_ty, None);
+        let void_fn_ty = self.context.void_type().fn_type(&[ptr_ty.into()], false);
+        let f = self.module.add_function(fn_name, void_fn_ty, None);
+
         let saved = self.builder.get_insert_block();
         let entry = self.context.append_basic_block(f, "entry");
+        let call_deinit = self.context.append_basic_block(f, "call_deinit");
         let free_block = self.context.append_basic_block(f, "free");
         let done_block = self.context.append_basic_block(f, "done");
+
         self.builder.position_at_end(entry);
         let obj = f.get_nth_param(0).unwrap().into_pointer_value();
         let rc_ptr = unsafe {
@@ -4341,7 +4361,14 @@ impl<'ctx> IRGenerator<'ctx> {
         let is_zero = self.builder.build_int_compare(
             inkwell::IntPredicate::EQ, new_rc, i64_ty.const_int(0, false), "",
         ).unwrap();
-        self.builder.build_conditional_branch(is_zero, free_block, done_block).unwrap();
+        self.builder.build_conditional_branch(is_zero, call_deinit, done_block).unwrap();
+
+        self.builder.position_at_end(call_deinit);
+        let vtable_ptr = self.builder.build_load(ptr_ty, obj, "").unwrap().into_pointer_value();
+        let deinit_fn = self.builder.build_load(ptr_ty, vtable_ptr, "").unwrap().into_pointer_value();
+        self.builder.build_indirect_call(void_fn_ty, deinit_fn, &[obj.into()], "").unwrap();
+        self.builder.build_unconditional_branch(free_block).unwrap();
+
         self.builder.position_at_end(free_block);
         self.builder.build_call(
             self.module.get_function("free").unwrap_or_else(|| {
@@ -4351,8 +4378,10 @@ impl<'ctx> IRGenerator<'ctx> {
             &[obj.into()], "",
         ).unwrap();
         self.builder.build_return(None).unwrap();
+
         self.builder.position_at_end(done_block);
         self.builder.build_return(None).unwrap();
+
         if let Some(block) = saved {
             self.builder.position_at_end(block);
         }
