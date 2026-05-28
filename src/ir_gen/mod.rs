@@ -273,7 +273,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 let ref_count_ty = self.context.i64_type().into();
                 let vtable_ptr_ty: BasicTypeEnum<'ctx> =
                     self.context.ptr_type(inkwell::AddressSpace::from(0)).into();
-                let mut field_types: Vec<BasicTypeEnum<'ctx>> = vec![ref_count_ty, vtable_ptr_ty];
+                let mut field_types: Vec<BasicTypeEnum<'ctx>> = vec![vtable_ptr_ty, ref_count_ty];
 
                 field_types.extend(self.collect_class_stored_field_types(class_name));
 
@@ -2978,7 +2978,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             if let Some(slot_idx) = self.get_vtable_slot_index(class_name, method_name) {
                                 let class_type = *self.class_types.borrow().get(class_name).unwrap();
                                 let vtable_ptr_ptr = self.builder.build_struct_gep(
-                                    class_type, ptr, 1, "",
+                                    class_type, ptr, 0, "",
                                 )?;
                                 let vtable_ptr = self.builder.build_load(
                                     self.context.ptr_type(inkwell::AddressSpace::from(0)),
@@ -3131,19 +3131,19 @@ impl<'ctx> IRGenerator<'ctx> {
                                 class_ptr_ty,
                                 "",
                             )?;
-                            let rc_ptr = self.builder.build_struct_gep(class_type, class_ptr, 0, "")?;
-                            self.builder.build_store(rc_ptr, i64_ty.const_int(1, false))?;
-
                             let vtable_global = self.vtable_globals.borrow().get(struct_name).copied();
                             if let Some(vt_global) = vtable_global {
                                 let vtable_ptr_gep = self.builder.build_struct_gep(
-                                    class_type, class_ptr, 1, "",
+                                    class_type, class_ptr, 0, "",
                                 )?;
                                 self.builder.build_store(
                                     vtable_ptr_gep,
                                     vt_global.as_pointer_value(),
                                 )?;
                             }
+
+                            let rc_ptr = self.builder.build_struct_gep(class_type, class_ptr, 1, "")?;
+                            self.builder.build_store(rc_ptr, i64_ty.const_int(1, false))?;
 
                             args.push(class_ptr.into());
                             Some((class_type.as_basic_type_enum(), class_ptr))

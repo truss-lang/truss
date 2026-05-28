@@ -1326,7 +1326,7 @@ fn test_irgen_class_inheritance_field_layout() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i64, ptr, i32, i32 }"), "Expected Dog type [ref_count, vtable_ptr, name, breed] in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ ptr, i64, i32, i32 }"), "Expected Dog type [vtable_ptr, ref_count, name, breed] in IR:\n{}", llvm_ir);
 }
 
 #[test]
@@ -1394,7 +1394,7 @@ fn test_irgen_class_inheritance_multi_level() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i64, ptr, i32, i32, i32 }"), "Expected Dog type [ref_count, vtable_ptr, a, b, c] in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("{ ptr, i64, i32, i32, i32 }"), "Expected Dog type [vtable_ptr, ref_count, a, b, c] in IR:\n{}", llvm_ir);
     assert!(llvm_ir.contains("getelementptr"), "Expected GEP instructions in IR:\n{}", llvm_ir);
 }
 
