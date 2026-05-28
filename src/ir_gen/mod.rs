@@ -163,13 +163,29 @@ impl<'ctx> IRGenerator<'ctx> {
         self.scope_stack.borrow_mut().push(Scope::new());
     }
 
-    fn exit_scope(&self) {
-        let mut stack = self.scope_stack.borrow_mut();
-        if let Some(scope) = stack.last() {
+    fn emit_all_deinit_calls(&self) {
+        let stack = self.scope_stack.borrow();
+        for scope in stack.iter().rev() {
             for (var_ptr, type_name) in &scope.deferred_vars {
                 let deinit_name = format!("{}.deinit", type_name);
                 if let Some(deinit_fn) = self.module.get_function(&deinit_name) {
                     let _ = self.builder.build_call(deinit_fn, &[(*var_ptr).into()], "");
+                }
+            }
+        }
+    }
+
+    fn exit_scope(&self) {
+        let mut stack = self.scope_stack.borrow_mut();
+        if let Some(scope) = stack.last() {
+            let current_block = self.builder.get_insert_block();
+            let can_emit = current_block.map_or(false, |b| !b.get_terminator().is_some());
+            if can_emit {
+                for (var_ptr, type_name) in &scope.deferred_vars {
+                    let deinit_name = format!("{}.deinit", type_name);
+                    if let Some(deinit_fn) = self.module.get_function(&deinit_name) {
+                        let _ = self.builder.build_call(deinit_fn, &[(*var_ptr).into()], "");
+                    }
                 }
             }
         }
@@ -2057,14 +2073,18 @@ impl<'ctx> IRGenerator<'ctx> {
                                     break;
                                 }
                             }
+                            if has_return {
+                                self.exit_scope();
+                            }
                             self.emit_class_releases();
                             if is_void && !has_return {
+                                self.exit_scope();
                                 self.builder.build_return(None)?;
                             }
-                            self.exit_scope();
                         }
                         FunctionBody::Expression(expr) => {
                             let value = self.resolve_expression(expr.clone())?.unwrap();
+                            self.emit_all_deinit_calls();
                             self.emit_class_releases();
                             self.builder.build_return(Some(&value))?;
                         }
@@ -2191,9 +2211,11 @@ impl<'ctx> IRGenerator<'ctx> {
                 match value {
                     Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
                         let value = self.resolve_expression(value.clone())?.unwrap();
+                        self.emit_all_deinit_calls();
                         self.builder.build_return(Some(&value))?;
                     }
                     _ => {
+                        self.emit_all_deinit_calls();
                         self.builder.build_return(None)?;
                     }
                 }
