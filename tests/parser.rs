@@ -1112,7 +1112,8 @@ fn test_parse_struct_decl_empty() {
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert!(body.is_empty());
+        assert_eq!(body.len(), 1);
+        assert!(matches!(&*body[0].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!();
     }
@@ -1168,7 +1169,7 @@ fn test_parse_struct_decl_with_function() {
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Calculator");
-        assert_eq!(body.len(), 1);
+        assert_eq!(body.len(), 2);
         if let Statement::FunctionDecl {
             name: func_name, ..
         } = &*body[0].borrow()
@@ -1177,6 +1178,7 @@ fn test_parse_struct_decl_with_function() {
         } else {
             panic!("Expected FunctionDecl for method add");
         }
+        assert!(matches!(&*body[1].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!();
     }
@@ -1241,7 +1243,7 @@ fn test_parse_struct_decl_nested_function_body() {
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Math");
-        assert_eq!(body.len(), 1);
+        assert_eq!(body.len(), 2);
         if let Statement::FunctionDecl {
             body: func_body, ..
         } = &*body[0].borrow()
@@ -1252,6 +1254,7 @@ fn test_parse_struct_decl_nested_function_body() {
         } else {
             panic!("Expected FunctionDecl with statements");
         }
+        assert!(matches!(&*body[1].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!();
     }
@@ -1443,11 +1446,12 @@ fn test_parse_deinit_decl() {
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
-        assert_eq!(body.len(), 1);
+        assert_eq!(body.len(), 2);
         if let Statement::DeinitDecl { .. } = &*body[0].borrow() {
         } else {
             panic!("Expected DeinitDecl");
         }
+        assert!(matches!(&*body[1].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!("Expected StructDecl");
     }
@@ -1645,8 +1649,9 @@ fn test_parse_private_deinit_decl() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
-        assert_eq!(body.len(), 1);
+        assert_eq!(body.len(), 2);
         assert_has_access_modifier(&body[0].borrow(), AccessModifier::Private);
+        assert!(matches!(&*body[1].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!("Expected StructDecl");
     }
@@ -1666,13 +1671,14 @@ fn test_parse_struct_with_public_method() {
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Foo");
-        assert_eq!(body.len(), 1);
+        assert_eq!(body.len(), 2);
         if let Statement::FunctionDecl { name: fn_name, .. } = &*body[0].borrow() {
             assert_eq!(fn_name.value, "bar");
             assert_has_access_modifier(&body[0].borrow(), AccessModifier::Public);
         } else {
             panic!("Expected FunctionDecl inside struct");
         }
+        assert!(matches!(&*body[1].borrow(), Statement::InitDecl { .. }));
     } else {
         panic!("Expected StructDecl");
     }

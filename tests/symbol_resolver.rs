@@ -194,7 +194,7 @@ fn test_struct_method_symbol() {
 
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Math");
-        assert_eq!(body.len(), 1);
+        assert_eq!(body.len(), 2);
     } else {
         panic!("Expected StructDecl");
     }

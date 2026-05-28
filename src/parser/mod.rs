@@ -1858,9 +1858,6 @@ impl Parser {
                 parameters.push(param);
             }
         }
-        if parameters.is_empty() {
-            return;
-        }
         let init_token = Box::new(Token::new(
             "init".to_string(),
             TokenType::Keyword { keyword: KeywordType::Init },
