@@ -54,6 +54,8 @@ pub struct IRGenerator<'ctx> {
     protocol_witness_table_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     protocol_witness_tables: Rc<RefCell<HashMap<(String, String), inkwell::values::GlobalValue<'ctx>>>>,
     existential_container_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
+    class_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
+    container_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -80,6 +82,8 @@ impl<'ctx> IRGenerator<'ctx> {
             protocol_witness_table_types: Rc::new(RefCell::new(HashMap::new())),
             protocol_witness_tables: Rc::new(RefCell::new(HashMap::new())),
             existential_container_types: Rc::new(RefCell::new(HashMap::new())),
+            class_refs: Rc::new(RefCell::new(Vec::new())),
+            container_refs: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -1603,16 +1607,20 @@ impl<'ctx> IRGenerator<'ctx> {
                                         let protocol_name = protocol_name.clone();
                                         drop(ty_borrow);
                                         if let Some(ct) = self.existential_container_types.borrow().get(&protocol_name).copied() {
-                                            let data_ptr = match init_val {
-                                                BasicValueEnum::PointerValue(p) => p,
+                                            let (data_ptr, is_class_ref) = match init_val {
+                                                BasicValueEnum::PointerValue(p) => (p, true),
                                                 val => {
                                                     let heap = self.heap_allocate(val.get_type())?;
                                                     self.builder.build_store(heap, val)?;
-                                                    heap
+                                                    (heap, false)
                                                 }
                                             };
                                             let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
                                             self.builder.build_store(value_field, data_ptr)?;
+                                            if is_class_ref {
+                                                self.emit_retain(data_ptr)?;
+                                                self.container_refs.borrow_mut().push(ptr);
+                                            }
 
                                             if let Some(init_expr) = initializer {
                                                 let concrete_name = self.extract_concrete_type_name(init_expr);
@@ -1633,16 +1641,20 @@ impl<'ctx> IRGenerator<'ctx> {
                                         if !names.is_empty() {
                                             let compound_key = self.build_compound_protocol_key(&names);
                                             if let Some(ct) = self.existential_container_types.borrow().get(&compound_key).copied() {
-                                                let data_ptr = match init_val {
-                                                    BasicValueEnum::PointerValue(p) => p,
+                                                let (data_ptr, is_class_ref) = match init_val {
+                                                    BasicValueEnum::PointerValue(p) => (p, true),
                                                     val => {
                                                         let heap = self.heap_allocate(val.get_type())?;
                                                         self.builder.build_store(heap, val)?;
-                                                        heap
+                                                        (heap, false)
                                                     }
                                                 };
                                                 let value_field = self.builder.build_struct_gep(ct, ptr, 0, "")?;
                                                 self.builder.build_store(value_field, data_ptr)?;
+                                                if is_class_ref {
+                                                    self.emit_retain(data_ptr)?;
+                                                    self.container_refs.borrow_mut().push(ptr);
+                                                }
 
                                                 if let Some(init_expr) = initializer {
                                                     let concrete_name = self.extract_concrete_type_name(init_expr);
@@ -1704,6 +1716,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 }
                                 self.builder.build_call(function, &args, "")?;
                                 self.builder.build_store(ptr, class_ptr)?;
+                                self.class_refs.borrow_mut().push(ptr);
                             } else {
                                 let mut args = Vec::new();
                                 args.push(ptr.into());
@@ -1849,6 +1862,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     // Temporarily clear current_struct so local variables inside
                     // method bodies are not treated as struct/class fields
                     let saved_struct = self.current_struct.borrow_mut().take();
+                    self.class_refs.borrow_mut().clear();
+                    self.container_refs.borrow_mut().clear();
                     let fn_name = if let Some(struct_name) = &saved_struct {
                         format!("{}.{}", struct_name, name.value)
                     } else {
@@ -1924,6 +1939,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     break;
                                 }
                             }
+                            self.emit_class_releases();
                             if is_void && !has_return {
                                 self.builder.build_return(None)?;
                             }
@@ -1931,9 +1947,12 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                         FunctionBody::Expression(expr) => {
                             let value = self.resolve_expression(expr.clone())?.unwrap();
+                            self.emit_class_releases();
                             self.builder.build_return(Some(&value))?;
                         }
-                        FunctionBody::None => {}
+                        FunctionBody::None => {
+                            self.emit_class_releases();
+                        }
                     }
 
                     if let Some(block) = current_block {
@@ -4209,6 +4228,25 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn emit_class_releases(&self) {
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+        for &alloca in self.class_refs.borrow().iter() {
+            let val = self.builder.build_load(ptr_ty, alloca, "").unwrap();
+            if let BasicValueEnum::PointerValue(p) = val {
+                let _ = self.emit_release(p);
+            }
+        }
+        for &container in self.container_refs.borrow().iter() {
+            let ptr_ptr = unsafe {
+                self.builder.build_gep(ptr_ty, container, &[self.context.i64_type().const_int(0, false)], "").unwrap()
+            };
+            let val = self.builder.build_load(ptr_ty, ptr_ptr, "").unwrap();
+            if let BasicValueEnum::PointerValue(p) = val {
+                let _ = self.emit_release(p);
+            }
+        }
+    }
+
     fn heap_allocate(&self, llvm_type: BasicTypeEnum<'ctx>) -> Result<PointerValue<'ctx>> {
         let i64_ty = self.context.i64_type();
         let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
@@ -4228,6 +4266,97 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             _ => anyhow::bail!("malloc expected to return a pointer"),
         }
+    }
+
+    fn emit_retain(&self, obj_ptr: PointerValue<'ctx>) -> Result<()> {
+        let saved_block = self.builder.get_insert_block();
+        let fn_val = self.get_or_create_retain_fn();
+        self.builder.build_call(fn_val, &[obj_ptr.into()], "")?;
+        if let Some(block) = saved_block {
+            self.builder.position_at_end(block);
+        }
+        Ok(())
+    }
+
+    fn emit_release(&self, obj_ptr: PointerValue<'ctx>) -> Result<()> {
+        let saved_block = self.builder.get_insert_block();
+        let fn_val = self.get_or_create_release_fn();
+        self.builder.build_call(fn_val, &[obj_ptr.into()], "")?;
+        if let Some(block) = saved_block {
+            self.builder.position_at_end(block);
+        }
+        Ok(())
+    }
+
+    fn get_or_create_retain_fn(&self) -> FunctionValue<'ctx> {
+        let fn_name = "truss_retain";
+        if let Some(f) = self.module.get_function(fn_name) {
+            return f;
+        }
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+        let i64_ty = self.context.i64_type();
+        let i8_ty = self.context.i8_type();
+        let fn_ty = self.context.void_type().fn_type(&[ptr_ty.into()], false);
+        let f = self.module.add_function(fn_name, fn_ty, None);
+        let entry = self.context.append_basic_block(f, "entry");
+        let saved = self.builder.get_insert_block();
+        self.builder.position_at_end(entry);
+        let obj = f.get_nth_param(0).unwrap().into_pointer_value();
+        // refcount is at offset 8 (after vtable ptr at offset 0)
+        let rc_ptr = unsafe {
+            self.builder.build_gep(i8_ty, obj, &[i64_ty.const_int(8, false)], "").unwrap()
+        };
+        let rc = self.builder.build_load(i64_ty, rc_ptr, "").unwrap().into_int_value();
+        let new_rc = self.builder.build_int_add(rc, i64_ty.const_int(1, false), "").unwrap();
+        self.builder.build_store(rc_ptr, new_rc).unwrap();
+        self.builder.build_return(None).unwrap();
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        f
+    }
+
+    fn get_or_create_release_fn(&self) -> FunctionValue<'ctx> {
+        let fn_name = "truss_release";
+        if let Some(f) = self.module.get_function(fn_name) {
+            return f;
+        }
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+        let i64_ty = self.context.i64_type();
+        let i8_ty = self.context.i8_type();
+        let fn_ty = self.context.void_type().fn_type(&[ptr_ty.into()], false);
+        let f = self.module.add_function(fn_name, fn_ty, None);
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(f, "entry");
+        let free_block = self.context.append_basic_block(f, "free");
+        let done_block = self.context.append_basic_block(f, "done");
+        self.builder.position_at_end(entry);
+        let obj = f.get_nth_param(0).unwrap().into_pointer_value();
+        let rc_ptr = unsafe {
+            self.builder.build_gep(i8_ty, obj, &[i64_ty.const_int(8, false)], "").unwrap()
+        };
+        let rc = self.builder.build_load(i64_ty, rc_ptr, "").unwrap().into_int_value();
+        let new_rc = self.builder.build_int_sub(rc, i64_ty.const_int(1, false), "").unwrap();
+        self.builder.build_store(rc_ptr, new_rc).unwrap();
+        let is_zero = self.builder.build_int_compare(
+            inkwell::IntPredicate::EQ, new_rc, i64_ty.const_int(0, false), "",
+        ).unwrap();
+        self.builder.build_conditional_branch(is_zero, free_block, done_block).unwrap();
+        self.builder.position_at_end(free_block);
+        self.builder.build_call(
+            self.module.get_function("free").unwrap_or_else(|| {
+                let free_ty = self.context.void_type().fn_type(&[ptr_ty.into()], false);
+                self.module.add_function("free", free_ty, None)
+            }),
+            &[obj.into()], "",
+        ).unwrap();
+        self.builder.build_return(None).unwrap();
+        self.builder.position_at_end(done_block);
+        self.builder.build_return(None).unwrap();
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        f
     }
 
     fn resolve_type(&self, ty: Rc<RefCell<Type>>) -> Result<BasicTypeEnum<'ctx>> {
