@@ -120,7 +120,7 @@ impl TypeResolver {
                 self.leave_scope();
             }
             Statement::StructDecl {
-                name, body, scope, ..
+                name, body, scope, conformances, ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -140,6 +140,10 @@ impl TypeResolver {
                     .unwrap()
                     .borrow_mut()
                     .set_type(name.value.clone(), struct_ty);
+
+                for conformance in conformances {
+                    self.infer_type(conformance.clone());
+                }
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 self.current_scope
@@ -849,7 +853,10 @@ impl TypeResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.resolve_statement(statement.clone());
             }
-            Statement::StructDecl { body, .. } => {
+            Statement::StructDecl { body, conformances, .. } => {
+                for conformance in conformances {
+                    self.infer_type(conformance.clone());
+                }
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
                 }
