@@ -731,7 +731,6 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
-            // Generate default init for classes without explicit init declarations
             let init_name = format!("{}.init", name.value);
             if self.module.get_function(&init_name).is_none() {
                 let void_ty = Rc::new(RefCell::new(Type::Void));
@@ -1847,7 +1846,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 ..
             } => {
                 if let Type::Function(_parameter_types, return_type, _) = &*ty.borrow() {
-                    let fn_name = if let Some(struct_name) = &*self.current_struct.borrow() {
+                    // Temporarily clear current_struct so local variables inside
+                    // method bodies are not treated as struct/class fields
+                    let saved_struct = self.current_struct.borrow_mut().take();
+                    let fn_name = if let Some(struct_name) = &saved_struct {
                         format!("{}.{}", struct_name, name.value)
                     } else {
                         name.value.clone()
@@ -1936,6 +1938,10 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     if let Some(block) = current_block {
                         self.builder.position_at_end(block);
+                    }
+                    // Restore current_struct after method body is processed
+                    if let Some(sname) = saved_struct {
+                        self.current_struct.borrow_mut().replace(sname);
                     }
                 }
                 Ok(false)
