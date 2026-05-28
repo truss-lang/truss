@@ -2258,3 +2258,110 @@ fn test_protocol_refinement_type() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
 }
+
+#[test]
+fn test_protocol_any_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol {} let x: any MyProtocol".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors with 'any' type, got: {:?}", errors);
+
+    if let Statement::VariableDecl { ty, .. } = &*program.statements[1].borrow() {
+        assert!(ty.is_some(), "Variable should have a type annotation");
+        let resolved = ty.as_ref().unwrap().borrow();
+        assert!(
+            matches!(&*resolved, Type::Protocol(name, _) if name == "MyProtocol"),
+            "Expected Protocol type, got {:?}",
+            resolved
+        );
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_protocol_compound_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol A {} protocol B {} let x: A & B".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors with compound type, got: {:?}", errors);
+
+    if let Statement::VariableDecl { ty, .. } = &*program.statements[2].borrow() {
+        assert!(ty.is_some(), "Variable should have a type annotation");
+        let resolved = ty.as_ref().unwrap().borrow();
+        assert!(
+            matches!(&*resolved, Type::Compound(types) if types.len() == 2),
+            "Expected Compound type with 2 elements, got {:?}",
+            resolved
+        );
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_protocol_member_access_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Drawable { func draw() -> Int32 } let x: any Drawable".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors with protocol member access, got: {:?}", errors);
+
+    if let Statement::VariableDecl {
+        type_expression: Some(ty_expr),
+        ..
+    } = &*program.statements[1].borrow()
+    {
+        assert!(
+            matches!(&*ty_expr.borrow(), Expression::AnyType { .. }),
+            "Expected AnyType expression, got {:?}",
+            &*ty_expr.borrow()
+        );
+    } else {
+        panic!("Expected VariableDecl with type expression");
+    }
+}

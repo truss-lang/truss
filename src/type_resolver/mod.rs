@@ -1776,6 +1776,50 @@ impl TypeResolver {
                         );
                         return None;
                     }
+                    Type::Protocol(protocol_name, _) => {
+                        let scope = self.current_scope.as_ref().unwrap().borrow();
+                        let protocol_name = protocol_name.clone();
+                        if let Some(symbol) = scope.get_symbol(&protocol_name)
+                            && let Symbol::Protocol { methods, .. } = &*symbol.borrow()
+                        {
+                            for method in methods {
+                                if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                    && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                {
+                                    let method_ty = {
+                                        let decl_ref = decl.borrow();
+                                        if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                            ty.clone()
+                                        } else {
+                                            continue;
+                                        }
+                                    };
+                                    if let Some(t) = method_ty {
+                                        *ty = Some(t.clone());
+                                        return Some(t.clone());
+                                    }
+                                }
+                            }
+                            let token = &*member;
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!(
+                                    "Member '{}' not found on protocol '{}'",
+                                    member.value, protocol_name
+                                ),
+                                token,
+                            );
+                            return None;
+                        } else {
+                            let token = &*member;
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!("Protocol symbol '{}' not found", protocol_name),
+                                token,
+                            );
+                            return None;
+                        }
+                    }
                     _ => {
                         let token = &*member;
                         self.emit_error(
@@ -1944,13 +1988,15 @@ impl TypeResolver {
             }
             drop(expr_mut);
         } else if let Some(inferred) = self.infer_type(expression) {
-            if inferred.borrow().clone() != expected.borrow().clone() {
+            let inferred_clone = inferred.borrow().clone();
+            let expected_clone = expected.borrow().clone();
+            let is_protocol_compat = matches!(&expected_clone, Type::Protocol(..) | Type::Compound(..));
+            if !is_protocol_compat && inferred_clone != expected_clone {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
                         "Type mismatch: expected {}, found {}",
-                        expected.borrow(),
-                        inferred.borrow()
+                        expected_clone, inferred_clone
                     ),
                     token,
                 );

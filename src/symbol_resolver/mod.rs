@@ -811,6 +811,14 @@ impl SymbolResolver {
             Expression::Case { expression, .. } => {
                 self.resolve_expression(expression.clone());
             }
+            Expression::AnyType { inner, .. } => {
+                self.resolve_expression(inner.clone());
+            }
+            Expression::CompoundType { types, .. } => {
+                for t in types {
+                    self.resolve_expression(t.clone());
+                }
+            }
             _ => {}
         }
     }
