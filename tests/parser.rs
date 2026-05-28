@@ -3811,3 +3811,78 @@ fn test_parse_any_type() {
         panic!();
     }
 }
+
+#[test]
+fn test_parse_compound_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let x: Copyable & Clonable".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        type_expression: Some(ty_expr),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        if let Expression::CompoundType { types, .. } = &*ty_expr.borrow() {
+            assert_eq!(types.len(), 2);
+            let first = &types[0];
+            assert!(
+                matches!(&*first.borrow(), Expression::Type { name, .. } if name.value == "Copyable"),
+                "Expected Type(Copyable), got {:?}",
+                &*first.borrow()
+            );
+            let second = &types[1];
+            assert!(
+                matches!(&*second.borrow(), Expression::Type { name, .. } if name.value == "Clonable"),
+                "Expected Type(Clonable), got {:?}",
+                &*second.borrow()
+            );
+        } else {
+            panic!("Expected CompoundType");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_compound_type_three() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let x: A & B & C".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        type_expression: Some(ty_expr),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        if let Expression::CompoundType { types, .. } = &*ty_expr.borrow() {
+            assert_eq!(types.len(), 3);
+            assert!(
+                matches!(&*types[0].borrow(), Expression::Type { name, .. } if name.value == "A")
+            );
+            assert!(
+                matches!(&*types[1].borrow(), Expression::Type { name, .. } if name.value == "B")
+            );
+            assert!(
+                matches!(&*types[2].borrow(), Expression::Type { name, .. } if name.value == "C")
+            );
+        } else {
+            panic!("Expected CompoundType");
+        }
+    } else {
+        panic!();
+    }
+}

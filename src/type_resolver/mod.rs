@@ -1438,6 +1438,19 @@ impl TypeResolver {
                 *ty = Some(inner_ty.clone());
                 inner_ty
             }
+            Expression::CompoundType { types, ty } => {
+                let mut resolved = Vec::new();
+                for t in types {
+                    if let Some(t_ty) = self.infer_type(t.clone()) {
+                        resolved.push(t_ty);
+                    } else {
+                        return None;
+                    }
+                }
+                let compound = Rc::new(RefCell::new(Type::Compound(resolved)));
+                *ty = Some(compound.clone());
+                compound
+            }
             Expression::Cast {
                 expression,
                 target_type,

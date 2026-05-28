@@ -136,6 +136,10 @@ pub enum Expression {
         inner: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    CompoundType {
+        types: Vec<Rc<RefCell<Expression>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 impl Expression {
@@ -148,6 +152,7 @@ impl Expression {
             Self::TupleLiteral { ty, .. } => Ok(ty.clone()),
             Self::SelfKeyword { ty, .. } => Ok(ty.clone()),
             Self::AnyType { ty, .. } => Ok(ty.clone()),
+            Self::CompoundType { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -160,6 +165,7 @@ impl Expression {
             Self::TupleLiteral { ty, .. } => Ok(ty),
             Self::SelfKeyword { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
+            Self::CompoundType { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -172,6 +178,7 @@ impl Expression {
             Self::TupleLiteral { ty, .. } => Ok(ty),
             Self::SelfKeyword { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
+            Self::CompoundType { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -253,6 +260,7 @@ impl Expression {
             Expression::TupleIndexAccess { index, .. } => (**index).clone(),
             Expression::SelfKeyword { token, .. } => (**token).clone(),
             Expression::AnyType { inner, .. } => inner.borrow().token(),
+            Expression::CompoundType { types, .. } => types[0].borrow().token(),
         }
     }
 }

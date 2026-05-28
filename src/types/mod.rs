@@ -27,6 +27,7 @@ pub enum Type {
     Class(String, WeakSymbol),
     Enum(String, WeakSymbol),
     Protocol(String, WeakSymbol),
+    Compound(Vec<Rc<RefCell<Type>>>),
 }
 
 impl fmt::Display for Type {
@@ -79,6 +80,15 @@ impl fmt::Display for Type {
             Type::Class(name, _) => write!(f, "Class({})", name),
             Type::Enum(name, _) => write!(f, "Enum({})", name),
             Type::Protocol(name, _) => write!(f, "Protocol({})", name),
+            Type::Compound(types) => {
+                for (i, t) in types.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " & ")?;
+                    }
+                    write!(f, "{}", t.borrow())?;
+                }
+                Ok(())
+            }
         }
     }
 }

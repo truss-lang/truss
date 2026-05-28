@@ -3373,6 +3373,14 @@ impl<'ctx> IRGenerator<'ctx> {
                     struct_type.as_basic_type_enum()
                 }
             }
+            Type::Compound(..) => {
+                self.emit_error(
+                    TrussDiagnosticCode::UnsupportedFeature,
+                    "Compound type cannot be used directly in IR generation",
+                    None,
+                );
+                anyhow::bail!("Compound type not supported");
+            }
         };
         Ok(resolved)
     }

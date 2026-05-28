@@ -843,7 +843,24 @@ impl Parser {
                 };
             }
 
-            return Ok(type_expr);
+            let mut types = vec![Rc::new(RefCell::new(type_expr))];
+            while let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::BitAnd)
+            {
+                self.index += 1;
+                let right = self.parse_type_expression()?;
+                if let Expression::CompoundType { types: inner_types, .. } = right {
+                    types.extend(inner_types);
+                } else {
+                    types.push(Rc::new(RefCell::new(right)));
+                }
+            }
+
+            if types.len() > 1 {
+                return Ok(Expression::CompoundType { types, ty: None });
+            } else {
+                return Ok(Rc::try_unwrap(types.into_iter().next().unwrap()).ok().unwrap().into_inner());
+            }
         }
 
         let Some(name) = self.next() else {
@@ -879,7 +896,24 @@ impl Parser {
             };
         }
 
-        Ok(type_expr)
+        let mut types = vec![Rc::new(RefCell::new(type_expr))];
+        while let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::BitAnd)
+        {
+            self.index += 1;
+            let right = self.parse_type_expression()?;
+            if let Expression::CompoundType { types: inner_types, .. } = right {
+                types.extend(inner_types);
+            } else {
+                types.push(Rc::new(RefCell::new(right)));
+            }
+        }
+
+        if types.len() > 1 {
+            Ok(Expression::CompoundType { types, ty: None })
+        } else {
+            Ok(Rc::try_unwrap(types.into_iter().next().unwrap()).ok().unwrap().into_inner())
+        }
     }
 
     fn parse_function_decl(
