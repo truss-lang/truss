@@ -2215,7 +2215,7 @@ fn test_protocol_conformance_type() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "protocol Drawable { func draw() -> Void }
-             class Circle: Drawable {}".to_string(),
+             class Circle: Drawable { func draw() -> Void { return } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2239,7 +2239,7 @@ fn test_struct_protocol_conformance_type() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "protocol Drawable { func draw() -> Void }
-             struct Circle: Drawable {}".to_string(),
+             struct Circle: Drawable { func draw() -> Void { return } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2264,7 +2264,10 @@ fn test_struct_multiple_protocol_conformance_type() {
         CharStream::new(
             "protocol Drawable { func draw() -> Void }
              protocol Resettable { func reset() -> Void }
-             struct Circle: Drawable, Resettable {}".to_string(),
+             struct Circle: Drawable, Resettable {
+                 func draw() -> Void { return }
+                 func reset() -> Void { return }
+             }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2445,5 +2448,122 @@ fn test_any_compound_type_resolved() {
         );
     } else {
         panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_protocol_conformance_missing_method_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Drawable { func draw() -> Void }
+             struct Circle: Drawable {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 1, "Should have 1 error for missing method, got: {:?}", errors);
+    assert_eq!(
+        errors[0].code,
+        TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+        "Error code should be ProtocolRequirementNotImplemented, got: {:?}",
+        errors[0].code,
+    );
+}
+
+#[test]
+fn test_protocol_conformance_with_default_impl_no_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Drawable { func draw() -> Void { return } }
+             struct Circle: Drawable {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors when method has default impl, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_conformance_struct_missing_method_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { func foo() -> Int32 }
+             struct S: P {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 1, "Should have 1 error for missing method, got: {:?}", errors);
+    assert_eq!(
+        errors[0].code,
+        TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+        "Error code should be ProtocolRequirementNotImplemented, got: {:?}",
+        errors[0].code,
+    );
+}
+
+#[test]
+fn test_protocol_conformance_missing_multiple_methods_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { func foo() -> Int32
+                         func bar() -> Void }
+             struct S: P {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 2, "Should have 2 errors for 2 missing methods, got: {:?}", errors);
+    for error in errors.iter() {
+        assert_eq!(
+            error.code,
+            TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+            "Error code should be ProtocolRequirementNotImplemented, got: {:?}",
+            error.code,
+        );
     }
 }

@@ -50,6 +50,7 @@ pub enum TrussDiagnosticCode {
     CallingNonFunction,
     FieldNotFound,
     InaccessibleMember,
+    ProtocolRequirementNotImplemented,
 
     IRError,
     UnsupportedFeature,
@@ -107,6 +108,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::CallingNonFunction => "E0314",
             Self::FieldNotFound => "E0315",
             Self::InaccessibleMember => "E0316",
+            Self::ProtocolRequirementNotImplemented => "E0317",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",

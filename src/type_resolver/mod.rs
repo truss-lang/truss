@@ -141,7 +141,7 @@ impl TypeResolver {
                     .borrow_mut()
                     .set_type(name.value.clone(), struct_ty);
 
-                for conformance in conformances {
+                for conformance in conformances.iter() {
                     self.infer_type(conformance.clone());
                 }
 
@@ -204,6 +204,7 @@ impl TypeResolver {
                     self.process_decl(stmt.clone());
                 }
                 self.leave_scope();
+                self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::ClassDecl {
                 name, body, scope, superclass, conformances, ..
@@ -230,7 +231,7 @@ impl TypeResolver {
                 if let Some(superclass_expr) = superclass {
                     self.infer_type(superclass_expr.clone());
                 }
-                for conformance in conformances {
+                for conformance in conformances.iter() {
                     self.infer_type(conformance.clone());
                 }
 
@@ -293,6 +294,7 @@ impl TypeResolver {
                     self.process_decl(stmt.clone());
                 }
                 self.leave_scope();
+                self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::EnumDecl {
                 name, cases: ast_cases, body, scope, ..
@@ -513,7 +515,7 @@ impl TypeResolver {
                     .borrow_mut()
                     .set_type(name.value.clone(), protocol_ty);
 
-                for conformance in conformances {
+                for conformance in conformances.iter() {
                     self.infer_type(conformance.clone());
                 }
 
@@ -2484,6 +2486,127 @@ impl TypeResolver {
 
     fn leave_scope(&mut self) {
         self.current_scope = self.current_scope.clone().unwrap().borrow().parent.clone();
+    }
+
+    fn check_protocol_conformances(
+        &mut self,
+        type_name: &str,
+        type_token: &Token,
+        conformances: &[Rc<RefCell<Expression>>],
+    ) {
+        for conformance in conformances {
+            let expr = conformance.borrow();
+            let protocol_name = match &*expr {
+                Expression::Type { name, ty, .. } => {
+                    if let Some(ty) = ty {
+                        if matches!(&*ty.borrow(), Type::Protocol(..)) {
+                            Some(name.value.clone())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            let Some(ref protocol_name) = protocol_name else { continue; };
+            drop(expr);
+
+            let Some(protocol_symbol) = self
+                .current_scope
+                .as_ref()
+                .and_then(|scope| scope.borrow().get_symbol(protocol_name))
+            else {
+                continue;
+            };
+
+            let required_methods: Vec<String> = {
+                let sym = protocol_symbol.borrow();
+                let Symbol::Protocol { methods, .. } = &*sym else { continue; };
+                methods
+                    .iter()
+                    .filter(|m| {
+                        m.borrow()
+                            .get_decl()
+                            .ok()
+                            .flatten()
+                            .map(|decl| {
+                                let d = decl.borrow();
+                                match &*d {
+                                    Statement::FunctionDecl { body, .. } => {
+                                        matches!(&*body.borrow(), FunctionBody::None)
+                                    }
+                                    _ => true,
+                                }
+                            })
+                            .unwrap_or(true)
+                    })
+                    .filter_map(|m| m.borrow().name().ok())
+                    .collect()
+            };
+
+            let required_properties: Vec<String> = {
+                let sym = protocol_symbol.borrow();
+                let Symbol::Protocol { properties, .. } = &*sym else { continue; };
+                properties
+                    .iter()
+                    .filter_map(|p| p.borrow().name().ok())
+                    .collect()
+            };
+
+            let Some(type_symbol) = self
+                .current_scope
+                .as_ref()
+                .and_then(|scope| scope.borrow().get_symbol(type_name))
+            else {
+                continue;
+            };
+
+            let (type_methods, type_fields): (Vec<String>, Vec<String>) = {
+                let type_sym = type_symbol.borrow();
+                match &*type_sym {
+                    Symbol::Struct { methods, fields, .. }
+                    | Symbol::Class { methods, fields, .. } => (
+                        methods
+                            .iter()
+                            .filter_map(|m| m.borrow().name().ok())
+                            .collect(),
+                        fields
+                            .iter()
+                            .filter_map(|f| f.borrow().name().ok())
+                            .collect(),
+                    ),
+                    _ => (vec![], vec![]),
+                }
+            };
+
+            for req_method in &required_methods {
+                if !type_methods.contains(req_method) {
+                    self.emit_error(
+                        TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+                        format!(
+                            "Type '{}' does not implement protocol '{}' requirement: 'func {}()'",
+                            type_name, protocol_name, req_method
+                        ),
+                        type_token,
+                    );
+                }
+            }
+
+            for req_prop in &required_properties {
+                if !type_fields.contains(req_prop) {
+                    self.emit_error(
+                        TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+                        format!(
+                            "Type '{}' does not implement protocol '{}' requirement: 'var {}'",
+                            type_name, protocol_name, req_prop
+                        ),
+                        type_token,
+                    );
+                }
+            }
+        }
     }
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
