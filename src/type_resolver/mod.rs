@@ -64,8 +64,20 @@ impl TypeResolver {
                 body,
                 scope,
                 ty,
+                generic_parameters,
                 ..
             } => {
+                // Enter function scope first so generic params are available
+                self.enter_scope(scope.as_ref().unwrap().clone());
+                for gp in generic_parameters {
+                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    self.current_scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
+                }
+
                 let ret_type = if let Some(return_type_expr) = return_type {
                     self.infer_type(return_type_expr.clone())
                         .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
@@ -97,13 +109,10 @@ impl TypeResolver {
                 )));
                 *ty = Some(fn_type.clone());
 
-                self.current_scope
-                    .as_ref()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_type(name.value.clone(), fn_type);
-
-                self.enter_scope(scope.as_ref().unwrap().clone());
+                // Register fn type in the enclosing (parent) scope
+                if let Some(parent) = self.current_scope.as_ref().unwrap().borrow().parent.clone() {
+                    parent.borrow_mut().set_type(name.value.clone(), fn_type);
+                }
 
                 match &*body.borrow() {
                     FunctionBody::Statements(stmts) => {
@@ -120,7 +129,7 @@ impl TypeResolver {
                 self.leave_scope();
             }
             Statement::StructDecl {
-                name, body, scope, conformances, ..
+                name, body, scope, conformances, generic_parameters, ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -146,6 +155,14 @@ impl TypeResolver {
                 }
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
+                for gp in generic_parameters {
+                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    self.current_scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
+                }
                 self.current_scope
                     .as_ref()
                     .unwrap()
@@ -207,7 +224,7 @@ impl TypeResolver {
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::ClassDecl {
-                name, body, scope, superclass, conformances, ..
+                name, body, scope, superclass, conformances, generic_parameters, ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -236,6 +253,14 @@ impl TypeResolver {
                 }
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
+                for gp in generic_parameters {
+                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    self.current_scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
+                }
                 self.current_scope
                     .as_ref()
                     .unwrap()
@@ -297,7 +322,7 @@ impl TypeResolver {
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::EnumDecl {
-                name, cases: ast_cases, body, scope, ..
+                name, cases: ast_cases, body, scope, generic_parameters, ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -317,6 +342,15 @@ impl TypeResolver {
                     .borrow_mut()
                     .set_type(name.value.clone(), enum_ty);
 
+                self.enter_scope(scope.as_ref().unwrap().clone());
+                for gp in generic_parameters {
+                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    self.current_scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
+                }
                 if let Symbol::Enum { cases, .. } = &mut *symbol.borrow_mut() {
                     for (case_symbol, ast_case) in cases.iter().zip(ast_cases.iter()) {
                         let mut parameter_types = Vec::new();
@@ -332,7 +366,6 @@ impl TypeResolver {
                     }
                 }
 
-                self.enter_scope(scope.as_ref().unwrap().clone());
                 for stmt in body {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
@@ -495,6 +528,7 @@ impl TypeResolver {
                 conformances,
                 members,
                 scope,
+                generic_parameters,
                 ..
             } => {
                 let Some(symbol) = self
@@ -520,6 +554,14 @@ impl TypeResolver {
                 }
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
+                for gp in generic_parameters {
+                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    self.current_scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
+                }
                 for member in members {
                     match member {
                         ProtocolMember::Method { decl, .. } => {
@@ -722,6 +764,13 @@ impl TypeResolver {
                         self.process_decl(stmt.clone());
                     }
                     self.leave_scope();
+                }
+            }
+            Statement::TypeAlias { type_expression, name, .. } => {
+                if let Some(ty) = self.infer_type(type_expression.clone()) {
+                    if let Some(scope) = self.current_scope.as_ref() {
+                        scope.borrow_mut().set_type(name.value.clone(), ty);
+                    }
                 }
             }
             _ => {}
@@ -981,20 +1030,36 @@ impl TypeResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.resolve_statement(statement.clone());
             }
-            Statement::StructDecl { body, conformances, .. } => {
+            Statement::StructDecl { body, conformances, scope, .. } => {
                 for conformance in conformances {
                     self.infer_type(conformance.clone());
                 }
-                for stmt in body {
-                    self.resolve_statement(stmt.clone());
+                if let Some(s) = scope.as_ref() {
+                    self.enter_scope(s.clone());
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                    self.leave_scope();
+                } else {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
                 }
             }
-            Statement::ClassDecl { body, conformances, .. } => {
+            Statement::ClassDecl { body, conformances, scope, .. } => {
                 for conformance in conformances {
                     self.infer_type(conformance.clone());
                 }
-                for stmt in body {
-                    self.resolve_statement(stmt.clone());
+                if let Some(s) = scope.as_ref() {
+                    self.enter_scope(s.clone());
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                    self.leave_scope();
+                } else {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
                 }
             }
             Statement::ProtocolDecl { scope, members, .. } => {
@@ -1047,9 +1112,17 @@ impl TypeResolver {
                 }
                 self.leave_scope();
             }
-            Statement::EnumDecl { body, .. } => {
-                for stmt in body {
-                    self.resolve_statement(stmt.clone());
+            Statement::EnumDecl { body, scope, .. } => {
+                if let Some(s) = scope.as_ref() {
+                    self.enter_scope(s.clone());
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                    self.leave_scope();
+                } else {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
                 }
             }
             Statement::ExtensionDecl {
@@ -1083,6 +1156,13 @@ impl TypeResolver {
                 } else {
                     for stmt in body {
                         self.resolve_statement(stmt.clone());
+                    }
+                }
+            }
+            Statement::TypeAlias { type_expression, name, .. } => {
+                if let Some(ty) = self.infer_type(type_expression.clone()) {
+                    if let Some(scope) = self.current_scope.as_ref() {
+                        scope.borrow_mut().set_type(name.value.clone(), ty);
                     }
                 }
             }
