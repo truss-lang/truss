@@ -4246,7 +4246,7 @@ fn test_parse_generic_enum() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "enum Option<T> { none, some(T) }".to_string(),
+            "enum Option<T> { case none case some(T) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),

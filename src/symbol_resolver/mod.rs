@@ -4,13 +4,17 @@ use crate::{
     ast::{
         expression::Expression,
         node::Program,
-        statement::{AccessorKind, FunctionBody, Pattern, ProtocolMember, Statement},
+        statement::{
+            AccessorKind, FunctionBody, Pattern, ProtocolMember, Statement, WhereRequirement,
+            WhereRequirementKind,
+        },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     krate::{Crate, Module},
     lexer::token::Token,
     scope::Scope,
     symbol::{Symbol, WeakSymbol},
+    types::Type,
 };
 
 #[derive(Debug)]
@@ -72,7 +76,7 @@ impl SymbolResolver {
                 }
             }
             Statement::StructDecl {
-                name, body, scope, ..
+                name, body, scope, generic_parameters, ..
             } => {
                 let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
                     name: name.value.clone(),
@@ -95,6 +99,12 @@ impl SymbolResolver {
                 };
 
                 *scope = Some(self.enter_scope(None));
+                {
+                    for gp in generic_parameters {
+                        let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                        scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                    }
+                }
                 {
                     let self_sym = Rc::new(RefCell::new(Symbol::Variable {
                         name: "self".to_string(),
@@ -199,7 +209,7 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Statement::ClassDecl {
-                name, body, scope, ..
+                name, body, scope, generic_parameters, ..
             } => {
                 let class_symbol = Rc::new(RefCell::new(Symbol::Class {
                     name: name.value.clone(),
@@ -223,6 +233,12 @@ impl SymbolResolver {
                 };
 
                 *scope = Some(self.enter_scope(None));
+                {
+                    for gp in generic_parameters {
+                        let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                        scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                    }
+                }
                 {
                     let self_sym = Rc::new(RefCell::new(Symbol::Variable {
                         name: "self".to_string(),
@@ -327,7 +343,7 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Statement::EnumDecl {
-                name, cases: ast_cases, body, scope, ..
+                name, cases: ast_cases, body, scope, generic_parameters, ..
             } => {
                 let enum_symbol = Rc::new(RefCell::new(Symbol::Enum {
                     name: name.value.clone(),
@@ -342,6 +358,10 @@ impl SymbolResolver {
                 };
 
                 *scope = Some(self.enter_scope(None));
+                for gp in generic_parameters {
+                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                }
                 for case in ast_cases {
                     let case_symbol = Rc::new(RefCell::new(Symbol::EnumCase {
                         name: case.name.value.clone(),
@@ -395,7 +415,7 @@ impl SymbolResolver {
                 self.register_symbols(statement.clone());
             }
             Statement::ProtocolDecl {
-                name, members, scope, ..
+                name, members, scope, generic_parameters, ..
             } => {
                 let protocol_symbol = Rc::new(RefCell::new(Symbol::Protocol {
                     name: name.value.clone(),
@@ -414,6 +434,10 @@ impl SymbolResolver {
                 };
 
                 *scope = Some(self.enter_scope(None));
+                for gp in generic_parameters {
+                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                }
                 for member in members {
                     match member {
                         ProtocolMember::Method { decl, .. } => {
@@ -709,9 +733,15 @@ impl SymbolResolver {
                 return_type,
                 body,
                 scope,
+                generic_parameters,
+                where_clause,
                 ..
             } => {
                 *scope = Some(self.enter_scope(None));
+                for gp in generic_parameters {
+                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                }
                 for parameter in parameters {
                     let name = parameter.borrow().name.value.clone();
                     if name != "_" {
@@ -725,6 +755,11 @@ impl SymbolResolver {
                 }
                 if let Some(return_type) = return_type {
                     self.resolve_expression(return_type.clone());
+                }
+                if let Some(where_clause) = where_clause {
+                    for req in where_clause {
+                        self.resolve_where_requirement(req);
+                    }
                 }
                 self.resolve_function_body(body.clone());
                 self.leave_scope();
@@ -782,10 +817,13 @@ impl SymbolResolver {
                     }
                 }
             }
-            Statement::StructDecl { body, scope, conformances, .. } => {
+            Statement::StructDecl { body, scope, conformances, where_clause, .. } => {
                 for conformance in conformances {
-                    if let Expression::Type { name, .. } = &*conformance.borrow() {
-                        let _ = self.resolve_symbol(name);
+                    self.resolve_conformance(conformance.clone());
+                }
+                if let Some(where_clause) = where_clause {
+                    for req in where_clause {
+                        self.resolve_where_requirement(req);
                     }
                 }
                 self.enter_scope(scope.clone());
@@ -794,15 +832,23 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Statement::ClassDecl { body, scope, superclass, conformances, .. } => {
+            Statement::ClassDecl { body, scope, superclass, conformances, where_clause, .. } => {
                 if let Some(superclass_expr) = superclass {
-                    if let Expression::Type { name: super_name, .. } = &*superclass_expr.borrow() {
+                    if let Expression::Type { name: super_name, type_parameters, .. } = &*superclass_expr.borrow() {
                         let _ = self.resolve_symbol(super_name);
+                        if let Some(type_parameters) = type_parameters {
+                            for tp in type_parameters {
+                                self.resolve_expression(tp.clone());
+                            }
+                        }
                     }
                 }
                 for conformance in conformances {
-                    if let Expression::Type { name, .. } = &*conformance.borrow() {
-                        let _ = self.resolve_symbol(name);
+                    self.resolve_conformance(conformance.clone());
+                }
+                if let Some(where_clause) = where_clause {
+                    for req in where_clause {
+                        self.resolve_where_requirement(req);
                     }
                 }
                 self.enter_scope(scope.clone());
@@ -811,7 +857,12 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Statement::EnumDecl { body, scope, .. } => {
+            Statement::EnumDecl { body, scope, where_clause, .. } => {
+                if let Some(where_clause) = where_clause {
+                    for req in where_clause {
+                        self.resolve_where_requirement(req);
+                    }
+                }
                 self.enter_scope(scope.clone());
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
@@ -852,10 +903,13 @@ impl SymbolResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.resolve_statement(statement.clone());
             }
-            Statement::ProtocolDecl { conformances, scope, members, .. } => {
+            Statement::ProtocolDecl { conformances, scope, members, where_clause, .. } => {
                 for conformance in conformances {
-                    if let Expression::Type { name, .. } = &*conformance.borrow() {
-                        let _ = self.resolve_symbol(name);
+                    self.resolve_conformance(conformance.clone());
+                }
+                if let Some(where_clause) = where_clause {
+                    for req in where_clause {
+                        self.resolve_where_requirement(req);
                     }
                 }
                 self.enter_scope(scope.clone());
@@ -904,8 +958,13 @@ impl SymbolResolver {
                 value: Some(value), ..
             } => self.resolve_expression(value.clone()),
             Statement::ExtensionDecl {
-                type_name, body, ..
+                type_name, body, where_clause, ..
             } => {
+                if let Some(where_clause) = where_clause {
+                    for req in where_clause {
+                        self.resolve_where_requirement(req);
+                    }
+                }
                 let target_scope = {
                     self.current_scope
                         .as_ref()
@@ -937,6 +996,9 @@ impl SymbolResolver {
                         self.resolve_statement(stmt.clone());
                     }
                 }
+            }
+            Statement::TypeAlias { type_expression, name: _, .. } => {
+                self.resolve_expression(type_expression.clone());
             }
             _ => {}
         }
@@ -1104,6 +1166,40 @@ impl SymbolResolver {
                     Self::resolve_pattern_bindings(items, resolver);
                 }
                 Pattern::Ignore => {}
+            }
+        }
+    }
+
+    fn resolve_conformance(&mut self, conformance: Rc<RefCell<Expression>>) {
+        match &*conformance.borrow() {
+            Expression::Type { name, type_parameters, .. } => {
+                let _ = self.resolve_symbol(name);
+                if let Some(type_parameters) = type_parameters {
+                    for tp in type_parameters {
+                        self.resolve_expression(tp.clone());
+                    }
+                }
+            }
+            Expression::CompoundType { types, .. } => {
+                for t in types {
+                    self.resolve_conformance(t.clone());
+                }
+            }
+            _ => {
+                self.resolve_expression(conformance.clone());
+            }
+        }
+    }
+
+    fn resolve_where_requirement(&mut self, req: &WhereRequirement) {
+        match &req.kind {
+            WhereRequirementKind::Conformance { type_expr, constraint } => {
+                self.resolve_expression(type_expr.clone());
+                self.resolve_expression(constraint.clone());
+            }
+            WhereRequirementKind::Equality { left, right } => {
+                self.resolve_expression(left.clone());
+                self.resolve_expression(right.clone());
             }
         }
     }

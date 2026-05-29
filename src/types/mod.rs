@@ -28,6 +28,7 @@ pub enum Type {
     Enum(String, WeakSymbol),
     Protocol(String, WeakSymbol),
     Compound(Vec<Rc<RefCell<Type>>>),
+    GenericParam(String),
 }
 
 impl fmt::Display for Type {
@@ -89,6 +90,7 @@ impl fmt::Display for Type {
                 }
                 Ok(())
             }
+            Type::GenericParam(name) => write!(f, "GenericParam({})", name),
         }
     }
 }

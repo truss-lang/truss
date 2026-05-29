@@ -4748,6 +4748,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     struct_type.as_basic_type_enum()
                 }
             }
+            Type::GenericParam(_) => {
+                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+            }
         };
         Ok(resolved)
     }

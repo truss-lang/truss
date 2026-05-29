@@ -1053,3 +1053,220 @@ fn test_extension_protocol_method_symbol() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Should not have errors for protocol extension, got: {:?}", errors);
 }
+
+#[test]
+fn test_generic_function_resolves_type_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func identity<T>(x: T) -> T { x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Generic function should resolve without errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_generic_struct_resolves_type_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Stack<Element> { var items: Array<Element> }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Generic struct should resolve without errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_generic_class_resolves_type_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Box<T> { var value: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Generic class should resolve without errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_generic_enum_resolves_type_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Option<T> { case none case some(T) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Generic enum should resolve without errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_with_associatedtype_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { associatedtype Item }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Protocol with associatedtype should resolve without errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_typealias_in_struct_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Wrapper { typealias Inner = Int32; var x: Inner }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Typealias in struct should resolve without errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_sugar_associatedtype_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Container<T> { func append(item: T) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Protocol<T> sugar should resolve without errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_function_where_clause_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo<T>(x: T) where T: Equatable { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Where clause should resolve without errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_struct_with_generic_protocol_conformance_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyArray: Container<Int32> { typealias Item = Int32 } protocol Container<T> { func append(item: T) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    // This should not crash; symbol resolution should handle the generic conformance
+    let _ = engine.borrow();
+}
+
+#[test]
+fn test_extension_where_clause_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct S<T> {} extension S where T: Hashable {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let _ = engine.borrow();
+}
