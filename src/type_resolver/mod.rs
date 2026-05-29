@@ -1353,7 +1353,92 @@ impl TypeResolver {
         }
     }
 
+    fn infer_if_type(&mut self, expression: Rc<RefCell<Expression>>) -> Option<Rc<RefCell<Type>>> {
+        let (condition, then, else_) = {
+            let expr = expression.borrow();
+            let Expression::If {
+                condition,
+                then,
+                else_,
+                ..
+            } = &*expr
+            else {
+                return None;
+            };
+            (condition.clone(), then.clone(), else_.clone())
+        };
+
+        let cond_ty = self.infer_type(condition.clone())?;
+
+        let binding_types = {
+            let cond = condition.borrow();
+            if let Expression::Case {
+                enum_type,
+                case_name,
+                bindings,
+                expression,
+                ..
+            } = &*cond
+            {
+                if !bindings.is_empty() {
+                    if let Some(type_name) = enum_type.as_ref() {
+                        self.get_enum_case_parameter_types(&type_name.value, &case_name.value)
+                    } else if let Some(expr_ty) = self.infer_type(expression.clone()) {
+                        self.resolve_enum_case_from_type(&expr_ty, None, case_name, bindings)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+
+        if let Some(ref param_types) = binding_types {
+            if let Expression::Block { scope, .. } = &mut *then.borrow_mut() {
+                if let Some(block_scope) = scope {
+                    if let Expression::Case { bindings, .. } = &*condition.borrow() {
+                        Self::set_binding_types(bindings, param_types, block_scope);
+                    }
+                }
+            }
+        }
+
+        if *cond_ty.borrow() != Type::Bool && binding_types.is_none() {
+            self.emit_error(
+                TrussDiagnosticCode::InvalidConditionType,
+                format!("If condition must be Bool, found {}", cond_ty.borrow()),
+                &condition.borrow().token(),
+            );
+        }
+
+        let then_ty = self.infer_type(then.clone())?;
+        if let Some(else_expr) = else_ {
+            let else_ty = self.infer_type(else_expr.clone())?;
+            if then_ty.borrow().clone() != else_ty.borrow().clone() {
+                self.emit_error(
+                    TrussDiagnosticCode::BranchTypeMismatch,
+                    format!(
+                        "If branches have different types: {} vs {}",
+                        then_ty.borrow(),
+                        else_ty.borrow()
+                    ),
+                    &then.borrow().token(),
+                );
+            }
+        }
+        if let Expression::If { ty, .. } = &mut *expression.borrow_mut() {
+            *ty = Some(then_ty.clone());
+        }
+        Some(then_ty)
+    }
+
     fn infer_type(&mut self, expression: Rc<RefCell<Expression>>) -> Option<Rc<RefCell<Type>>> {
+        if matches!(&*expression.borrow(), Expression::If { .. }) {
+            return self.infer_if_type(expression);
+        }
         let result = match &mut *expression.borrow_mut() {
             Expression::IntegerLiteral { ty, .. } => {
                 if ty.is_none() {
@@ -1670,79 +1755,8 @@ impl TypeResolver {
                 }
                 left_ty
             }
-            Expression::If {
-                condition,
-                then,
-                else_,
-                ..
-            } => {
-                let cond_ty = self.infer_type(condition.clone())?;
-
-                let binding_types = {
-                    let cond = condition.borrow();
-                    if let Expression::Case {
-                        enum_type,
-                        case_name,
-                        bindings,
-                        expression,
-                        ..
-                    } = &*cond
-                    {
-                        if !bindings.is_empty() {
-                            if let Some(type_name) = enum_type.as_ref() {
-                                self.get_enum_case_parameter_types(
-                                    &type_name.value,
-                                    &case_name.value,
-                                )
-                            } else if let Some(expr_ty) = self.infer_type(expression.clone()) {
-                                self.resolve_enum_case_from_type(
-                                    &expr_ty, None, case_name, bindings,
-                                )
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                };
-
-                if let Some(ref param_types) = binding_types {
-                    if let Expression::Block { scope, .. } = &mut *then.borrow_mut() {
-                        if let Some(block_scope) = scope {
-                            if let Expression::Case { bindings, .. } = &*condition.borrow() {
-                                Self::set_binding_types(bindings, param_types, block_scope);
-                            }
-                        }
-                    }
-                }
-
-                if *cond_ty.borrow() != Type::Bool && binding_types.is_none() {
-                    self.emit_error(
-                        TrussDiagnosticCode::InvalidConditionType,
-                        format!("If condition must be Bool, found {}", cond_ty.borrow()),
-                        &condition.borrow().token(),
-                    );
-                }
-
-                let then_ty = self.infer_type(then.clone())?;
-                if let Some(else_expr) = else_ {
-                    let else_ty = self.infer_type(else_expr.clone())?;
-                    if then_ty.borrow().clone() != else_ty.borrow().clone() {
-                        self.emit_error(
-                            TrussDiagnosticCode::BranchTypeMismatch,
-                            format!(
-                                "If branches have different types: {} vs {}",
-                                then_ty.borrow(),
-                                else_ty.borrow()
-                            ),
-                            &then.borrow().token(),
-                        );
-                    }
-                }
-                then_ty
+            Expression::If { .. } => {
+                unreachable!()
             }
             Expression::Case {
                 enum_type: enum_type_opt,

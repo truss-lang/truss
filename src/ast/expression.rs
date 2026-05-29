@@ -98,6 +98,7 @@ pub enum Expression {
         condition: Rc<RefCell<Expression>>,
         then: Rc<RefCell<Expression>>,
         else_: Option<Rc<RefCell<Expression>>>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     Case {
         token: Box<Token>,

@@ -2073,6 +2073,39 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn resolve_block_and_get_value(
+        &self,
+        block_expr: Rc<RefCell<Expression>>,
+    ) -> Result<(bool, Option<BasicValueEnum<'ctx>>)> {
+        if let Expression::Block { statements, .. } = &*block_expr.borrow() {
+            self.enter_scope_with_stmts(statements)?;
+            let len = statements.len();
+            let mut last_value = None;
+            for (i, stmt) in statements.iter().enumerate() {
+                let is_last = i == len - 1;
+                let terminates = match &*stmt.borrow() {
+                    Statement::ExpressionStatement { expression } => {
+                        let val = self.resolve_expression(expression.clone())?;
+                        if is_last {
+                            last_value = val;
+                        }
+                        false
+                    }
+                    _ => self.resolve_statement(stmt.clone())?,
+                };
+                if terminates {
+                    self.exit_scope();
+                    return Ok((true, None));
+                }
+            }
+            self.exit_scope();
+            Ok((false, last_value))
+        } else {
+            let val = self.resolve_expression(block_expr.clone())?;
+            Ok((false, val))
+        }
+    }
+
     fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<bool> {
         match &*statement.borrow() {
             Statement::VariableDecl {
@@ -2531,7 +2564,23 @@ impl<'ctx> IRGenerator<'ctx> {
                         FunctionBody::Statements(stmts) => {
                             self.enter_scope_with_stmts(stmts)?;
                             let mut has_return = false;
-                            for stmt in stmts {
+                            let stmt_count = stmts.len();
+                            for (i, stmt) in stmts.iter().enumerate() {
+                                let is_last = i == stmt_count - 1;
+                                if is_last && !is_void {
+                                    if let Statement::ExpressionStatement { expression } =
+                                        &*stmt.borrow()
+                                    {
+                                        let value = self.resolve_expression(expression.clone())?;
+                                        if let Some(value) = value {
+                                            self.emit_all_deinit_calls();
+                                            self.emit_class_releases();
+                                            self.builder.build_return(Some(&value))?;
+                                            has_return = true;
+                                            break;
+                                        }
+                                    }
+                                }
                                 let terminates = self.resolve_statement(stmt.clone())?;
                                 if terminates {
                                     has_return = true;
@@ -3885,6 +3934,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 condition,
                 then,
                 else_,
+                ty,
             } => {
                 let fn_val = self
                     .builder
@@ -4054,6 +4104,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     };
                     let exit_bb = self.context.append_basic_block(fn_val, "if_exit");
 
+                    let result_alloca = match (ty.as_ref(), else_.as_ref()) {
+                        (Some(t), Some(_)) => self.resolve_type(t.clone()).ok().map(|llvm_ty| {
+                            (self.builder.build_alloca(llvm_ty, "if_result"), llvm_ty)
+                        }),
+                        _ => None,
+                    };
+
                     self.builder.build_unconditional_branch(cond_bb)?;
                     self.builder.position_at_end(cond_bb);
 
@@ -4072,22 +4129,34 @@ impl<'ctx> IRGenerator<'ctx> {
                     )?;
 
                     self.builder.position_at_end(then_bb);
-                    let terminates = self.resolve_block_expression(then.clone())?;
+                    let (terminates, then_val) = self.resolve_block_and_get_value(then.clone())?;
+                    if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, then_val) {
+                        self.builder.build_store(*alloca, val)?;
+                    }
                     if !terminates {
                         self.builder.build_unconditional_branch(exit_bb)?;
                     }
 
                     if let Some(else_) = else_ {
                         self.builder.position_at_end(else_bb.unwrap());
-                        let terminates = self.resolve_block_expression(else_.clone())?;
+                        let (terminates, else_val) =
+                            self.resolve_block_and_get_value(else_.clone())?;
+                        if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, else_val) {
+                            self.builder.build_store(*alloca, val)?;
+                        }
                         if !terminates {
                             self.builder.build_unconditional_branch(exit_bb)?;
                         }
                     }
 
                     self.builder.position_at_end(exit_bb);
-
-                    Ok(None)
+                    match result_alloca {
+                        Some((Ok(alloca), llvm_ty)) => {
+                            let result = self.builder.build_load(llvm_ty, alloca, "if_result")?;
+                            Ok(Some(result))
+                        }
+                        _ => Ok(None),
+                    }
                 }
             }
             Expression::Cast {

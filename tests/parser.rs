@@ -5343,6 +5343,7 @@ fn test_parse_if_as_variable_initializer() {
             condition,
             then,
             else_,
+            ..
         } = &*init.borrow()
     {
         assert!(matches!(

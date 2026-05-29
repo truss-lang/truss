@@ -2888,6 +2888,7 @@ impl Parser {
             condition: Rc::new(RefCell::new(condition)),
             then: Rc::new(RefCell::new(then)),
             else_: else_.map(RefCell::new).map(Rc::new),
+            ty: None,
         })
     }
     fn parse_case_expression(&mut self) -> Result<Expression, ()> {

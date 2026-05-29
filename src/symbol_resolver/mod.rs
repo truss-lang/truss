@@ -1213,6 +1213,7 @@ impl SymbolResolver {
                 condition,
                 then,
                 else_,
+                ..
             } => {
                 self.resolve_expression(condition.clone());
 
