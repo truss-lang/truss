@@ -200,6 +200,16 @@ impl Parser {
                     }
                     self.parse_break()
                 }
+                KeywordType::Defer => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_defer()
+                }
                 KeywordType::Extension => self.parse_extension_decl(modifiers),
                 KeywordType::Typealias => self.parse_typealias(modifiers),
                 _ => {
@@ -3413,6 +3423,47 @@ impl Parser {
         Ok(Statement::Break {
             token: Box::new(token),
         })
+    }
+
+    fn parse_defer(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+        {
+            let body = self.parse_block()?;
+            if let Expression::Block { ref statements, .. } = body {
+                for stmt in statements {
+                    if Self::is_forbidden_in_defer(&*stmt.borrow()) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ControlFlowNotAllowedInDefer,
+                            format!("'{}' is not allowed in defer body", stmt.borrow().token().value),
+                            &stmt.borrow().token(),
+                        );
+                    }
+                }
+            }
+            Ok(Statement::Defer {
+                token: Box::new(token),
+                body: Rc::new(RefCell::new(body)),
+            })
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedBlockAfterDefer,
+                "Expected '{' after 'defer'",
+                &self.tokens[self.index],
+            );
+            Err(())
+        }
+    }
+
+    fn is_forbidden_in_defer(stmt: &Statement) -> bool {
+        matches!(
+            stmt,
+            Statement::Return { .. }
+                | Statement::Throw { .. }
+                | Statement::Break { .. }
+                | Statement::Fallthrough { .. }
+        )
     }
 
     fn parse_maybe_named_expr(&mut self) -> Result<(Option<String>, Expression), ()> {

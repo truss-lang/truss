@@ -156,6 +156,10 @@ pub enum Statement {
     Break {
         token: Box<Token>,
     },
+    Defer {
+        token: Box<Token>,
+        body: Rc<RefCell<Expression>>,
+    },
 }
 
 impl Statement {
@@ -184,6 +188,7 @@ impl Statement {
             Self::Guard { token, .. } => (**token).clone(),
             Self::Fallthrough { token, .. } => (**token).clone(),
             Self::Break { token, .. } => (**token).clone(),
+            Self::Defer { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -200,6 +205,7 @@ impl Statement {
             Self::Guard { .. } => Ok(vec![]),
             Self::Fallthrough { .. } => Ok(vec![]),
             Self::Break { .. } => Ok(vec![]),
+            Self::Defer { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
     }

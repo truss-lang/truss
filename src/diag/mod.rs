@@ -26,6 +26,8 @@ pub enum TrussDiagnosticCode {
     DuplicateModifier,
     ModifierNotAllowedHere,
     IncompatibleAccessors,
+    ExpectedBlockAfterDefer,
+    ControlFlowNotAllowedInDefer,
 
     SymbolError,
     UndefinedVariable,
@@ -84,6 +86,8 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::DuplicateModifier => "E0110",
             Self::ModifierNotAllowedHere => "E0111",
             Self::IncompatibleAccessors => "E0112",
+            Self::ExpectedBlockAfterDefer => "E0113",
+            Self::ControlFlowNotAllowedInDefer => "E0114",
 
             Self::SymbolError => "E0201",
             Self::UndefinedVariable => "E0202",

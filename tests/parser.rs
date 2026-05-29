@@ -5095,3 +5095,98 @@ fn test_parse_associated_type_in_parenthesized_type() {
         panic!("Expected FunctionDecl");
     }
 }
+
+#[test]
+fn test_parse_defer_statement() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { defer { cleanup() } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::Defer { body: defer_body, .. } = &*statements[0].borrow()
+        && let Expression::Block { statements: block_stmts, .. } = &*defer_body.borrow()
+    {
+        assert_eq!(block_stmts.len(), 1);
+        assert!(matches!(
+            &*block_stmts[0].borrow(),
+            Statement::ExpressionStatement { .. }
+        ));
+    } else {
+        panic!("Expected FunctionDecl with defer statement");
+    }
+}
+
+#[test]
+fn test_parse_defer_nested() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { defer { defer { f() } g() } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::Defer { body: outer_defer_body, .. } = &*statements[0].borrow()
+        && let Expression::Block { statements: outer_stmts, .. } = &*outer_defer_body.borrow()
+    {
+        assert_eq!(outer_stmts.len(), 2);
+        assert!(matches!(
+            &*outer_stmts[0].borrow(),
+            Statement::Defer { .. }
+        ));
+        assert!(matches!(
+            &*outer_stmts[1].borrow(),
+            Statement::ExpressionStatement { .. }
+        ));
+    } else {
+        panic!("Expected FunctionDecl with nested defer");
+    }
+}
+
+#[test]
+fn test_parse_defer_with_return_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { defer { return } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        assert!(matches!(&*statements[0].borrow(), Statement::Defer { .. }));
+    } else {
+        panic!("Expected FunctionDecl with defer");
+    }
+    assert!(engine.borrow().has_errors());
+}
+
+#[test]
+fn test_parse_defer_missing_block_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { defer }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().has_errors());
+}
