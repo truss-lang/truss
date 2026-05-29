@@ -4,9 +4,8 @@ use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, GenericParameter, MatchCase, Modifier,
-            ModifierType, Parameter, Pattern, ProtocolMember, Statement, VariadicKind,
-            WhereRequirement, WhereRequirementKind,
+            AccessModifier, AccessorKind, FunctionBody, Modifier, ModifierType, Parameter, Pattern,
+            ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -1543,7 +1542,10 @@ fn test_parse_extension_with_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExtensionDecl { type_name, body, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExtensionDecl {
+        type_name, body, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(type_name.value, "Foo");
         assert_eq!(body.len(), 1);
         if let Statement::FunctionDecl { name, .. } = &*body[0].borrow() {
@@ -1568,7 +1570,13 @@ fn test_parse_extension_with_protocol_conformance() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExtensionDecl { type_name, conformances, body, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExtensionDecl {
+        type_name,
+        conformances,
+        body,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(type_name.value, "Foo");
         assert_eq!(conformances.len(), 2);
         assert_eq!(body.len(), 1);
@@ -1586,7 +1594,10 @@ fn test_parse_extension_empty_body() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExtensionDecl { type_name, body, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExtensionDecl {
+        type_name, body, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(type_name.value, "Foo");
         assert!(body.is_empty());
     } else {
@@ -1606,7 +1617,10 @@ fn test_parse_extension_of_protocol() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExtensionDecl { type_name, body, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExtensionDecl {
+        type_name, body, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(type_name.value, "Printable");
         assert_eq!(body.len(), 1);
         if let Statement::FunctionDecl { name, .. } = &*body[0].borrow() {
@@ -2524,7 +2538,10 @@ fn test_parse_enum_with_body() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::EnumDecl { name, cases, body, .. } = &*program.statements[0].borrow() {
+    if let Statement::EnumDecl {
+        name, cases, body, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(name.value, "Name");
         assert_eq!(cases.len(), 5);
         assert_eq!(cases[0].name.value, "a");
@@ -2573,7 +2590,8 @@ fn test_parse_enum_case_constructor() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "enum Result { case success(Int32) } func test() { let r = Result.success(42) }".to_string(),
+            "enum Result { case success(Int32) } func test() { let r = Result.success(42) }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2584,7 +2602,9 @@ fn test_parse_enum_case_constructor() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
         && let Some(init) = initializer
-        && let Expression::Call { callee, parameters, .. } = &*init.borrow()
+        && let Expression::Call {
+            callee, parameters, ..
+        } = &*init.borrow()
         && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
     {
         assert_eq!(member.value, "success");
@@ -2596,7 +2616,10 @@ fn test_parse_enum_case_constructor() {
             _ => panic!("Expected Type or Variable expression for object"),
         }
     } else {
-        panic!("Expected FunctionDecl -> VariableDecl -> Call -> MemberAccess, got: {:?}", program.statements);
+        panic!(
+            "Expected FunctionDecl -> VariableDecl -> Call -> MemberAccess, got: {:?}",
+            program.statements
+        );
     }
 }
 
@@ -2618,19 +2641,33 @@ fn test_parse_if_case_no_bindings() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
-        && let Expression::If { condition, then, .. } = &*expression.borrow()
-        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+        && let Expression::If {
+            condition, then, ..
+        } = &*expression.borrow()
+        && let Expression::Case {
+            enum_type,
+            case_name,
+            bindings,
+            ..
+        } = &*condition.borrow()
     {
         assert_eq!(enum_type.as_ref().unwrap().value, "Option");
         assert_eq!(case_name.value, "none");
         assert!(bindings.is_empty());
-        if let Expression::Block { statements: then_stmts, .. } = &*then.borrow() {
+        if let Expression::Block {
+            statements: then_stmts,
+            ..
+        } = &*then.borrow()
+        {
             assert!(then_stmts.is_empty());
         } else {
             panic!("Expected block expression for then branch");
         }
     } else {
-        panic!("Expected If with Case condition, got: {:?}", program.statements);
+        panic!(
+            "Expected If with Case condition, got: {:?}",
+            program.statements
+        );
     }
 }
 
@@ -2653,7 +2690,12 @@ fn test_parse_if_case_with_bindings() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::If { condition, .. } = &*expression.borrow()
-        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+        && let Expression::Case {
+            enum_type,
+            case_name,
+            bindings,
+            ..
+        } = &*condition.borrow()
     {
         assert_eq!(enum_type.as_ref().unwrap().value, "Option");
         assert_eq!(case_name.value, "some");
@@ -2664,7 +2706,10 @@ fn test_parse_if_case_with_bindings() {
             panic!("Expected Identifier pattern");
         }
     } else {
-        panic!("Expected If with Case condition, got: {:?}", program.statements);
+        panic!(
+            "Expected If with Case condition, got: {:?}",
+            program.statements
+        );
     }
 }
 
@@ -2690,15 +2735,25 @@ fn test_parse_if_case_with_else() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
-        && let Expression::If { condition, else_, .. } = &*expression.borrow()
-        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+        && let Expression::If {
+            condition, else_, ..
+        } = &*expression.borrow()
+        && let Expression::Case {
+            enum_type,
+            case_name,
+            bindings,
+            ..
+        } = &*condition.borrow()
     {
         assert_eq!(enum_type.as_ref().unwrap().value, "Option");
         assert_eq!(case_name.value, "some");
         assert_eq!(bindings.len(), 1);
         assert!(else_.is_some());
     } else {
-        panic!("Expected If with Case condition and else, got: {:?}", program.statements);
+        panic!(
+            "Expected If with Case condition and else, got: {:?}",
+            program.statements
+        );
     }
 }
 
@@ -2724,15 +2779,28 @@ fn test_parse_if_case_else_if() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
-        && let Expression::If { condition, else_, .. } = &*expression.borrow()
-        && let Expression::Case { enum_type, case_name, .. } = &*condition.borrow()
+        && let Expression::If {
+            condition, else_, ..
+        } = &*expression.borrow()
+        && let Expression::Case {
+            enum_type,
+            case_name,
+            ..
+        } = &*condition.borrow()
     {
         assert_eq!(enum_type.as_ref().unwrap().value, "Status");
         assert_eq!(case_name.value, "idle");
         assert!(else_.is_some());
         if let Some(else_expr) = else_ {
-            if let Expression::If { condition: else_cond, .. } = &*else_expr.borrow()
-                && let Expression::Case { enum_type: else_enum_type, case_name: else_case_name, .. } = &*else_cond.borrow()
+            if let Expression::If {
+                condition: else_cond,
+                ..
+            } = &*else_expr.borrow()
+                && let Expression::Case {
+                    enum_type: else_enum_type,
+                    case_name: else_case_name,
+                    ..
+                } = &*else_cond.borrow()
             {
                 assert_eq!(else_enum_type.as_ref().unwrap().value, "Status");
                 assert_eq!(else_case_name.value, "loading");
@@ -2741,7 +2809,10 @@ fn test_parse_if_case_else_if() {
             }
         }
     } else {
-        panic!("Expected If with Case condition, got: {:?}", program.statements);
+        panic!(
+            "Expected If with Case condition, got: {:?}",
+            program.statements
+        );
     }
 }
 
@@ -2764,13 +2835,21 @@ fn test_parse_if_case_multiple_bindings() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::If { condition, .. } = &*expression.borrow()
-        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+        && let Expression::Case {
+            enum_type,
+            case_name,
+            bindings,
+            ..
+        } = &*condition.borrow()
     {
         assert_eq!(enum_type.as_ref().unwrap().value, "Status");
         assert_eq!(case_name.value, "error");
         assert_eq!(bindings.len(), 2);
     } else {
-        panic!("Expected If with Case condition, got: {:?}", program.statements);
+        panic!(
+            "Expected If with Case condition, got: {:?}",
+            program.statements
+        );
     }
 }
 
@@ -2811,11 +2890,16 @@ fn test_parse_case_alone() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::Return { value: Some(value), .. } = &*statements[0].borrow()
+        && let Statement::Return {
+            value: Some(value), ..
+        } = &*statements[0].borrow()
     {
         assert!(matches!(&*value.borrow(), Expression::Case { .. }));
     } else {
-        panic!("Expected Return with Case expression, got: {:?}", program.statements);
+        panic!(
+            "Expected Return with Case expression, got: {:?}",
+            program.statements
+        );
     }
 }
 
@@ -3086,7 +3170,10 @@ fn test_parse_void_literal_empty_parens() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    assert!(!program.statements.is_empty(), "program should have statements");
+    assert!(
+        !program.statements.is_empty(),
+        "program should have statements"
+    );
     if let Statement::VariableDecl {
         type_expression: Some(type_expr),
         initializer: Some(init),
@@ -3178,8 +3265,7 @@ fn test_parse_tuple_type_in_variable_decl() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func test() { let a: (Int32, Bool) }"
-                .to_string(),
+            "func test() { let a: (Int32, Bool) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3195,14 +3281,8 @@ fn test_parse_tuple_type_in_variable_decl() {
         && let Expression::TupleType { elements, .. } = &*type_expr.borrow()
     {
         assert_eq!(elements.len(), 2);
-        assert!(matches!(
-            *elements[0].1.borrow(),
-            Expression::Type { .. }
-        ));
-        assert!(matches!(
-            *elements[1].1.borrow(),
-            Expression::Type { .. }
-        ));
+        assert!(matches!(*elements[0].1.borrow(), Expression::Type { .. }));
+        assert!(matches!(*elements[1].1.borrow(), Expression::Type { .. }));
     } else {
         panic!();
     }
@@ -3213,8 +3293,7 @@ fn test_parse_grouped_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func test() { let a: (Int32) }"
-                .to_string(),
+            "func test() { let a: (Int32) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3228,10 +3307,7 @@ fn test_parse_grouped_type() {
             ..
         } = &*statements[0].borrow()
     {
-        assert!(matches!(
-            *type_expr.borrow(),
-            Expression::Type { .. }
-        ));
+        assert!(matches!(*type_expr.borrow(), Expression::Type { .. }));
     } else {
         panic!();
     }
@@ -3242,8 +3318,7 @@ fn test_parse_tuple_pointer_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func test() { let a: (Int32, Bool)* }"
-                .to_string(),
+            "func test() { let a: (Int32, Bool)* }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3333,10 +3408,7 @@ fn test_parse_tuple_index_access_second_element() {
         initializer: Some(init),
         ..
     } = &*program.statements[0].borrow()
-        && let Expression::TupleIndexAccess {
-            index_value: 1,
-            ..
-        } = &*init.borrow()
+        && let Expression::TupleIndexAccess { index_value: 1, .. } = &*init.borrow()
     {
     } else {
         panic!();
@@ -3404,10 +3476,7 @@ fn test_parse_self_member_access() {
         && let Expression::MemberAccess { object, member, .. } = &*expression.borrow()
     {
         assert_eq!(member.value, "field");
-        assert!(matches!(
-            *object.borrow(),
-            Expression::SelfKeyword { .. }
-        ));
+        assert!(matches!(*object.borrow(), Expression::SelfKeyword { .. }));
     } else {
         panic!();
     }
@@ -3432,10 +3501,7 @@ fn test_parse_self_method_call() {
         && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
     {
         assert_eq!(member.value, "method");
-        assert!(matches!(
-            *object.borrow(),
-            Expression::SelfKeyword { .. }
-        ));
+        assert!(matches!(*object.borrow(), Expression::SelfKeyword { .. }));
     } else {
         panic!();
     }
@@ -3521,7 +3587,10 @@ fn test_parse_single_element_named_tuple() {
 fn test_parse_named_tuple_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("let a: (x: Int32, y: Bool) = (x: 1, y: true)".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "let a: (x: Int32, y: Bool) = (x: 1, y: true)".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -3531,8 +3600,14 @@ fn test_parse_named_tuple_type() {
         initializer: Some(init),
         ..
     } = &*program.statements[0].borrow()
-        && let Expression::TupleType { elements: type_elements, .. } = &*type_expr.borrow()
-        && let Expression::TupleLiteral { elements: lit_elements, .. } = &*init.borrow()
+        && let Expression::TupleType {
+            elements: type_elements,
+            ..
+        } = &*type_expr.borrow()
+        && let Expression::TupleLiteral {
+            elements: lit_elements,
+            ..
+        } = &*init.borrow()
     {
         assert_eq!(type_elements.len(), 2);
         assert_eq!(type_elements[0].0.as_deref(), Some("x"));
@@ -3550,7 +3625,10 @@ fn test_parse_named_tuple_type() {
 fn test_parse_protocol_empty() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("protocol MyProtocol {}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "protocol MyProtocol {}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -3582,7 +3660,10 @@ fn test_parse_protocol_with_modifier() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ProtocolDecl { name, modifiers, .. } = &*program.statements[0].borrow() {
+    if let Statement::ProtocolDecl {
+        name, modifiers, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(name.value, "MyProtocol");
         assert_eq!(modifiers.len(), 1);
         assert_eq!(
@@ -3634,10 +3715,7 @@ fn test_parse_protocol_with_method_requirement() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ProtocolDecl {
-        name, members, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
         assert_eq!(members.len(), 1);
         if let ProtocolMember::Method { decl, .. } = &members[0] {
@@ -3672,10 +3750,7 @@ fn test_parse_protocol_with_default_implementation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ProtocolDecl {
-        name, members, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
         assert_eq!(members.len(), 1);
         if let ProtocolMember::Method { decl, .. } = &members[0] {
@@ -3691,7 +3766,7 @@ fn test_parse_protocol_with_default_implementation() {
                 panic!();
             }
         } else {
-        panic!();
+            panic!();
         }
     } else {
         panic!();
@@ -3711,10 +3786,7 @@ fn test_parse_protocol_with_property_requirements() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ProtocolDecl {
-        name, members, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
         assert_eq!(members.len(), 2);
 
@@ -3761,10 +3833,7 @@ fn test_parse_protocol_with_mixed_members() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ProtocolDecl {
-        name, members, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
         assert_eq!(members.len(), 3);
         assert!(matches!(members[0], ProtocolMember::Method { .. }));
@@ -3789,10 +3858,7 @@ fn test_parse_protocol_property_get_only_default() {
     let program = parser.parse();
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
         assert_eq!(members.len(), 1);
-        if let ProtocolMember::Property {
-            accessors, ..
-        } = &members[0]
-        {
+        if let ProtocolMember::Property { accessors, .. } = &members[0] {
             assert!(accessors.get);
             assert!(!accessors.set);
         } else {
@@ -3851,7 +3917,10 @@ fn test_parse_class_with_superclass_and_protocols() {
     {
         assert_eq!(name.value, "MyClass");
         assert!(superclass.is_some());
-        if let Expression::Type { name: super_name, .. } = &*superclass.as_ref().unwrap().borrow() {
+        if let Expression::Type {
+            name: super_name, ..
+        } = &*superclass.as_ref().unwrap().borrow()
+        {
             assert_eq!(super_name.value, "SuperClass");
         } else {
             panic!();
@@ -3880,9 +3949,7 @@ fn test_parse_struct_with_protocol_conformance() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     if let Statement::StructDecl {
-        name,
-        conformances,
-        ..
+        name, conformances, ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "MyStruct");
@@ -3910,9 +3977,7 @@ fn test_parse_struct_with_multiple_protocol_conformances() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     if let Statement::StructDecl {
-        name,
-        conformances,
-        ..
+        name, conformances, ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "MyStruct");
@@ -3941,18 +4006,13 @@ fn test_parse_struct_with_multiple_protocol_conformances() {
 fn test_parse_struct_without_conformances_still_works() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "struct Empty {}".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("struct Empty {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     if let Statement::StructDecl {
-        name,
-        conformances,
-        ..
+        name, conformances, ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "Empty");
@@ -3966,10 +4026,7 @@ fn test_parse_struct_without_conformances_still_works() {
 fn test_parse_any_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "let x: any MyProtocol".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("let x: any MyProtocol".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -4041,10 +4098,7 @@ fn test_parse_compound_type() {
 fn test_parse_compound_type_three() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "let x: A & B & C".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("let x: A & B & C".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -4176,10 +4230,16 @@ fn test_parse_generic_function_with_combined_constraint() {
     {
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].constraints.len(), 1);
-        if let Expression::CompoundType { types, .. } = &*generic_parameters[0].constraints[0].borrow() {
+        if let Expression::CompoundType { types, .. } =
+            &*generic_parameters[0].constraints[0].borrow()
+        {
             assert_eq!(types.len(), 2);
-            assert!(matches!(&*types[0].borrow(), Expression::Type { name, .. } if name.value == "Equatable"));
-            assert!(matches!(&*types[1].borrow(), Expression::Type { name, .. } if name.value == "Hashable"));
+            assert!(
+                matches!(&*types[0].borrow(), Expression::Type { name, .. } if name.value == "Equatable")
+            );
+            assert!(
+                matches!(&*types[1].borrow(), Expression::Type { name, .. } if name.value == "Hashable")
+            );
         } else {
             panic!("Expected CompoundType");
         }
@@ -4310,7 +4370,10 @@ fn test_parse_protocol_associatedtype() {
     let program = parser.parse();
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
         assert!(matches!(members[0], ProtocolMember::AssociatedType { .. }));
-        if let ProtocolMember::AssociatedType { name, constraints, .. } = &members[0] {
+        if let ProtocolMember::AssociatedType {
+            name, constraints, ..
+        } = &members[0]
+        {
             assert_eq!(name.value, "Item");
             assert!(constraints.is_empty());
         }
@@ -4332,7 +4395,10 @@ fn test_parse_protocol_associatedtype_with_constraint() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
-        if let ProtocolMember::AssociatedType { name, constraints, .. } = &members[0] {
+        if let ProtocolMember::AssociatedType {
+            name, constraints, ..
+        } = &members[0]
+        {
             assert_eq!(name.value, "T");
             assert_eq!(constraints.len(), 1);
         } else {
@@ -4403,7 +4469,10 @@ fn test_parse_typealias_at_top_level() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    assert!(matches!(&*program.statements[0].borrow(), Statement::TypeAlias { .. }));
+    assert!(matches!(
+        &*program.statements[0].borrow(),
+        Statement::TypeAlias { .. }
+    ));
     if let Statement::TypeAlias { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyInt");
     } else {
@@ -4500,7 +4569,10 @@ fn test_parse_function_where_clause() {
         assert!(where_clause.is_some());
         let requirements = where_clause.as_ref().unwrap();
         assert_eq!(requirements.len(), 1);
-        assert!(matches!(requirements[0].kind, WhereRequirementKind::Conformance { .. }));
+        assert!(matches!(
+            requirements[0].kind,
+            WhereRequirementKind::Conformance { .. }
+        ));
     } else {
         panic!();
     }
@@ -4522,8 +4594,14 @@ fn test_parse_function_where_clause_multi_and() {
         assert!(where_clause.is_some());
         let reqs = where_clause.as_ref().unwrap();
         assert_eq!(reqs.len(), 2);
-        assert!(matches!(reqs[0].kind, WhereRequirementKind::Conformance { .. }));
-        assert!(matches!(reqs[1].kind, WhereRequirementKind::Conformance { .. }));
+        assert!(matches!(
+            reqs[0].kind,
+            WhereRequirementKind::Conformance { .. }
+        ));
+        assert!(matches!(
+            reqs[1].kind,
+            WhereRequirementKind::Conformance { .. }
+        ));
     } else {
         panic!();
     }
@@ -4566,7 +4644,12 @@ fn test_parse_extension_where_clause() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExtensionDecl { type_name, where_clause, .. } = &*program.statements[0].borrow() {
+    if let Statement::ExtensionDecl {
+        type_name,
+        where_clause,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(type_name.value, "Array");
         assert!(where_clause.is_some());
     } else {
@@ -4613,7 +4696,10 @@ fn test_parse_generic_function_less_than_no_conflict() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::FunctionDecl { generic_parameters, .. } = &*program.statements[0].borrow() {
+    if let Statement::FunctionDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
         assert!(generic_parameters.is_empty());
     } else {
         panic!();
@@ -4657,7 +4743,12 @@ fn test_parse_if_case_dot_shorthand() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::If { condition, .. } = &*expression.borrow()
-        && let Expression::Case { enum_type, case_name, bindings, .. } = &*condition.borrow()
+        && let Expression::Case {
+            enum_type,
+            case_name,
+            bindings,
+            ..
+        } = &*condition.borrow()
     {
         assert!(enum_type.is_none());
         assert_eq!(case_name.value, "some");
@@ -4686,7 +4777,11 @@ fn test_parse_if_case_connect_with_and() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::If { condition, .. } = &*expression.borrow()
-        && let Expression::Binary { left, operator, right } = &*condition.borrow()
+        && let Expression::Binary {
+            left,
+            operator,
+            right,
+        } = &*condition.borrow()
     {
         assert_eq!(*operator, BinaryOperator::And);
         assert!(matches!(&*left.borrow(), Expression::Case { .. }));
@@ -4731,7 +4826,9 @@ fn test_parse_match_simple() {
             assert_eq!(bindings.len(), 1);
             assert!(matches!(&bindings[0], Pattern::ValueBinding(_)));
         }
-        assert!(matches!(cases[1].pattern.as_ref(), Pattern::EnumCase { case_name, .. } if case_name.value == "none"));
+        assert!(
+            matches!(cases[1].pattern.as_ref(), Pattern::EnumCase { case_name, .. } if case_name.value == "none")
+        );
         assert!(matches!(cases[2].pattern.as_ref(), Pattern::Ignore));
     } else {
         panic!("Expected Return with Match expression");
@@ -4790,7 +4887,11 @@ fn test_parse_guard_statement() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::Guard { condition, else_body, .. } = &*statements[0].borrow()
+        && let Statement::Guard {
+            condition,
+            else_body,
+            ..
+        } = &*statements[0].borrow()
     {
         assert!(matches!(&*condition.borrow(), Expression::Case { .. }));
         assert!(matches!(&*else_body.borrow(), Expression::Block { .. }));
@@ -4825,12 +4926,18 @@ fn test_parse_fallthrough_and_break() {
         && let Expression::Match { cases, .. } = &*expression.borrow()
     {
         assert_eq!(cases.len(), 2);
-        if let Expression::Block { statements: stmts, .. } = &*cases[0].body.borrow() {
+        if let Expression::Block {
+            statements: stmts, ..
+        } = &*cases[0].body.borrow()
+        {
             assert!(matches!(&*stmts[0].borrow(), Statement::Fallthrough { .. }));
         } else {
             panic!("Expected block with fallthrough");
         }
-        if let Expression::Block { statements: stmts, .. } = &*cases[1].body.borrow() {
+        if let Expression::Block {
+            statements: stmts, ..
+        } = &*cases[1].body.borrow()
+        {
             assert!(matches!(&*stmts[0].borrow(), Statement::Break { .. }));
         } else {
             panic!("Expected block with break");
@@ -4859,11 +4966,17 @@ fn test_parse_pattern_value_binding() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::If { condition, .. } = &*expression.borrow()
-        && let Expression::Case { case_name, bindings, .. } = &*condition.borrow()
+        && let Expression::Case {
+            case_name,
+            bindings,
+            ..
+        } = &*condition.borrow()
     {
         assert_eq!(case_name.value, "some");
         assert_eq!(bindings.len(), 1);
-        assert!(matches!(&bindings[0], Pattern::ValueBinding(inner) if matches!(inner.as_ref(), Pattern::Identifier(_))));
+        assert!(
+            matches!(&bindings[0], Pattern::ValueBinding(inner) if matches!(inner.as_ref(), Pattern::Identifier(_)))
+        );
     } else {
         panic!("Expected Case with value binding pattern");
     }
@@ -4888,7 +5001,11 @@ fn test_parse_mixed_literal_and_binding_patterns() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::If { condition, .. } = &*expression.borrow()
-        && let Expression::Case { case_name, bindings, .. } = &*condition.borrow()
+        && let Expression::Case {
+            case_name,
+            bindings,
+            ..
+        } = &*condition.borrow()
     {
         assert_eq!(case_name.value, "error");
         assert_eq!(bindings.len(), 2);
@@ -4939,8 +5056,13 @@ fn test_parse_match_malformed_no_brace_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    assert!(program.statements.is_empty()
-        || matches!(&*program.statements[0].borrow(), Statement::ExpressionStatement { .. }));
+    assert!(
+        program.statements.is_empty()
+            || matches!(
+                &*program.statements[0].borrow(),
+                Statement::ExpressionStatement { .. }
+            )
+    );
 }
 
 #[test]
@@ -4952,8 +5074,10 @@ fn test_parse_guard_without_else_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    assert!(program.statements.is_empty()
-        || matches!(&*program.statements[0].borrow(), Statement::Guard { .. }));
+    assert!(
+        program.statements.is_empty()
+            || matches!(&*program.statements[0].borrow(), Statement::Guard { .. })
+    );
 }
 
 #[test]
@@ -5030,7 +5154,10 @@ fn test_parse_associated_type_with_pointer() {
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
         let ty_expr = parameters[0].borrow().type_expression.clone();
         let ty_expr_ref = ty_expr.borrow();
-        assert!(matches!(&*ty_expr_ref, Expression::PointerType { .. }), "Expected PointerType");
+        assert!(
+            matches!(&*ty_expr_ref, Expression::PointerType { .. }),
+            "Expected PointerType"
+        );
         if let Expression::PointerType { base, .. } = &*ty_expr_ref {
             let base = base.borrow();
             assert!(
@@ -5058,7 +5185,9 @@ fn test_parse_associated_type_in_variable_decl() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
-        && let Statement::VariableDecl { type_expression, .. } = &*stmts[0].borrow()
+        && let Statement::VariableDecl {
+            type_expression, ..
+        } = &*stmts[0].borrow()
     {
         let ty_expr = type_expression.as_ref().unwrap().borrow();
         assert!(
@@ -5110,8 +5239,13 @@ fn test_parse_defer_statement() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::Defer { body: defer_body, .. } = &*statements[0].borrow()
-        && let Expression::Block { statements: block_stmts, .. } = &*defer_body.borrow()
+        && let Statement::Defer {
+            body: defer_body, ..
+        } = &*statements[0].borrow()
+        && let Expression::Block {
+            statements: block_stmts,
+            ..
+        } = &*defer_body.borrow()
     {
         assert_eq!(block_stmts.len(), 1);
         assert!(matches!(
@@ -5137,14 +5271,17 @@ fn test_parse_defer_nested() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::Defer { body: outer_defer_body, .. } = &*statements[0].borrow()
-        && let Expression::Block { statements: outer_stmts, .. } = &*outer_defer_body.borrow()
+        && let Statement::Defer {
+            body: outer_defer_body,
+            ..
+        } = &*statements[0].borrow()
+        && let Expression::Block {
+            statements: outer_stmts,
+            ..
+        } = &*outer_defer_body.borrow()
     {
         assert_eq!(outer_stmts.len(), 2);
-        assert!(matches!(
-            &*outer_stmts[0].borrow(),
-            Statement::Defer { .. }
-        ));
+        assert!(matches!(&*outer_stmts[0].borrow(), Statement::Defer { .. }));
         assert!(matches!(
             &*outer_stmts[1].borrow(),
             Statement::ExpressionStatement { .. }
@@ -5180,10 +5317,7 @@ fn test_parse_defer_with_return_error() {
 fn test_parse_defer_missing_block_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "func test() { defer }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("func test() { defer }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());

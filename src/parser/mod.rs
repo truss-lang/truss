@@ -576,10 +576,7 @@ impl Parser {
                                 );
                                 return Err(());
                             };
-                            if !SeparatorType::is_separator(
-                                &right,
-                                SeparatorType::CloseParen,
-                            ) {
+                            if !SeparatorType::is_separator(&right, SeparatorType::CloseParen) {
                                 self.emit_error(
                                     TrussDiagnosticCode::UnexpectedToken,
                                     format!("Expected ')' but found '{}'", right.value),
@@ -603,10 +600,7 @@ impl Parser {
                                 );
                                 return Err(());
                             };
-                            if !SeparatorType::is_separator(
-                                &right,
-                                SeparatorType::CloseParen,
-                            ) {
+                            if !SeparatorType::is_separator(&right, SeparatorType::CloseParen) {
                                 self.emit_error(
                                     TrussDiagnosticCode::UnexpectedToken,
                                     format!("Expected ')' but found '{}'", right.value),
@@ -702,7 +696,10 @@ impl Parser {
                         } else {
                             self.emit_error(
                                 TrussDiagnosticCode::ExpectedIdentifier,
-                                format!("Expected member name or index but found '{}'", member_token.value),
+                                format!(
+                                    "Expected member name or index but found '{}'",
+                                    member_token.value
+                                ),
                                 &member_token,
                             );
                             return Err(());
@@ -902,7 +899,10 @@ impl Parser {
                 if TokenType::Identifier != member_token.ty {
                     self.emit_error(
                         TrussDiagnosticCode::ExpectedType,
-                        format!("Expected associated type name but found '{}'", member_token.value),
+                        format!(
+                            "Expected associated type name but found '{}'",
+                            member_token.value
+                        ),
                         &member_token,
                     );
                     return Err(());
@@ -930,7 +930,10 @@ impl Parser {
             {
                 self.index += 1;
                 let right = self.parse_type_expression()?;
-                if let Expression::CompoundType { types: inner_types, .. } = right {
+                if let Expression::CompoundType {
+                    types: inner_types, ..
+                } = right
+                {
                     types.extend(inner_types);
                 } else {
                     types.push(Rc::new(RefCell::new(right)));
@@ -940,7 +943,10 @@ impl Parser {
             if types.len() > 1 {
                 return Ok(Expression::CompoundType { types, ty: None });
             } else {
-                return Ok(Rc::try_unwrap(types.into_iter().next().unwrap()).ok().unwrap().into_inner());
+                return Ok(Rc::try_unwrap(types.into_iter().next().unwrap())
+                    .ok()
+                    .unwrap()
+                    .into_inner());
             }
         }
 
@@ -982,7 +988,10 @@ impl Parser {
             if TokenType::Identifier != member_token.ty {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedType,
-                    format!("Expected associated type name but found '{}'", member_token.value),
+                    format!(
+                        "Expected associated type name but found '{}'",
+                        member_token.value
+                    ),
                     &member_token,
                 );
                 return Err(());
@@ -1010,7 +1019,10 @@ impl Parser {
         {
             self.index += 1;
             let right = self.parse_type_expression()?;
-            if let Expression::CompoundType { types: inner_types, .. } = right {
+            if let Expression::CompoundType {
+                types: inner_types, ..
+            } = right
+            {
                 types.extend(inner_types);
             } else {
                 types.push(Rc::new(RefCell::new(right)));
@@ -1020,7 +1032,10 @@ impl Parser {
         if types.len() > 1 {
             Ok(Expression::CompoundType { types, ty: None })
         } else {
-            Ok(Rc::try_unwrap(types.into_iter().next().unwrap()).ok().unwrap().into_inner())
+            Ok(Rc::try_unwrap(types.into_iter().next().unwrap())
+                .ok()
+                .unwrap()
+                .into_inner())
         }
     }
 
@@ -1918,8 +1933,12 @@ impl Parser {
                 body,
             });
         }
-        let has_computed = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
-        let has_willset_didset = accessors.iter().any(|a| matches!(a.kind, AccessorKind::WillSet | AccessorKind::DidSet));
+        let has_computed = accessors
+            .iter()
+            .any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+        let has_willset_didset = accessors
+            .iter()
+            .any(|a| matches!(a.kind, AccessorKind::WillSet | AccessorKind::DidSet));
         if has_computed && has_willset_didset {
             let conflict_token = &self.tokens[self.index.saturating_sub(1)];
             self.emit_error(
@@ -1948,7 +1967,9 @@ impl Parser {
     }
 
     fn ensure_memberwise_init(&self, body: &mut Vec<Rc<RefCell<Statement>>>, type_name: &Token) {
-        let has_init = body.iter().any(|stmt| matches!(&*stmt.borrow(), Statement::InitDecl { .. }));
+        let has_init = body
+            .iter()
+            .any(|stmt| matches!(&*stmt.borrow(), Statement::InitDecl { .. }));
         if has_init {
             return;
         }
@@ -1972,7 +1993,9 @@ impl Parser {
         }
         let init_token = Box::new(Token::new(
             "init".to_string(),
-            TokenType::Keyword { keyword: KeywordType::Init },
+            TokenType::Keyword {
+                keyword: KeywordType::Init,
+            },
             type_name.position.clone(),
             type_name.file.clone(),
         ));
@@ -2154,11 +2177,19 @@ impl Parser {
             return Err(());
         };
         if TokenType::Identifier != type_name.ty
-            && !matches!(type_name.ty, TokenType::Keyword { keyword: KeywordType::SelfType })
+            && !matches!(
+                type_name.ty,
+                TokenType::Keyword {
+                    keyword: KeywordType::SelfType
+                }
+            )
         {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedIdentifier,
-                format!("Expected type name or 'Self' but found '{}'", type_name.value),
+                format!(
+                    "Expected type name or 'Self' but found '{}'",
+                    type_name.value
+                ),
                 &type_name,
             );
             return Err(());
@@ -2333,7 +2364,8 @@ impl Parser {
                                 );
                                 return Err(());
                             };
-                            if !SeparatorType::is_separator(&close_paren, SeparatorType::CloseParen) {
+                            if !SeparatorType::is_separator(&close_paren, SeparatorType::CloseParen)
+                            {
                                 self.emit_error(
                                     TrussDiagnosticCode::MissingSeparator,
                                     format!("Expected ')' but found '{}'", close_paren.value),
@@ -2429,13 +2461,14 @@ impl Parser {
             return Err(());
         }
         let generic_params = self.parse_generic_parameters()?.unwrap_or_default();
-        let mut associated_members: Vec<ProtocolMember> = generic_params.iter().map(|gp| {
-            ProtocolMember::AssociatedType {
+        let mut associated_members: Vec<ProtocolMember> = generic_params
+            .iter()
+            .map(|gp| ProtocolMember::AssociatedType {
                 token: Box::new(*gp.name.clone()),
                 name: gp.name.clone(),
                 constraints: gp.constraints.clone(),
-            }
-        }).collect();
+            })
+            .collect();
         let mut conformances = Vec::new();
         if let Some(next) = self.peek()
             && SeparatorType::is_separator(&next, SeparatorType::Colon)
@@ -2470,9 +2503,7 @@ impl Parser {
                             });
                         }
                     }
-                    TokenType::Keyword { keyword }
-                        if keyword == KeywordType::Associatedtype =>
-                    {
+                    TokenType::Keyword { keyword } if keyword == KeywordType::Associatedtype => {
                         self.index += 1;
                         let Some(assoc_name) = self.next() else {
                             self.emit_error(
@@ -2485,7 +2516,10 @@ impl Parser {
                         if TokenType::Identifier != assoc_name.ty {
                             self.emit_error(
                                 TrussDiagnosticCode::InvalidVariableName,
-                                format!("Expected associated type name but found '{}'", assoc_name.value),
+                                format!(
+                                    "Expected associated type name but found '{}'",
+                                    assoc_name.value
+                                ),
                                 &assoc_name,
                             );
                             return Err(());
@@ -2500,7 +2534,8 @@ impl Parser {
                                 && OperatorType::is_operator(&t, OperatorType::BitAnd)
                             {
                                 self.index += 1;
-                                constraints.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                                constraints
+                                    .push(Rc::new(RefCell::new(self.parse_type_expression()?)));
                             }
                         }
                         members.push(ProtocolMember::AssociatedType {
@@ -2525,10 +2560,7 @@ impl Parser {
                         if TokenType::Identifier != prop_name.ty {
                             self.emit_error(
                                 TrussDiagnosticCode::InvalidVariableName,
-                                format!(
-                                    "Expected property name but found '{}'",
-                                    prop_name.value
-                                ),
+                                format!("Expected property name but found '{}'", prop_name.value),
                                 &prop_name,
                             );
                             return Err(());
@@ -2622,9 +2654,7 @@ impl Parser {
                             accessors: ProtocolAccessorSet { get, set },
                         });
                     }
-                    TokenType::Keyword { keyword }
-                        if keyword == KeywordType::Typealias =>
-                    {
+                    TokenType::Keyword { keyword } if keyword == KeywordType::Typealias => {
                         let token = self.next().unwrap();
                         let Some(name) = self.next() else {
                             self.emit_error(
@@ -3300,7 +3330,10 @@ impl Parser {
             if !KeywordType::is_keyword(&case_token, KeywordType::Case) {
                 self.emit_error(
                     TrussDiagnosticCode::UnexpectedToken,
-                    format!("Expected 'case' or 'default' in match, found '{}'", case_token.value),
+                    format!(
+                        "Expected 'case' or 'default' in match, found '{}'",
+                        case_token.value
+                    ),
                     &case_token,
                 );
                 return Err(());
@@ -3436,7 +3469,10 @@ impl Parser {
                     if Self::is_forbidden_in_defer(&*stmt.borrow()) {
                         self.emit_error(
                             TrussDiagnosticCode::ControlFlowNotAllowedInDefer,
-                            format!("'{}' is not allowed in defer body", stmt.borrow().token().value),
+                            format!(
+                                "'{}' is not allowed in defer body",
+                                stmt.borrow().token().value
+                            ),
                             &stmt.borrow().token(),
                         );
                     }

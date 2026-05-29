@@ -76,7 +76,11 @@ impl SymbolResolver {
                 }
             }
             Statement::StructDecl {
-                name, body, scope, generic_parameters, ..
+                name,
+                body,
+                scope,
+                generic_parameters,
+                ..
             } => {
                 let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
                     name: name.value.clone(),
@@ -101,8 +105,13 @@ impl SymbolResolver {
                 *scope = Some(self.enter_scope(None));
                 {
                     for gp in generic_parameters {
-                        let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
-                        scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                        let gp_type =
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                        scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_type(gp.name.value.clone(), gp_type);
                     }
                 }
                 {
@@ -209,7 +218,11 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Statement::ClassDecl {
-                name, body, scope, generic_parameters, ..
+                name,
+                body,
+                scope,
+                generic_parameters,
+                ..
             } => {
                 let class_symbol = Rc::new(RefCell::new(Symbol::Class {
                     name: name.value.clone(),
@@ -235,8 +248,13 @@ impl SymbolResolver {
                 *scope = Some(self.enter_scope(None));
                 {
                     for gp in generic_parameters {
-                        let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
-                        scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                        let gp_type =
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                        scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_type(gp.name.value.clone(), gp_type);
                     }
                 }
                 {
@@ -343,7 +361,12 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Statement::EnumDecl {
-                name, cases: ast_cases, body, scope, generic_parameters, ..
+                name,
+                cases: ast_cases,
+                body,
+                scope,
+                generic_parameters,
+                ..
             } => {
                 let enum_symbol = Rc::new(RefCell::new(Symbol::Enum {
                     name: name.value.clone(),
@@ -352,15 +375,18 @@ impl SymbolResolver {
                     methods: vec![],
                 }));
                 self.enter(enum_symbol.clone(), name);
-                let Symbol::Enum { cases, methods, .. } = &mut *enum_symbol.borrow_mut()
-                else {
+                let Symbol::Enum { cases, methods, .. } = &mut *enum_symbol.borrow_mut() else {
                     return;
                 };
 
                 *scope = Some(self.enter_scope(None));
                 for gp in generic_parameters {
                     let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
-                    scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                    scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
                 }
                 for case in ast_cases {
                     let case_symbol = Rc::new(RefCell::new(Symbol::EnumCase {
@@ -414,8 +440,19 @@ impl SymbolResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.register_symbols(statement.clone());
             }
+            Statement::Defer { body, .. } => {
+                if let Expression::Block { statements, .. } = &*body.borrow() {
+                    for stmt in statements {
+                        self.register_symbols(stmt.clone());
+                    }
+                }
+            }
             Statement::ProtocolDecl {
-                name, members, scope, generic_parameters, ..
+                name,
+                members,
+                scope,
+                generic_parameters,
+                ..
             } => {
                 let protocol_symbol = Rc::new(RefCell::new(Symbol::Protocol {
                     name: name.value.clone(),
@@ -436,17 +473,18 @@ impl SymbolResolver {
                 *scope = Some(self.enter_scope(None));
                 for gp in generic_parameters {
                     let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
-                    scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                    scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
                 }
                 for member in members {
                     match member {
                         ProtocolMember::Method { decl, .. } => {
                             let name_token = {
                                 let d = decl.borrow();
-                                if let Statement::FunctionDecl {
-                                    name: fn_name, ..
-                                } = &*d
-                                {
+                                if let Statement::FunctionDecl { name: fn_name, .. } = &*d {
                                     fn_name.clone()
                                 } else {
                                     continue;
@@ -477,7 +515,9 @@ impl SymbolResolver {
                                 }
                             }
                         }
-                        ProtocolMember::Property { name: prop_name, .. } => {
+                        ProtocolMember::Property {
+                            name: prop_name, ..
+                        } => {
                             let prop_symbol = Rc::new(RefCell::new(Symbol::ProtocolProperty {
                                 name: prop_name.value.clone(),
                                 parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
@@ -487,10 +527,17 @@ impl SymbolResolver {
                             self.enter(prop_symbol, prop_name);
                         }
                         ProtocolMember::AssociatedType { name, .. } => {
-                            let at_type = Rc::new(RefCell::new(Type::GenericParam(name.value.clone())));
-                            scope.as_ref().unwrap().borrow_mut().set_type(name.value.clone(), at_type);
+                            let at_type =
+                                Rc::new(RefCell::new(Type::GenericParam(name.value.clone())));
+                            scope
+                                .as_ref()
+                                .unwrap()
+                                .borrow_mut()
+                                .set_type(name.value.clone(), at_type);
                         }
-                        ProtocolMember::TypeAlias { type_expression, .. } => {
+                        ProtocolMember::TypeAlias {
+                            type_expression, ..
+                        } => {
                             self.resolve_expression(type_expression.clone());
                         }
                     }
@@ -548,8 +595,7 @@ impl SymbolResolver {
                     } => {
                         for field_stmt in body {
                             if let Statement::FunctionDecl {
-                                name: method_name,
-                                ..
+                                name: method_name, ..
                             } = &*field_stmt.borrow()
                             {
                                 let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
@@ -570,15 +616,12 @@ impl SymbolResolver {
                                             }
                                         }
                                         FunctionBody::Expression(expr) => {
-                                            self.register_function_symbols_in_expr(
-                                                expr.clone(),
-                                            );
+                                            self.register_function_symbols_in_expr(expr.clone());
                                         }
                                         FunctionBody::None => {}
                                     }
                                 }
-                            } else if let Statement::InitDecl { body, .. } = &*field_stmt.borrow()
-                            {
+                            } else if let Statement::InitDecl { body, .. } = &*field_stmt.borrow() {
                                 let init_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
                                     name: "init".to_string(),
                                     parent: WeakSymbol(Rc::downgrade(&target_sym)),
@@ -599,8 +642,7 @@ impl SymbolResolver {
                                         self.register_symbols(s.clone());
                                     }
                                 }
-                            } else if let Statement::DeinitDecl { body, .. } =
-                                &*field_stmt.borrow()
+                            } else if let Statement::DeinitDecl { body, .. } = &*field_stmt.borrow()
                             {
                                 let deinit_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
                                     name: "deinit".to_string(),
@@ -638,8 +680,7 @@ impl SymbolResolver {
                     Symbol::Enum { methods, .. } => {
                         for field_stmt in body {
                             if let Statement::FunctionDecl {
-                                name: method_name,
-                                ..
+                                name: method_name, ..
                             } = &*field_stmt.borrow()
                             {
                                 let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
@@ -660,9 +701,7 @@ impl SymbolResolver {
                                             }
                                         }
                                         FunctionBody::Expression(expr) => {
-                                            self.register_function_symbols_in_expr(
-                                                expr.clone(),
-                                            );
+                                            self.register_function_symbols_in_expr(expr.clone());
                                         }
                                         FunctionBody::None => {}
                                     }
@@ -675,17 +714,14 @@ impl SymbolResolver {
                     Symbol::Protocol { methods, .. } => {
                         for field_stmt in body {
                             if let Statement::FunctionDecl {
-                                name: method_name,
-                                ..
+                                name: method_name, ..
                             } = &*field_stmt.borrow()
                             {
-                                let method_symbol = Rc::new(RefCell::new(
-                                    Symbol::ProtocolMethod {
-                                        name: method_name.value.clone(),
-                                        parent: WeakSymbol(Rc::downgrade(&target_sym)),
-                                        decl: Some(field_stmt.clone()),
-                                    },
-                                ));
+                                let method_symbol = Rc::new(RefCell::new(Symbol::ProtocolMethod {
+                                    name: method_name.value.clone(),
+                                    parent: WeakSymbol(Rc::downgrade(&target_sym)),
+                                    decl: Some(field_stmt.clone()),
+                                }));
                                 methods.push(method_symbol.clone());
                                 self.enter(method_symbol, method_name);
                                 if let Statement::FunctionDecl {
@@ -699,9 +735,7 @@ impl SymbolResolver {
                                             }
                                         }
                                         FunctionBody::Expression(expr) => {
-                                            self.register_function_symbols_in_expr(
-                                                expr.clone(),
-                                            );
+                                            self.register_function_symbols_in_expr(expr.clone());
                                         }
                                         FunctionBody::None => {}
                                     }
@@ -746,7 +780,11 @@ impl SymbolResolver {
                 *scope = Some(self.enter_scope(None));
                 for gp in generic_parameters {
                     let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
-                    scope.as_ref().unwrap().borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                    scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
                 }
                 for parameter in parameters {
                     let name = parameter.borrow().name.value.clone();
@@ -771,7 +809,10 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Statement::VariableDecl {
-                name, initializer, accessors, ..
+                name,
+                initializer,
+                accessors,
+                ..
             } => {
                 if name.value != "_" {
                     let symbol = Rc::new(RefCell::new(Symbol::Variable {
@@ -786,7 +827,8 @@ impl SymbolResolver {
                 }
                 if !accessors.is_empty() {
                     for accessor in accessors {
-                        let accessor_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                        let accessor_scope =
+                            Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
                         let saved = self.current_scope.clone();
                         self.current_scope = Some(accessor_scope.clone());
                         let backing_sym = Rc::new(RefCell::new(Symbol::Variable {
@@ -823,7 +865,13 @@ impl SymbolResolver {
                     }
                 }
             }
-            Statement::StructDecl { body, scope, conformances, where_clause, .. } => {
+            Statement::StructDecl {
+                body,
+                scope,
+                conformances,
+                where_clause,
+                ..
+            } => {
                 for conformance in conformances {
                     self.resolve_conformance(conformance.clone());
                 }
@@ -838,9 +886,21 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Statement::ClassDecl { body, scope, superclass, conformances, where_clause, .. } => {
+            Statement::ClassDecl {
+                body,
+                scope,
+                superclass,
+                conformances,
+                where_clause,
+                ..
+            } => {
                 if let Some(superclass_expr) = superclass {
-                    if let Expression::Type { name: super_name, type_parameters, .. } = &*superclass_expr.borrow() {
+                    if let Expression::Type {
+                        name: super_name,
+                        type_parameters,
+                        ..
+                    } = &*superclass_expr.borrow()
+                    {
                         let _ = self.resolve_symbol(super_name);
                         if let Some(type_parameters) = type_parameters {
                             for tp in type_parameters {
@@ -863,7 +923,12 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
-            Statement::EnumDecl { body, scope, where_clause, .. } => {
+            Statement::EnumDecl {
+                body,
+                scope,
+                where_clause,
+                ..
+            } => {
                 if let Some(where_clause) = where_clause {
                     for req in where_clause {
                         self.resolve_where_requirement(req);
@@ -909,7 +974,13 @@ impl SymbolResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.resolve_statement(statement.clone());
             }
-            Statement::ProtocolDecl { conformances, scope, members, where_clause, .. } => {
+            Statement::ProtocolDecl {
+                conformances,
+                scope,
+                members,
+                where_clause,
+                ..
+            } => {
                 for conformance in conformances {
                     self.resolve_conformance(conformance.clone());
                 }
@@ -949,7 +1020,9 @@ impl SymbolResolver {
                                 self.leave_scope();
                             }
                         }
-                        ProtocolMember::Property { type_expression, .. } => {
+                        ProtocolMember::Property {
+                            type_expression, ..
+                        } => {
                             self.resolve_expression(type_expression.clone());
                         }
                         ProtocolMember::AssociatedType { constraints, .. } => {
@@ -957,7 +1030,9 @@ impl SymbolResolver {
                                 self.resolve_expression(constraint.clone());
                             }
                         }
-                        ProtocolMember::TypeAlias { type_expression, .. } => {
+                        ProtocolMember::TypeAlias {
+                            type_expression, ..
+                        } => {
                             self.resolve_expression(type_expression.clone());
                         }
                     }
@@ -971,7 +1046,10 @@ impl SymbolResolver {
                 value: Some(value), ..
             } => self.resolve_expression(value.clone()),
             Statement::ExtensionDecl {
-                type_name, body, where_clause, ..
+                type_name,
+                body,
+                where_clause,
+                ..
             } => {
                 if let Some(where_clause) = where_clause {
                     for req in where_clause {
@@ -1010,7 +1088,11 @@ impl SymbolResolver {
                     }
                 }
             }
-            Statement::TypeAlias { type_expression, name: _, .. } => {
+            Statement::TypeAlias {
+                type_expression,
+                name: _,
+                ..
+            } => {
                 self.resolve_expression(type_expression.clone());
             }
             Statement::Guard {
@@ -1036,6 +1118,9 @@ impl SymbolResolver {
                 }
             }
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
+            Statement::Defer { body, .. } => {
+                self.resolve_expression(body.clone());
+            }
             _ => {}
         }
     }
@@ -1105,18 +1190,16 @@ impl SymbolResolver {
             Expression::TupleIndexAccess { object, .. } => {
                 self.resolve_expression(object.clone());
             }
-            Expression::SelfKeyword { token, symbol, .. } => {
-                match self.resolve_symbol(token) {
-                    Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
-                    Err(_) => {
-                        self.emit_error(
-                            TrussDiagnosticCode::UndefinedVariable,
-                            format!("'self' is only available inside methods"),
-                            token.as_ref(),
-                        );
-                    }
+            Expression::SelfKeyword { token, symbol, .. } => match self.resolve_symbol(token) {
+                Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
+                Err(_) => {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedVariable,
+                        format!("'self' is only available inside methods"),
+                        token.as_ref(),
+                    );
                 }
-            }
+            },
             Expression::Binary { left, right, .. } => {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())
@@ -1143,11 +1226,7 @@ impl SymbolResolver {
                 };
 
                 if !case_bindings.is_empty() {
-                    if let Expression::Block {
-                        statements,
-                        scope,
-                    } = &mut *then.borrow_mut()
-                    {
+                    if let Expression::Block { statements, scope } = &mut *then.borrow_mut() {
                         if let Some(existing_scope) = scope.as_ref() {
                             self.enter_scope(Some(existing_scope.clone()));
                         } else {
@@ -1197,10 +1276,7 @@ impl SymbolResolver {
         }
     }
 
-    fn resolve_pattern_bindings_ref(
-        pattern: &Pattern,
-        resolver: &mut SymbolResolver,
-    ) {
+    fn resolve_pattern_bindings_ref(pattern: &Pattern, resolver: &mut SymbolResolver) {
         match pattern {
             Pattern::Identifier(name) => {
                 if name.value != "_" {
@@ -1226,10 +1302,7 @@ impl SymbolResolver {
         }
     }
 
-    fn resolve_pattern_bindings(
-        bindings: &[Pattern],
-        resolver: &mut SymbolResolver,
-    ) {
+    fn resolve_pattern_bindings(bindings: &[Pattern], resolver: &mut SymbolResolver) {
         for binding in bindings {
             match binding {
                 Pattern::Identifier(name) => {
@@ -1259,7 +1332,11 @@ impl SymbolResolver {
 
     fn resolve_conformance(&mut self, conformance: Rc<RefCell<Expression>>) {
         match &*conformance.borrow() {
-            Expression::Type { name, type_parameters, .. } => {
+            Expression::Type {
+                name,
+                type_parameters,
+                ..
+            } => {
                 let _ = self.resolve_symbol(name);
                 if let Some(type_parameters) = type_parameters {
                     for tp in type_parameters {
@@ -1280,7 +1357,10 @@ impl SymbolResolver {
 
     fn resolve_where_requirement(&mut self, req: &WhereRequirement) {
         match &req.kind {
-            WhereRequirementKind::Conformance { type_expr, constraint } => {
+            WhereRequirementKind::Conformance {
+                type_expr,
+                constraint,
+            } => {
                 self.resolve_expression(type_expr.clone());
                 self.resolve_expression(constraint.clone());
             }
