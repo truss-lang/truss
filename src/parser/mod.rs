@@ -3414,8 +3414,20 @@ impl Parser {
                             scope: None,
                         });
                     }
+                    KeywordType::Case | KeywordType::Default => {
+                        return Ok(Expression::Block {
+                            statements: vec![],
+                            scope: None,
+                        });
+                    }
                     _ => {}
                 }
+            }
+            if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                return Ok(Expression::Block {
+                    statements: vec![],
+                    scope: None,
+                });
             }
         }
         self.parse_expression()
