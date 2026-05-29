@@ -3151,3 +3151,101 @@ fn test_irgen_if_elseif_chain_as_value() {
         "Expected return from if-else if chain"
     );
 }
+
+#[test]
+fn test_irgen_match_multi_pattern_enum() {
+    let code = r#"
+        enum Status { case idle case loading case done }
+        func test(s: Status) -> Bool {
+            match s {
+                case .idle, .loading:
+                    true
+                case .done:
+                    false
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    match result {
+        Ok(module) => {
+            let llvm_ir = module.print_to_string().to_string();
+            assert!(
+                llvm_ir.contains("match_exit"),
+                "multi-pattern match should generate match_exit block:\n{}",
+                llvm_ir
+            );
+            assert!(
+                llvm_ir.contains("case_body"),
+                "multi-pattern match should generate case_body blocks:\n{}",
+                llvm_ir
+            );
+        }
+        Err(_) => panic!("multi-pattern match IR generation panicked"),
+    }
+}
+
+#[test]
+fn test_irgen_match_multi_pattern_with_guard() {
+    let code = r#"
+        enum Status { case idle case loading case done }
+        func test(s: Status) -> Bool {
+            match s {
+                case .idle, .loading where true:
+                    true
+                default:
+                    false
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    match result {
+        Ok(module) => {
+            let llvm_ir = module.print_to_string().to_string();
+            assert!(
+                llvm_ir.contains("match_exit"),
+                "multi-pattern match with guard should generate match_exit:\n{}",
+                llvm_ir
+            );
+            assert!(
+                llvm_ir.contains("case_body"),
+                "multi-pattern match with guard should generate case_body:\n{}",
+                llvm_ir
+            );
+        }
+        Err(_) => panic!("multi-pattern match with guard IR generation panicked"),
+    }
+}

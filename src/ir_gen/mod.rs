@@ -5283,83 +5283,89 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 for (i, case) in cases.iter().enumerate() {
                     let body_bb = all_body_bbs[i];
-                    let next_bb = if i + 1 < all_body_bbs.len() {
-                        all_body_bbs[i + 1]
+                    let next_check_or_exit_bb = if i + 1 < all_check_bbs.len() {
+                        all_check_bbs[i + 1]
                     } else {
                         exit_bb
                     };
 
-                    let case_idx = match case.pattern.as_ref() {
-                        Pattern::EnumCase { case_name, .. } => {
-                            Some(self.get_enum_case_index(&enum_name, &case_name.value)?)
-                        }
-                        _ => None,
-                    };
+                    let mut prev_check_bb = all_check_bbs[i];
+                    let pattern_count = case.patterns.len();
 
-                    if let Some(idx) = case_idx {
-                        let expected_tag = self.context.i8_type().const_int(idx as u64, false);
-                        let match_result = self.builder.build_int_compare(
-                            inkwell::IntPredicate::EQ,
-                            tag_val.into_int_value(),
-                            expected_tag,
-                            "",
-                        )?;
-                        self.builder
-                            .build_conditional_branch(match_result, body_bb, next_bb)?;
-                    } else {
-                        self.builder.build_unconditional_branch(body_bb)?;
+                    for (pi, pattern) in case.patterns.iter().enumerate() {
+                        let is_last_pattern = pi == pattern_count - 1;
+                        let next_bb = if is_last_pattern {
+                            next_check_or_exit_bb
+                        } else {
+                            self.context
+                                .append_basic_block(fn_val, "case_pattern_check")
+                        };
+
+                        self.builder.position_at_end(prev_check_bb);
+
+                        let case_idx = match pattern.as_ref() {
+                            Pattern::EnumCase { case_name, .. } => {
+                                Some(self.get_enum_case_index(&enum_name, &case_name.value)?)
+                            }
+                            _ => None,
+                        };
+
+                        if let Some(idx) = case_idx {
+                            let expected_tag = self.context.i8_type().const_int(idx as u64, false);
+                            let match_result = self.builder.build_int_compare(
+                                inkwell::IntPredicate::EQ,
+                                tag_val.into_int_value(),
+                                expected_tag,
+                                "",
+                            )?;
+                            self.builder.build_conditional_branch(
+                                match_result,
+                                body_bb,
+                                next_bb,
+                            )?;
+                        } else {
+                            self.builder.build_unconditional_branch(body_bb)?;
+                        }
+
+                        prev_check_bb = next_bb;
                     }
 
                     self.builder.position_at_end(body_bb);
                     self.enter_scope();
 
-                    if let Pattern::EnumCase { bindings, .. } = case.pattern.as_ref() {
-                        if !bindings.is_empty() {
-                            let idx = case_idx.unwrap();
-                            let enum_payloads = self.enum_payload_types.borrow();
-                            if let Some(payload_type) = enum_payloads.get(&enum_name) {
-                                let payload_union_ptr = self.builder.build_struct_gep(
-                                    enum_llvm_type,
-                                    subject_alloca,
-                                    1,
-                                    "",
-                                )?;
-                                let case_payload_ptr = self.builder.build_struct_gep(
-                                    *payload_type,
-                                    payload_union_ptr,
-                                    idx as u32,
-                                    "",
-                                )?;
-                                let case_payload_ty = payload_type
-                                    .get_field_type_at_index(idx as u32)
-                                    .ok_or_else(|| {
-                                        anyhow::anyhow!("Payload not found at idx {}", idx)
-                                    })?;
-                                let case_payload_struct_ty = case_payload_ty.into_struct_type();
+                    for pattern in &case.patterns {
+                        if let Pattern::EnumCase { bindings, .. } = pattern.as_ref() {
+                            if !bindings.is_empty() {
+                                let idx = match pattern.as_ref() {
+                                    Pattern::EnumCase { case_name, .. } => {
+                                        self.get_enum_case_index(&enum_name, &case_name.value)?
+                                    }
+                                    _ => unreachable!(),
+                                };
+                                let enum_payloads = self.enum_payload_types.borrow();
+                                if let Some(payload_type) = enum_payloads.get(&enum_name) {
+                                    let payload_union_ptr = self.builder.build_struct_gep(
+                                        enum_llvm_type,
+                                        subject_alloca,
+                                        1,
+                                        "",
+                                    )?;
+                                    let case_payload_ptr = self.builder.build_struct_gep(
+                                        *payload_type,
+                                        payload_union_ptr,
+                                        idx as u32,
+                                        "",
+                                    )?;
+                                    let case_payload_ty = payload_type
+                                        .get_field_type_at_index(idx as u32)
+                                        .ok_or_else(|| {
+                                            anyhow::anyhow!("Payload not found at idx {}", idx)
+                                        })?;
+                                    let case_payload_struct_ty = case_payload_ty.into_struct_type();
 
-                                for (j, binding) in bindings.iter().enumerate() {
-                                    match binding {
-                                        Pattern::Identifier(tok) => {
-                                            let field_ptr = self.builder.build_struct_gep(
-                                                case_payload_struct_ty,
-                                                case_payload_ptr,
-                                                j as u32,
-                                                "",
-                                            )?;
-                                            let field_ty = case_payload_struct_ty
-                                                .get_field_type_at_index(j as u32)
-                                                .ok_or_else(|| {
-                                                    anyhow::anyhow!("Field not found at idx {}", j)
-                                                })?;
-                                            let field_val =
-                                                self.builder.build_load(field_ty, field_ptr, "")?;
-                                            let var_ptr =
-                                                self.builder.build_alloca(field_ty, &tok.value)?;
-                                            self.builder.build_store(var_ptr, field_val)?;
-                                            self.declare_variable(tok.value.clone(), var_ptr);
-                                        }
-                                        Pattern::ValueBinding(inner) => {
-                                            if let Pattern::Identifier(tok) = inner.as_ref() {
+                                    for (j, binding) in bindings.iter().enumerate() {
+                                        match binding {
+                                            Pattern::Identifier(tok) => {
                                                 let field_ptr = self.builder.build_struct_gep(
                                                     case_payload_struct_ty,
                                                     case_payload_ptr,
@@ -5383,19 +5389,50 @@ impl<'ctx> IRGenerator<'ctx> {
                                                 self.builder.build_store(var_ptr, field_val)?;
                                                 self.declare_variable(tok.value.clone(), var_ptr);
                                             }
+                                            Pattern::ValueBinding(inner) => {
+                                                if let Pattern::Identifier(tok) = inner.as_ref() {
+                                                    let field_ptr = self.builder.build_struct_gep(
+                                                        case_payload_struct_ty,
+                                                        case_payload_ptr,
+                                                        j as u32,
+                                                        "",
+                                                    )?;
+                                                    let field_ty = case_payload_struct_ty
+                                                        .get_field_type_at_index(j as u32)
+                                                        .ok_or_else(|| {
+                                                            anyhow::anyhow!(
+                                                                "Field not found at idx {}",
+                                                                j
+                                                            )
+                                                        })?;
+                                                    let field_val = self
+                                                        .builder
+                                                        .build_load(field_ty, field_ptr, "")?;
+                                                    let var_ptr = self
+                                                        .builder
+                                                        .build_alloca(field_ty, &tok.value)?;
+                                                    self.builder.build_store(var_ptr, field_val)?;
+                                                    self.declare_variable(
+                                                        tok.value.clone(),
+                                                        var_ptr,
+                                                    );
+                                                }
+                                            }
+                                            _ => {}
                                         }
-                                        _ => {}
                                     }
                                 }
+                                break;
                             }
-                        }
-                    } else if let Pattern::ValueBinding(inner) = case.pattern.as_ref() {
-                        if let Pattern::Identifier(tok) = inner.as_ref() {
-                            let var_ptr = self
-                                .builder
-                                .build_alloca(subject_val.get_type(), &tok.value)?;
-                            self.builder.build_store(var_ptr, subject_val)?;
-                            self.declare_variable(tok.value.clone(), var_ptr);
+                        } else if let Pattern::ValueBinding(inner) = pattern.as_ref() {
+                            if let Pattern::Identifier(tok) = inner.as_ref() {
+                                let var_ptr = self
+                                    .builder
+                                    .build_alloca(subject_val.get_type(), &tok.value)?;
+                                self.builder.build_store(var_ptr, subject_val)?;
+                                self.declare_variable(tok.value.clone(), var_ptr);
+                            }
+                            break;
                         }
                     }
 
