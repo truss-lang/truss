@@ -4820,16 +4820,16 @@ fn test_parse_match_simple() {
     {
         assert_eq!(cases.len(), 3, "expected 3 cases (some, none, default)");
         assert!(matches!(&*value.borrow(), Expression::Variable { name, .. } if name.value == "x"));
-        assert!(matches!(cases[0].pattern.as_ref(),
+        assert!(matches!(cases[0].patterns[0].as_ref(),
             Pattern::EnumCase { case_name, .. } if case_name.value == "some"));
-        if let Pattern::EnumCase { bindings, .. } = cases[0].pattern.as_ref() {
+        if let Pattern::EnumCase { bindings, .. } = cases[0].patterns[0].as_ref() {
             assert_eq!(bindings.len(), 1);
             assert!(matches!(&bindings[0], Pattern::ValueBinding(_)));
         }
         assert!(
-            matches!(cases[1].pattern.as_ref(), Pattern::EnumCase { case_name, .. } if case_name.value == "none")
+            matches!(cases[1].patterns[0].as_ref(), Pattern::EnumCase { case_name, .. } if case_name.value == "none")
         );
-        assert!(matches!(cases[2].pattern.as_ref(), Pattern::Ignore));
+        assert!(matches!(cases[2].patterns[0].as_ref(), Pattern::Ignore));
     } else {
         panic!("Expected Return with Match expression");
     }
@@ -5420,5 +5420,135 @@ fn test_parse_if_without_else_as_expression() {
         assert!(else_.is_none());
     } else {
         panic!("Expected VariableDecl with If (no else) initializer");
+    }
+}
+
+#[test]
+fn test_parse_match_multi_pattern_literals() {
+    let code = r#"
+        func test(x: Int32) -> Int32 {
+            match x {
+                case 1, 2, 3:
+                    10
+                case 4, 5:
+                    20
+                default:
+                    0
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Match { cases, .. } = &*expression.borrow()
+    {
+        assert_eq!(cases.len(), 3);
+        assert_eq!(
+            cases[0].patterns.len(),
+            3,
+            "case 1,2,3 should have 3 patterns"
+        );
+        assert!(matches!(cases[0].patterns[0].as_ref(), Pattern::Expr(_)));
+        assert!(matches!(cases[0].patterns[1].as_ref(), Pattern::Expr(_)));
+        assert!(matches!(cases[0].patterns[2].as_ref(), Pattern::Expr(_)));
+        assert_eq!(
+            cases[1].patterns.len(),
+            2,
+            "case 4,5 should have 2 patterns"
+        );
+        assert!(matches!(cases[1].patterns[0].as_ref(), Pattern::Expr(_)));
+        assert!(matches!(cases[1].patterns[1].as_ref(), Pattern::Expr(_)));
+        assert_eq!(cases[2].patterns.len(), 1);
+        assert!(matches!(cases[2].patterns[0].as_ref(), Pattern::Ignore));
+    } else {
+        panic!("Expected Match with multi-pattern cases");
+    }
+}
+
+#[test]
+fn test_parse_match_multi_pattern_enum() {
+    let code = r#"
+        enum Status { case idle case loading case done }
+        func test(s: Status) {
+            match s {
+                case .idle, .loading:
+                    true
+                case .done:
+                    false
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Match { cases, .. } = &*expression.borrow()
+    {
+        assert_eq!(cases.len(), 2);
+        assert_eq!(
+            cases[0].patterns.len(),
+            2,
+            "case .idle, .loading should have 2 patterns"
+        );
+        assert!(matches!(cases[0].patterns[0].as_ref(),
+            Pattern::EnumCase { case_name, .. } if case_name.value == "idle"));
+        assert!(matches!(cases[0].patterns[1].as_ref(),
+            Pattern::EnumCase { case_name, .. } if case_name.value == "loading"));
+        assert_eq!(cases[1].patterns.len(), 1);
+        assert!(matches!(cases[1].patterns[0].as_ref(),
+            Pattern::EnumCase { case_name, .. } if case_name.value == "done"));
+    } else {
+        panic!("Expected Match with multi-pattern enum cases");
+    }
+}
+
+#[test]
+fn test_parse_match_multi_pattern_with_guard() {
+    let code = r#"
+        enum Status { case idle case loading case done }
+        func test(s: Status) {
+            match s {
+                case .idle, .loading where true:
+                    true
+                default:
+                    false
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Match { cases, .. } = &*expression.borrow()
+    {
+        assert_eq!(cases.len(), 2);
+        assert_eq!(
+            cases[0].patterns.len(),
+            2,
+            "case .idle, .loading should have 2 patterns"
+        );
+        assert!(cases[0].guard.is_some(), "guard should be present");
+        assert!(cases[1].guard.is_none());
+    } else {
+        panic!("Expected Match with guard on multi-pattern case");
     }
 }

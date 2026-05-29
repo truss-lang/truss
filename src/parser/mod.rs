@@ -3318,7 +3318,7 @@ impl Parser {
                 let body = self.parse_match_case_body()?;
                 cases.push(MatchCase {
                     token: Box::new(t),
-                    pattern: Rc::new(Pattern::Ignore),
+                    patterns: vec![Rc::new(Pattern::Ignore)],
                     guard: None,
                     body: Rc::new(RefCell::new(body)),
                 });
@@ -3340,7 +3340,13 @@ impl Parser {
                 return Err(());
             }
 
-            let pattern = self.parse_pattern()?;
+            let mut patterns = vec![Rc::new(self.parse_pattern()?)];
+            while let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Comma)
+            {
+                self.index += 1;
+                patterns.push(Rc::new(self.parse_pattern()?));
+            }
 
             let guard = if let Some(t) = self.peek()
                 && KeywordType::is_keyword(&t, KeywordType::Where)
@@ -3371,7 +3377,7 @@ impl Parser {
             let body = self.parse_match_case_body()?;
             cases.push(MatchCase {
                 token: Box::new(case_token),
-                pattern: Rc::new(pattern),
+                patterns,
                 guard,
                 body: Rc::new(RefCell::new(body)),
             });
