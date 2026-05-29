@@ -2363,6 +2363,78 @@ impl<'ctx> IRGenerator<'ctx> {
                 *self.current_struct.borrow_mut() = prev;
                 result
             }
+            Statement::Guard {
+                condition,
+                else_body,
+                ..
+            } => {
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
+
+                if let Expression::Case {
+                    enum_type,
+                    case_name,
+                    bindings: _,
+                    expression,
+                    ..
+                } = &*condition.borrow()
+                {
+                    let enum_name = if let Some(name) = enum_type.as_ref().map(|t| t.value.as_str()) {
+                        name.to_string()
+                    } else if let Some(name) = self.get_enum_name_from_expr_string(expression.clone()) {
+                        name
+                    } else {
+                        String::new()
+                    };
+                    let check_bb = self.context.append_basic_block(fn_val, "guard_check");
+                    let else_bb = self.context.append_basic_block(fn_val, "guard_else");
+                    let exit_bb = self.context.append_basic_block(fn_val, "guard_exit");
+
+                    self.builder.build_unconditional_branch(check_bb)?;
+                    self.builder.position_at_end(check_bb);
+
+                    let subject_val = self.resolve_expression(expression.clone())?.unwrap();
+                    let subject_alloca = self.builder.build_alloca(subject_val.get_type(), "")?;
+                    self.builder.build_store(subject_alloca, subject_val)?;
+
+                    let case_idx = self.get_enum_case_index(&enum_name, &case_name.value)?;
+
+                    let enum_types = self.enum_types.borrow();
+                    let enum_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
+                        anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                    })?;
+                    drop(enum_types);
+
+                    let tag_ptr = self.builder.build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
+                    let tag_val = self.builder.build_load(self.context.i8_type(), tag_ptr, "")?;
+                    let expected_tag = self.context.i8_type().const_int(case_idx as u64, false);
+                    let match_result = self.builder.build_int_compare(
+                        inkwell::IntPredicate::EQ,
+                        tag_val.into_int_value(),
+                        expected_tag,
+                        "",
+                    )?;
+
+                    self.builder.build_conditional_branch(match_result, exit_bb, else_bb)?;
+
+                    self.builder.position_at_end(else_bb);
+                    self.resolve_block_expression(else_body.clone())?;
+                    self.builder.build_unconditional_branch(exit_bb)?;
+
+                    self.builder.position_at_end(exit_bb);
+                }
+                Ok(false)
+            }
+            Statement::Fallthrough { .. } => {
+                anyhow::bail!("fallthrough outside of match is not supported");
+            }
+            Statement::Break { .. } => {
+                anyhow::bail!("break outside of match is not supported");
+            }
             _ => Ok(false),
         }
     }
@@ -3398,7 +3470,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         .build_alloca(subject_val.get_type(), "")?;
                     self.builder.build_store(subject_alloca, subject_val)?;
 
-                    let enum_name = &enum_type.value;
+                    let enum_name = &enum_type.as_ref().unwrap().value;
                     let case_idx =
                         self.get_enum_case_index(enum_name, &case_name.value)?;
 
@@ -4416,6 +4488,144 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("TupleIndexAccess on non-tuple type");
                 }
             }
+            Expression::Match { value, cases, .. } => {
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
+                let exit_bb = self.context.append_basic_block(fn_val, "match_exit");
+
+                let subject_val = self.resolve_expression(value.clone())?.unwrap();
+                let subject_alloca = self.builder.build_alloca(subject_val.get_type(), "")?;
+                self.builder.build_store(subject_alloca, subject_val)?;
+
+                let enum_name = self.get_enum_name_from_expr_string(value.clone())
+                    .unwrap_or_default();
+
+                if enum_name.is_empty() {
+                    anyhow::bail!("Cannot determine enum type for match expression");
+                }
+
+                let enum_types = self.enum_types.borrow();
+                let enum_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
+                    anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                })?;
+                drop(enum_types);
+
+                let tag_ptr = self.builder.build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
+                let tag_val = self.builder.build_load(self.context.i8_type(), tag_ptr, "")?;
+
+                let mut all_body_bbs = Vec::new();
+                let mut all_check_bbs = Vec::new();
+
+                for _ in cases.iter() {
+                    all_body_bbs.push(self.context.append_basic_block(fn_val, "case_body"));
+                    all_check_bbs.push(self.context.append_basic_block(fn_val, "case_check"));
+                }
+
+                for (i, case) in cases.iter().enumerate() {
+                    let body_bb = all_body_bbs[i];
+                    let next_bb = if i + 1 < all_body_bbs.len() {
+                        all_body_bbs[i + 1]
+                    } else {
+                        exit_bb
+                    };
+
+                    let case_idx = match case.pattern.as_ref() {
+                        Pattern::EnumCase { case_name, .. } => {
+                            Some(self.get_enum_case_index(&enum_name, &case_name.value)?)
+                        }
+                        _ => None,
+                    };
+
+                    if let Some(idx) = case_idx {
+                        let expected_tag = self.context.i8_type().const_int(idx as u64, false);
+                        let match_result = self.builder.build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            tag_val.into_int_value(),
+                            expected_tag,
+                            "",
+                        )?;
+                        self.builder.build_conditional_branch(match_result, body_bb, next_bb)?;
+                    } else {
+                        self.builder.build_unconditional_branch(body_bb)?;
+                    }
+
+                    self.builder.position_at_end(body_bb);
+                    self.enter_scope();
+
+                    if let Pattern::EnumCase { bindings, .. } = case.pattern.as_ref() {
+                        if !bindings.is_empty() {
+                            let idx = case_idx.unwrap();
+                            let enum_payloads = self.enum_payload_types.borrow();
+                            if let Some(payload_type) = enum_payloads.get(&enum_name) {
+                                let payload_union_ptr = self.builder.build_struct_gep(
+                                    enum_llvm_type, subject_alloca, 1, "",
+                                )?;
+                                let case_payload_ptr = self.builder.build_struct_gep(
+                                    *payload_type, payload_union_ptr, idx as u32, "",
+                                )?;
+                                let case_payload_ty = payload_type.get_field_type_at_index(idx as u32)
+                                    .ok_or_else(|| anyhow::anyhow!("Payload not found at idx {}", idx))?;
+                                let case_payload_struct_ty = case_payload_ty.into_struct_type();
+
+                                for (j, binding) in bindings.iter().enumerate() {
+                                    match binding {
+                                        Pattern::Identifier(tok) => {
+                                            let field_ptr = self.builder.build_struct_gep(
+                                                case_payload_struct_ty, case_payload_ptr, j as u32, "",
+                                            )?;
+                                            let field_ty = case_payload_struct_ty.get_field_type_at_index(j as u32)
+                                                .ok_or_else(|| anyhow::anyhow!("Field not found at idx {}", j))?;
+                                            let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                                            let var_ptr = self.builder.build_alloca(field_ty, &tok.value)?;
+                                            self.builder.build_store(var_ptr, field_val)?;
+                                            self.declare_variable(tok.value.clone(), var_ptr);
+                                        }
+                                        Pattern::ValueBinding(inner) => {
+                                            if let Pattern::Identifier(tok) = inner.as_ref() {
+                                                let field_ptr = self.builder.build_struct_gep(
+                                                    case_payload_struct_ty, case_payload_ptr, j as u32, "",
+                                                )?;
+                                                let field_ty = case_payload_struct_ty.get_field_type_at_index(j as u32)
+                                                    .ok_or_else(|| anyhow::anyhow!("Field not found at idx {}", j))?;
+                                                let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                                                let var_ptr = self.builder.build_alloca(field_ty, &tok.value)?;
+                                                self.builder.build_store(var_ptr, field_val)?;
+                                                self.declare_variable(tok.value.clone(), var_ptr);
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    } else if let Pattern::ValueBinding(inner) = case.pattern.as_ref() {
+                        if let Pattern::Identifier(tok) = inner.as_ref() {
+                            let var_ptr = self.builder.build_alloca(subject_val.get_type(), &tok.value)?;
+                            self.builder.build_store(var_ptr, subject_val)?;
+                            self.declare_variable(tok.value.clone(), var_ptr);
+                        }
+                    }
+
+                    let _ = self.resolve_expression(case.body.clone())?;
+                    if case.guard.is_some() {
+                        let _ = self.resolve_expression(case.guard.clone().unwrap());
+                    }
+
+                    self.builder.build_unconditional_branch(exit_bb)?;
+                    self.exit_scope();
+
+                    if i + 1 < all_check_bbs.len() {
+                        self.builder.position_at_end(all_check_bbs[i + 1]);
+                    }
+                }
+
+                self.builder.position_at_end(exit_bb);
+                Ok(None)
+            }
             _ => anyhow::bail!("Expression type not implemented"),
         }
     }
@@ -4481,8 +4691,23 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Variable { ty, .. } => {
                 let ty = ty.as_ref()?;
                 match &*ty.borrow() {
-                    Type::Struct(name, _) | Type::Class(name, _) => Some(name.clone()),
+                    Type::Struct(name, _) | Type::Class(name, _) | Type::Enum(name, _) => Some(name.clone()),
                     _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn get_enum_name_from_expr_string(&self, expr: Rc<RefCell<Expression>>) -> Option<String> {
+        let e = expr.borrow();
+        match &*e {
+            Expression::Variable { ty, .. } => {
+                let ty = ty.as_ref()?;
+                if let Type::Enum(name, _) = &*ty.borrow() {
+                    Some(name.clone())
+                } else {
+                    None
                 }
             }
             _ => None,

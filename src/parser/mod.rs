@@ -2639,7 +2639,6 @@ impl Parser {
             return Err(());
         }
         let where_clause = self.parse_where_clause()?;
-        // prepend synthesized associatedtype members from protocol<T> sugar
         associated_members.append(&mut members);
         Ok(Statement::ProtocolDecl {
             modifiers,
@@ -3044,7 +3043,6 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> Result<Pattern, ()> {
-        // Check for let binding pattern: "let pattern"
         if let Some(token) = self.peek()
             && let TokenType::Keyword { keyword } = token.ty
             && (keyword == KeywordType::Let || keyword == KeywordType::Var)
@@ -3054,7 +3052,6 @@ impl Parser {
             return Ok(Pattern::ValueBinding(Box::new(inner)));
         }
 
-        // Check for enum case pattern: ".caseName(...)" or "Type.caseName(...)"
         if let Some(token) = self.peek()
             && OperatorType::is_operator(&token, OperatorType::Dot)
         {
@@ -3118,8 +3115,6 @@ impl Parser {
                 if token.value == "_" {
                     Ok(Pattern::Ignore)
                 } else {
-                    // Could be a literal-like value pattern (like `true`, `false`, `null`)
-                    // or an identifier pattern
                     Ok(Pattern::Identifier(Box::new(token)))
                 }
             }
@@ -3129,7 +3124,7 @@ impl Parser {
             | TokenType::NullLiteral
             | TokenType::NullptrLiteral
             | TokenType::CharLiteral { .. } => {
-                self.index -= 1; // put back, re-parse as expression
+                self.index -= 1;
                 let expr = self.parse_expression()?;
                 Ok(Pattern::Expr(Rc::new(RefCell::new(expr))))
             }
@@ -3205,7 +3200,6 @@ impl Parser {
                 break;
             }
 
-            // Parse default case
             if let Some(t) = self.peek()
                 && KeywordType::is_keyword(&t, KeywordType::Default)
             {
@@ -3236,7 +3230,6 @@ impl Parser {
                 continue;
             }
 
-            // Parse case pattern
             let Some(case_token) = self.next() else {
                 break;
             };

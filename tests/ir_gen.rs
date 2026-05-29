@@ -2373,3 +2373,112 @@ fn test_irgen_extension_protocol_witness_table() {
     assert!(llvm_ir.contains("define i32 @Foo.req"), "extension method should generate Foo.req:\n{}", llvm_ir);
     assert!(llvm_ir.contains("__protocol_wt.P.Foo"), "protocol witness table for P+Foo should exist:\n{}", llvm_ir);
 }
+
+#[test]
+fn test_irgen_guard_case_success() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) -> Int32 {
+            guard case .some(val) = x else { return 0 }
+            return val
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    match result {
+        Ok(_) => {}
+        Err(_) => panic!("guard IR generation panicked"),
+    }
+}
+
+#[test]
+fn test_irgen_match_simple() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) -> Int32 {
+            match x {
+                case .some(let val):
+                    val
+                case .none:
+                    0
+                default:
+                    -1
+            }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    match result {
+        Ok(module) => {
+            let llvm_ir = module.print_to_string().to_string();
+            assert!(llvm_ir.contains("match_exit"), "match should generate match_exit block:\n{}", llvm_ir);
+            assert!(llvm_ir.contains("case_body"), "match should generate case_body blocks:\n{}", llvm_ir);
+        }
+        Err(_) => panic!("match IR generation panicked"),
+    }
+}
+
+#[test]
+fn test_irgen_guard_dot_shorthand() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) -> Int32 {
+            guard case .some(val) = x else { return 0 }
+            return val
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    match result {
+        Ok(_) => {}
+        Err(_) => panic!("guard dot shorthand IR generation panicked"),
+    }
+}

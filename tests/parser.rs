@@ -4725,16 +4725,13 @@ fn test_parse_match_simple() {
     {
         assert_eq!(cases.len(), 3, "expected 3 cases (some, none, default)");
         assert!(matches!(&*value.borrow(), Expression::Variable { name, .. } if name.value == "x"));
-        // First case: .some(let val) -> EnumCase with ValueBinding
         assert!(matches!(cases[0].pattern.as_ref(),
             Pattern::EnumCase { case_name, .. } if case_name.value == "some"));
         if let Pattern::EnumCase { bindings, .. } = cases[0].pattern.as_ref() {
             assert_eq!(bindings.len(), 1);
             assert!(matches!(&bindings[0], Pattern::ValueBinding(_)));
         }
-        // Second case: .none -> EnumCase
         assert!(matches!(cases[1].pattern.as_ref(), Pattern::EnumCase { case_name, .. } if case_name.value == "none"));
-        // Third case: default -> Ignore
         assert!(matches!(cases[2].pattern.as_ref(), Pattern::Ignore));
     } else {
         panic!("Expected Return with Match expression");
@@ -4828,13 +4825,11 @@ fn test_parse_fallthrough_and_break() {
         && let Expression::Match { cases, .. } = &*expression.borrow()
     {
         assert_eq!(cases.len(), 2);
-        // First case body has fallthrough
         if let Expression::Block { statements: stmts, .. } = &*cases[0].body.borrow() {
             assert!(matches!(&*stmts[0].borrow(), Statement::Fallthrough { .. }));
         } else {
             panic!("Expected block with fallthrough");
         }
-        // Second case body has break
         if let Expression::Block { statements: stmts, .. } = &*cases[1].body.borrow() {
             assert!(matches!(&*stmts[0].borrow(), Statement::Break { .. }));
         } else {
@@ -4945,8 +4940,6 @@ fn test_parse_match_malformed_no_brace_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    // Should still parse, just produce something (error recovery)
-    // The key is it shouldn't panic or hang
     assert!(program.statements.is_empty()
         || matches!(&*program.statements[0].borrow(), Statement::ExpressionStatement { .. }));
 }
@@ -4960,7 +4953,6 @@ fn test_parse_guard_without_else_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    // Should not crash
     assert!(program.statements.is_empty()
         || matches!(&*program.statements[0].borrow(), Statement::Guard { .. }));
 }

@@ -1291,7 +1291,6 @@ fn test_struct_with_generic_protocol_conformance_resolves() {
         engine.clone(),
     );
     resolver.resolve(&program, "test".to_string());
-    // This should not crash; symbol resolution should handle the generic conformance
     let _ = engine.borrow();
 }
 

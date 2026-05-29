@@ -67,7 +67,6 @@ impl TypeResolver {
                 generic_parameters,
                 ..
             } => {
-                // Enter function scope first so generic params are available
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
@@ -109,7 +108,6 @@ impl TypeResolver {
                 )));
                 *ty = Some(fn_type.clone());
 
-                // Register fn type in the enclosing (parent) scope
                 if let Some(parent) = self.current_scope.as_ref().unwrap().borrow().parent.clone() {
                     parent.borrow_mut().set_type(name.value.clone(), fn_type);
                 }
@@ -1703,7 +1701,6 @@ impl TypeResolver {
                             );
                         }
                     } else if let Some(expr_ty) = expr_ty.as_ref() {
-                        // shorthand .caseName — infer enum type from expression type
                         if let Type::Enum(enum_name, _) = &*expr_ty.borrow() {
                             let scope = current_scope.borrow();
                             if let Some(symbol) = scope.get_symbol(enum_name) {
