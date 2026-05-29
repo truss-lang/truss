@@ -5324,3 +5324,98 @@ fn test_parse_defer_missing_block_error() {
     parser.parse();
     assert!(engine.borrow().has_errors());
 }
+
+#[test]
+fn test_parse_if_as_variable_initializer() {
+    let code = "func test() { let x = if true { 1 } else { 2 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::If {
+            condition,
+            then,
+            else_,
+        } = &*init.borrow()
+    {
+        assert!(matches!(&*condition.borrow(), Expression::BooleanLiteral { .. }));
+        assert!(matches!(&*then.borrow(), Expression::Block { .. }));
+        assert!(else_.is_some());
+    } else {
+        panic!("Expected VariableDecl with If initializer");
+    }
+}
+
+#[test]
+fn test_parse_if_as_function_body_last_expression() {
+    let code = "func test() -> Int32 { if true { 1 } else { 2 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::If { else_, .. } = &*expression.borrow()
+    {
+        assert!(else_.is_some());
+    } else {
+        panic!("Expected FunctionDecl with if as last expression statement");
+    }
+}
+
+#[test]
+fn test_parse_if_elseif_chain() {
+    let code =
+        "func test() { let x = if true { 1 } else if false { 2 } else { 3 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::If { else_, .. } = &*init.borrow()
+        && let Some(else_expr) = else_
+    {
+        assert!(matches!(&*else_expr.borrow(), Expression::If { .. }));
+    } else {
+        panic!("Expected VariableDecl with if-else if chain");
+    }
+}
+
+#[test]
+fn test_parse_if_without_else_as_expression() {
+    let code = "func test() { let x = if true { 1 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::If { else_, .. } = &*init.borrow()
+    {
+        assert!(else_.is_none());
+    } else {
+        panic!("Expected VariableDecl with If (no else) initializer");
+    }
+}
