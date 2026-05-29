@@ -1773,3 +1773,122 @@ fn test_defer_nested_scope_symbol_resolved() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
 }
+
+#[test]
+fn test_symbol_resolve_variable_in_implicit_return() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { let x = 1 x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[1].borrow()
+        && let Expression::Variable { symbol, .. } = &*expression.borrow()
+    {
+        assert_ne!(
+            *symbol,
+            None,
+            "Variable in implicit return position should have resolved symbol"
+        );
+    } else {
+        panic!("Expected FunctionDecl with variable in last expression position");
+    }
+}
+
+#[test]
+fn test_symbol_resolve_if_expression_branches() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { let a = 1 let b = 2 if true { a } else { b } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[2].borrow()
+        && let Expression::If {
+            then, else_, ..
+        } = &*expression.borrow()
+        && let Expression::Block {
+            statements: then_stmts,
+            ..
+        } = &*then.borrow()
+        && let Statement::ExpressionStatement { expression: then_expr } = &*then_stmts[0].borrow()
+        && let Expression::Variable { symbol: then_sym, .. } = &*then_expr.borrow()
+    {
+        assert_ne!(
+            *then_sym, None,
+            "Variable in then branch should have resolved symbol"
+        );
+        if let Some(else_expr) = else_
+            && let Expression::Block {
+                statements: else_stmts,
+                ..
+            } = &*else_expr.borrow()
+            && let Statement::ExpressionStatement { expression: else_expr_val } =
+                &*else_stmts[0].borrow()
+            && let Expression::Variable { symbol: else_sym, .. } = &*else_expr_val.borrow()
+        {
+            assert_ne!(
+                *else_sym, None,
+                "Variable in else branch should have resolved symbol"
+            );
+        } else {
+            panic!("Expected else branch with variable");
+        }
+    } else {
+        panic!("Expected FunctionDecl with if expression in last expression position");
+    }
+}
+
+#[test]
+fn test_symbol_resolve_call_in_implicit_return() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo() -> Int32 { return 1 } func bar() -> Int32 { foo() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Call { callee, .. } = &*expression.borrow()
+        && let Expression::Variable { symbol, .. } = &*callee.borrow()
+    {
+        assert_ne!(
+            *symbol, None,
+            "Function call in implicit return position should have resolved symbol"
+        );
+    } else {
+        panic!("Expected FunctionDecl with call in last expression position");
+    }
+}
