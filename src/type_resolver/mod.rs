@@ -598,6 +598,127 @@ impl TypeResolver {
                 }
                 self.leave_scope();
             }
+            Statement::ExtensionDecl {
+                type_name,
+                conformances,
+                body,
+                ..
+            } => {
+                let Some(target_sym) = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().name_table.get(&type_name.value).cloned())
+                else {
+                    return;
+                };
+
+                let target_ty = match &*target_sym.borrow() {
+                    Symbol::Struct { name, .. } => Some(Rc::new(RefCell::new(Type::Struct(
+                        name.clone(),
+                        WeakSymbol(Rc::downgrade(&target_sym)),
+                    )))),
+                    Symbol::Class { name, .. } => Some(Rc::new(RefCell::new(Type::Class(
+                        name.clone(),
+                        WeakSymbol(Rc::downgrade(&target_sym)),
+                    )))),
+                    Symbol::Enum { name, .. } => Some(Rc::new(RefCell::new(Type::Enum(
+                        name.clone(),
+                        WeakSymbol(Rc::downgrade(&target_sym)),
+                    )))),
+                    Symbol::Protocol { name, .. } => Some(Rc::new(RefCell::new(Type::Protocol(
+                        name.clone(),
+                        WeakSymbol(Rc::downgrade(&target_sym)),
+                    )))),
+                    _ => None,
+                };
+
+                for conformance in conformances.iter() {
+                    self.infer_type(conformance.clone());
+                }
+
+                let target_scope = {
+                    target_sym
+                        .borrow()
+                        .get_decl()
+                        .ok()
+                        .flatten()
+                        .and_then(|d| {
+                            let stmt = d.borrow();
+                            match &*stmt {
+                                Statement::StructDecl { scope, .. }
+                                | Statement::ClassDecl { scope, .. }
+                                | Statement::EnumDecl { scope, .. }
+                                | Statement::ProtocolDecl { scope, .. } => scope.clone(),
+                                _ => None,
+                            }
+                        })
+                };
+
+                if let Some(ref scope) = target_scope {
+                    self.enter_scope(scope.clone());
+                    if let Some(ref target_ty) = target_ty {
+                        self.current_scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_type("Self".to_string(), target_ty.clone());
+                    }
+                    for stmt in body {
+                        let method_info: MethodInfo = {
+                            if let Statement::FunctionDecl {
+                                name: method_name,
+                                parameters,
+                                return_type,
+                                ..
+                            } = &*stmt.borrow()
+                            {
+                                let ret_type = if let Some(return_type_expr) = return_type {
+                                    self.infer_type(return_type_expr.clone())
+                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                                } else {
+                                    Rc::new(RefCell::new(Type::Void))
+                                };
+
+                                let mut parameter_types = Vec::new();
+                                let mut is_vararg = false;
+                                for param in parameters.iter() {
+                                    if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                        is_vararg = true;
+                                        continue;
+                                    }
+                                    let param_type =
+                                        self.infer_type(param.borrow().type_expression.clone());
+                                    if let Some(ref param_type) = param_type {
+                                        param.borrow_mut().ty = Some(param_type.clone());
+                                        parameter_types.push(param_type.clone());
+                                    }
+                                    if param.borrow().variadic_kind != VariadicKind::NotVariadic {
+                                        is_vararg = true;
+                                    }
+                                }
+
+                                let fn_type = Rc::new(RefCell::new(Type::Function(
+                                    parameter_types.clone(),
+                                    ret_type,
+                                    is_vararg,
+                                )));
+                                Some((method_name.value.clone(), fn_type, parameter_types))
+                            } else {
+                                None
+                            }
+                        };
+
+                        if let Some((_method_name, fn_type, _)) = method_info
+                            && let Statement::FunctionDecl { ty, .. } = &mut *stmt.borrow_mut()
+                        {
+                            *ty = Some(fn_type.clone());
+                        }
+
+                        self.process_decl(stmt.clone());
+                    }
+                    self.leave_scope();
+                }
+            }
             _ => {}
         }
     }
@@ -923,6 +1044,40 @@ impl TypeResolver {
             Statement::EnumDecl { body, .. } => {
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
+                }
+            }
+            Statement::ExtensionDecl {
+                type_name, body, ..
+            } => {
+                let target_scope = {
+                    self.current_scope
+                        .as_ref()
+                        .and_then(|scope| scope.borrow().get_symbol(&type_name.value))
+                        .and_then(|sym| {
+                            let decl = sym.borrow().get_decl().ok().flatten();
+                            decl.and_then(|d| {
+                                let stmt = d.borrow();
+                                match &*stmt {
+                                    Statement::StructDecl { scope, .. }
+                                    | Statement::ClassDecl { scope, .. }
+                                    | Statement::EnumDecl { scope, .. }
+                                    | Statement::ProtocolDecl { scope, .. } => scope.clone(),
+                                    _ => None,
+                                }
+                            })
+                        })
+                };
+
+                if let Some(ref scope) = target_scope {
+                    self.enter_scope(scope.clone());
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                    self.leave_scope();
+                } else {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
                 }
             }
             _ => {}

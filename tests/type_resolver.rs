@@ -2567,3 +2567,86 @@ fn test_protocol_conformance_missing_multiple_methods_error() {
         );
     }
 }
+
+#[test]
+fn test_extension_method_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo {} extension Foo { func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ExtensionDecl { body, .. } = &*program.statements[1].borrow()
+        && let Statement::FunctionDecl { ty, .. } = &*body[0].borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(
+            ty.borrow().clone(),
+            Type::Function(vec![], Rc::new(RefCell::new(Type::Int32)), false)
+        );
+    } else {
+        panic!("Extension method should have function type");
+    }
+}
+
+#[test]
+fn test_extension_self_in_return_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { let x: Int32 } extension Point { func getSelf() -> Self { self } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors for Self return type, got: {:?}", errors);
+}
+
+#[test]
+fn test_extension_struct_method_call_type_check() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Calc {} extension Calc { func add(a: Int32, b: Int32) -> Int32 { a + b } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}
