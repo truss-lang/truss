@@ -486,7 +486,10 @@ impl SymbolResolver {
                             properties.push(prop_symbol.clone());
                             self.enter(prop_symbol, prop_name);
                         }
-                        ProtocolMember::AssociatedType { .. } => {}
+                        ProtocolMember::AssociatedType { name, .. } => {
+                            let at_type = Rc::new(RefCell::new(Type::GenericParam(name.value.clone())));
+                            scope.as_ref().unwrap().borrow_mut().set_type(name.value.clone(), at_type);
+                        }
                         ProtocolMember::TypeAlias { type_expression, .. } => {
                             self.resolve_expression(type_expression.clone());
                         }
@@ -949,7 +952,11 @@ impl SymbolResolver {
                         ProtocolMember::Property { type_expression, .. } => {
                             self.resolve_expression(type_expression.clone());
                         }
-                        ProtocolMember::AssociatedType { .. } => {}
+                        ProtocolMember::AssociatedType { constraints, .. } => {
+                            for constraint in constraints {
+                                self.resolve_expression(constraint.clone());
+                            }
+                        }
                         ProtocolMember::TypeAlias { type_expression, .. } => {
                             self.resolve_expression(type_expression.clone());
                         }
@@ -1080,6 +1087,9 @@ impl SymbolResolver {
                 }
             }
             Expression::MemberAccess { object, .. } => {
+                self.resolve_expression(object.clone());
+            }
+            Expression::AssociatedTypeAccess { object, .. } => {
                 self.resolve_expression(object.clone());
             }
             Expression::TupleLiteral { elements, .. } => {
