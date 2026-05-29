@@ -1877,7 +1877,11 @@ fn test_if_case_enum_type_not_found() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(errors.len() > 0, "Should have errors for unknown enum type, got: {:?}", errors);
+    assert!(
+        errors.len() > 0,
+        "Should have errors for unknown enum type, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -1904,7 +1908,11 @@ fn test_if_case_case_not_found() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(errors.len() > 0, "Should have errors for unknown case, got: {:?}", errors);
+    assert!(
+        errors.len() > 0,
+        "Should have errors for unknown case, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -1955,12 +1963,23 @@ fn test_class_superclass_type() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should not have type errors, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have type errors, got: {:?}",
+        errors
+    );
 
-    if let Statement::ClassDecl { name, superclass, .. } = &*program.statements[1].borrow() {
+    if let Statement::ClassDecl {
+        name, superclass, ..
+    } = &*program.statements[1].borrow()
+    {
         assert_eq!(name.value, "Dog");
         assert!(superclass.is_some());
-        if let Expression::Type { name: super_name, .. } = &*superclass.as_ref().unwrap().borrow() {
+        if let Expression::Type {
+            name: super_name, ..
+        } = &*superclass.as_ref().unwrap().borrow()
+        {
             assert_eq!(super_name.value, "Animal");
         } else {
             panic!("Expected superclass to be a Type expression");
@@ -2099,10 +2118,7 @@ fn test_protocol_type_with_method() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
 
-    if let Statement::ProtocolDecl {
-        name, members, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
         assert_eq!(members.len(), 1);
         if let ProtocolMember::Method { decl, .. } = &members[0] {
@@ -2215,7 +2231,8 @@ fn test_protocol_conformance_type() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "protocol Drawable { func draw() -> Void }
-             class Circle: Drawable { func draw() -> Void { return } }".to_string(),
+             class Circle: Drawable { func draw() -> Void { return } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2239,7 +2256,8 @@ fn test_struct_protocol_conformance_type() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "protocol Drawable { func draw() -> Void }
-             struct Circle: Drawable { func draw() -> Void { return } }".to_string(),
+             struct Circle: Drawable { func draw() -> Void { return } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2267,7 +2285,8 @@ fn test_struct_multiple_protocol_conformance_type() {
              struct Circle: Drawable, Resettable {
                  func draw() -> Void { return }
                  func reset() -> Void { return }
-             }".to_string(),
+             }"
+            .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2291,7 +2310,8 @@ fn test_protocol_refinement_type() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "protocol Base {}
-             protocol Derived: Base {}".to_string(),
+             protocol Derived: Base {}"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2329,7 +2349,12 @@ fn test_protocol_any_type_resolved() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should not have errors with 'any' type, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have errors with 'any' type, got: {:?}",
+        errors
+    );
 
     if let Statement::VariableDecl { ty, .. } = &*program.statements[1].borrow() {
         assert!(ty.is_some(), "Variable should have a type annotation");
@@ -2364,7 +2389,12 @@ fn test_protocol_compound_type_resolved() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should not have errors with compound type, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have errors with compound type, got: {:?}",
+        errors
+    );
 
     if let Statement::VariableDecl { ty, .. } = &*program.statements[2].borrow() {
         assert!(ty.is_some(), "Variable should have a type annotation");
@@ -2399,7 +2429,12 @@ fn test_protocol_member_access_type() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should not have errors with protocol member access, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have errors with protocol member access, got: {:?}",
+        errors
+    );
 
     if let Statement::VariableDecl {
         type_expression: Some(ty_expr),
@@ -2421,7 +2456,8 @@ fn test_any_compound_type_resolved() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "protocol A { func foo() -> Int32 } protocol B { func bar() -> Void } let x: any A & B".to_string(),
+            "protocol A { func foo() -> Int32 } protocol B { func bar() -> Void } let x: any A & B"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2436,7 +2472,12 @@ fn test_any_compound_type_resolved() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should not have errors with 'any A & B', got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have errors with 'any A & B', got: {:?}",
+        errors
+    );
 
     if let Statement::VariableDecl { ty, .. } = &*program.statements[2].borrow() {
         assert!(ty.is_some(), "Variable should have a type annotation");
@@ -2457,7 +2498,8 @@ fn test_protocol_conformance_missing_method_error() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "protocol Drawable { func draw() -> Void }
-             struct Circle: Drawable {}".to_string(),
+             struct Circle: Drawable {}"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2472,7 +2514,12 @@ fn test_protocol_conformance_missing_method_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 1, "Should have 1 error for missing method, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        1,
+        "Should have 1 error for missing method, got: {:?}",
+        errors
+    );
     assert_eq!(
         errors[0].code,
         TrussDiagnosticCode::ProtocolRequirementNotImplemented,
@@ -2487,7 +2534,8 @@ fn test_protocol_conformance_with_default_impl_no_error() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "protocol Drawable { func draw() -> Void { return } }
-             struct Circle: Drawable {}".to_string(),
+             struct Circle: Drawable {}"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2502,7 +2550,12 @@ fn test_protocol_conformance_with_default_impl_no_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should not have errors when method has default impl, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have errors when method has default impl, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2511,7 +2564,8 @@ fn test_protocol_conformance_struct_missing_method_error() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "protocol P { func foo() -> Int32 }
-             struct S: P {}".to_string(),
+             struct S: P {}"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2526,7 +2580,12 @@ fn test_protocol_conformance_struct_missing_method_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 1, "Should have 1 error for missing method, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        1,
+        "Should have 1 error for missing method, got: {:?}",
+        errors
+    );
     assert_eq!(
         errors[0].code,
         TrussDiagnosticCode::ProtocolRequirementNotImplemented,
@@ -2542,7 +2601,8 @@ fn test_protocol_conformance_missing_multiple_methods_error() {
         CharStream::new(
             "protocol P { func foo() -> Int32
                          func bar() -> Void }
-             struct S: P {}".to_string(),
+             struct S: P {}"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2557,7 +2617,12 @@ fn test_protocol_conformance_missing_multiple_methods_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 2, "Should have 2 errors for 2 missing methods, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        2,
+        "Should have 2 errors for 2 missing methods, got: {:?}",
+        errors
+    );
     for error in errors.iter() {
         assert_eq!(
             error.code,
@@ -2624,7 +2689,12 @@ fn test_extension_self_in_return_type() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should not have errors for Self return type, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have errors for Self return type, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2670,7 +2740,12 @@ fn test_generic_function_type_param_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Generic function type resolution, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic function type resolution, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2692,7 +2767,12 @@ fn test_generic_struct_type_param_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Generic struct type resolution, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic struct type resolution, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2714,7 +2794,12 @@ fn test_generic_class_type_param_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Generic class type resolution, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic class type resolution, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2736,7 +2821,12 @@ fn test_generic_enum_type_param_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Generic enum type resolution, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic enum type resolution, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2758,7 +2848,12 @@ fn test_typealias_in_struct_type_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Typealias type resolution, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Typealias type resolution, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2806,7 +2901,12 @@ fn test_if_case_dot_shorthand_type_resolved() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "dot shorthand should resolve type correctly, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "dot shorthand should resolve type correctly, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2833,7 +2933,12 @@ fn test_guard_case_type_check() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "guard case should type check correctly, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "guard case should type check correctly, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2866,7 +2971,12 @@ fn test_match_type_check() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "match should type check correctly, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "match should type check correctly, got: {:?}",
+        errors
+    );
 }
 #[test]
 fn test_typealias_in_protocol_type_resolves() {
@@ -2887,7 +2997,12 @@ fn test_typealias_in_protocol_type_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Typealias in protocol type resolution, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Typealias in protocol type resolution, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2909,7 +3024,12 @@ fn test_typealias_at_top_level_type_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Top-level typealias type resolution, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Top-level typealias type resolution, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2931,7 +3051,12 @@ fn test_generic_function_call_with_type_inference() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Normal function call type resolution, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Normal function call type resolution, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2953,7 +3078,12 @@ fn test_associated_type_access_on_protocol_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Associated type access on protocol, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Associated type access on protocol, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2975,7 +3105,12 @@ fn test_associated_type_access_typealias_resolves() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Associated type access with typealias, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Associated type access with typealias, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2997,5 +3132,52 @@ fn test_associated_type_access_missing_member_errors() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(errors.len() > 0, "Expected error for missing associated type");
+    assert!(
+        errors.len() > 0,
+        "Expected error for missing associated type"
+    );
+}
+
+#[test]
+fn test_defer_body_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { let x = 1 defer { let y = x } return x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+}
+
+#[test]
+fn test_defer_body_type_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { defer { let x: UndefinedType = 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.len() > 0, "Expected type errors in defer body");
 }

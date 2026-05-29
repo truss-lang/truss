@@ -4,7 +4,10 @@ use crate::{
     ast::{
         expression::{BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator},
         node::Program,
-        statement::{AccessModifier, AccessorKind, FunctionBody, ModifierType, Pattern, ProtocolMember, Statement, VariadicKind},
+        statement::{
+            AccessModifier, AccessorKind, FunctionBody, ModifierType, Pattern, ProtocolMember,
+            Statement, VariadicKind,
+        },
     },
     diag::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
@@ -127,7 +130,12 @@ impl TypeResolver {
                 self.leave_scope();
             }
             Statement::StructDecl {
-                name, body, scope, conformances, generic_parameters, ..
+                name,
+                body,
+                scope,
+                conformances,
+                generic_parameters,
+                ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -222,7 +230,13 @@ impl TypeResolver {
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::ClassDecl {
-                name, body, scope, superclass, conformances, generic_parameters, ..
+                name,
+                body,
+                scope,
+                superclass,
+                conformances,
+                generic_parameters,
+                ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -320,7 +334,12 @@ impl TypeResolver {
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::EnumDecl {
-                name, cases: ast_cases, body, scope, generic_parameters, ..
+                name,
+                cases: ast_cases,
+                body,
+                scope,
+                generic_parameters,
+                ..
             } => {
                 let Some(symbol) = self
                     .current_scope
@@ -358,7 +377,11 @@ impl TypeResolver {
                                 parameter_types.push(param_type.clone());
                             }
                         }
-                        if let Symbol::EnumCase { parameter_types: param_tys, .. } = &mut *case_symbol.borrow_mut() {
+                        if let Symbol::EnumCase {
+                            parameter_types: param_tys,
+                            ..
+                        } = &mut *case_symbol.borrow_mut()
+                        {
                             *param_tys = parameter_types;
                         }
                     }
@@ -634,8 +657,11 @@ impl TypeResolver {
                                     .set_type(prop_name.value.clone(), prop_ty);
                             }
                         }
-                        ProtocolMember::AssociatedType { name, constraints, .. } => {
-                            let at_type = Rc::new(RefCell::new(Type::GenericParam(name.value.clone())));
+                        ProtocolMember::AssociatedType {
+                            name, constraints, ..
+                        } => {
+                            let at_type =
+                                Rc::new(RefCell::new(Type::GenericParam(name.value.clone())));
                             self.current_scope
                                 .as_ref()
                                 .unwrap()
@@ -645,7 +671,11 @@ impl TypeResolver {
                                 self.infer_type(constraint.clone());
                             }
                         }
-                        ProtocolMember::TypeAlias { name, type_expression, .. } => {
+                        ProtocolMember::TypeAlias {
+                            name,
+                            type_expression,
+                            ..
+                        } => {
                             if let Some(ty) = self.infer_type(type_expression.clone()) {
                                 if let Some(scope) = self.current_scope.as_ref() {
                                     scope.borrow_mut().set_type(name.value.clone(), ty);
@@ -695,21 +725,16 @@ impl TypeResolver {
                 }
 
                 let target_scope = {
-                    target_sym
-                        .borrow()
-                        .get_decl()
-                        .ok()
-                        .flatten()
-                        .and_then(|d| {
-                            let stmt = d.borrow();
-                            match &*stmt {
-                                Statement::StructDecl { scope, .. }
-                                | Statement::ClassDecl { scope, .. }
-                                | Statement::EnumDecl { scope, .. }
-                                | Statement::ProtocolDecl { scope, .. } => scope.clone(),
-                                _ => None,
-                            }
-                        })
+                    target_sym.borrow().get_decl().ok().flatten().and_then(|d| {
+                        let stmt = d.borrow();
+                        match &*stmt {
+                            Statement::StructDecl { scope, .. }
+                            | Statement::ClassDecl { scope, .. }
+                            | Statement::EnumDecl { scope, .. }
+                            | Statement::ProtocolDecl { scope, .. } => scope.clone(),
+                            _ => None,
+                        }
+                    })
                 };
 
                 if let Some(ref scope) = target_scope {
@@ -777,7 +802,11 @@ impl TypeResolver {
                     self.leave_scope();
                 }
             }
-            Statement::TypeAlias { type_expression, name, .. } => {
+            Statement::TypeAlias {
+                type_expression,
+                name,
+                ..
+            } => {
                 if let Some(ty) = self.infer_type(type_expression.clone()) {
                     if let Some(scope) = self.current_scope.as_ref() {
                         scope.borrow_mut().set_type(name.value.clone(), ty);
@@ -860,11 +889,8 @@ impl TypeResolver {
                                     self.current_return_type = Some(var_ty.clone());
                                 }
                             }
-                            AccessorKind::Set
-                            | AccessorKind::WillSet
-                            | AccessorKind::DidSet => {
-                                self.current_return_type =
-                                    Some(Rc::new(RefCell::new(Type::Void)));
+                            AccessorKind::Set | AccessorKind::WillSet | AccessorKind::DidSet => {
+                                self.current_return_type = Some(Rc::new(RefCell::new(Type::Void)));
                                 let param_name = accessor
                                     .parameter
                                     .as_ref()
@@ -1041,7 +1067,12 @@ impl TypeResolver {
             Statement::ExternDecl { statement, .. } => {
                 self.resolve_statement(statement.clone());
             }
-            Statement::StructDecl { body, conformances, scope, .. } => {
+            Statement::StructDecl {
+                body,
+                conformances,
+                scope,
+                ..
+            } => {
                 for conformance in conformances {
                     self.infer_type(conformance.clone());
                 }
@@ -1057,7 +1088,12 @@ impl TypeResolver {
                     }
                 }
             }
-            Statement::ClassDecl { body, conformances, scope, .. } => {
+            Statement::ClassDecl {
+                body,
+                conformances,
+                scope,
+                ..
+            } => {
                 for conformance in conformances {
                     self.infer_type(conformance.clone());
                 }
@@ -1096,7 +1132,8 @@ impl TypeResolver {
                                         false,
                                     )))
                                 };
-                                let ret_type = if let Type::Function(_, ret, _) = &*fn_type.borrow() {
+                                let ret_type = if let Type::Function(_, ret, _) = &*fn_type.borrow()
+                                {
                                     ret.clone()
                                 } else {
                                     Rc::new(RefCell::new(Type::Void))
@@ -1119,7 +1156,11 @@ impl TypeResolver {
                         }
                         ProtocolMember::Property { .. } => {}
                         ProtocolMember::AssociatedType { .. } => {}
-                        ProtocolMember::TypeAlias { name, type_expression, .. } => {
+                        ProtocolMember::TypeAlias {
+                            name,
+                            type_expression,
+                            ..
+                        } => {
                             if let Some(ty) = self.infer_type(type_expression.clone()) {
                                 if let Some(scope) = self.current_scope.as_ref() {
                                     scope.borrow_mut().set_type(name.value.clone(), ty);
@@ -1177,7 +1218,11 @@ impl TypeResolver {
                     }
                 }
             }
-            Statement::TypeAlias { type_expression, name, .. } => {
+            Statement::TypeAlias {
+                type_expression,
+                name,
+                ..
+            } => {
                 if let Some(ty) = self.infer_type(type_expression.clone()) {
                     if let Some(scope) = self.current_scope.as_ref() {
                         scope.borrow_mut().set_type(name.value.clone(), ty);
@@ -1192,11 +1237,20 @@ impl TypeResolver {
                 let _cond_ty = self.infer_type(condition.clone());
                 let binding_types = {
                     let cond = condition.borrow();
-                    if let Expression::Case { enum_type, case_name, bindings, expression, .. } = &*cond {
+                    if let Expression::Case {
+                        enum_type,
+                        case_name,
+                        bindings,
+                        expression,
+                        ..
+                    } = &*cond
+                    {
                         if !bindings.is_empty() {
                             let enum_name = enum_type.as_ref().map(|t| t.value.as_str());
                             if let Some(expr_ty) = self.infer_type(expression.clone()) {
-                                self.resolve_enum_case_from_type(&expr_ty, enum_name, case_name, bindings)
+                                self.resolve_enum_case_from_type(
+                                    &expr_ty, enum_name, case_name, bindings,
+                                )
                             } else {
                                 None
                             }
@@ -1218,6 +1272,9 @@ impl TypeResolver {
                 self.resolve_block_expression(else_body.clone());
             }
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
+            Statement::Defer { body, .. } => {
+                self.resolve_block_expression(body.clone());
+            }
             _ => {}
         }
     }
@@ -1611,7 +1668,14 @@ impl TypeResolver {
 
                 let binding_types = {
                     let cond = condition.borrow();
-                    if let Expression::Case { enum_type, case_name, bindings, expression, .. } = &*cond {
+                    if let Expression::Case {
+                        enum_type,
+                        case_name,
+                        bindings,
+                        expression,
+                        ..
+                    } = &*cond
+                    {
                         if !bindings.is_empty() {
                             if let Some(type_name) = enum_type.as_ref() {
                                 self.get_enum_case_parameter_types(
@@ -1688,7 +1752,10 @@ impl TypeResolver {
                                 if !found {
                                     self.emit_error(
                                         TrussDiagnosticCode::FieldNotFound,
-                                        format!("Enum '{}' has no case '{}'", enum_type.value, case_name.value),
+                                        format!(
+                                            "Enum '{}' has no case '{}'",
+                                            enum_type.value, case_name.value
+                                        ),
                                         case_name.as_ref(),
                                     );
                                 }
@@ -1717,7 +1784,10 @@ impl TypeResolver {
                                     if !found {
                                         self.emit_error(
                                             TrussDiagnosticCode::FieldNotFound,
-                                            format!("Enum '{}' has no case '{}'", enum_name, case_name.value),
+                                            format!(
+                                                "Enum '{}' has no case '{}'",
+                                                enum_name, case_name.value
+                                            ),
                                             case_name.as_ref(),
                                         );
                                     }
@@ -1797,7 +1867,9 @@ impl TypeResolver {
                 *ty = Some(compound.clone());
                 compound
             }
-            Expression::Match { value, cases, ty, .. } => {
+            Expression::Match {
+                value, cases, ty, ..
+            } => {
                 let subject_ty = self.infer_type(value.clone());
                 let mut match_ty = Rc::new(RefCell::new(Type::Void));
 
@@ -1805,11 +1877,17 @@ impl TypeResolver {
                     let case_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
                     self.enter_scope(case_scope.clone());
 
-                    if let Pattern::EnumCase { case_name, bindings, .. } = case.pattern.as_ref() {
+                    if let Pattern::EnumCase {
+                        case_name,
+                        bindings,
+                        ..
+                    } = case.pattern.as_ref()
+                    {
                         if !bindings.is_empty() {
                             if let Some(ref subject_ty) = subject_ty {
                                 if let Type::Enum(enum_name, _) = &*subject_ty.borrow() {
-                                    let param_types = self.get_enum_case_parameter_types(enum_name, &case_name.value);
+                                    let param_types = self
+                                        .get_enum_case_parameter_types(enum_name, &case_name.value);
                                     if let Some(ref param_types) = param_types {
                                         Self::set_binding_types(bindings, param_types, &case_scope);
                                     }
@@ -1820,7 +1898,9 @@ impl TypeResolver {
                     if let Pattern::ValueBinding(inner) = case.pattern.as_ref() {
                         if let Pattern::Identifier(name) = inner.as_ref() {
                             if let Some(ref subject_ty) = subject_ty {
-                                case_scope.borrow_mut().set_type(name.value.clone(), subject_ty.clone());
+                                case_scope
+                                    .borrow_mut()
+                                    .set_type(name.value.clone(), subject_ty.clone());
                             }
                         }
                     }
@@ -1829,14 +1909,20 @@ impl TypeResolver {
                         self.infer_type(guard.clone());
                     }
 
-                    let body_ty = self.infer_type(case.body.clone()).unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                    let body_ty = self
+                        .infer_type(case.body.clone())
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
 
                     if *match_ty.borrow() == Type::Void {
                         match_ty = body_ty;
                     } else if match_ty.borrow().clone() != body_ty.borrow().clone() {
                         self.emit_error(
                             TrussDiagnosticCode::BranchTypeMismatch,
-                            format!("Match branches have different types: {} vs {}", match_ty.borrow(), body_ty.borrow()),
+                            format!(
+                                "Match branches have different types: {} vs {}",
+                                match_ty.borrow(),
+                                body_ty.borrow()
+                            ),
                             &case.body.borrow().token(),
                         );
                     }
@@ -1981,12 +2067,19 @@ impl TypeResolver {
                         if let Some(symbol) = scope.get_symbol(class_name) {
                             let binding = symbol.borrow();
                             let (fields, methods) = match &*binding {
-                                Symbol::Struct { fields, methods, .. }
-                                | Symbol::Class { fields, methods, .. } => (fields, methods),
+                                Symbol::Struct {
+                                    fields, methods, ..
+                                }
+                                | Symbol::Class {
+                                    fields, methods, ..
+                                } => (fields, methods),
                                 _ => {
                                     self.emit_error(
                                         TrussDiagnosticCode::FieldNotFound,
-                                        format!("Class symbol '{}' has unexpected type", class_name),
+                                        format!(
+                                            "Class symbol '{}' has unexpected type",
+                                            class_name
+                                        ),
                                         member,
                                     );
                                     return None;
@@ -2050,9 +2143,20 @@ impl TypeResolver {
 
                             let decl = symbol.borrow().get_decl().ok().flatten();
                             let super_info = decl.as_ref().and_then(|decl| {
-                                if let Statement::ClassDecl { superclass: Some(super_expr), .. } = &*decl.borrow() {
-                                    if let Expression::Type { name: super_name, .. } = &*super_expr.borrow() {
-                                        return Some((super_name.value.clone(), super_name.position.clone(), super_name.file.clone()));
+                                if let Statement::ClassDecl {
+                                    superclass: Some(super_expr),
+                                    ..
+                                } = &*decl.borrow()
+                                {
+                                    if let Expression::Type {
+                                        name: super_name, ..
+                                    } = &*super_expr.borrow()
+                                    {
+                                        return Some((
+                                            super_name.value.clone(),
+                                            super_name.position.clone(),
+                                            super_name.file.clone(),
+                                        ));
                                     }
                                 }
                                 None
@@ -2062,7 +2166,12 @@ impl TypeResolver {
 
                             if let Some((super_name, pos, file)) = super_info {
                                 let super_object = Rc::new(RefCell::new(Expression::Variable {
-                                    name: Box::new(Token::new(super_name, TokenType::Identifier, pos, file)),
+                                    name: Box::new(Token::new(
+                                        super_name,
+                                        TokenType::Identifier,
+                                        pos,
+                                        file,
+                                    )),
                                     ty: None,
                                     symbol: None,
                                 }));
@@ -2101,16 +2210,20 @@ impl TypeResolver {
                         {
                             for case in cases {
                                 if case.borrow().name().as_ref().ok() == Some(&member.value) {
-                                    if let Symbol::EnumCase { parameter_types, .. } = &*case.borrow() {
+                                    if let Symbol::EnumCase {
+                                        parameter_types, ..
+                                    } = &*case.borrow()
+                                    {
                                         if parameter_types.is_empty() {
                                             *ty = Some(object_ty.clone());
                                             return Some(object_ty.clone());
                                         } else {
-                                            let case_fn_type = Rc::new(RefCell::new(Type::Function(
-                                                parameter_types.clone(),
-                                                object_ty.clone(),
-                                                false,
-                                            )));
+                                            let case_fn_type =
+                                                Rc::new(RefCell::new(Type::Function(
+                                                    parameter_types.clone(),
+                                                    object_ty.clone(),
+                                                    false,
+                                                )));
                                             *ty = Some(case_fn_type.clone());
                                             return Some(case_fn_type);
                                         }
@@ -2139,15 +2252,17 @@ impl TypeResolver {
                     }
                     Type::Tuple(elements) => {
                         let member_name = &member.value;
-                        if let Some((_, element_ty)) = elements.iter().enumerate().find_map(|(i, (n, t))| {
-                            n.as_ref().and_then(|name| {
-                                if name == member_name {
-                                    Some((i, t.clone()))
-                                } else {
-                                    None
-                                }
+                        if let Some((_, element_ty)) =
+                            elements.iter().enumerate().find_map(|(i, (n, t))| {
+                                n.as_ref().and_then(|name| {
+                                    if name == member_name {
+                                        Some((i, t.clone()))
+                                    } else {
+                                        None
+                                    }
+                                })
                             })
-                        }) {
+                        {
                             *ty = Some(element_ty.clone());
                             return Some(element_ty.clone());
                         }
@@ -2215,21 +2330,29 @@ impl TypeResolver {
                         }
                     }
                     Type::Compound(types) => {
-                        let protocol_names: Vec<String> = types.iter().filter_map(|t| {
-                            if let Type::Protocol(name, _) = &*t.borrow() {
-                                Some(name.clone())
-                            } else {
-                                None
-                            }
-                        }).collect();
+                        let protocol_names: Vec<String> = types
+                            .iter()
+                            .filter_map(|t| {
+                                if let Type::Protocol(name, _) = &*t.borrow() {
+                                    Some(name.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
                         for protocol_name in &protocol_names {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
                             if let Some(symbol) = scope.get_symbol(protocol_name)
-                                && let Symbol::Protocol { methods, properties, .. } = &*symbol.borrow()
+                                && let Symbol::Protocol {
+                                    methods,
+                                    properties,
+                                    ..
+                                } = &*symbol.borrow()
                             {
                                 for method in methods {
                                     if method.borrow().name().as_ref().ok() == Some(&member.value)
-                                        && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                        && let Some(decl) =
+                                            method.borrow().get_decl().ok().flatten()
                                     {
                                         let method_ty = {
                                             let decl_ref = decl.borrow();
@@ -2248,7 +2371,8 @@ impl TypeResolver {
                                 for prop in properties {
                                     if prop.borrow().name().as_ref().ok() == Some(&member.value)
                                         && let Some(decl) = prop.borrow().get_decl().ok().flatten()
-                                        && let Statement::VariableDecl { ty: prop_ty, .. } = &*decl.borrow()
+                                        && let Statement::VariableDecl { ty: prop_ty, .. } =
+                                            &*decl.borrow()
                                         && let Some(t) = prop_ty
                                     {
                                         *ty = Some(t.clone());
@@ -2285,9 +2409,7 @@ impl TypeResolver {
                     }
                 }
             }
-            Expression::TupleLiteral {
-                elements, ty, ..
-            } => {
+            Expression::TupleLiteral { elements, ty, .. } => {
                 let mut element_types = Vec::new();
                 for (name, elem) in elements {
                     if let Some(t) = self.infer_type(elem.clone()) {
@@ -2339,8 +2461,7 @@ impl TypeResolver {
                             TrussDiagnosticCode::TypeError,
                             format!(
                                 "Cannot index into non-tuple type '{}' with .{}",
-                                other,
-                                index_value
+                                other, index_value
                             ),
                             index.as_ref(),
                         );
@@ -2367,11 +2488,7 @@ impl TypeResolver {
                 t
             }
             Expression::SelfType { ty, .. } => {
-                let t = self
-                    .current_scope
-                    .as_ref()?
-                    .borrow()
-                    .get_type("Self");
+                let t = self.current_scope.as_ref()?.borrow().get_type("Self");
                 if let Some(t) = t {
                     *ty = Some(t.clone());
                     t
@@ -2396,7 +2513,10 @@ impl TypeResolver {
                                             let found_ty = found.borrow().clone();
                                             match &found_ty {
                                                 Type::GenericParam(_) => {
-                                                    Rc::new(RefCell::new(Type::AssociatedType(object_ty.clone(), member.value.clone())))
+                                                    Rc::new(RefCell::new(Type::AssociatedType(
+                                                        object_ty.clone(),
+                                                        member.value.clone(),
+                                                    )))
                                                 }
                                                 _ => found.clone(),
                                             }
@@ -2432,13 +2552,22 @@ impl TypeResolver {
                             if let Type::Protocol(_name, weak_sym) = &*t.borrow() {
                                 if let Some(sym) = weak_sym.0.upgrade() {
                                     if let Ok(Some(decl)) = sym.borrow().get_decl() {
-                                        if let Statement::ProtocolDecl { scope, .. } = &*decl.borrow() {
+                                        if let Statement::ProtocolDecl { scope, .. } =
+                                            &*decl.borrow()
+                                        {
                                             if let Some(protocol_scope) = scope {
                                                 let scope_ref = protocol_scope.borrow();
-                                                if let Some(found) = scope_ref.get_type(&member.value) {
+                                                if let Some(found) =
+                                                    scope_ref.get_type(&member.value)
+                                                {
                                                     let found_ty = found.borrow().clone();
                                                     result = Some(match &found_ty {
-                                                        Type::GenericParam(_) => Rc::new(RefCell::new(Type::AssociatedType(object_ty.clone(), member.value.clone()))),
+                                                        Type::GenericParam(_) => Rc::new(
+                                                            RefCell::new(Type::AssociatedType(
+                                                                object_ty.clone(),
+                                                                member.value.clone(),
+                                                            )),
+                                                        ),
                                                         _ => found.clone(),
                                                     });
                                                     break;
@@ -2454,16 +2583,20 @@ impl TypeResolver {
                             None => {
                                 self.emit_error(
                                     TrussDiagnosticCode::UnknownType,
-                                    format!("Associated type '{}' not found in compound protocol", member.value),
+                                    format!(
+                                        "Associated type '{}' not found in compound protocol",
+                                        member.value
+                                    ),
                                     member,
                                 );
                                 return None;
                             }
                         }
                     }
-                    Type::GenericParam(_) => {
-                        Rc::new(RefCell::new(Type::AssociatedType(object_ty.clone(), member.value.clone())))
-                    }
+                    Type::GenericParam(_) => Rc::new(RefCell::new(Type::AssociatedType(
+                        object_ty.clone(),
+                        member.value.clone(),
+                    ))),
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::UnknownType,
@@ -2550,7 +2683,8 @@ impl TypeResolver {
         } else if let Some(inferred) = self.infer_type(expression) {
             let inferred_clone = inferred.borrow().clone();
             let expected_clone = expected.borrow().clone();
-            let is_protocol_compat = matches!(&expected_clone, Type::Protocol(..) | Type::Compound(..));
+            let is_protocol_compat =
+                matches!(&expected_clone, Type::Protocol(..) | Type::Compound(..));
             if !is_protocol_compat && inferred_clone != expected_clone {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
@@ -2931,7 +3065,10 @@ impl TypeResolver {
         if let Symbol::Enum { cases, .. } = &*symbol_ref {
             for case in cases {
                 if case.borrow().name().as_ref().ok() == Some(&case_name.to_string()) {
-                    if let Symbol::EnumCase { parameter_types, .. } = &*case.borrow() {
+                    if let Symbol::EnumCase {
+                        parameter_types, ..
+                    } = &*case.borrow()
+                    {
                         return Some(parameter_types.clone());
                     }
                 }
@@ -3014,7 +3151,9 @@ impl TypeResolver {
                 }
                 _ => None,
             };
-            let Some(ref protocol_name) = protocol_name else { continue; };
+            let Some(ref protocol_name) = protocol_name else {
+                continue;
+            };
             drop(expr);
 
             let Some(protocol_symbol) = self
@@ -3027,7 +3166,9 @@ impl TypeResolver {
 
             let required_methods: Vec<String> = {
                 let sym = protocol_symbol.borrow();
-                let Symbol::Protocol { methods, .. } = &*sym else { continue; };
+                let Symbol::Protocol { methods, .. } = &*sym else {
+                    continue;
+                };
                 methods
                     .iter()
                     .filter(|m| {
@@ -3052,7 +3193,9 @@ impl TypeResolver {
 
             let required_properties: Vec<String> = {
                 let sym = protocol_symbol.borrow();
-                let Symbol::Protocol { properties, .. } = &*sym else { continue; };
+                let Symbol::Protocol { properties, .. } = &*sym else {
+                    continue;
+                };
                 properties
                     .iter()
                     .filter_map(|p| p.borrow().name().ok())
@@ -3070,8 +3213,12 @@ impl TypeResolver {
             let (type_methods, type_fields): (Vec<String>, Vec<String>) = {
                 let type_sym = type_symbol.borrow();
                 match &*type_sym {
-                    Symbol::Struct { methods, fields, .. }
-                    | Symbol::Class { methods, fields, .. } => (
+                    Symbol::Struct {
+                        methods, fields, ..
+                    }
+                    | Symbol::Class {
+                        methods, fields, ..
+                    } => (
                         methods
                             .iter()
                             .filter_map(|m| m.borrow().name().ok())
