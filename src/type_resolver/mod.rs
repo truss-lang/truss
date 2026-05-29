@@ -641,6 +641,13 @@ impl TypeResolver {
                                 self.infer_type(constraint.clone());
                             }
                         }
+                        ProtocolMember::TypeAlias { name, type_expression, .. } => {
+                            if let Some(ty) = self.infer_type(type_expression.clone()) {
+                                if let Some(scope) = self.current_scope.as_ref() {
+                                    scope.borrow_mut().set_type(name.value.clone(), ty);
+                                }
+                            }
+                        }
                     }
                 }
                 self.leave_scope();
@@ -1108,6 +1115,13 @@ impl TypeResolver {
                         }
                         ProtocolMember::Property { .. } => {}
                         ProtocolMember::AssociatedType { .. } => {}
+                        ProtocolMember::TypeAlias { name, type_expression, .. } => {
+                            if let Some(ty) = self.infer_type(type_expression.clone()) {
+                                if let Some(scope) = self.current_scope.as_ref() {
+                                    scope.borrow_mut().set_type(name.value.clone(), ty);
+                                }
+                            }
+                        }
                     }
                 }
                 self.leave_scope();

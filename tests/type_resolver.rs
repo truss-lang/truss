@@ -2782,6 +2782,50 @@ fn test_protocol_with_associatedtype_type_resolves() {
 }
 
 #[test]
+fn test_typealias_in_protocol_type_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { typealias Inner = Int32 func get() -> Inner }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Typealias in protocol type resolution, got: {:?}", errors);
+}
+
+#[test]
+fn test_typealias_at_top_level_type_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "typealias MyInt = Int32 var x: MyInt".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Top-level typealias type resolution, got: {:?}", errors);
+}
+
+#[test]
 fn test_generic_function_call_with_type_inference() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
