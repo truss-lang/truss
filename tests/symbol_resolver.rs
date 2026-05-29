@@ -1314,3 +1314,189 @@ fn test_extension_where_clause_resolves() {
     resolver.resolve(&program, "test".to_string());
     let _ = engine.borrow();
 }
+
+#[test]
+fn test_guard_case_binding_available_after_guard() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"
+                enum Option { case none case some(Int32) }
+                func test(x: Option) {
+                    guard case .some(val) = x else { return }
+                    let _ = val
+                }
+            "#
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "guard binding should be available after guard statement, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_guard_case_binding_not_available_in_else_block() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"
+                enum Option { case none case some(Int32) }
+                func test(x: Option) {
+                    guard case .some(val) = x else {
+                        val
+                    }
+                }
+            "#
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        errors.len() > 0,
+        "guard binding should NOT be available in else block, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_match_case_binding_available_in_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"
+                enum Option { case none case some(Int32) }
+                func test(x: Option) -> Int32 {
+                    match x {
+                        case .some(let val):
+                            val
+                        case .none:
+                            0
+                        default:
+                            -1
+                    }
+                }
+            "#
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "match case binding should be available in case body, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_match_case_binding_not_available_outside() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"
+                enum Option { case none case some(Int32) }
+                func test(x: Option) -> Int32 {
+                    match x {
+                        case .some(let val):
+                            val
+                        default:
+                            0
+                    }
+                    val
+                }
+            "#
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        errors.len() > 0,
+        "match case binding should NOT be available outside match, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_if_case_dot_shorthand_binding_available() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"
+                enum Option { case none case some(Int32) }
+                func test(x: Option) {
+                    if case .some(val) = x {
+                        val
+                    }
+                }
+            "#
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "dot shorthand case binding should be available in then block, got: {:?}",
+        errors
+    );
+}

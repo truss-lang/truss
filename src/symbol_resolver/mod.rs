@@ -1006,6 +1006,29 @@ impl SymbolResolver {
             Statement::TypeAlias { type_expression, name: _, .. } => {
                 self.resolve_expression(type_expression.clone());
             }
+            Statement::Guard {
+                condition,
+                else_body,
+                ..
+            } => {
+                self.resolve_expression(condition.clone());
+
+                let case_bindings = {
+                    let cond = condition.borrow();
+                    if let Expression::Case { bindings, .. } = &*cond {
+                        Some(bindings.clone())
+                    } else {
+                        None
+                    }
+                };
+
+                self.resolve_expression(else_body.clone());
+
+                if let Some(bindings) = case_bindings {
+                    Self::resolve_pattern_bindings(&bindings, self);
+                }
+            }
+            Statement::Fallthrough { .. } | Statement::Break { .. } => {}
             _ => {}
         }
     }
@@ -1140,6 +1163,18 @@ impl SymbolResolver {
             Expression::Case { expression, .. } => {
                 self.resolve_expression(expression.clone());
             }
+            Expression::Match { value, cases, .. } => {
+                self.resolve_expression(value.clone());
+                for case in cases {
+                    self.enter_scope(None);
+                    Self::resolve_pattern_bindings_ref(case.pattern.as_ref(), self);
+                    self.resolve_expression(case.body.clone());
+                    if let Some(guard) = &case.guard {
+                        self.resolve_expression(guard.clone());
+                    }
+                    self.leave_scope();
+                }
+            }
             Expression::AnyType { inner, .. } => {
                 self.resolve_expression(inner.clone());
             }
@@ -1149,6 +1184,35 @@ impl SymbolResolver {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn resolve_pattern_bindings_ref(
+        pattern: &Pattern,
+        resolver: &mut SymbolResolver,
+    ) {
+        match pattern {
+            Pattern::Identifier(name) => {
+                if name.value != "_" {
+                    let sym = Rc::new(RefCell::new(Symbol::Variable {
+                        name: name.value.clone(),
+                        decl: None,
+                        parameter: None,
+                    }));
+                    resolver.enter(sym, name);
+                }
+            }
+            Pattern::Tuple(items) => {
+                Self::resolve_pattern_bindings(items, resolver);
+            }
+            Pattern::Ignore => {}
+            Pattern::ValueBinding(inner) => {
+                Self::resolve_pattern_bindings_ref(inner.as_ref(), resolver);
+            }
+            Pattern::EnumCase { bindings, .. } => {
+                Self::resolve_pattern_bindings(bindings, resolver);
+            }
+            Pattern::Expr(_) => {}
         }
     }
 
@@ -1172,6 +1236,13 @@ impl SymbolResolver {
                     Self::resolve_pattern_bindings(items, resolver);
                 }
                 Pattern::Ignore => {}
+                Pattern::ValueBinding(inner) => {
+                    Self::resolve_pattern_bindings(&[*(inner.clone())], resolver);
+                }
+                Pattern::EnumCase { bindings, .. } => {
+                    Self::resolve_pattern_bindings(bindings, resolver);
+                }
+                Pattern::Expr(_) => {}
             }
         }
     }
