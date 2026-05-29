@@ -2300,3 +2300,76 @@ fn test_irgen_enum_deinit_called_on_scope_exit() {
     assert!(llvm_ir.contains("Option.deinit"), "enum deinit function should exist:\n{}", llvm_ir);
     assert!(llvm_ir.contains("call void @Option.deinit"), "deinit should be called on scope exit:\n{}", llvm_ir);
 }
+
+#[test]
+fn test_irgen_extension_method() {
+    let code = "struct Foo {} extension Foo { func bar() -> Int32 { 42 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("define i32 @Foo.bar"), "extension method should generate Foo.bar:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_extension_self_access() {
+    let code = "struct Point { let x: Int32 } extension Point { func getX() -> Int32 { self.x } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("define i32 @Point.getX"), "extension method self access should generate Point.getX:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_extension_protocol_witness_table() {
+    let code = "protocol P { func req() -> Int32 } struct Foo {} extension Foo: P { func req() -> Int32 { 99 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(llvm_ir.contains("define i32 @Foo.req"), "extension method should generate Foo.req:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("__protocol_wt.P.Foo"), "protocol witness table for P+Foo should exist:\n{}", llvm_ir);
+}

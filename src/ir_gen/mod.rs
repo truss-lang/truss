@@ -902,6 +902,61 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
         }
+        if let Statement::ExtensionDecl {
+            type_name, body, ..
+        } = &*statement.borrow()
+        {
+            for stmt in body {
+                if let Statement::FunctionDecl {
+                    name: method_name,
+                    ty,
+                    ..
+                } = &*stmt.borrow()
+                    && let Some(ty) = ty
+                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    let mut all_param_types = vec![self_param];
+                    all_param_types.extend(param_types.iter().cloned());
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
+                    {
+                        let llvm_name = format!("{}.{}", type_name.value, method_name.value);
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
+                if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    let mut all_param_types = vec![self_param];
+                    all_param_types.extend(param_types.iter().cloned());
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
+                    {
+                        let llvm_name = format!("{}.{}", type_name.value, "init");
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
+                if let Statement::DeinitDecl { ty: Some(ty), .. } = &*stmt.borrow()
+                    && let Type::Function(_, return_type, _) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), vec![self_param], false)
+                    {
+                        let llvm_name = format!("{}.deinit", type_name.value);
+                        self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
+            }
+        }
         if let Statement::ProtocolDecl { name, members, .. } = &*statement.borrow() {
             for member in members {
                 if let ProtocolMember::Method { decl, .. } = member
@@ -1255,6 +1310,9 @@ impl<'ctx> IRGenerator<'ctx> {
         } else if let Statement::StructDecl { name, conformances, .. } = &*statement.borrow() {
             if conformances.is_empty() { return; }
             name.value.clone()
+        } else if let Statement::ExtensionDecl { type_name, conformances, .. } = &*statement.borrow() {
+            if conformances.is_empty() { return; }
+            type_name.value.clone()
         } else {
             return;
         };
@@ -1262,6 +1320,8 @@ impl<'ctx> IRGenerator<'ctx> {
         let conformances: Vec<Rc<RefCell<Expression>>> = if let Statement::ClassDecl { conformances, .. } = &*statement.borrow() {
             conformances.clone()
         } else if let Statement::StructDecl { conformances, .. } = &*statement.borrow() {
+            conformances.clone()
+        } else if let Statement::ExtensionDecl { conformances, .. } = &*statement.borrow() {
             conformances.clone()
         } else { return; };
 
@@ -2281,6 +2341,22 @@ impl<'ctx> IRGenerator<'ctx> {
                         {
                             self.resolve_statement(decl.clone())?;
                         }
+                    }
+                    Ok(false)
+                })();
+                *self.current_struct.borrow_mut() = prev;
+                result
+            }
+            Statement::ExtensionDecl {
+                type_name, body, ..
+            } => {
+                let prev = self.current_struct.borrow_mut().take();
+                self.current_struct
+                    .borrow_mut()
+                    .replace(type_name.value.clone());
+                let result = (|| -> Result<bool> {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone())?;
                     }
                     Ok(false)
                 })();
