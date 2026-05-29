@@ -2482,3 +2482,69 @@ fn test_irgen_guard_dot_shorthand() {
         Err(_) => panic!("guard dot shorthand IR generation panicked"),
     }
 }
+
+#[test]
+fn test_irgen_associated_type_access_on_protocol() {
+    let code = r#"
+        protocol Container { associatedtype Item }
+        func test(x: Container.Item) -> Container.Item { return x }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    match result {
+        Ok(module) => {
+            let llvm_ir = module.print_to_string().to_string();
+            assert!(llvm_ir.contains("test"), "LLVM IR should contain function test:\n{}", llvm_ir);
+        }
+        Err(_) => panic!("IR generation for associated type access panicked"),
+    }
+}
+
+#[test]
+fn test_irgen_associated_type_access_typealias() {
+    let code = r#"
+        protocol P { typealias Item = Int32 }
+        func test(x: P.Item) -> P.Item { return x }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    match result {
+        Ok(module) => {
+            let llvm_ir = module.print_to_string().to_string();
+            assert!(llvm_ir.contains("i32"), "Typealias to Int32 should produce i32 in IR:\n{}", llvm_ir);
+        }
+        Err(_) => panic!("IR generation for typealias access panicked"),
+    }
+}

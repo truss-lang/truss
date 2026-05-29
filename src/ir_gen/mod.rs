@@ -4976,6 +4976,9 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::GenericParam(_) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
+            Type::AssociatedType(_, _) => {
+                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+            }
         };
         Ok(resolved)
     }
