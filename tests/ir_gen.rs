@@ -1142,7 +1142,11 @@ fn test_irgen_class_decl() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("class.Point"), "Expected class.Point in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("class.Point"),
+        "Expected class.Point in IR:\n{}",
+        llvm_ir
+    );
     assert!(llvm_ir.contains("load"));
 }
 
@@ -1178,7 +1182,11 @@ fn test_irgen_class_method_call() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Point.f"), "Expected Point.f in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Point.f"),
+        "Expected Point.f in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1211,10 +1219,26 @@ fn test_irgen_class_vtable_global() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("vtable.Animal"), "Expected vtable type in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__vtable.Animal"), "Expected vtable global in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Animal.speak"), "Expected Animal.speak in vtable:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Animal.eat"), "Expected Animal.eat in vtable:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("vtable.Animal"),
+        "Expected vtable type in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__vtable.Animal"),
+        "Expected vtable global in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Animal.speak"),
+        "Expected Animal.speak in vtable:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Animal.eat"),
+        "Expected Animal.eat in vtable:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1246,10 +1270,26 @@ fn test_irgen_class_vtable_method_call_is_indirect() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("vtable.Greeter"), "Expected vtable type:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__vtable.Greeter"), "Expected vtable global:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("call"), "Expected a call instruction:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Greeter.greet"), "Expected Greeter.greet function:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("vtable.Greeter"),
+        "Expected vtable type:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__vtable.Greeter"),
+        "Expected vtable global:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("call"),
+        "Expected a call instruction:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Greeter.greet"),
+        "Expected Greeter.greet function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1284,12 +1324,36 @@ fn test_irgen_class_inheritance_vtable_inherited_methods() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("vtable.Animal"), "Expected vtable.Animal:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("vtable.Dog"), "Expected vtable.Dog:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__vtable.Animal"), "Expected __vtable.Animal:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__vtable.Dog"), "Expected __vtable.Dog:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Dog.speak"), "Expected Dog.speak in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Animal.speak"), "Expected Animal.speak in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("vtable.Animal"),
+        "Expected vtable.Animal:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("vtable.Dog"),
+        "Expected vtable.Dog:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__vtable.Animal"),
+        "Expected __vtable.Animal:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__vtable.Dog"),
+        "Expected __vtable.Dog:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Dog.speak"),
+        "Expected Dog.speak in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Animal.speak"),
+        "Expected Animal.speak in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1320,8 +1384,16 @@ fn test_irgen_class_inheritance_field_layout() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ ptr, i64, i32, i32 }"), "Expected Dog type [vtable_ptr, ref_count, name, breed] in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("class.Dog"),
+        "Expected class.Dog in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("{ ptr, i64, i32, i32 }"),
+        "Expected Dog type [vtable_ptr, ref_count, name, breed] in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1353,8 +1425,16 @@ fn test_irgen_class_inheritance_field_access() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("load"), "Expected load instruction in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("class.Dog"),
+        "Expected class.Dog in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("load"),
+        "Expected load instruction in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1388,9 +1468,21 @@ fn test_irgen_class_inheritance_multi_level() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("class.Dog"), "Expected class.Dog in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ ptr, i64, i32, i32, i32 }"), "Expected Dog type [vtable_ptr, ref_count, a, b, c] in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("getelementptr"), "Expected GEP instructions in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("class.Dog"),
+        "Expected class.Dog in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("{ ptr, i64, i32, i32, i32 }"),
+        "Expected Dog type [vtable_ptr, ref_count, a, b, c] in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("getelementptr"),
+        "Expected GEP instructions in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1414,8 +1506,16 @@ fn test_irgen_tuple_type_annotation() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i32, i1 }"), "Expected tuple layout (Int32, Bool) in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("tuple.__tuple_Int32_Bool"),
+        "Expected tuple struct type in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("{ i32, i1 }"),
+        "Expected tuple layout (Int32, Bool) in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1450,7 +1550,11 @@ fn test_irgen_self_return_in_struct_method() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@Point.identity"), "Expected Point.identity function:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("@Point.identity"),
+        "Expected Point.identity function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1483,7 +1587,11 @@ fn test_irgen_self_in_init() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@Point.init"), "Expected Point.init function:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("@Point.init"),
+        "Expected Point.init function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1507,9 +1615,21 @@ fn test_irgen_tuple_literal() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("tuple.__tuple_Int32_Int32"), "Expected tuple struct type in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i32, i32 }"), "Expected tuple layout (Int32, Int32) in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("getelementptr"), "Expected GEP for field access in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("tuple.__tuple_Int32_Int32"),
+        "Expected tuple struct type in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("{ i32, i32 }"),
+        "Expected tuple layout (Int32, Int32) in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("getelementptr"),
+        "Expected GEP for field access in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1533,9 +1653,21 @@ fn test_irgen_tuple_index_access() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i32, i1 }"), "Expected tuple layout (Int32, Bool) in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("getelementptr"), "Expected GEP for field access in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("tuple.__tuple_Int32_Bool"),
+        "Expected tuple struct type in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("{ i32, i1 }"),
+        "Expected tuple layout (Int32, Bool) in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("getelementptr"),
+        "Expected GEP for field access in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1559,8 +1691,16 @@ fn test_irgen_tuple_literal_as_return() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i32, i1 }"), "Expected tuple layout (Int32, Bool) in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("tuple.__tuple_Int32_Bool"),
+        "Expected tuple struct type in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("{ i32, i1 }"),
+        "Expected tuple layout (Int32, Bool) in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1584,8 +1724,16 @@ fn test_irgen_named_tuple_literal() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("{ i32, i1 }"), "Expected tuple layout (Int32, Bool) in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("tuple.__tuple_Int32_Bool"),
+        "Expected tuple struct type in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("{ i32, i1 }"),
+        "Expected tuple layout (Int32, Bool) in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1609,8 +1757,16 @@ fn test_irgen_named_tuple_member_access() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("getelementptr"), "Expected GEP for named field access in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("tuple.__tuple_Int32_Bool"),
+        "Expected tuple struct type in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("getelementptr"),
+        "Expected GEP for named field access in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1634,13 +1790,22 @@ fn test_irgen_named_tuple_positional_access() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("getelementptr"), "Expected GEP for positional access in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("tuple.__tuple_Int32_Bool"),
+        "Expected tuple struct type in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("getelementptr"),
+        "Expected GEP for positional access in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
 fn test_irgen_named_tuple_type_annotation() {
-    let code = "func test() -> Int32 { let t: (a: Int32, b: Bool) = (a: 10, b: false); return t.a }";
+    let code =
+        "func test() -> Int32 { let t: (a: Int32, b: Bool) = (a: 10, b: false); return t.a }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -1659,7 +1824,11 @@ fn test_irgen_named_tuple_type_annotation() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("tuple.__tuple_Int32_Bool"), "Expected tuple struct type in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("tuple.__tuple_Int32_Bool"),
+        "Expected tuple struct type in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1707,7 +1876,10 @@ fn test_irgen_protocol_method_requirement_only() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(!llvm_ir.contains("Drawable.draw"), "Method requirement without body should not generate IR function");
+    assert!(
+        !llvm_ir.contains("Drawable.draw"),
+        "Method requirement without body should not generate IR function"
+    );
 }
 
 #[test]
@@ -1731,12 +1903,17 @@ fn test_irgen_protocol_default_implementation() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Greeter.greet"), "Default implementation should generate function:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Greeter.greet"),
+        "Default implementation should generate function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
 fn test_irgen_protocol_default_impl_no_crash() {
-    let code = "protocol Helper { func help() -> Int32 { return 42 } func need() -> Void { return } }";
+    let code =
+        "protocol Helper { func help() -> Int32 { return 42 } func need() -> Void { return } }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -1759,8 +1936,16 @@ fn test_irgen_protocol_default_impl_no_crash() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Helper.help"), "Default impl 'help' should generate function:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Helper.need"), "Default impl 'need' should generate function:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Helper.help"),
+        "Default impl 'help' should generate function:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Helper.need"),
+        "Default impl 'need' should generate function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1784,9 +1969,21 @@ fn test_irgen_protocol_only_requirement_no_default() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(!llvm_ir.contains("Drawable.draw"), "Requirement-only 'draw' should NOT generate function:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Helper.help"), "Default impl 'help' should generate function:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Helper.need"), "Default impl 'need' should generate function:\n{}", llvm_ir);
+    assert!(
+        !llvm_ir.contains("Drawable.draw"),
+        "Requirement-only 'draw' should NOT generate function:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Helper.help"),
+        "Default impl 'help' should generate function:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Helper.need"),
+        "Default impl 'need' should generate function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1810,7 +2007,11 @@ fn test_irgen_protocol_existential_container() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Drawable.draw"), "Default implementation should generate function:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Drawable.draw"),
+        "Default implementation should generate function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1851,8 +2052,16 @@ fn test_irgen_protocol_witness_table_for_class() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("__protocol_wt.Drawable.Circle"), "Witness table for (Drawable, Circle) should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("existential.Drawable"), "Existential container type should exist:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("__protocol_wt.Drawable.Circle"),
+        "Witness table for (Drawable, Circle) should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("existential.Drawable"),
+        "Existential container type should exist:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1892,8 +2101,16 @@ fn test_irgen_protocol_witness_table_for_struct() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("__protocol_wt.Drawable.Circle"), "Witness table for (Drawable, Circle) struct should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("existential.Drawable"), "Existential container type should exist:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("__protocol_wt.Drawable.Circle"),
+        "Witness table for (Drawable, Circle) struct should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("existential.Drawable"),
+        "Existential container type should exist:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1938,10 +2155,26 @@ fn test_irgen_compound_protocol_existential_dispatch() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("existential.Drawable & Resettable"), "Existential container for compound type should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__protocol_wt.Drawable.Circle"), "Witness table for (Drawable, Circle) should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__protocol_wt.Resettable.Circle"), "Witness table for (Resettable, Circle) should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Circle.draw"), "Circle.draw function should exist:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("existential.Drawable & Resettable"),
+        "Existential container for compound type should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__protocol_wt.Drawable.Circle"),
+        "Witness table for (Drawable, Circle) should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__protocol_wt.Resettable.Circle"),
+        "Witness table for (Resettable, Circle) should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Circle.draw"),
+        "Circle.draw function should exist:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -1976,9 +2209,21 @@ fn test_irgen_class_computed_property_getter_in_vtable() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("vtable.ViewModel"), "vtable type should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__vtable.ViewModel"), "vtable global should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("ViewModel.value.getter"), "getter function should be in vtable:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("vtable.ViewModel"),
+        "vtable type should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__vtable.ViewModel"),
+        "vtable global should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("ViewModel.value.getter"),
+        "getter function should be in vtable:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2015,9 +2260,21 @@ fn test_irgen_class_computed_property_setter_in_vtable() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("vtable.ViewModel"), "vtable type should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("ViewModel.value.getter"), "getter should be in vtable:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("ViewModel.value.setter"), "setter should be in vtable:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("vtable.ViewModel"),
+        "vtable type should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("ViewModel.value.getter"),
+        "getter should be in vtable:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("ViewModel.value.setter"),
+        "setter should be in vtable:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2056,12 +2313,36 @@ fn test_irgen_class_computed_property_inheritance_override() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("vtable.Base"), "vtable.Base should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("vtable.Derived"), "vtable.Derived should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__vtable.Base"), "__vtable.Base should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__vtable.Derived"), "__vtable.Derived should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Base.value.getter"), "Base getter should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Derived.value.getter"), "Derived getter should exist:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("vtable.Base"),
+        "vtable.Base should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("vtable.Derived"),
+        "vtable.Derived should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__vtable.Base"),
+        "__vtable.Base should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__vtable.Derived"),
+        "__vtable.Derived should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Base.value.getter"),
+        "Base getter should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Derived.value.getter"),
+        "Derived getter should exist:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2093,10 +2374,26 @@ fn test_irgen_class_stored_property_auto_getter_setter() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("__vtable.Data"), "vtable should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Data.name.getter"), "stored property should have getter:\n{}", llvm_ir);
-    assert!(!llvm_ir.contains("Data.name.setter"), "let property should not have setter:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("call"), "should have indirect call:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("__vtable.Data"),
+        "vtable should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Data.name.getter"),
+        "stored property should have getter:\n{}",
+        llvm_ir
+    );
+    assert!(
+        !llvm_ir.contains("Data.name.setter"),
+        "let property should not have setter:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("call"),
+        "should have indirect call:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2129,8 +2426,16 @@ fn test_irgen_class_stored_var_auto_getter_and_setter() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Data.value.getter"), "var should have getter:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Data.value.setter"), "var should have setter:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Data.value.getter"),
+        "var should have getter:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Data.value.setter"),
+        "var should have setter:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2162,7 +2467,11 @@ fn test_irgen_struct_auto_deinit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Data.deinit"), "struct should have deinit function:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Data.deinit"),
+        "struct should have deinit function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2195,7 +2504,11 @@ fn test_irgen_enum_auto_deinit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Option.deinit"), "enum should have deinit function:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Option.deinit"),
+        "enum should have deinit function:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2227,8 +2540,16 @@ fn test_irgen_struct_deinit_called_on_scope_exit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Counter.deinit"), "struct deinit function should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("call void @Counter.deinit"), "deinit should be called on scope exit:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Counter.deinit"),
+        "struct deinit function should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("call void @Counter.deinit"),
+        "deinit should be called on scope exit:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2263,8 +2584,16 @@ fn test_irgen_user_defined_struct_deinit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Data.deinit"), "struct deinit function should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("call void @Data.deinit"), "deinit should be called on scope exit:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Data.deinit"),
+        "struct deinit function should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("call void @Data.deinit"),
+        "deinit should be called on scope exit:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2297,8 +2626,16 @@ fn test_irgen_enum_deinit_called_on_scope_exit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("Option.deinit"), "enum deinit function should exist:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("call void @Option.deinit"), "deinit should be called on scope exit:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Option.deinit"),
+        "enum deinit function should exist:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("call void @Option.deinit"),
+        "deinit should be called on scope exit:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2322,7 +2659,11 @@ fn test_irgen_extension_method() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 @Foo.bar"), "extension method should generate Foo.bar:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("define i32 @Foo.bar"),
+        "extension method should generate Foo.bar:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2346,7 +2687,11 @@ fn test_irgen_extension_self_access() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 @Point.getX"), "extension method self access should generate Point.getX:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("define i32 @Point.getX"),
+        "extension method self access should generate Point.getX:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2370,8 +2715,16 @@ fn test_irgen_extension_protocol_witness_table() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 @Foo.req"), "extension method should generate Foo.req:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("__protocol_wt.P.Foo"), "protocol witness table for P+Foo should exist:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("define i32 @Foo.req"),
+        "extension method should generate Foo.req:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__protocol_wt.P.Foo"),
+        "protocol witness table for P+Foo should exist:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -2443,8 +2796,16 @@ fn test_irgen_match_simple() {
     match result {
         Ok(module) => {
             let llvm_ir = module.print_to_string().to_string();
-            assert!(llvm_ir.contains("match_exit"), "match should generate match_exit block:\n{}", llvm_ir);
-            assert!(llvm_ir.contains("case_body"), "match should generate case_body blocks:\n{}", llvm_ir);
+            assert!(
+                llvm_ir.contains("match_exit"),
+                "match should generate match_exit block:\n{}",
+                llvm_ir
+            );
+            assert!(
+                llvm_ir.contains("case_body"),
+                "match should generate case_body blocks:\n{}",
+                llvm_ir
+            );
         }
         Err(_) => panic!("match IR generation panicked"),
     }
@@ -2510,7 +2871,11 @@ fn test_irgen_associated_type_access_on_protocol() {
     match result {
         Ok(module) => {
             let llvm_ir = module.print_to_string().to_string();
-            assert!(llvm_ir.contains("test"), "LLVM IR should contain function test:\n{}", llvm_ir);
+            assert!(
+                llvm_ir.contains("test"),
+                "LLVM IR should contain function test:\n{}",
+                llvm_ir
+            );
         }
         Err(_) => panic!("IR generation for associated type access panicked"),
     }
@@ -2543,8 +2908,105 @@ fn test_irgen_associated_type_access_typealias() {
     match result {
         Ok(module) => {
             let llvm_ir = module.print_to_string().to_string();
-            assert!(llvm_ir.contains("i32"), "Typealias to Int32 should produce i32 in IR:\n{}", llvm_ir);
+            assert!(
+                llvm_ir.contains("i32"),
+                "Typealias to Int32 should produce i32 in IR:\n{}",
+                llvm_ir
+            );
         }
         Err(_) => panic!("IR generation for typealias access panicked"),
     }
+}
+
+#[test]
+fn test_irgen_defer_basic() {
+    let code = "func test(x: Int32) -> Int32 { defer { } return x }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    assert!(result.is_ok(), "Defer should not cause panic in IR gen");
+}
+
+#[test]
+fn test_irgen_defer_lifo_order() {
+    let code = r#"
+        func test() -> Int32 {
+            var result = 0
+            defer { result = 1 }
+            defer { result = 2 }
+            return result
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    assert!(
+        result.is_ok(),
+        "Defer LIFO should not cause panic in IR gen"
+    );
+}
+
+#[test]
+fn test_irgen_defer_nested_scope() {
+    let code = r#"
+        func test() -> Int32 {
+            let x = 1
+            if x == 1 {
+                defer { }
+            }
+            return x
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap())
+    }));
+    assert!(
+        result.is_ok(),
+        "Defer in nested scope should not cause panic"
+    );
 }
