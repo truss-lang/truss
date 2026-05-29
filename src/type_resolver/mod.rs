@@ -1903,30 +1903,38 @@ impl TypeResolver {
                     let case_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
                     self.enter_scope(case_scope.clone());
 
-                    if let Pattern::EnumCase {
-                        case_name,
-                        bindings,
-                        ..
-                    } = case.pattern.as_ref()
-                    {
-                        if !bindings.is_empty() {
-                            if let Some(ref subject_ty) = subject_ty {
-                                if let Type::Enum(enum_name, _) = &*subject_ty.borrow() {
-                                    let param_types = self
-                                        .get_enum_case_parameter_types(enum_name, &case_name.value);
-                                    if let Some(ref param_types) = param_types {
-                                        Self::set_binding_types(bindings, param_types, &case_scope);
+                    for pattern in &case.patterns {
+                        if let Pattern::EnumCase {
+                            case_name,
+                            bindings,
+                            ..
+                        } = pattern.as_ref()
+                        {
+                            if !bindings.is_empty() {
+                                if let Some(ref subject_ty) = subject_ty {
+                                    if let Type::Enum(enum_name, _) = &*subject_ty.borrow() {
+                                        let param_types = self.get_enum_case_parameter_types(
+                                            enum_name,
+                                            &case_name.value,
+                                        );
+                                        if let Some(ref param_types) = param_types {
+                                            Self::set_binding_types(
+                                                bindings,
+                                                param_types,
+                                                &case_scope,
+                                            );
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    if let Pattern::ValueBinding(inner) = case.pattern.as_ref() {
-                        if let Pattern::Identifier(name) = inner.as_ref() {
-                            if let Some(ref subject_ty) = subject_ty {
-                                case_scope
-                                    .borrow_mut()
-                                    .set_type(name.value.clone(), subject_ty.clone());
+                        if let Pattern::ValueBinding(inner) = pattern.as_ref() {
+                            if let Pattern::Identifier(name) = inner.as_ref() {
+                                if let Some(ref subject_ty) = subject_ty {
+                                    case_scope
+                                        .borrow_mut()
+                                        .set_type(name.value.clone(), subject_ty.clone());
+                                }
                             }
                         }
                     }
