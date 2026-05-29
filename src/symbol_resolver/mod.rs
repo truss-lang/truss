@@ -462,6 +462,7 @@ impl SymbolResolver {
                             properties.push(prop_symbol.clone());
                             self.enter(prop_symbol, prop_name);
                         }
+                        ProtocolMember::AssociatedType { .. } => {}
                     }
                 }
                 self.leave_scope();
@@ -891,6 +892,7 @@ impl SymbolResolver {
                         ProtocolMember::Property { type_expression, .. } => {
                             self.resolve_expression(type_expression.clone());
                         }
+                        ProtocolMember::AssociatedType { .. } => {}
                     }
                 }
                 self.leave_scope();

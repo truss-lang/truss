@@ -15,6 +15,7 @@ pub enum Statement {
         parameters: Vec<Rc<RefCell<Parameter>>>,
         return_type: Option<Rc<RefCell<Expression>>>,
         body: Rc<RefCell<FunctionBody>>,
+        where_clause: Option<Vec<WhereRequirement>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
@@ -31,8 +32,10 @@ pub enum Statement {
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
+        generic_parameters: Vec<GenericParameter>,
         conformances: Vec<Rc<RefCell<Expression>>>,
         body: Vec<Rc<RefCell<Statement>>>,
+        where_clause: Option<Vec<WhereRequirement>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
@@ -40,9 +43,11 @@ pub enum Statement {
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
+        generic_parameters: Vec<GenericParameter>,
         superclass: Option<Rc<RefCell<Expression>>>,
         conformances: Vec<Rc<RefCell<Expression>>>,
         body: Vec<Rc<RefCell<Statement>>>,
+        where_clause: Option<Vec<WhereRequirement>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
@@ -53,6 +58,7 @@ pub enum Statement {
         generic_parameters: Vec<GenericParameter>,
         conformances: Vec<Rc<RefCell<Expression>>>,
         members: Vec<ProtocolMember>,
+        where_clause: Option<Vec<WhereRequirement>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
@@ -60,8 +66,10 @@ pub enum Statement {
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
+        generic_parameters: Vec<GenericParameter>,
         cases: Vec<EnumCase>,
         body: Vec<Rc<RefCell<Statement>>>,
+        where_clause: Option<Vec<WhereRequirement>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
@@ -129,7 +137,13 @@ pub enum Statement {
         type_name: Box<Token>,
         conformances: Vec<Rc<RefCell<Expression>>>,
         body: Vec<Rc<RefCell<Statement>>>,
+        where_clause: Option<Vec<WhereRequirement>>,
         scope: Option<Rc<RefCell<Scope>>>,
+    },
+    TypeAlias {
+        token: Box<Token>,
+        name: Box<Token>,
+        type_expression: Rc<RefCell<Expression>>,
     },
 }
 
@@ -155,6 +169,7 @@ impl Statement {
             Self::ExternDecl { token, .. } => (**token).clone(),
             Self::ProtocolDecl { token, .. } => (**token).clone(),
             Self::ExtensionDecl { token, .. } => (**token).clone(),
+            Self::TypeAlias { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -167,6 +182,7 @@ impl Statement {
             Self::InitDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::DeinitDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::ProtocolDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::TypeAlias { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
     }
@@ -223,7 +239,27 @@ pub struct Accessor {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct GenericParameter {}
+pub struct GenericParameter {
+    pub name: Box<Token>,
+    pub constraints: Vec<Rc<RefCell<Expression>>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WhereRequirement {
+    pub kind: WhereRequirementKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum WhereRequirementKind {
+    Conformance {
+        type_expr: Rc<RefCell<Expression>>,
+        constraint: Rc<RefCell<Expression>>,
+    },
+    Equality {
+        left: Rc<RefCell<Expression>>,
+        right: Rc<RefCell<Expression>>,
+    },
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VariadicKind {
@@ -273,6 +309,11 @@ pub enum ProtocolMember {
         name: Box<Token>,
         type_expression: Rc<RefCell<Expression>>,
         accessors: ProtocolAccessorSet,
+    },
+    AssociatedType {
+        token: Box<Token>,
+        name: Box<Token>,
+        constraints: Vec<Rc<RefCell<Expression>>>,
     },
 }
 

@@ -57,6 +57,9 @@ pub enum KeywordType {
     Any,
     Extension,
     SelfType,
+    Where,
+    Associatedtype,
+    Typealias,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -148,6 +151,9 @@ impl KeywordType {
             KeywordType::Any => "any",
             KeywordType::Extension => "extension",
             KeywordType::SelfType => "Self",
+            KeywordType::Where => "where",
+            KeywordType::Associatedtype => "associatedtype",
+            KeywordType::Typealias => "typealias",
         }
         .to_string()
     }

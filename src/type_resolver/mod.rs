@@ -594,6 +594,11 @@ impl TypeResolver {
                                     .set_type(prop_name.value.clone(), prop_ty);
                             }
                         }
+                        ProtocolMember::AssociatedType { name: _, constraints, .. } => {
+                            for constraint in constraints {
+                                self.infer_type(constraint.clone());
+                            }
+                        }
                     }
                 }
                 self.leave_scope();
@@ -1037,6 +1042,7 @@ impl TypeResolver {
                             }
                         }
                         ProtocolMember::Property { .. } => {}
+                        ProtocolMember::AssociatedType { .. } => {}
                     }
                 }
                 self.leave_scope();

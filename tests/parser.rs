@@ -4,8 +4,9 @@ use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, Modifier, ModifierType, Parameter, Pattern,
-            ProtocolMember, Statement, VariadicKind,
+            AccessModifier, AccessorKind, FunctionBody, GenericParameter, Modifier, ModifierType,
+            Parameter, Pattern, ProtocolMember, Statement, VariadicKind, WhereRequirement,
+            WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -4067,6 +4068,499 @@ fn test_parse_compound_type_three() {
         } else {
             panic!("Expected CompoundType");
         }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func identity<T>(x: T) -> T".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        name,
+        generic_parameters,
+        parameters,
+        return_type,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "identity");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert!(generic_parameters[0].constraints.is_empty());
+        assert_eq!(parameters.len(), 1);
+        assert_eq!(parameters[0].borrow().name.value, "x");
+        assert!(return_type.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_function_param_with_constraints() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func compare<T: Equatable>(a: T, b: T) -> Bool".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert_eq!(generic_parameters[0].constraints.len(), 1);
+        if let Expression::Type { name, .. } = &*generic_parameters[0].constraints[0].borrow() {
+            assert_eq!(name.value, "Equatable");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_function_multi_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func map<T, U>(x: T, y: U) -> U".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 2);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert_eq!(generic_parameters[1].name.value, "U");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_function_with_combined_constraint() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test<T: Equatable & Hashable>(x: T)".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].constraints.len(), 1);
+        if let Expression::CompoundType { types, .. } = &*generic_parameters[0].constraints[0].borrow() {
+            assert_eq!(types.len(), 2);
+            assert!(matches!(&*types[0].borrow(), Expression::Type { name, .. } if name.value == "Equatable"));
+            assert!(matches!(&*types[1].borrow(), Expression::Type { name, .. } if name.value == "Hashable"));
+        } else {
+            panic!("Expected CompoundType");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Stack<Element> { var items: Array<Element> }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl {
+        name,
+        generic_parameters,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Stack");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "Element");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Box<T: Hashable> { var value: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name,
+        generic_parameters,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Box");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert_eq!(generic_parameters[0].constraints.len(), 1);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_enum() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Option<T> { none, some(T) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::EnumDecl {
+        name,
+        generic_parameters,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Option");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_protocol_with_sugar() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Container<T> { func append(item: T) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl {
+        name,
+        generic_parameters,
+        members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Container");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert!(matches!(members[0], ProtocolMember::AssociatedType { .. }));
+        assert_eq!(members.len(), 2);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_associatedtype() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { associatedtype Item func get() -> Item }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
+        assert!(matches!(members[0], ProtocolMember::AssociatedType { .. }));
+        if let ProtocolMember::AssociatedType { name, constraints, .. } = &members[0] {
+            assert_eq!(name.value, "Item");
+            assert!(constraints.is_empty());
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_protocol_associatedtype_with_constraint() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { associatedtype T: Equatable }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
+        if let ProtocolMember::AssociatedType { name, constraints, .. } = &members[0] {
+            assert_eq!(name.value, "T");
+            assert_eq!(constraints.len(), 1);
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_typealias_in_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Wrapper { typealias Inner = Int32; var x: Inner }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        assert!(matches!(&*body[0].borrow(), Statement::TypeAlias { .. }));
+        if let Statement::TypeAlias { name, .. } = &*body[0].borrow() {
+            assert_eq!(name.value, "Inner");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_conformance_with_generic_protocol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyArray: Container<Int32> {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl {
+        name,
+        conformances,
+        generic_parameters,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyArray");
+        assert!(generic_parameters.is_empty());
+        assert_eq!(conformances.len(), 1);
+        if let Expression::Type {
+            name,
+            type_parameters,
+            ..
+        } = &*conformances[0].borrow()
+        {
+            assert_eq!(name.value, "Container");
+            assert!(type_parameters.is_some());
+            assert_eq!(type_parameters.as_ref().unwrap().len(), 1);
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_where_clause() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo<T>(x: T) where T: Equatable".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        generic_parameters,
+        where_clause,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert!(where_clause.is_some());
+        let requirements = where_clause.as_ref().unwrap();
+        assert_eq!(requirements.len(), 1);
+        assert!(matches!(requirements[0].kind, WhereRequirementKind::Conformance { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_where_clause_multi_and() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo<T, U>(x: T, y: U) where T: Equatable && U: Hashable".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { where_clause, .. } = &*program.statements[0].borrow() {
+        assert!(where_clause.is_some());
+        let reqs = where_clause.as_ref().unwrap();
+        assert_eq!(reqs.len(), 2);
+        assert!(matches!(reqs[0].kind, WhereRequirementKind::Conformance { .. }));
+        assert!(matches!(reqs[1].kind, WhereRequirementKind::Conformance { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_with_where_clause() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct S<T> where T: Hashable { var x: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl {
+        generic_parameters,
+        where_clause,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert!(where_clause.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_extension_where_clause() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "extension Array where Element: Hashable {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExtensionDecl { type_name, where_clause, .. } = &*program.statements[0].borrow() {
+        assert_eq!(type_name.value, "Array");
+        assert!(where_clause.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_non_generic_function_still_works() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func plain(x: Int32) -> Int32 { x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        name,
+        generic_parameters,
+        where_clause,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "plain");
+        assert!(generic_parameters.is_empty());
+        assert!(where_clause.is_none());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_function_less_than_no_conflict() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func cmp(x: Int32, y: Int32) -> Bool { x < y }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { generic_parameters, .. } = &*program.statements[0].borrow() {
+        assert!(generic_parameters.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_type_instantiation_inside_generic_context() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: Array<Int32> = Array() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { .. } = &*program.statements[0].borrow() {
     } else {
         panic!();
     }

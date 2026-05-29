@@ -10,8 +10,8 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, Accessor, AccessorKind, EnumCase, EnumCaseParameter, FunctionBody,
-            Modifier, ModifierType, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember,
-            Statement, VariadicKind,
+            GenericParameter, Modifier, ModifierType, Parameter, Pattern, ProtocolAccessorSet,
+            ProtocolMember, Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -170,6 +170,7 @@ impl Parser {
                     self.parse_throw()
                 }
                 KeywordType::Extension => self.parse_extension_decl(modifiers),
+                KeywordType::Typealias => self.parse_typealias(modifiers),
                 _ => {
                     if !modifiers.is_empty() {
                         self.emit_error(
@@ -936,7 +937,7 @@ impl Parser {
             return Err(());
         };
         let is_init = KeywordType::is_keyword(&token, KeywordType::Init);
-        let name = if !is_init {
+        let (name, generic_parameters) = if !is_init {
             let Some(name) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::InvalidFunctionName,
@@ -953,6 +954,7 @@ impl Parser {
                 );
                 return Err(());
             }
+            let generic_parameters = self.parse_generic_parameters()?.unwrap_or_default();
             let Some(next) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
@@ -969,7 +971,7 @@ impl Parser {
                 );
                 return Err(());
             }
-            Some(name)
+            (Some(name), generic_parameters)
         } else {
             let Some(next) = self.next() else {
                 self.emit_error(
@@ -987,7 +989,7 @@ impl Parser {
                 );
                 return Err(());
             }
-            None
+            (None, vec![])
         };
         let mut parameters = Vec::new();
         let mut has_variadic = false;
@@ -1191,6 +1193,8 @@ impl Parser {
             })
         };
 
+        let where_clause = self.parse_where_clause()?;
+
         let body = if is_extern {
             FunctionBody::None
         } else {
@@ -1251,10 +1255,11 @@ impl Parser {
                 modifiers,
                 token: Box::new(token),
                 name: Box::new(name.unwrap()),
-                generic_parameters: vec![],
+                generic_parameters,
                 parameters,
                 return_type: return_type.map(RefCell::new).map(Rc::new),
                 body: Rc::new(RefCell::new(body)),
+                where_clause,
                 scope: None,
                 ty: None,
             })
@@ -1906,6 +1911,7 @@ impl Parser {
             );
             return Err(());
         }
+        let generic_parameters = self.parse_generic_parameters()?.unwrap_or_default();
         let mut conformances = Vec::new();
         if let Some(next) = self.peek()
             && SeparatorType::is_separator(&next, SeparatorType::Colon)
@@ -1922,14 +1928,17 @@ impl Parser {
                 }
             }
         }
+        let where_clause = self.parse_where_clause()?;
         let mut body = self.parse_brace_body()?;
         self.ensure_memberwise_init(&mut body, &name);
         Ok(Statement::StructDecl {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
+            generic_parameters,
             conformances,
             body,
+            where_clause,
             scope: None,
             ty: None,
         })
@@ -1955,6 +1964,7 @@ impl Parser {
             );
             return Err(());
         }
+        let generic_parameters = self.parse_generic_parameters()?.unwrap_or_default();
         let mut superclass = None;
         let mut conformances = Vec::new();
         if let Some(next) = self.peek()
@@ -1969,14 +1979,17 @@ impl Parser {
                 conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
             }
         }
+        let where_clause = self.parse_where_clause()?;
         let body = self.parse_brace_body()?;
         Ok(Statement::ClassDecl {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
+            generic_parameters,
             superclass,
             conformances,
             body,
+            where_clause,
             scope: None,
             ty: None,
         })
@@ -2070,13 +2083,66 @@ impl Parser {
                 }
             }
         }
+        let where_clause = self.parse_where_clause()?;
         let body = self.parse_brace_body()?;
         Ok(Statement::ExtensionDecl {
             token: Box::new(token),
             type_name: Box::new(type_name),
             conformances,
             body,
+            where_clause,
             scope: None,
+        })
+    }
+
+    fn parse_typealias(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+        if !modifiers.is_empty() {
+            self.emit_error(
+                TrussDiagnosticCode::ModifierNotAllowedHere,
+                "Modifiers are not allowed on 'typealias' declaration",
+                &modifiers[0].token,
+            );
+        }
+        let Some(token) = self.next() else {
+            return Err(());
+        };
+        let Some(name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected alias name after 'typealias'",
+                &token,
+            );
+            return Err(());
+        };
+        if TokenType::Identifier != name.ty {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected alias name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
+        let Some(assign) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '=' after typealias name",
+                &name,
+            );
+            return Err(());
+        };
+        if !OperatorType::is_operator(&assign, OperatorType::Assign) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '=' but found '{}'", assign.value),
+                &assign,
+            );
+            return Err(());
+        }
+        let type_expression = self.parse_type_expression()?;
+        Ok(Statement::TypeAlias {
+            token: Box::new(token),
+            name: Box::new(name),
+            type_expression: Rc::new(RefCell::new(type_expression)),
         })
     }
 
@@ -2100,6 +2166,7 @@ impl Parser {
             );
             return Err(());
         }
+        let generic_parameters = self.parse_generic_parameters()?.unwrap_or_default();
         let mut cases = Vec::new();
         let mut body = Vec::new();
         if let Some(t) = self.peek()
@@ -2231,12 +2298,15 @@ impl Parser {
             );
             return Err(());
         }
+        let where_clause = self.parse_where_clause()?;
         Ok(Statement::EnumDecl {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
+            generic_parameters,
             cases,
             body,
+            where_clause,
             scope: None,
             ty: None,
         })
@@ -2262,7 +2332,14 @@ impl Parser {
             );
             return Err(());
         }
-        let generic_parameters = Vec::new();
+        let generic_params = self.parse_generic_parameters()?.unwrap_or_default();
+        let mut associated_members: Vec<ProtocolMember> = generic_params.iter().map(|gp| {
+            ProtocolMember::AssociatedType {
+                token: Box::new(*gp.name.clone()),
+                name: gp.name.clone(),
+                constraints: gp.constraints.clone(),
+            }
+        }).collect();
         let mut conformances = Vec::new();
         if let Some(next) = self.peek()
             && SeparatorType::is_separator(&next, SeparatorType::Colon)
@@ -2296,6 +2373,45 @@ impl Parser {
                                 decl: Rc::new(RefCell::new(func_decl)),
                             });
                         }
+                    }
+                    TokenType::Keyword { keyword }
+                        if keyword == KeywordType::Associatedtype =>
+                    {
+                        self.index += 1;
+                        let Some(assoc_name) = self.next() else {
+                            self.emit_error(
+                                TrussDiagnosticCode::InvalidVariableName,
+                                "Expected associated type name",
+                                &peek_token,
+                            );
+                            return Err(());
+                        };
+                        if TokenType::Identifier != assoc_name.ty {
+                            self.emit_error(
+                                TrussDiagnosticCode::InvalidVariableName,
+                                format!("Expected associated type name but found '{}'", assoc_name.value),
+                                &assoc_name,
+                            );
+                            return Err(());
+                        }
+                        let mut constraints = Vec::new();
+                        if let Some(t) = self.peek()
+                            && SeparatorType::is_separator(&t, SeparatorType::Colon)
+                        {
+                            self.index += 1;
+                            constraints.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                            while let Some(t) = self.peek()
+                                && OperatorType::is_operator(&t, OperatorType::BitAnd)
+                            {
+                                self.index += 1;
+                                constraints.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                            }
+                        }
+                        members.push(ProtocolMember::AssociatedType {
+                            token: Box::new(assoc_name.clone()),
+                            name: Box::new(assoc_name),
+                            constraints,
+                        });
                     }
                     TokenType::Keyword { keyword }
                         if keyword == KeywordType::Let || keyword == KeywordType::Var =>
@@ -2414,7 +2530,7 @@ impl Parser {
                         self.emit_error(
                             TrussDiagnosticCode::UnexpectedToken,
                             format!(
-                                "Expected 'func' or 'let'/'var' in protocol body, found '{}'",
+                                "Expected 'func', 'associatedtype', or 'let'/'var' in protocol body, found '{}'",
                                 peek_token.value
                             ),
                             &peek_token,
@@ -2447,13 +2563,17 @@ impl Parser {
             );
             return Err(());
         }
+        let where_clause = self.parse_where_clause()?;
+        // prepend synthesized associatedtype members from protocol<T> sugar
+        associated_members.append(&mut members);
         Ok(Statement::ProtocolDecl {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
-            generic_parameters,
+            generic_parameters: generic_params,
             conformances,
-            members,
+            members: associated_members,
+            where_clause,
             scope: None,
             ty: None,
         })
@@ -2918,6 +3038,115 @@ impl Parser {
         }
         let type_expr = self.parse_type_expression()?;
         Ok((None, type_expr))
+    }
+
+    fn parse_generic_parameters(&mut self) -> Result<Option<Vec<GenericParameter>>, ()> {
+        if let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::Less)
+        {
+            self.index += 1;
+            let mut params = Vec::new();
+            loop {
+                let Some(name) = self.next() else { break };
+                if TokenType::Identifier != name.ty {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!("Expected generic parameter name but found '{}'", name.value),
+                        &name,
+                    );
+                    return Err(());
+                }
+                let mut constraints = Vec::new();
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::Colon)
+                {
+                    self.index += 1;
+                    constraints.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                }
+                params.push(GenericParameter {
+                    name: Box::new(name),
+                    constraints,
+                });
+                let Some(t) = self.peek() else { break };
+                if OperatorType::is_operator(&t, OperatorType::Greater) {
+                    break;
+                } else if SeparatorType::is_separator(&t, SeparatorType::Comma) {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+            let Some(next) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '>' to close generic parameter list",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !OperatorType::is_operator(&next, OperatorType::Greater) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '>' but found '{}'", next.value),
+                    &next,
+                );
+                return Err(());
+            }
+            Ok(Some(params))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_where_clause(&mut self) -> Result<Option<Vec<WhereRequirement>>, ()> {
+        if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::Where)
+        {
+            self.index += 1;
+            let mut requirements = Vec::new();
+            loop {
+                let type_expr = self.parse_type_expression()?;
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::Colon)
+                {
+                    self.index += 1;
+                    let constraint = self.parse_type_expression()?;
+                    requirements.push(WhereRequirement {
+                        kind: WhereRequirementKind::Conformance {
+                            type_expr: Rc::new(RefCell::new(type_expr)),
+                            constraint: Rc::new(RefCell::new(constraint)),
+                        },
+                    });
+                } else if let Some(t) = self.peek()
+                    && OperatorType::is_operator(&t, OperatorType::Equal)
+                {
+                    self.index += 1;
+                    let right = self.parse_type_expression()?;
+                    requirements.push(WhereRequirement {
+                        kind: WhereRequirementKind::Equality {
+                            left: Rc::new(RefCell::new(type_expr)),
+                            right: Rc::new(RefCell::new(right)),
+                        },
+                    });
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnexpectedToken,
+                        "Expected ':' or '==' in where clause requirement",
+                        &self.tokens[self.index.saturating_sub(1)],
+                    );
+                    return Err(());
+                }
+                let Some(t) = self.peek() else { break };
+                if OperatorType::is_operator(&t, OperatorType::And) {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+            Ok(Some(requirements))
+        } else {
+            Ok(None)
+        }
     }
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {
