@@ -466,6 +466,225 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
+            Statement::ExtensionDecl {
+                type_name, body, ..
+            } => {
+                let Some(target_sym) = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().get_symbol(&type_name.value))
+                else {
+                    self.emit_error(
+                        TrussDiagnosticCode::SymbolError,
+                        format!("Cannot extend undefined type '{}'", type_name.value),
+                        type_name.as_ref(),
+                    );
+                    return;
+                };
+
+                let target_scope = {
+                    let decl = target_sym.borrow().get_decl().ok().flatten();
+                    decl.and_then(|d| {
+                        let stmt = d.borrow();
+                        match &*stmt {
+                            Statement::StructDecl { scope, .. }
+                            | Statement::ClassDecl { scope, .. }
+                            | Statement::EnumDecl { scope, .. }
+                            | Statement::ProtocolDecl { scope, .. } => scope.clone(),
+                            _ => None,
+                        }
+                    })
+                };
+
+                let saved = self.current_scope.clone();
+                if let Some(ref target_scope) = target_scope {
+                    self.current_scope = Some(target_scope.clone());
+                }
+
+                let target_symbol_rc = target_sym.clone();
+                match &mut *target_symbol_rc.borrow_mut() {
+                    Symbol::Struct {
+                        methods,
+                        constructors,
+                        destrcutor,
+                        ..
+                    }
+                    | Symbol::Class {
+                        methods,
+                        constructors,
+                        destrcutor,
+                        ..
+                    } => {
+                        for field_stmt in body {
+                            if let Statement::FunctionDecl {
+                                name: method_name,
+                                ..
+                            } = &*field_stmt.borrow()
+                            {
+                                let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                                    name: method_name.value.clone(),
+                                    parent: WeakSymbol(Rc::downgrade(&target_sym)),
+                                    decl: Some(field_stmt.clone()),
+                                }));
+                                methods.push(method_symbol.clone());
+                                self.enter(method_symbol, method_name);
+                                if let Statement::FunctionDecl {
+                                    body: method_body, ..
+                                } = &*field_stmt.borrow()
+                                {
+                                    match &*method_body.borrow() {
+                                        FunctionBody::Statements(stmts) => {
+                                            for s in stmts {
+                                                self.register_symbols(s.clone());
+                                            }
+                                        }
+                                        FunctionBody::Expression(expr) => {
+                                            self.register_function_symbols_in_expr(
+                                                expr.clone(),
+                                            );
+                                        }
+                                        FunctionBody::None => {}
+                                    }
+                                }
+                            } else if let Statement::InitDecl { body, .. } = &*field_stmt.borrow()
+                            {
+                                let init_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                                    name: "init".to_string(),
+                                    parent: WeakSymbol(Rc::downgrade(&target_sym)),
+                                    decl: Some(field_stmt.clone()),
+                                }));
+                                constructors.push(init_symbol.clone());
+                                let init_token = {
+                                    let stmt = field_stmt.borrow();
+                                    if let Statement::InitDecl { token, .. } = &*stmt {
+                                        Box::new(token.clone())
+                                    } else {
+                                        unreachable!()
+                                    }
+                                };
+                                self.enter(init_symbol, &init_token);
+                                if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                                    for s in stmts {
+                                        self.register_symbols(s.clone());
+                                    }
+                                }
+                            } else if let Statement::DeinitDecl { body, .. } =
+                                &*field_stmt.borrow()
+                            {
+                                let deinit_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                                    name: "deinit".to_string(),
+                                    parent: WeakSymbol(Rc::downgrade(&target_sym)),
+                                    decl: Some(field_stmt.clone()),
+                                }));
+                                let deinit_token = {
+                                    let stmt = field_stmt.borrow();
+                                    if let Statement::DeinitDecl { token, .. } = &*stmt {
+                                        token.as_ref().clone()
+                                    } else {
+                                        unreachable!()
+                                    }
+                                };
+                                if destrcutor.is_none() {
+                                    *destrcutor = Some(deinit_symbol.clone());
+                                } else {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::DuplicateFunction,
+                                        "Duplicate deinit function",
+                                        &deinit_token,
+                                    );
+                                }
+                                self.enter(deinit_symbol, &deinit_token);
+                                if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                                    for s in stmts {
+                                        self.register_symbols(s.clone());
+                                    }
+                                }
+                            } else {
+                                self.register_symbols(field_stmt.clone());
+                            }
+                        }
+                    }
+                    Symbol::Enum { methods, .. } => {
+                        for field_stmt in body {
+                            if let Statement::FunctionDecl {
+                                name: method_name,
+                                ..
+                            } = &*field_stmt.borrow()
+                            {
+                                let method_symbol = Rc::new(RefCell::new(Symbol::StructMethod {
+                                    name: method_name.value.clone(),
+                                    parent: WeakSymbol(Rc::downgrade(&target_sym)),
+                                    decl: Some(field_stmt.clone()),
+                                }));
+                                methods.push(method_symbol.clone());
+                                self.enter(method_symbol, method_name);
+                                if let Statement::FunctionDecl {
+                                    body: method_body, ..
+                                } = &*field_stmt.borrow()
+                                {
+                                    match &*method_body.borrow() {
+                                        FunctionBody::Statements(stmts) => {
+                                            for s in stmts {
+                                                self.register_symbols(s.clone());
+                                            }
+                                        }
+                                        FunctionBody::Expression(expr) => {
+                                            self.register_function_symbols_in_expr(
+                                                expr.clone(),
+                                            );
+                                        }
+                                        FunctionBody::None => {}
+                                    }
+                                }
+                            } else {
+                                self.register_symbols(field_stmt.clone());
+                            }
+                        }
+                    }
+                    Symbol::Protocol { methods, .. } => {
+                        for field_stmt in body {
+                            if let Statement::FunctionDecl {
+                                name: method_name,
+                                ..
+                            } = &*field_stmt.borrow()
+                            {
+                                let method_symbol = Rc::new(RefCell::new(
+                                    Symbol::ProtocolMethod {
+                                        name: method_name.value.clone(),
+                                        parent: WeakSymbol(Rc::downgrade(&target_sym)),
+                                        decl: Some(field_stmt.clone()),
+                                    },
+                                ));
+                                methods.push(method_symbol.clone());
+                                self.enter(method_symbol, method_name);
+                                if let Statement::FunctionDecl {
+                                    body: method_body, ..
+                                } = &*field_stmt.borrow()
+                                {
+                                    match &*method_body.borrow() {
+                                        FunctionBody::Statements(stmts) => {
+                                            for s in stmts {
+                                                self.register_symbols(s.clone());
+                                            }
+                                        }
+                                        FunctionBody::Expression(expr) => {
+                                            self.register_function_symbols_in_expr(
+                                                expr.clone(),
+                                            );
+                                        }
+                                        FunctionBody::None => {}
+                                    }
+                                }
+                            } else {
+                                self.register_symbols(field_stmt.clone());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                self.current_scope = saved;
+            }
             _ => {}
         }
     }
@@ -682,6 +901,41 @@ impl SymbolResolver {
             Statement::Return {
                 value: Some(value), ..
             } => self.resolve_expression(value.clone()),
+            Statement::ExtensionDecl {
+                type_name, body, ..
+            } => {
+                let target_scope = {
+                    self.current_scope
+                        .as_ref()
+                        .and_then(|scope| scope.borrow().get_symbol(&type_name.value))
+                        .and_then(|sym| {
+                            let decl = sym.borrow().get_decl().ok().flatten();
+                            decl.and_then(|d| {
+                                let stmt = d.borrow();
+                                match &*stmt {
+                                    Statement::StructDecl { scope, .. }
+                                    | Statement::ClassDecl { scope, .. }
+                                    | Statement::EnumDecl { scope, .. }
+                                    | Statement::ProtocolDecl { scope, .. } => scope.clone(),
+                                    _ => None,
+                                }
+                            })
+                        })
+                };
+
+                if let Some(ref scope) = target_scope {
+                    let saved = self.current_scope.clone();
+                    self.current_scope = Some(scope.clone());
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                    self.current_scope = saved;
+                } else {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                }
+            }
             _ => {}
         }
     }
