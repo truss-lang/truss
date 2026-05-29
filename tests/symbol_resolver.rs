@@ -1896,3 +1896,81 @@ fn test_symbol_resolve_call_in_implicit_return() {
         panic!("Expected FunctionDecl with call in last expression position");
     }
 }
+
+#[test]
+fn test_match_multi_pattern_enum_symbols_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"
+                enum Status { case idle case loading case done }
+                func test(s: Status) {
+                    match s {
+                        case .idle, .loading:
+                            true
+                        case .done:
+                            false
+                    }
+                }
+            "#
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "multi-pattern enum match should resolve without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_match_multi_pattern_with_guard_symbols_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"
+                enum Status { case idle case loading case done }
+                func test(s: Status) {
+                    match s {
+                        case .idle, .loading where true:
+                            true
+                        default:
+                            false
+                    }
+                }
+            "#
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "multi-pattern enum match with guard should resolve without errors, got: {:?}",
+        errors
+    );
+}

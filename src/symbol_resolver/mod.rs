@@ -1257,7 +1257,9 @@ impl SymbolResolver {
                 self.resolve_expression(value.clone());
                 for case in cases {
                     self.enter_scope(None);
-                    Self::resolve_pattern_bindings_ref(case.pattern.as_ref(), self);
+                    for p in &case.patterns {
+                        Self::resolve_pattern_bindings_ref(p.as_ref(), self);
+                    }
                     self.resolve_expression(case.body.clone());
                     if let Some(guard) = &case.guard {
                         self.resolve_expression(guard.clone());

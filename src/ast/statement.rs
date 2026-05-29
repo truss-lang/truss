@@ -316,7 +316,7 @@ pub enum Pattern {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchCase {
     pub token: Box<Token>,
-    pub pattern: Rc<Pattern>,
+    pub patterns: Vec<Rc<Pattern>>,
     pub guard: Option<Rc<RefCell<Expression>>>,
     pub body: Rc<RefCell<Expression>>,
 }
