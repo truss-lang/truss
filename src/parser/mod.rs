@@ -10,8 +10,9 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, Accessor, AccessorKind, EnumCase, EnumCaseParameter, FunctionBody,
-            GenericParameter, Modifier, ModifierType, Parameter, Pattern, ProtocolAccessorSet,
-            ProtocolMember, Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
+            GenericParameter, MatchCase, Modifier, ModifierType, Parameter, Pattern,
+            ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind, WhereRequirement,
+            WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -168,6 +169,36 @@ impl Parser {
                         );
                     }
                     self.parse_throw()
+                }
+                KeywordType::Guard => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_guard()
+                }
+                KeywordType::Fallthrough => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_fallthrough()
+                }
+                KeywordType::Break => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_break()
                 }
                 KeywordType::Extension => self.parse_extension_decl(modifiers),
                 KeywordType::Typealias => self.parse_typealias(modifiers),
@@ -469,6 +500,7 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::If => self.parse_if(),
                 KeywordType::Case => self.parse_case_expression(),
+                KeywordType::Match => self.parse_match(),
                 KeywordType::SelfKw => {
                     self.index += 1;
                     Ok(Expression::SelfKeyword {
@@ -2768,48 +2800,55 @@ impl Parser {
     fn parse_case_expression(&mut self) -> Result<Expression, ()> {
         let case_token = self.next().unwrap();
 
-        let Some(enum_type_token) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::ExpectedType,
-                "Expected enum type name after 'case'",
-                &self.tokens[self.index.saturating_sub(1)],
-            );
-            return Err(());
+        let (enum_type, case_name_token) = if let Some(t) = self.peek()
+            && OperatorType::is_operator(&t, OperatorType::Dot)
+        {
+            self.index += 1;
+            let Some(name) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    "Expected case name after '.'",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            (None, name)
+        } else {
+            let Some(type_name) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    "Expected enum type name or '.' after 'case'",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            let Some(dot) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '.' after enum type name",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !OperatorType::is_operator(&dot, OperatorType::Dot) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '.' but found '{}'", dot.value),
+                    &dot,
+                );
+                return Err(());
+            }
+            let Some(name) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    "Expected case name after '.'",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            (Some(Box::new(type_name)), name)
         };
-        if enum_type_token.ty != TokenType::Identifier {
-            self.emit_error(
-                TrussDiagnosticCode::ExpectedType,
-                format!("Expected enum type name but found '{}'", enum_type_token.value),
-                &enum_type_token,
-            );
-            return Err(());
-        }
 
-        let Some(dot) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::MissingSeparator,
-                "Expected '.' after enum type name",
-                &self.tokens[self.index.saturating_sub(1)],
-            );
-            return Err(());
-        };
-        if !OperatorType::is_operator(&dot, OperatorType::Dot) {
-            self.emit_error(
-                TrussDiagnosticCode::MissingSeparator,
-                format!("Expected '.' but found '{}'", dot.value),
-                &dot,
-            );
-            return Err(());
-        }
-
-        let Some(case_name_token) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::ExpectedIdentifier,
-                "Expected case name after '.'",
-                &self.tokens[self.index.saturating_sub(1)],
-            );
-            return Err(());
-        };
         if case_name_token.ty != TokenType::Identifier {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedIdentifier,
@@ -2874,11 +2913,11 @@ impl Parser {
             return Err(());
         }
 
-        let expression = self.parse_expression()?;
+        let expression = self.parse_binary(Precedence::And)?;
 
         Ok(Expression::Case {
             token: Box::new(case_token),
-            enum_type: Box::new(enum_type_token),
+            enum_type,
             case_name: Box::new(case_name_token),
             bindings,
             expression: Rc::new(RefCell::new(expression)),
@@ -3005,6 +3044,72 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> Result<Pattern, ()> {
+        // Check for let binding pattern: "let pattern"
+        if let Some(token) = self.peek()
+            && let TokenType::Keyword { keyword } = token.ty
+            && (keyword == KeywordType::Let || keyword == KeywordType::Var)
+        {
+            self.index += 1;
+            let inner = self.parse_pattern()?;
+            return Ok(Pattern::ValueBinding(Box::new(inner)));
+        }
+
+        // Check for enum case pattern: ".caseName(...)" or "Type.caseName(...)"
+        if let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::Dot)
+        {
+            self.index += 1;
+            let Some(case_name) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    "Expected case name after '.'",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if case_name.ty != TokenType::Identifier {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    format!("Expected case name but found '{}'", case_name.value),
+                    &case_name,
+                );
+                return Err(());
+            }
+            let mut bindings = Vec::new();
+            if let Some(next) = self.peek() {
+                if SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
+                    self.index += 1;
+                    loop {
+                        if let Some(t) = self.peek()
+                            && SeparatorType::is_separator(&t, SeparatorType::CloseParen)
+                        {
+                            break;
+                        }
+                        bindings.push(self.parse_pattern()?);
+                        if let Some(t) = self.peek()
+                            && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                        {
+                            self.index += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    let Some(_close_paren) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::MissingSeparator,
+                            "Expected ')' to close enum case pattern",
+                            &self.tokens[self.index.saturating_sub(1)],
+                        );
+                        return Err(());
+                    };
+                }
+            }
+            return Ok(Pattern::EnumCase {
+                case_name: Box::new(case_name),
+                bindings,
+            });
+        }
+
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -3013,8 +3118,20 @@ impl Parser {
                 if token.value == "_" {
                     Ok(Pattern::Ignore)
                 } else {
+                    // Could be a literal-like value pattern (like `true`, `false`, `null`)
+                    // or an identifier pattern
                     Ok(Pattern::Identifier(Box::new(token)))
                 }
+            }
+            TokenType::IntegerLiteral { .. }
+            | TokenType::DecimalLiteral { .. }
+            | TokenType::BooleanLiteral { .. }
+            | TokenType::NullLiteral
+            | TokenType::NullptrLiteral
+            | TokenType::CharLiteral { .. } => {
+                self.index -= 1; // put back, re-parse as expression
+                let expr = self.parse_expression()?;
+                Ok(Pattern::Expr(Rc::new(RefCell::new(expr))))
             }
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenParen => {
@@ -3031,6 +3148,9 @@ impl Parser {
                             break;
                         }
                     }
+                    let Some(_close) = self.next() else {
+                        return Err(());
+                    };
                     Ok(Pattern::Tuple(patterns))
                 }
                 _ => {
@@ -3051,6 +3171,201 @@ impl Parser {
                 Err(())
             }
         }
+    }
+
+    fn parse_match(&mut self) -> Result<Expression, ()> {
+        let token = self.next().unwrap();
+        let value = self.parse_expression()?;
+
+        let Some(open_brace) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' after match expression",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&open_brace, SeparatorType::OpenBrace) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '{{' but found '{}'", open_brace.value),
+                &open_brace,
+            );
+            return Err(());
+        }
+
+        let mut cases = Vec::new();
+        loop {
+            if let Some(t) = self.peek() {
+                if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                    self.index += 1;
+                    break;
+                }
+            } else {
+                break;
+            }
+
+            // Parse default case
+            if let Some(t) = self.peek()
+                && KeywordType::is_keyword(&t, KeywordType::Default)
+            {
+                self.index += 1;
+                let Some(colon) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        "Expected ':' after 'default'",
+                        &self.tokens[self.index.saturating_sub(1)],
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        format!("Expected ':' but found '{}'", colon.value),
+                        &colon,
+                    );
+                    return Err(());
+                }
+                let body = self.parse_match_case_body()?;
+                cases.push(MatchCase {
+                    token: Box::new(t),
+                    pattern: Rc::new(Pattern::Ignore),
+                    guard: None,
+                    body: Rc::new(RefCell::new(body)),
+                });
+                continue;
+            }
+
+            // Parse case pattern
+            let Some(case_token) = self.next() else {
+                break;
+            };
+            if !KeywordType::is_keyword(&case_token, KeywordType::Case) {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    format!("Expected 'case' or 'default' in match, found '{}'", case_token.value),
+                    &case_token,
+                );
+                return Err(());
+            }
+
+            let pattern = self.parse_pattern()?;
+
+            let guard = if let Some(t) = self.peek()
+                && KeywordType::is_keyword(&t, KeywordType::Where)
+            {
+                self.index += 1;
+                Some(Rc::new(RefCell::new(self.parse_expression()?)))
+            } else {
+                None
+            };
+
+            let Some(colon) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected ':' after case pattern",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected ':' but found '{}'", colon.value),
+                    &colon,
+                );
+                return Err(());
+            }
+
+            let body = self.parse_match_case_body()?;
+            cases.push(MatchCase {
+                token: Box::new(case_token),
+                pattern: Rc::new(pattern),
+                guard,
+                body: Rc::new(RefCell::new(body)),
+            });
+        }
+
+        Ok(Expression::Match {
+            token: Box::new(token),
+            value: Rc::new(RefCell::new(value)),
+            cases,
+            ty: None,
+        })
+    }
+
+    fn parse_match_case_body(&mut self) -> Result<Expression, ()> {
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+        {
+            return self.parse_block();
+        }
+        if let Some(t) = self.peek() {
+            if let TokenType::Keyword { keyword } = &t.ty {
+                match keyword {
+                    KeywordType::Fallthrough => {
+                        let stmt = self.parse_fallthrough()?;
+                        return Ok(Expression::Block {
+                            statements: vec![Rc::new(RefCell::new(stmt))],
+                            scope: None,
+                        });
+                    }
+                    KeywordType::Break => {
+                        let stmt = self.parse_break()?;
+                        return Ok(Expression::Block {
+                            statements: vec![Rc::new(RefCell::new(stmt))],
+                            scope: None,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.parse_expression()
+    }
+
+    fn parse_guard(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        let condition = self.parse_expression()?;
+
+        let Some(else_token) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected 'else' after guard condition",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !KeywordType::is_keyword(&else_token, KeywordType::Else) {
+            self.emit_error(
+                TrussDiagnosticCode::UnexpectedToken,
+                format!("Expected 'else' but found '{}'", else_token.value),
+                &else_token,
+            );
+            return Err(());
+        }
+
+        let else_body = self.parse_expression()?;
+
+        Ok(Statement::Guard {
+            token: Box::new(token),
+            condition: Rc::new(RefCell::new(condition)),
+            else_body: Rc::new(RefCell::new(else_body)),
+        })
+    }
+
+    fn parse_fallthrough(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        Ok(Statement::Fallthrough {
+            token: Box::new(token),
+        })
+    }
+
+    fn parse_break(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        Ok(Statement::Break {
+            token: Box::new(token),
+        })
     }
 
     fn parse_maybe_named_expr(&mut self) -> Result<(Option<String>, Expression), ()> {

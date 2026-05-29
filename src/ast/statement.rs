@@ -145,6 +145,17 @@ pub enum Statement {
         name: Box<Token>,
         type_expression: Rc<RefCell<Expression>>,
     },
+    Guard {
+        token: Box<Token>,
+        condition: Rc<RefCell<Expression>>,
+        else_body: Rc<RefCell<Expression>>,
+    },
+    Fallthrough {
+        token: Box<Token>,
+    },
+    Break {
+        token: Box<Token>,
+    },
 }
 
 impl Statement {
@@ -170,6 +181,9 @@ impl Statement {
             Self::ProtocolDecl { token, .. } => (**token).clone(),
             Self::ExtensionDecl { token, .. } => (**token).clone(),
             Self::TypeAlias { token, .. } => (**token).clone(),
+            Self::Guard { token, .. } => (**token).clone(),
+            Self::Fallthrough { token, .. } => (**token).clone(),
+            Self::Break { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -183,6 +197,9 @@ impl Statement {
             Self::DeinitDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::ProtocolDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::TypeAlias { .. } => Ok(vec![]),
+            Self::Guard { .. } => Ok(vec![]),
+            Self::Fallthrough { .. } => Ok(vec![]),
+            Self::Break { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
     }
@@ -282,6 +299,20 @@ pub enum Pattern {
     Identifier(Box<Token>),
     Tuple(Vec<Pattern>),
     Ignore,
+    ValueBinding(Box<Pattern>),
+    EnumCase {
+        case_name: Box<Token>,
+        bindings: Vec<Pattern>,
+    },
+    Expr(Rc<RefCell<Expression>>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchCase {
+    pub token: Box<Token>,
+    pub pattern: Rc<Pattern>,
+    pub guard: Option<Rc<RefCell<Expression>>>,
+    pub body: Rc<RefCell<Expression>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

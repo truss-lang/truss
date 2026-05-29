@@ -9,7 +9,7 @@ use crate::{
     types::Type,
 };
 
-use super::statement::Statement;
+use super::statement::{MatchCase, Statement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallParameter {
@@ -96,10 +96,16 @@ pub enum Expression {
     },
     Case {
         token: Box<Token>,
-        enum_type: Box<Token>,
+        enum_type: Option<Box<Token>>,
         case_name: Box<Token>,
         bindings: Vec<super::statement::Pattern>,
         expression: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+    Match {
+        token: Box<Token>,
+        value: Rc<RefCell<Expression>>,
+        cases: Vec<MatchCase>,
         ty: Option<Rc<RefCell<Type>>>,
     },
     Cast {
@@ -207,6 +213,7 @@ impl Expression {
             Expression::Assignment { left, .. } => left.borrow().token(),
             Expression::If { condition, .. } => condition.borrow().token(),
             Expression::Case { token, .. } => (**token).clone(),
+            Expression::Match { token, .. } => (**token).clone(),
             Expression::Cast {
                 token,
                 kind_tokens,

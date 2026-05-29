@@ -60,6 +60,11 @@ pub enum KeywordType {
     Where,
     Associatedtype,
     Typealias,
+    Match,
+    Guard,
+    Default,
+    Break,
+    Fallthrough,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -154,6 +159,11 @@ impl KeywordType {
             KeywordType::Where => "where",
             KeywordType::Associatedtype => "associatedtype",
             KeywordType::Typealias => "typealias",
+            KeywordType::Match => "match",
+            KeywordType::Guard => "guard",
+            KeywordType::Default => "default",
+            KeywordType::Break => "break",
+            KeywordType::Fallthrough => "fallthrough",
         }
         .to_string()
     }
