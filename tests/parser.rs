@@ -4925,7 +4925,6 @@ fn test_parse_match_in_expression_context() {
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
         && let Expression::Match { .. } = &*expression.borrow()
     {
-        // Match expression parsed correctly in expression context
     } else {
         panic!("Expected ExpressionStatement with Match expression");
     }

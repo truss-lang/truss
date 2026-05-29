@@ -74,6 +74,11 @@ pub enum Expression {
         member: Box<Token>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    AssociatedTypeAccess {
+        object: Rc<RefCell<Expression>>,
+        member: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     Binary {
         left: Rc<RefCell<Expression>>,
         operator: BinaryOperator,
@@ -164,6 +169,7 @@ impl Expression {
             Self::SelfType { ty, .. } => Ok(ty.clone()),
             Self::AnyType { ty, .. } => Ok(ty.clone()),
             Self::CompoundType { ty, .. } => Ok(ty.clone()),
+            Self::AssociatedTypeAccess { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -178,6 +184,7 @@ impl Expression {
             Self::SelfType { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
+            Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -192,6 +199,7 @@ impl Expression {
             Self::SelfType { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
+            Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -276,6 +284,7 @@ impl Expression {
             Expression::SelfType { token, .. } => (**token).clone(),
             Expression::AnyType { inner, .. } => inner.borrow().token(),
             Expression::CompoundType { types, .. } => types[0].borrow().token(),
+            Expression::AssociatedTypeAccess { object, .. } => object.borrow().token(),
         }
     }
 }

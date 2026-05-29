@@ -878,6 +878,33 @@ impl Parser {
             let mut type_expr = Rc::try_unwrap(first).ok().unwrap().into_inner();
 
             while let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::Dot)
+            {
+                self.index += 1;
+                let Some(member_token) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedType,
+                        "Expected associated type name after '.'",
+                        &self.tokens[self.index.saturating_sub(1)],
+                    );
+                    return Err(());
+                };
+                if TokenType::Identifier != member_token.ty {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedType,
+                        format!("Expected associated type name but found '{}'", member_token.value),
+                        &member_token,
+                    );
+                    return Err(());
+                }
+                type_expr = Expression::AssociatedTypeAccess {
+                    object: Rc::new(RefCell::new(type_expr)),
+                    member: Box::new(member_token),
+                    ty: None,
+                };
+            }
+
+            while let Some(token) = self.peek()
                 && OperatorType::is_operator(&token, OperatorType::Multiply)
             {
                 self.index += 1;
@@ -929,6 +956,33 @@ impl Parser {
             type_parameters,
             ty: None,
         };
+
+        while let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::Dot)
+        {
+            self.index += 1;
+            let Some(member_token) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    "Expected associated type name after '.'",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if TokenType::Identifier != member_token.ty {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    format!("Expected associated type name but found '{}'", member_token.value),
+                    &member_token,
+                );
+                return Err(());
+            }
+            type_expr = Expression::AssociatedTypeAccess {
+                object: Rc::new(RefCell::new(type_expr)),
+                member: Box::new(member_token),
+                ty: None,
+            };
+        }
 
         while let Some(token) = self.peek()
             && OperatorType::is_operator(&token, OperatorType::Multiply)
