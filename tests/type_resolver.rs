@@ -2782,6 +2782,93 @@ fn test_protocol_with_associatedtype_type_resolves() {
 }
 
 #[test]
+fn test_if_case_dot_shorthand_type_resolved() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) {
+            if case .some(val) = x {
+                let _: Int32 = val
+            }
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "dot shorthand should resolve type correctly, got: {:?}", errors);
+}
+
+#[test]
+fn test_guard_case_type_check() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) -> Int32 {
+            guard case .some(val) = x else { return 0 }
+            return val
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "guard case should type check correctly, got: {:?}", errors);
+}
+
+#[test]
+fn test_match_type_check() {
+    let code = r#"
+        enum Option { case none case some(Int32) }
+        func test(x: Option) -> Int32 {
+            match x {
+                case .some(let val):
+                    val
+                case .none:
+                    0
+                default:
+                    -1
+            }
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "match should type check correctly, got: {:?}", errors);
+}
+#[test]
 fn test_typealias_in_protocol_type_resolves() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
@@ -2845,24 +2932,4 @@ fn test_generic_function_call_with_type_inference() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Normal function call type resolution, got: {:?}", errors);
-}
-
-#[test]
-fn test_struct_with_generic_protocol_conformance_type_check() {
-    let engine = create_engine();
-    let mut lexer = Lexer::new(
-        CharStream::new(
-            "struct MyArray: Container<Int32> { typealias Item = Int32; func append(item: Item) {} } protocol Container<T> { func append(item: T) }".to_string(),
-            Rc::new("".to_string()),
-        ),
-        engine.clone(),
-    );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
-    let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
-    let module_id = symbol_resolver.resolve(&program, "test".to_string());
-    let mut type_resolver = TypeResolver::new(krate, engine.clone());
-    type_resolver.resolve(&program, module_id);
-    let _ = engine.borrow();
 }

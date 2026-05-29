@@ -1180,6 +1180,40 @@ impl TypeResolver {
                     }
                 }
             }
+            Statement::Guard {
+                condition,
+                else_body,
+                ..
+            } => {
+                let _cond_ty = self.infer_type(condition.clone());
+                let binding_types = {
+                    let cond = condition.borrow();
+                    if let Expression::Case { enum_type, case_name, bindings, expression, .. } = &*cond {
+                        if !bindings.is_empty() {
+                            let enum_name = enum_type.as_ref().map(|t| t.value.as_str());
+                            if let Some(expr_ty) = self.infer_type(expression.clone()) {
+                                self.resolve_enum_case_from_type(&expr_ty, enum_name, case_name, bindings)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+                if let Some(ref param_types) = binding_types {
+                    if let Expression::Case { bindings, .. } = &*condition.borrow() {
+                        let current_scope = self.current_scope.clone();
+                        if let Some(scope) = current_scope {
+                            Self::set_binding_types(bindings, param_types, &scope);
+                        }
+                    }
+                }
+                self.resolve_block_expression(else_body.clone());
+            }
+            Statement::Fallthrough { .. } | Statement::Break { .. } => {}
             _ => {}
         }
     }
@@ -1573,12 +1607,20 @@ impl TypeResolver {
 
                 let binding_types = {
                     let cond = condition.borrow();
-                    if let Expression::Case { enum_type, case_name, bindings, .. } = &*cond {
+                    if let Expression::Case { enum_type, case_name, bindings, expression, .. } = &*cond {
                         if !bindings.is_empty() {
-                            self.get_enum_case_parameter_types(
-                                &enum_type.value,
-                                &case_name.value,
-                            )
+                            if let Some(type_name) = enum_type.as_ref() {
+                                self.get_enum_case_parameter_types(
+                                    &type_name.value,
+                                    &case_name.value,
+                                )
+                            } else if let Some(expr_ty) = self.infer_type(expression.clone()) {
+                                self.resolve_enum_case_from_type(
+                                    &expr_ty, None, case_name, bindings,
+                                )
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }
@@ -1623,41 +1665,62 @@ impl TypeResolver {
                 then_ty
             }
             Expression::Case {
-                enum_type,
+                enum_type: enum_type_opt,
                 case_name,
                 expression,
                 ty,
                 ..
             } => {
-                let _expr_ty = self.infer_type(expression.clone());
+                let expr_ty = self.infer_type(expression.clone());
 
                 if let Some(current_scope) = &self.current_scope {
-                    let scope = current_scope.borrow();
-                    if let Some(symbol) = scope.get_symbol(&enum_type.value) {
-                        if let Symbol::Enum { cases, .. } = &*symbol.borrow() {
-                            let found = cases.iter().any(|c| {
-                                c.borrow().name().as_ref().ok() == Some(&case_name.value)
-                            });
-                            if !found {
+                    if let Some(enum_type) = enum_type_opt.as_ref() {
+                        let scope = current_scope.borrow();
+                        if let Some(symbol) = scope.get_symbol(&enum_type.value) {
+                            if let Symbol::Enum { cases, .. } = &*symbol.borrow() {
+                                let found = cases.iter().any(|c| {
+                                    c.borrow().name().as_ref().ok() == Some(&case_name.value)
+                                });
+                                if !found {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::FieldNotFound,
+                                        format!("Enum '{}' has no case '{}'", enum_type.value, case_name.value),
+                                        case_name.as_ref(),
+                                    );
+                                }
+                            } else {
                                 self.emit_error(
-                                    TrussDiagnosticCode::FieldNotFound,
-                                    format!("Enum '{}' has no case '{}'", enum_type.value, case_name.value),
-                                    case_name.as_ref(),
+                                    TrussDiagnosticCode::TypeError,
+                                    format!("'{}' is not an enum type", enum_type.value),
+                                    enum_type.as_ref(),
                                 );
                             }
                         } else {
                             self.emit_error(
-                                TrussDiagnosticCode::TypeError,
-                                format!("'{}' is not an enum type", enum_type.value),
+                                TrussDiagnosticCode::UnknownType,
+                                format!("Unknown type '{}'", enum_type.value),
                                 enum_type.as_ref(),
                             );
                         }
-                    } else {
-                        self.emit_error(
-                            TrussDiagnosticCode::UnknownType,
-                            format!("Unknown type '{}'", enum_type.value),
-                            enum_type.as_ref(),
-                        );
+                    } else if let Some(expr_ty) = expr_ty.as_ref() {
+                        // shorthand .caseName — infer enum type from expression type
+                        if let Type::Enum(enum_name, _) = &*expr_ty.borrow() {
+                            let scope = current_scope.borrow();
+                            if let Some(symbol) = scope.get_symbol(enum_name) {
+                                if let Symbol::Enum { cases, .. } = &*symbol.borrow() {
+                                    let found = cases.iter().any(|c| {
+                                        c.borrow().name().as_ref().ok() == Some(&case_name.value)
+                                    });
+                                    if !found {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::FieldNotFound,
+                                            format!("Enum '{}' has no case '{}'", enum_name, case_name.value),
+                                            case_name.as_ref(),
+                                        );
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1730,6 +1793,56 @@ impl TypeResolver {
                 let compound = Rc::new(RefCell::new(Type::Compound(resolved)));
                 *ty = Some(compound.clone());
                 compound
+            }
+            Expression::Match { value, cases, ty, .. } => {
+                let subject_ty = self.infer_type(value.clone());
+                let mut match_ty = Rc::new(RefCell::new(Type::Void));
+
+                for case in cases {
+                    let case_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                    self.enter_scope(case_scope.clone());
+
+                    if let Pattern::EnumCase { case_name, bindings, .. } = case.pattern.as_ref() {
+                        if !bindings.is_empty() {
+                            if let Some(ref subject_ty) = subject_ty {
+                                if let Type::Enum(enum_name, _) = &*subject_ty.borrow() {
+                                    let param_types = self.get_enum_case_parameter_types(enum_name, &case_name.value);
+                                    if let Some(ref param_types) = param_types {
+                                        Self::set_binding_types(bindings, param_types, &case_scope);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Pattern::ValueBinding(inner) = case.pattern.as_ref() {
+                        if let Pattern::Identifier(name) = inner.as_ref() {
+                            if let Some(ref subject_ty) = subject_ty {
+                                case_scope.borrow_mut().set_type(name.value.clone(), subject_ty.clone());
+                            }
+                        }
+                    }
+
+                    if let Some(guard) = &case.guard {
+                        self.infer_type(guard.clone());
+                    }
+
+                    let body_ty = self.infer_type(case.body.clone()).unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+
+                    if *match_ty.borrow() == Type::Void {
+                        match_ty = body_ty;
+                    } else if match_ty.borrow().clone() != body_ty.borrow().clone() {
+                        self.emit_error(
+                            TrussDiagnosticCode::BranchTypeMismatch,
+                            format!("Match branches have different types: {} vs {}", match_ty.borrow(), body_ty.borrow()),
+                            &case.body.borrow().token(),
+                        );
+                    }
+
+                    self.leave_scope();
+                }
+
+                *ty = Some(match_ty.clone());
+                match_ty
             }
             Expression::Cast {
                 expression,
@@ -2727,6 +2840,22 @@ impl TypeResolver {
         None
     }
 
+    fn resolve_enum_case_from_type(
+        &self,
+        expr_ty: &Rc<RefCell<Type>>,
+        enum_name: Option<&str>,
+        case_name: &Token,
+        _bindings: &[Pattern],
+    ) -> Option<Vec<Rc<RefCell<Type>>>> {
+        if let Some(name) = enum_name {
+            self.get_enum_case_parameter_types(name, &case_name.value)
+        } else if let Type::Enum(enum_name, _) = &*expr_ty.borrow() {
+            self.get_enum_case_parameter_types(enum_name, &case_name.value)
+        } else {
+            None
+        }
+    }
+
     fn set_binding_types(
         bindings: &[Pattern],
         param_types: &[Rc<RefCell<Type>>],
@@ -2741,6 +2870,13 @@ impl TypeResolver {
                 Pattern::Identifier(name) => {
                     if name.value != "_" {
                         scope_ref.set_type(name.value.clone(), param_types[i].clone());
+                    }
+                }
+                Pattern::ValueBinding(inner) => {
+                    if let Pattern::Identifier(name) = inner.as_ref() {
+                        if name.value != "_" {
+                            scope_ref.set_type(name.value.clone(), param_types[i].clone());
+                        }
                     }
                 }
                 _ => {}
