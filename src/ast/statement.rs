@@ -315,6 +315,11 @@ pub enum ProtocolMember {
         name: Box<Token>,
         constraints: Vec<Rc<RefCell<Expression>>>,
     },
+    TypeAlias {
+        token: Box<Token>,
+        name: Box<Token>,
+        type_expression: Rc<RefCell<Expression>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

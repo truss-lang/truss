@@ -2526,11 +2526,54 @@ impl Parser {
                             accessors: ProtocolAccessorSet { get, set },
                         });
                     }
+                    TokenType::Keyword { keyword }
+                        if keyword == KeywordType::Typealias =>
+                    {
+                        let token = self.next().unwrap();
+                        let Some(name) = self.next() else {
+                            self.emit_error(
+                                TrussDiagnosticCode::ExpectedIdentifier,
+                                "Expected alias name after 'typealias'",
+                                &token,
+                            );
+                            return Err(());
+                        };
+                        if TokenType::Identifier != name.ty {
+                            self.emit_error(
+                                TrussDiagnosticCode::ExpectedIdentifier,
+                                format!("Expected alias name but found '{}'", name.value),
+                                &name,
+                            );
+                            return Err(());
+                        }
+                        let Some(assign) = self.next() else {
+                            self.emit_error(
+                                TrussDiagnosticCode::MissingSeparator,
+                                "Expected '=' after typealias name",
+                                &name,
+                            );
+                            return Err(());
+                        };
+                        if !OperatorType::is_operator(&assign, OperatorType::Assign) {
+                            self.emit_error(
+                                TrussDiagnosticCode::MissingSeparator,
+                                format!("Expected '=' but found '{}'", assign.value),
+                                &assign,
+                            );
+                            return Err(());
+                        }
+                        let type_expression = self.parse_type_expression()?;
+                        members.push(ProtocolMember::TypeAlias {
+                            token: Box::new(token),
+                            name: Box::new(name),
+                            type_expression: Rc::new(RefCell::new(type_expression)),
+                        });
+                    }
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::UnexpectedToken,
                             format!(
-                                "Expected 'func', 'associatedtype', or 'let'/'var' in protocol body, found '{}'",
+                                "Expected 'func', 'associatedtype', 'typealias', or 'let'/'var' in protocol body, found '{}'",
                                 peek_token.value
                             ),
                             &peek_token,

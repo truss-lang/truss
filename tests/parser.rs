@@ -4344,6 +4344,30 @@ fn test_parse_protocol_associatedtype_with_constraint() {
 }
 
 #[test]
+fn test_parse_typealias_in_protocol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { typealias Inner = Int32 func get() -> Inner }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
+        assert!(matches!(members[0], ProtocolMember::TypeAlias { .. }));
+        if let ProtocolMember::TypeAlias { name, .. } = &members[0] {
+            assert_eq!(name.value, "Inner");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_typealias_in_struct() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
@@ -4359,6 +4383,54 @@ fn test_parse_typealias_in_struct() {
         assert!(matches!(&*body[0].borrow(), Statement::TypeAlias { .. }));
         if let Statement::TypeAlias { name, .. } = &*body[0].borrow() {
             assert_eq!(name.value, "Inner");
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_typealias_at_top_level() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "typealias MyInt = Int32 var x: MyInt".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert!(matches!(&*program.statements[0].borrow(), Statement::TypeAlias { .. }));
+    if let Statement::TypeAlias { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "MyInt");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_typealias_in_function_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo() { typealias Inner = Int32 var y: Inner }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow() {
+        if let FunctionBody::Statements(stmts) = &*body.borrow() {
+            assert!(matches!(&*stmts[0].borrow(), Statement::TypeAlias { .. }));
+            if let Statement::TypeAlias { name, .. } = &*stmts[0].borrow() {
+                assert_eq!(name.value, "Inner");
+            } else {
+                panic!();
+            }
         } else {
             panic!();
         }
