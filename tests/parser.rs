@@ -4955,3 +4955,143 @@ fn test_parse_guard_without_else_error() {
     assert!(program.statements.is_empty()
         || matches!(&*program.statements[0].borrow(), Statement::Guard { .. }));
 }
+
+#[test]
+fn test_parse_associated_type_access_in_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { associatedtype Item } func foo(x: P.Item) {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert!(program.statements.len() >= 2);
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
+        let ty_expr = parameters[0].borrow().type_expression.clone();
+        let ty_expr_ref = ty_expr.borrow();
+        assert!(
+            matches!(&*ty_expr_ref, Expression::AssociatedTypeAccess { member, .. } if member.value == "Item"),
+            "Expected AssociatedTypeAccess with member 'Item', got: {:?}",
+            ty_expr_ref
+        );
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_associated_type_access_chained() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { associatedtype Item } func foo(x: P.Item.Sub) {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
+        let ty_expr = parameters[0].borrow().type_expression.clone();
+        let ty_expr_ref = ty_expr.borrow();
+        assert!(
+            matches!(&*ty_expr_ref, Expression::AssociatedTypeAccess { member, .. } if member.value == "Sub"),
+            "Outer level should be 'Sub', got: {:?}",
+            ty_expr_ref
+        );
+        if let Expression::AssociatedTypeAccess { object, .. } = &*ty_expr_ref {
+            let inner = object.borrow();
+            assert!(
+                matches!(&*inner, Expression::AssociatedTypeAccess { member, .. } if member.value == "Item"),
+                "Inner level should be 'Item', got: {:?}",
+                inner
+            );
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_associated_type_with_pointer() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Buf { associatedtype Elem } func foo(x: Buf.Elem*) {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
+        let ty_expr = parameters[0].borrow().type_expression.clone();
+        let ty_expr_ref = ty_expr.borrow();
+        assert!(matches!(&*ty_expr_ref, Expression::PointerType { .. }), "Expected PointerType");
+        if let Expression::PointerType { base, .. } = &*ty_expr_ref {
+            let base = base.borrow();
+            assert!(
+                matches!(&*base, Expression::AssociatedTypeAccess { member, .. } if member.value == "Elem"),
+                "PointerType base should be AssociatedTypeAccess, got: {:?}",
+                base
+            );
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_associated_type_in_variable_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol C { associatedtype T } func test() { let x: C.T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::VariableDecl { type_expression, .. } = &*stmts[0].borrow()
+    {
+        let ty_expr = type_expression.as_ref().unwrap().borrow();
+        assert!(
+            matches!(&*ty_expr, Expression::AssociatedTypeAccess { member, .. } if member.value == "T"),
+            "Expected AssociatedTypeAccess, got: {:?}",
+            ty_expr
+        );
+    } else {
+        panic!("Expected FunctionDecl with body");
+    }
+}
+
+#[test]
+fn test_parse_associated_type_in_parenthesized_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { associatedtype Item } func foo(x: (P).Item) {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
+        let ty_expr = parameters[0].borrow().type_expression.clone();
+        let ty_expr_ref = ty_expr.borrow();
+        assert!(
+            matches!(&*ty_expr_ref, Expression::AssociatedTypeAccess { member, .. } if member.value == "Item"),
+            "Expected AssociatedTypeAccess from parenthesized base, got: {:?}",
+            ty_expr_ref
+        );
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
