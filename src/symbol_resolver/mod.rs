@@ -487,6 +487,9 @@ impl SymbolResolver {
                             self.enter(prop_symbol, prop_name);
                         }
                         ProtocolMember::AssociatedType { .. } => {}
+                        ProtocolMember::TypeAlias { type_expression, .. } => {
+                            self.resolve_expression(type_expression.clone());
+                        }
                     }
                 }
                 self.leave_scope();
@@ -947,6 +950,9 @@ impl SymbolResolver {
                             self.resolve_expression(type_expression.clone());
                         }
                         ProtocolMember::AssociatedType { .. } => {}
+                        ProtocolMember::TypeAlias { type_expression, .. } => {
+                            self.resolve_expression(type_expression.clone());
+                        }
                     }
                 }
                 self.leave_scope();
