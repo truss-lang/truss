@@ -634,7 +634,13 @@ impl TypeResolver {
                                     .set_type(prop_name.value.clone(), prop_ty);
                             }
                         }
-                        ProtocolMember::AssociatedType { name: _, constraints, .. } => {
+                        ProtocolMember::AssociatedType { name, constraints, .. } => {
+                            let at_type = Rc::new(RefCell::new(Type::GenericParam(name.value.clone())));
+                            self.current_scope
+                                .as_ref()
+                                .unwrap()
+                                .borrow_mut()
+                                .set_type(name.value.clone(), at_type);
                             for constraint in constraints {
                                 self.infer_type(constraint.clone());
                             }
@@ -2372,6 +2378,103 @@ impl TypeResolver {
                 } else {
                     return None;
                 }
+            }
+            Expression::AssociatedTypeAccess { object, member, ty } => {
+                let object_ty = self.infer_type(object.clone());
+                let object_ty = match object_ty {
+                    Some(t) => t,
+                    None => return None,
+                };
+                let result = match &*object_ty.borrow() {
+                    Type::Protocol(protocol_name, weak_sym) => {
+                        if let Some(sym) = weak_sym.0.upgrade() {
+                            if let Ok(Some(decl)) = sym.borrow().get_decl() {
+                                if let Statement::ProtocolDecl { scope, .. } = &*decl.borrow() {
+                                    if let Some(protocol_scope) = scope {
+                                        let scope_ref = protocol_scope.borrow();
+                                        if let Some(found) = scope_ref.get_type(&member.value) {
+                                            let found_ty = found.borrow().clone();
+                                            match &found_ty {
+                                                Type::GenericParam(_) => {
+                                                    Rc::new(RefCell::new(Type::AssociatedType(object_ty.clone(), member.value.clone())))
+                                                }
+                                                _ => found.clone(),
+                                            }
+                                        } else {
+                                            self.emit_error(
+                                                TrussDiagnosticCode::UnknownType,
+                                                format!("Associated type '{}' not found in protocol '{}'", member.value, protocol_name),
+                                                member,
+                                            );
+                                            return None;
+                                        }
+                                    } else {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::UnknownType,
+                                            format!("Protocol '{}' has no scope", protocol_name),
+                                            member,
+                                        );
+                                        return None;
+                                    }
+                                } else {
+                                    return None;
+                                }
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    }
+                    Type::Compound(types) => {
+                        let mut result = None;
+                        for t in types {
+                            if let Type::Protocol(_name, weak_sym) = &*t.borrow() {
+                                if let Some(sym) = weak_sym.0.upgrade() {
+                                    if let Ok(Some(decl)) = sym.borrow().get_decl() {
+                                        if let Statement::ProtocolDecl { scope, .. } = &*decl.borrow() {
+                                            if let Some(protocol_scope) = scope {
+                                                let scope_ref = protocol_scope.borrow();
+                                                if let Some(found) = scope_ref.get_type(&member.value) {
+                                                    let found_ty = found.borrow().clone();
+                                                    result = Some(match &found_ty {
+                                                        Type::GenericParam(_) => Rc::new(RefCell::new(Type::AssociatedType(object_ty.clone(), member.value.clone()))),
+                                                        _ => found.clone(),
+                                                    });
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        match result {
+                            Some(t) => t,
+                            None => {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnknownType,
+                                    format!("Associated type '{}' not found in compound protocol", member.value),
+                                    member,
+                                );
+                                return None;
+                            }
+                        }
+                    }
+                    Type::GenericParam(_) => {
+                        Rc::new(RefCell::new(Type::AssociatedType(object_ty.clone(), member.value.clone())))
+                    }
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnknownType,
+                            format!("Cannot access associated type on non-protocol type"),
+                            member,
+                        );
+                        return None;
+                    }
+                };
+                *ty = Some(result.clone());
+                result
             }
         };
         Some(result)
