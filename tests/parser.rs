@@ -1530,6 +1530,94 @@ fn test_parse_type_instantiation_call() {
     }
 }
 
+#[test]
+fn test_parse_extension_with_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "extension Foo { func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExtensionDecl { type_name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(type_name.value, "Foo");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl { name, .. } = &*body[0].borrow() {
+            assert_eq!(name.value, "bar");
+        } else {
+            panic!("Expected FunctionDecl in extension body");
+        }
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_with_protocol_conformance() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "extension Foo: Printable, Serializable { func dump() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExtensionDecl { type_name, conformances, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(type_name.value, "Foo");
+        assert_eq!(conformances.len(), 2);
+        assert_eq!(body.len(), 1);
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_empty_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("extension Foo {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExtensionDecl { type_name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(type_name.value, "Foo");
+        assert!(body.is_empty());
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_of_protocol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "extension Printable { func describe() -> String { \"hello\" } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExtensionDecl { type_name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(type_name.value, "Printable");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl { name, .. } = &*body[0].borrow() {
+            assert_eq!(name.value, "describe");
+        } else {
+            panic!("Expected FunctionDecl in extension body");
+        }
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
 fn collect_modifiers(stmt: &Statement) -> Vec<Modifier> {
     match stmt {
         Statement::FunctionDecl { modifiers, .. }

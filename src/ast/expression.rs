@@ -132,6 +132,10 @@ pub enum Expression {
         ty: Option<Rc<RefCell<Type>>>,
         symbol: Option<WeakSymbol>,
     },
+    SelfType {
+        token: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     AnyType {
         inner: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
@@ -151,6 +155,7 @@ impl Expression {
             Self::Cast { ty, .. } => Ok(ty.clone()),
             Self::TupleLiteral { ty, .. } => Ok(ty.clone()),
             Self::SelfKeyword { ty, .. } => Ok(ty.clone()),
+            Self::SelfType { ty, .. } => Ok(ty.clone()),
             Self::AnyType { ty, .. } => Ok(ty.clone()),
             Self::CompoundType { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
@@ -164,6 +169,7 @@ impl Expression {
             Self::Cast { ty, .. } => Ok(ty),
             Self::TupleLiteral { ty, .. } => Ok(ty),
             Self::SelfKeyword { ty, .. } => Ok(ty),
+            Self::SelfType { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
@@ -177,6 +183,7 @@ impl Expression {
             Self::Cast { ty, .. } => Ok(ty),
             Self::TupleLiteral { ty, .. } => Ok(ty),
             Self::SelfKeyword { ty, .. } => Ok(ty),
+            Self::SelfType { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
@@ -259,6 +266,7 @@ impl Expression {
             Expression::TupleType { left, .. } => (**left).clone(),
             Expression::TupleIndexAccess { index, .. } => (**index).clone(),
             Expression::SelfKeyword { token, .. } => (**token).clone(),
+            Expression::SelfType { token, .. } => (**token).clone(),
             Expression::AnyType { inner, .. } => inner.borrow().token(),
             Expression::CompoundType { types, .. } => types[0].borrow().token(),
         }

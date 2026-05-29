@@ -169,6 +169,7 @@ impl Parser {
                     }
                     self.parse_throw()
                 }
+                KeywordType::Extension => self.parse_extension_decl(modifiers),
                 _ => {
                     if !modifiers.is_empty() {
                         self.emit_error(
@@ -719,6 +720,16 @@ impl Parser {
 
             return Ok(Expression::AnyType {
                 inner: Rc::new(RefCell::new(inner)),
+                ty: None,
+            });
+        }
+
+        if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::SelfType)
+        {
+            self.index += 1;
+            return Ok(Expression::SelfType {
+                token: Box::new(token),
                 ty: None,
             });
         }
@@ -2012,6 +2023,61 @@ impl Parser {
             return Err(());
         }
         Ok(body)
+    }
+
+    fn parse_extension_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+        if !modifiers.is_empty() {
+            self.emit_error(
+                TrussDiagnosticCode::ModifierNotAllowedHere,
+                "Modifiers are not allowed on 'extension' declaration",
+                &modifiers[0].token,
+            );
+        }
+        let Some(token) = self.next() else {
+            return Err(());
+        };
+        let Some(type_name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected type name after 'extension'",
+                &token,
+            );
+            return Err(());
+        };
+        if TokenType::Identifier != type_name.ty
+            && !matches!(type_name.ty, TokenType::Keyword { keyword: KeywordType::SelfType })
+        {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected type name or 'Self' but found '{}'", type_name.value),
+                &type_name,
+            );
+            return Err(());
+        }
+        let mut conformances = Vec::new();
+        if let Some(next) = self.peek()
+            && SeparatorType::is_separator(&next, SeparatorType::Colon)
+        {
+            self.index += 1;
+            loop {
+                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        let body = self.parse_brace_body()?;
+        Ok(Statement::ExtensionDecl {
+            token: Box::new(token),
+            type_name: Box::new(type_name),
+            conformances,
+            body,
+            scope: None,
+        })
     }
 
     fn parse_enum_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {

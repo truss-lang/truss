@@ -1995,6 +1995,19 @@ impl TypeResolver {
                 *ty = Some(t.clone());
                 t
             }
+            Expression::SelfType { ty, .. } => {
+                let t = self
+                    .current_scope
+                    .as_ref()?
+                    .borrow()
+                    .get_type("Self");
+                if let Some(t) = t {
+                    *ty = Some(t.clone());
+                    t
+                } else {
+                    return None;
+                }
+            }
         };
         Some(result)
     }

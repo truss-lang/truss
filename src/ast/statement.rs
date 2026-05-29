@@ -124,6 +124,13 @@ pub enum Statement {
         linkage: Box<Token>,
         statement: Rc<RefCell<Statement>>,
     },
+    ExtensionDecl {
+        token: Box<Token>,
+        type_name: Box<Token>,
+        conformances: Vec<Rc<RefCell<Expression>>>,
+        body: Vec<Rc<RefCell<Statement>>>,
+        scope: Option<Rc<RefCell<Scope>>>,
+    },
 }
 
 impl Statement {
@@ -147,6 +154,7 @@ impl Statement {
             Self::ExternBlock { token, .. } => (**token).clone(),
             Self::ExternDecl { token, .. } => (**token).clone(),
             Self::ProtocolDecl { token, .. } => (**token).clone(),
+            Self::ExtensionDecl { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
