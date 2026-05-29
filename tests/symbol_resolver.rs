@@ -1797,8 +1797,7 @@ fn test_symbol_resolve_variable_in_implicit_return() {
         && let Expression::Variable { symbol, .. } = &*expression.borrow()
     {
         assert_ne!(
-            *symbol,
-            None,
+            *symbol, None,
             "Variable in implicit return position should have resolved symbol"
         );
     } else {
@@ -1826,15 +1825,17 @@ fn test_symbol_resolve_if_expression_branches() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[2].borrow()
-        && let Expression::If {
-            then, else_, ..
-        } = &*expression.borrow()
+        && let Expression::If { then, else_, .. } = &*expression.borrow()
         && let Expression::Block {
             statements: then_stmts,
             ..
         } = &*then.borrow()
-        && let Statement::ExpressionStatement { expression: then_expr } = &*then_stmts[0].borrow()
-        && let Expression::Variable { symbol: then_sym, .. } = &*then_expr.borrow()
+        && let Statement::ExpressionStatement {
+            expression: then_expr,
+        } = &*then_stmts[0].borrow()
+        && let Expression::Variable {
+            symbol: then_sym, ..
+        } = &*then_expr.borrow()
     {
         assert_ne!(
             *then_sym, None,
@@ -1845,9 +1846,12 @@ fn test_symbol_resolve_if_expression_branches() {
                 statements: else_stmts,
                 ..
             } = &*else_expr.borrow()
-            && let Statement::ExpressionStatement { expression: else_expr_val } =
-                &*else_stmts[0].borrow()
-            && let Expression::Variable { symbol: else_sym, .. } = &*else_expr_val.borrow()
+            && let Statement::ExpressionStatement {
+                expression: else_expr_val,
+            } = &*else_stmts[0].borrow()
+            && let Expression::Variable {
+                symbol: else_sym, ..
+            } = &*else_expr_val.borrow()
         {
             assert_ne!(
                 *else_sym, None,

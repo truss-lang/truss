@@ -1290,8 +1290,20 @@ impl TypeResolver {
     fn resolve_function_body(&mut self, body: Rc<RefCell<FunctionBody>>) {
         match &mut *body.borrow_mut() {
             FunctionBody::Statements(statements) => {
-                for stmt in statements {
+                for stmt in statements.iter() {
                     self.resolve_statement(stmt.clone());
+                }
+                if let Some(expected) = self.current_return_type.clone() {
+                    if !matches!(&*expected.borrow(), Type::Void) {
+                        if let Some(last_stmt) = statements.last() {
+                            if let Statement::ExpressionStatement { expression } =
+                                &*last_stmt.borrow()
+                            {
+                                let token = &expression.borrow().token();
+                                self.check_type_with_expected(expression.clone(), expected, token);
+                            }
+                        }
+                    }
                 }
             }
             FunctionBody::Expression(expression) => {

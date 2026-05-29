@@ -3181,3 +3181,150 @@ fn test_defer_body_type_error() {
     let errors = engine_ref.get_errors();
     assert!(errors.len() > 0, "Expected type errors in defer body");
 }
+
+#[test]
+fn test_implicit_return_last_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { let x = 1 x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for implicit return with Int32, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_implicit_return_type_mismatch() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Bool { 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        errors.len() > 0,
+        "Expected type mismatch error for implicit return"
+    );
+    assert!(
+        errors[0].message.contains("Type mismatch")
+            || errors[0].code == TrussDiagnosticCode::TypeMismatch
+    );
+}
+
+#[test]
+fn test_implicit_return_if_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { if true { 1 } else { 2 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for implicit return with if, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_implicit_return_void_function_no_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = 1 x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for void function with trailing expression, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_implicit_return_int_literal_context() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int64 { 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for Int64 context, got: {:?}",
+        errors
+    );
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::IntegerLiteral { ty, .. } = &*expression.borrow()
+        && let Some(ty) = ty
+    {
+        assert_eq!(ty.borrow().clone(), Type::Int64);
+    } else {
+        panic!("Expected integer literal with Int64 type");
+    }
+}

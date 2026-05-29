@@ -5345,7 +5345,10 @@ fn test_parse_if_as_variable_initializer() {
             else_,
         } = &*init.borrow()
     {
-        assert!(matches!(&*condition.borrow(), Expression::BooleanLiteral { .. }));
+        assert!(matches!(
+            &*condition.borrow(),
+            Expression::BooleanLiteral { .. }
+        ));
         assert!(matches!(&*then.borrow(), Expression::Block { .. }));
         assert!(else_.is_some());
     } else {
@@ -5376,8 +5379,7 @@ fn test_parse_if_as_function_body_last_expression() {
 
 #[test]
 fn test_parse_if_elseif_chain() {
-    let code =
-        "func test() { let x = if true { 1 } else if false { 2 } else { 3 } }";
+    let code = "func test() { let x = if true { 1 } else if false { 2 } else { 3 } }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
