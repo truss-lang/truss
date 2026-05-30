@@ -4,8 +4,8 @@ use truss::{
     ast::{
         expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, Modifier, ModifierType, Parameter, Pattern,
-            ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
+            AccessModifier, AccessorKind, FunctionBody, ImportKind, Modifier, ModifierType,
+            Parameter, Pattern, ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -5888,109 +5888,170 @@ fn test_parse_overloaded_top_level_functions() {
 }
 
 #[test]
-fn test_parse_overloaded_struct_methods() {
+fn test_parse_import_module_single() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "struct S { func bar(a: Int32) { a } func bar(b: Bool) { b } }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("import Foo".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
-        assert!(body.len() >= 2);
-        if let Statement::FunctionDecl {
-            name, parameters, ..
-        } = &*body[0].borrow()
-        {
-            assert_eq!(name.value, "bar");
-            assert_eq!(parameters.len(), 1);
-            assert!(
-                matches!(
-                    &*parameters[0].borrow().type_expression.borrow(),
-                    Expression::Type { name, .. } if name.value == "Int32"
-                ),
-                "Expected Int32 parameter type"
-            );
-        } else {
-            panic!("Expected FunctionDecl");
-        }
-        if let Statement::FunctionDecl {
-            name, parameters, ..
-        } = &*body[1].borrow()
-        {
-            assert_eq!(name.value, "bar");
-            assert_eq!(parameters.len(), 1);
-            assert!(
-                matches!(
-                    &*parameters[0].borrow().type_expression.borrow(),
-                    Expression::Type { name, .. } if name.value == "Bool"
-                ),
-                "Expected Bool parameter type"
-            );
-        } else {
-            panic!("Expected FunctionDecl");
-        }
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string()]);
+        assert_eq!(*kind, ImportKind::Module);
     } else {
-        panic!("Expected StructDecl");
+        panic!("Expected ImportDecl");
     }
 }
 
 #[test]
-fn test_parse_overloaded_functions_with_labels() {
+fn test_parse_import_module_nested() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import Foo.Bar".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
+        assert_eq!(*kind, ImportKind::Module);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_member() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import Foo.Bar.baz".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(
+            path,
+            &vec!["Foo".to_string(), "Bar".to_string(), "baz".to_string()]
+        );
+        assert_eq!(*kind, ImportKind::Member);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_wildcard() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import Foo.Bar.*".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
+        assert_eq!(*kind, ImportKind::Wildcard);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_member_deep() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func process(value x: Int32) { x } func process(label y: Float64) { y }".to_string(),
+            "import A.B.C.D.foo".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    assert_eq!(program.statements.len(), 2);
-    if let Statement::FunctionDecl {
-        name, parameters, ..
-    } = &*program.statements[0].borrow()
-    {
-        assert_eq!(name.value, "process");
-        assert_eq!(parameters.len(), 1);
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
         assert_eq!(
-            parameters[0].borrow().label.as_ref().unwrap().value,
-            "value"
+            path,
+            &vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string(),
+                "foo".to_string()
+            ]
         );
-        assert_eq!(parameters[0].borrow().name.value, "x");
-        assert!(
-            matches!(
-                &*parameters[0].borrow().type_expression.borrow(),
-                Expression::Type { name, .. } if name.value == "Int32"
-            ),
-            "Expected Int32 parameter type"
-        );
+        assert_eq!(*kind, ImportKind::Member);
     } else {
-        panic!("Expected FunctionDecl");
-    }
-    if let Statement::FunctionDecl {
-        name, parameters, ..
-    } = &*program.statements[1].borrow()
-    {
-        assert_eq!(name.value, "process");
-        assert_eq!(parameters.len(), 1);
-        assert_eq!(
-            parameters[0].borrow().label.as_ref().unwrap().value,
-            "label"
-        );
-        assert_eq!(parameters[0].borrow().name.value, "y");
-        assert!(
-            matches!(
-                &*parameters[0].borrow().type_expression.borrow(),
-                Expression::Type { name, .. } if name.value == "Float64"
-            ),
-            "Expected Float64 parameter type"
-        );
-    } else {
-        panic!("Expected FunctionDecl");
+        panic!("Expected ImportDecl");
     }
 }
+
+#[test]
+fn test_parse_import_wildcard_deep() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import A.B.C.*".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(
+            path,
+            &vec!["A".to_string(), "B".to_string(), "C".to_string()]
+        );
+        assert_eq!(*kind, ImportKind::Wildcard);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_multiple_imports() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "import Foo\nimport Bar.Baz\nimport X.Y.z\nimport U.V.*".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 4);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string()]);
+        assert_eq!(*kind, ImportKind::Module);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[1].borrow() {
+        assert_eq!(path, &vec!["Bar".to_string(), "Baz".to_string()]);
+        assert_eq!(*kind, ImportKind::Module);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[2].borrow() {
+        assert_eq!(
+            path,
+            &vec!["X".to_string(), "Y".to_string(), "z".to_string()]
+        );
+        assert_eq!(*kind, ImportKind::Member);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[3].borrow() {
+        assert_eq!(path, &vec!["U".to_string(), "V".to_string()]);
+        assert_eq!(*kind, ImportKind::Wildcard);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+

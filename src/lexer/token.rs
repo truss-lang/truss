@@ -67,6 +67,7 @@ pub enum KeywordType {
     Fallthrough,
     Defer,
     Module,
+    Import,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -168,6 +169,7 @@ impl KeywordType {
             KeywordType::Fallthrough => "fallthrough",
             KeywordType::Defer => "defer",
             KeywordType::Module => "module",
+            KeywordType::Import => "import",
         }
         .to_string()
     }

@@ -166,6 +166,11 @@ pub enum Statement {
         body: Vec<Rc<RefCell<Statement>>>,
         scope: Option<Rc<RefCell<Scope>>>,
     },
+    ImportDecl {
+        token: Box<Token>,
+        path: Vec<String>,
+        kind: ImportKind,
+    },
 }
 
 impl Statement {
@@ -196,6 +201,7 @@ impl Statement {
             Self::Break { token, .. } => (**token).clone(),
             Self::Defer { token, .. } => (**token).clone(),
             Self::ModuleDecl { token, .. } => (**token).clone(),
+            Self::ImportDecl { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -214,6 +220,7 @@ impl Statement {
             Self::Break { .. } => Ok(vec![]),
             Self::Defer { .. } => Ok(vec![]),
             Self::ModuleDecl { .. } => Ok(vec![]),
+            Self::ImportDecl { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
     }
@@ -371,4 +378,11 @@ pub enum ProtocolMember {
 pub struct ProtocolAccessorSet {
     pub get: bool,
     pub set: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ImportKind {
+    Module,
+    Member,
+    Wildcard,
 }

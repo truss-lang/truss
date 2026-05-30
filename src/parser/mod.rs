@@ -10,7 +10,7 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, Accessor, AccessorKind, EnumCase, EnumCaseParameter, FunctionBody,
-            GenericParameter, MatchCase, Modifier, ModifierType, Parameter, Pattern,
+            GenericParameter, ImportKind, MatchCase, Modifier, ModifierType, Parameter, Pattern,
             ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind, WhereRequirement,
             WhereRequirementKind,
         },
@@ -213,6 +213,7 @@ impl Parser {
                 KeywordType::Extension => self.parse_extension_decl(modifiers),
                 KeywordType::Typealias => self.parse_typealias(modifiers),
                 KeywordType::Module => self.parse_module_decl(modifiers),
+                KeywordType::Import => self.parse_import(),
                 _ => {
                     if !modifiers.is_empty() {
                         self.emit_error(
@@ -2351,6 +2352,72 @@ impl Parser {
             }
             Ok(inner)
         }
+    }
+
+    fn parse_import(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        let Some(first) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected module or member name after 'import'",
+                &token,
+            );
+            return Err(());
+        };
+        if !matches!(first.ty, TokenType::Identifier) {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected identifier but found '{}'", first.value),
+                &first,
+            );
+            return Err(());
+        }
+        let mut path = vec![first.value.clone()];
+        let mut wildcard = false;
+        loop {
+            match self.peek() {
+                Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
+                    self.index += 1;
+                    if let Some(ref star) = self.peek() {
+                        if let TokenType::Operator { operator: OperatorType::Multiply } = star.ty {
+                            self.index += 1;
+                            wildcard = true;
+                            break;
+                        }
+                    }
+                    let Some(name) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            "Expected identifier after '.'",
+                            &first,
+                        );
+                        return Err(());
+                    };
+                    if !matches!(name.ty, TokenType::Identifier) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!("Expected identifier but found '{}'", name.value),
+                            &name,
+                        );
+                        return Err(());
+                    }
+                    path.push(name.value);
+                }
+                _ => break,
+            }
+        }
+        let kind = if wildcard {
+            ImportKind::Wildcard
+        } else if path.len() >= 3 {
+            ImportKind::Member
+        } else {
+            ImportKind::Module
+        };
+        Ok(Statement::ImportDecl {
+            token: Box::new(token),
+            path,
+            kind,
+        })
     }
 
     fn parse_enum_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
