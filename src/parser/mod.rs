@@ -26,6 +26,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     index: usize,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
+    pending_greater_count: u32,
 }
 
 impl Parser {
@@ -39,6 +40,7 @@ impl Parser {
             tokens,
             index: 0,
             engine,
+            pending_greater_count: 0,
         }
     }
 
@@ -710,7 +712,9 @@ impl Parser {
                     OperatorType::Less
                         if matches!(
                             expression,
-                            Expression::Variable { .. } | Expression::Type { .. }
+                            Expression::Variable { .. }
+                                | Expression::Type { .. }
+                                | Expression::MemberAccess { .. }
                         ) =>
                     {
                         let mut temp_idx = self.index + 1;
@@ -727,6 +731,16 @@ impl Parser {
                                     OperatorType::Greater,
                                 ) {
                                     angle_count -= 1;
+                                } else if OperatorType::is_operator(
+                                    &self.tokens[temp_idx],
+                                    OperatorType::RightShift,
+                                ) {
+                                    angle_count -= 2;
+                                } else if OperatorType::is_operator(
+                                    &self.tokens[temp_idx],
+                                    OperatorType::RightShiftAssign,
+                                ) {
+                                    angle_count -= 2;
                                 }
                             }
                             temp_idx += 1;
@@ -2444,6 +2458,7 @@ impl Parser {
             return Err(());
         }
         let generic_parameters = self.parse_generic_parameters()?.unwrap_or_default();
+        let where_clause = self.parse_where_clause()?;
         let mut cases = Vec::new();
         let mut body = Vec::new();
         if let Some(t) = self.peek()
@@ -2576,7 +2591,6 @@ impl Parser {
             );
             return Err(());
         }
-        let where_clause = self.parse_where_clause()?;
         Ok(Statement::EnumDecl {
             modifiers,
             token: Box::new(token),
@@ -2632,6 +2646,7 @@ impl Parser {
                 conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
             }
         }
+        let where_clause = self.parse_where_clause()?;
         let mut members = Vec::new();
         if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
@@ -2882,7 +2897,6 @@ impl Parser {
             );
             return Err(());
         }
-        let where_clause = self.parse_where_clause()?;
         associated_members.append(&mut members);
         Ok(Statement::ProtocolDecl {
             modifiers,
@@ -3250,6 +3264,10 @@ impl Parser {
     }
 
     fn parse_type_parameters(&mut self) -> Result<Option<Vec<Rc<RefCell<Expression>>>>, ()> {
+        if self.pending_greater_count > 0 {
+            self.pending_greater_count -= 1;
+            return Ok(Some(Vec::new()));
+        }
         if let Some(token) = self.peek()
             && OperatorType::is_operator(&token, OperatorType::Less)
         {
@@ -3267,6 +3285,10 @@ impl Parser {
                     break;
                 }
             }
+            if self.pending_greater_count > 0 {
+                self.pending_greater_count -= 1;
+                return Ok(Some(type_parameters));
+            }
             let Some(next) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
@@ -3275,15 +3297,22 @@ impl Parser {
                 );
                 return Err(());
             };
-            if !OperatorType::is_operator(&next, OperatorType::Greater) {
+            if OperatorType::is_operator(&next, OperatorType::Greater) {
+                Ok(Some(type_parameters))
+            } else if OperatorType::is_operator(&next, OperatorType::RightShift) {
+                self.pending_greater_count += 1;
+                Ok(Some(type_parameters))
+            } else if OperatorType::is_operator(&next, OperatorType::RightShiftAssign) {
+                self.index -= 1;
+                Ok(Some(type_parameters))
+            } else {
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
                     format!("Expected '>' but found '{}'", next.value),
                     &next,
                 );
-                return Err(());
+                Err(())
             }
-            Ok(Some(type_parameters))
         } else {
             Ok(None)
         }
@@ -3733,11 +3762,20 @@ impl Parser {
                 let Some(t) = self.peek() else { break };
                 if OperatorType::is_operator(&t, OperatorType::Greater) {
                     break;
+                } else if OperatorType::is_operator(&t, OperatorType::RightShift) {
+                    self.pending_greater_count += 1;
+                    break;
+                } else if OperatorType::is_operator(&t, OperatorType::RightShiftAssign) {
+                    break;
                 } else if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                     self.index += 1;
                 } else {
                     break;
                 }
+            }
+            if self.pending_greater_count > 0 {
+                self.pending_greater_count -= 1;
+                return Ok(Some(params));
             }
             let Some(next) = self.next() else {
                 self.emit_error(
@@ -3747,15 +3785,22 @@ impl Parser {
                 );
                 return Err(());
             };
-            if !OperatorType::is_operator(&next, OperatorType::Greater) {
+            if OperatorType::is_operator(&next, OperatorType::Greater) {
+                Ok(Some(params))
+            } else if OperatorType::is_operator(&next, OperatorType::RightShift) {
+                self.pending_greater_count += 1;
+                Ok(Some(params))
+            } else if OperatorType::is_operator(&next, OperatorType::RightShiftAssign) {
+                self.index -= 1;
+                Ok(Some(params))
+            } else {
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
                     format!("Expected '>' but found '{}'", next.value),
                     &next,
                 );
-                return Err(());
+                Err(())
             }
-            Ok(Some(params))
         } else {
             Ok(None)
         }

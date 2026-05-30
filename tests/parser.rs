@@ -6051,3 +6051,289 @@ fn test_parse_multiple_imports() {
         panic!("Expected ImportDecl");
     }
 }
+
+#[test]
+fn test_parse_generic_call_with_type_args() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { foo<Int32>(42) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
+        && let Expression::Call {
+            callee,
+            type_parameters,
+            parameters,
+            ..
+        } = &*expression.borrow()
+        && let Expression::Variable { name, .. } = &*callee.borrow()
+    {
+        assert_eq!(name.value, "foo");
+        assert!(type_parameters.is_some());
+        let tps = type_parameters.as_ref().unwrap();
+        assert_eq!(tps.len(), 1);
+        assert!(
+            matches!(&*tps[0].borrow(), Expression::Type { name, .. } if name.value == "Int32")
+        );
+        assert_eq!(parameters.len(), 1);
+    } else {
+        panic!("Expected generic Call with type parameter Int32");
+    }
+}
+
+#[test]
+fn test_parse_generic_call_multi_type_args() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { pair<Int32, String>(1, 2) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
+        && let Expression::Call {
+            type_parameters,
+            parameters,
+            ..
+        } = &*expression.borrow()
+    {
+        assert!(type_parameters.is_some());
+        let tps = type_parameters.as_ref().unwrap();
+        assert_eq!(tps.len(), 2);
+        assert!(
+            matches!(&*tps[0].borrow(), Expression::Type { name, .. } if name.value == "Int32")
+        );
+        assert!(
+            matches!(&*tps[1].borrow(), Expression::Type { name, .. } if name.value == "String")
+        );
+        assert_eq!(parameters.len(), 2);
+    } else {
+        panic!("Expected generic Call with two type parameters");
+    }
+}
+
+#[test]
+fn test_parse_generic_call_nested_type_args() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { foo<Array<Int32>>(x) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
+        && let Expression::Call {
+            type_parameters, ..
+        } = &*expression.borrow()
+    {
+        assert!(type_parameters.is_some());
+        let tps = type_parameters.as_ref().unwrap();
+        assert_eq!(tps.len(), 1);
+        assert!(
+            matches!(&*tps[0].borrow(), Expression::Type { name, type_parameters: inner_tps, .. }
+                if name.value == "Array" && inner_tps.is_some() && inner_tps.as_ref().unwrap().len() == 1)
+        );
+    } else {
+        panic!("Expected generic Call with nested Array<Int32> type parameter");
+    }
+}
+
+#[test]
+fn test_parse_nested_generic_type_double_gt() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: Array<Array<Int32>> }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression, ..
+        } = &*stmts[0].borrow()
+        && let Some(ty_expr) = type_expression
+        && let Expression::Type {
+            name,
+            type_parameters,
+            ..
+        } = &*ty_expr.borrow()
+    {
+        assert_eq!(name.value, "Array");
+        assert!(type_parameters.is_some());
+        let tps = type_parameters.as_ref().unwrap();
+        assert_eq!(tps.len(), 1);
+        assert!(
+            matches!(&*tps[0].borrow(), Expression::Type { name, type_parameters: inner_tps, .. }
+                if name.value == "Array" && inner_tps.is_some() && inner_tps.as_ref().unwrap().len() == 1)
+        );
+    } else {
+        panic!("Expected nested generic Array<Array<Int32>> type");
+    }
+}
+
+#[test]
+fn test_parse_generic_method_call_with_type_args() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test(x: Foo) { x.identity<Int32>() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
+        && let Expression::Call {
+            callee,
+            type_parameters,
+            ..
+        } = &*expression.borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
+    {
+        assert_eq!(member.value, "identity");
+        assert!(type_parameters.is_some());
+        let tps = type_parameters.as_ref().unwrap();
+        assert_eq!(tps.len(), 1);
+        assert!(
+            matches!(&*tps[0].borrow(), Expression::Type { name, .. } if name.value == "Int32")
+        );
+        assert!(
+            matches!(&*object.borrow(), Expression::Variable { name, .. } if name.value == "x")
+        );
+    } else {
+        panic!("Expected generic method call x.identity<Int32>()");
+    }
+}
+
+#[test]
+fn test_parse_where_clause_equality() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func same<T, U>(a: T, b: U) -> Bool where T == U".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { where_clause, .. } = &*program.statements[0].borrow() {
+        assert!(where_clause.is_some());
+        let reqs = where_clause.as_ref().unwrap();
+        assert_eq!(reqs.len(), 1);
+        assert!(matches!(
+            reqs[0].kind,
+            WhereRequirementKind::Equality { .. }
+        ));
+    } else {
+        panic!("Expected FunctionDecl with equality where clause");
+    }
+}
+
+#[test]
+fn test_parse_generic_class_with_where_clause() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Box<T> where T: Hashable { var value: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl {
+        name,
+        generic_parameters,
+        where_clause,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Box");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert!(where_clause.is_some());
+    } else {
+        panic!("Expected ClassDecl with where clause");
+    }
+}
+
+#[test]
+fn test_parse_generic_enum_with_where_clause() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Option<T> where T: Hashable { case none case some(T) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::EnumDecl {
+        name,
+        generic_parameters,
+        where_clause,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Option");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert!(where_clause.is_some());
+    } else {
+        panic!("Expected EnumDecl with where clause");
+    }
+}
+
+#[test]
+fn test_parse_generic_protocol_with_where_clause() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Container<T> where T: Equatable { func get() -> T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ProtocolDecl {
+        name,
+        generic_parameters,
+        where_clause,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Container");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert!(where_clause.is_some());
+    } else {
+        panic!("Expected ProtocolDecl with where clause");
+    }
+}
