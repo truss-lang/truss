@@ -2916,6 +2916,8 @@ impl Parser {
                 callee: Rc::new(RefCell::new(callee)),
                 type_parameters,
                 parameters,
+                overloads: vec![],
+                selected_index: None,
             })
         } else {
             self.emit_error(

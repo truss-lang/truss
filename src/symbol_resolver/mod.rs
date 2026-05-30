@@ -1212,6 +1212,8 @@ impl SymbolResolver {
                 callee,
                 type_parameters,
                 parameters,
+                overloads,
+                ..
             } => {
                 self.resolve_expression(callee.clone());
                 if let Some(type_parameters) = type_parameters {
@@ -1221,6 +1223,14 @@ impl SymbolResolver {
                 }
                 for parameter in parameters {
                     self.resolve_expression(parameter.expression.clone())
+                }
+                if let Expression::Variable { name, .. } = &*callee.borrow() {
+                    if let Some(scope) = self.current_scope.clone() {
+                        let candidates = scope.borrow().get_all_symbols(&name.value);
+                        if candidates.len() > 1 {
+                            *overloads = candidates;
+                        }
+                    }
                 }
             }
             Expression::MemberAccess { object, .. } => {

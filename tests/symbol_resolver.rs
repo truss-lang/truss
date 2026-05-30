@@ -2187,3 +2187,96 @@ fn test_module_func_call_resolves() {
         errors
     );
 }
+
+#[test]
+fn test_overloaded_functions_register_without_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(x: Int32) { x } func foo(y: Float64) { y }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("main".to_string())));
+    let mut resolver = SymbolResolver::new(krate, engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let engine_borrow = engine.borrow();
+    let errors = engine_borrow.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "overloaded functions should register without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_overloaded_struct_methods_register_without_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct S { func bar(a: Int32) { a } func bar(b: Bool) { b } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("main".to_string())));
+    let mut resolver = SymbolResolver::new(krate, engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let engine_borrow = engine.borrow();
+    let errors = engine_borrow.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "overloaded struct methods should register without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_get_all_symbols_returns_overloads() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(x: Int32) { x } func foo(y: Float64) { y } func caller() { foo(x: 1) }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("main".to_string())));
+    let mut resolver = SymbolResolver::new(krate, engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let engine_borrow = engine.borrow();
+    let errors = engine_borrow.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "overloaded function call should resolve, got: {:?}",
+        errors
+    );
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[2].borrow() {
+        if let FunctionBody::Statements(stmts) = &*body.borrow() {
+            if let Statement::ExpressionStatement { expression } = &*stmts[0].borrow() {
+                let expr = expression.borrow();
+                if let Expression::Call {
+                    callee, overloads, ..
+                } = &*expr
+                {
+                    if let Expression::Variable { name, .. } = &*callee.borrow() {
+                        assert_eq!(name.value, "foo");
+                        assert!(!overloads.is_empty(), "expected overloads to be populated");
+                    }
+                }
+            }
+        }
+    }
+}

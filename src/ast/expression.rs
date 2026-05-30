@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use crate::{
     lexer::token::{OperatorType, Position, Token, TokenType},
     scope::Scope,
-    symbol::WeakSymbol,
+    symbol::{Symbol, WeakSymbol},
     types::Type,
 };
 
@@ -68,6 +68,8 @@ pub enum Expression {
         callee: Rc<RefCell<Expression>>,
         type_parameters: Option<Vec<Rc<RefCell<Expression>>>>,
         parameters: Vec<CallParameter>,
+        overloads: Vec<Rc<RefCell<Symbol>>>,
+        selected_index: Option<usize>,
     },
     MemberAccess {
         object: Rc<RefCell<Expression>>,
