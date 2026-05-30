@@ -68,6 +68,7 @@ pub enum KeywordType {
     Defer,
     Module,
     Import,
+    Package,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -170,6 +171,7 @@ impl KeywordType {
             KeywordType::Defer => "defer",
             KeywordType::Module => "module",
             KeywordType::Import => "import",
+            KeywordType::Package => "package",
         }
         .to_string()
     }

@@ -1638,8 +1638,12 @@ fn collect_modifiers(stmt: &Statement) -> Vec<Modifier> {
         Statement::FunctionDecl { modifiers, .. }
         | Statement::VariableDecl { modifiers, .. }
         | Statement::StructDecl { modifiers, .. }
+        | Statement::ClassDecl { modifiers, .. }
+        | Statement::EnumDecl { modifiers, .. }
+        | Statement::ProtocolDecl { modifiers, .. }
         | Statement::InitDecl { modifiers, .. }
-        | Statement::DeinitDecl { modifiers, .. } => modifiers.clone(),
+        | Statement::DeinitDecl { modifiers, .. }
+        | Statement::ModuleDecl { modifiers, .. } => modifiers.clone(),
         _ => vec![],
     }
 }
@@ -1716,6 +1720,77 @@ fn test_parse_internal_struct() {
         assert_has_access_modifier(&program.statements[0].borrow(), AccessModifier::Internal);
     } else {
         panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_package_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("package func foo() {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "foo");
+        assert_has_access_modifier(&program.statements[0].borrow(), AccessModifier::Package);
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_package_variable() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("package var x: Int32".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "x");
+        assert_has_access_modifier(&program.statements[0].borrow(), AccessModifier::Package);
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_package_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("package struct Bar {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Bar");
+        assert_has_access_modifier(&program.statements[0].borrow(), AccessModifier::Package);
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_package_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "package class Point { let x: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_has_access_modifier(&program.statements[0].borrow(), AccessModifier::Package);
+    } else {
+        panic!("Expected ClassDecl");
     }
 }
 
@@ -2276,6 +2351,63 @@ fn test_triple_access_modifier() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "public internal private func foo() {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_duplicate_package_with_public() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "package public func foo() {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_duplicate_public_with_package() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public package func foo() {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine_has_error(
+        &engine,
+        TrussDiagnosticCode::DuplicateModifier
+    ));
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_duplicate_package_with_private() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "package private func foo() {}".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),

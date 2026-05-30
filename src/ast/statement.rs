@@ -252,6 +252,7 @@ pub enum AccessModifier {
     Public,
     Internal,
     Fileprivate,
+    Package,
     Private,
 }
 

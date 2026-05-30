@@ -3196,6 +3196,7 @@ impl Parser {
                 KeywordType::Internal => ModifierType::Access(AccessModifier::Internal),
                 KeywordType::Fileprivate => ModifierType::Access(AccessModifier::Fileprivate),
                 KeywordType::Private => ModifierType::Access(AccessModifier::Private),
+                KeywordType::Package => ModifierType::Access(AccessModifier::Package),
                 _ => {
                     break;
                 }

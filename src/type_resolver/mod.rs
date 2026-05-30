@@ -3567,8 +3567,11 @@ impl TypeResolver {
                 }
             }
             AccessModifier::Private => {
-                // self.is_within_owner_scope(symbol)
                 // TODO: implement is_within_owner_scope
+                true
+            }
+            AccessModifier::Package => {
+                // TODO: implement package access check
                 true
             }
         }
