@@ -3897,3 +3897,66 @@ fn test_generic_function_variable_decl_annotation() {
         ty
     );
 }
+
+#[test]
+fn test_private_struct_field_inaccessible_from_outside() {
+    let errors = run_type_check(
+        "struct Foo { private let x: Int32 }
+         func test(f: Foo) -> Int32 { return f.x }",
+    );
+    assert!(
+        errors > 0,
+        "Expected InaccessibleMember error for private field access from outside, got 0 errors"
+    );
+}
+
+#[test]
+fn test_private_struct_method_inaccessible_from_outside() {
+    let errors = run_type_check(
+        "struct Foo { private func foo() -> Int32 { return 42 } }
+         func test(f: Foo) -> Int32 { return f.foo() }",
+    );
+    assert!(
+        errors > 0,
+        "Expected InaccessibleMember error for private method access from outside, got 0 errors"
+    );
+}
+
+#[test]
+fn test_public_struct_field_accessible_from_outside() {
+    let errors = run_type_check(
+        "struct Foo { public let x: Int32 }
+         func test(f: Foo) -> Int32 { return f.x }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for public field access, got {}",
+        errors
+    );
+}
+
+#[test]
+fn test_internal_struct_field_accessible_from_outside() {
+    let errors = run_type_check(
+        "struct Foo { let x: Int32 }
+         func test(f: Foo) -> Int32 { return f.x }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for default internal field access, got {}",
+        errors
+    );
+}
+
+#[test]
+fn test_open_struct_field_accessible_from_outside() {
+    let errors = run_type_check(
+        "struct Foo { open let x: Int32 }
+         func test(f: Foo) -> Int32 { return f.x }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for open field access, got {}",
+        errors
+    );
+}

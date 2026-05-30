@@ -28,6 +28,7 @@ pub struct TypeResolver {
     current_module: Option<Rc<RefCell<Module>>>,
     current_return_type: Option<Rc<RefCell<Type>>>,
     current_scope: Option<Rc<RefCell<Scope>>>,
+    current_owner: Option<Rc<RefCell<Symbol>>>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
 }
 
@@ -38,6 +39,7 @@ impl TypeResolver {
             current_module: None,
             current_return_type: None,
             current_scope: None,
+            current_owner: None,
             engine,
         }
     }
@@ -160,6 +162,7 @@ impl TypeResolver {
                     self.infer_type(conformance.clone());
                 }
 
+                let prev_owner = self.current_owner.replace(symbol.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
@@ -227,6 +230,7 @@ impl TypeResolver {
                     self.process_decl(stmt.clone());
                 }
                 self.leave_scope();
+                self.current_owner = prev_owner;
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::ClassDecl {
@@ -264,6 +268,7 @@ impl TypeResolver {
                     self.infer_type(conformance.clone());
                 }
 
+                let prev_owner = self.current_owner.replace(symbol.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
@@ -331,6 +336,7 @@ impl TypeResolver {
                     self.process_decl(stmt.clone());
                 }
                 self.leave_scope();
+                self.current_owner = prev_owner;
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::EnumDecl {
@@ -359,6 +365,7 @@ impl TypeResolver {
                     .borrow_mut()
                     .set_type(name.value.clone(), enum_ty);
 
+                let prev_owner = self.current_owner.replace(symbol.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
@@ -440,6 +447,7 @@ impl TypeResolver {
                     self.process_decl(stmt.clone());
                 }
                 self.leave_scope();
+                self.current_owner = prev_owner;
             }
             Statement::InitDecl {
                 parameters,
@@ -2170,7 +2178,7 @@ impl TypeResolver {
                                 fields, methods, ..
                             } = &*symbol.borrow()
                         {
-                            if !self.is_member_accessible(&symbol.borrow(), member) {
+                            if !self.is_member_accessible(symbol.clone(), member) {
                                 self.emit_error(
                                     TrussDiagnosticCode::InaccessibleMember,
                                     format!(
@@ -2198,6 +2206,34 @@ impl TypeResolver {
                                         &*decl.borrow()
                                     && let Some(t) = field_ty
                                 {
+                                    if !self.is_member_symbol_accessible(field.clone(), member) {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::InaccessibleMember,
+                                            format!(
+                                                "'{}' is inaccessible due to '{}' level",
+                                                member.value,
+                                                field
+                                                    .borrow()
+                                                    .get_decl()
+                                                    .ok()
+                                                    .flatten()
+                                                    .map(|d| {
+                                                        d.borrow().access_modifier().map_or(
+                                                            String::from("internal"),
+                                                            |m| {
+                                                                m.map(|m| m.token.value.clone())
+                                                                    .unwrap_or(String::from(
+                                                                        "internal",
+                                                                    ))
+                                                            },
+                                                        )
+                                                    })
+                                                    .unwrap_or(String::from("internal"))
+                                            ),
+                                            member,
+                                        );
+                                        return None;
+                                    }
                                     *ty = Some(t.clone());
                                     return Some(t.clone());
                                 }
@@ -2206,6 +2242,34 @@ impl TypeResolver {
                                 if method.borrow().name().as_ref().ok() == Some(&member.value)
                                     && let Some(decl) = method.borrow().get_decl().ok().flatten()
                                 {
+                                    if !self.is_member_symbol_accessible(method.clone(), member) {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::InaccessibleMember,
+                                            format!(
+                                                "'{}' is inaccessible due to '{}' level",
+                                                member.value,
+                                                method
+                                                    .borrow()
+                                                    .get_decl()
+                                                    .ok()
+                                                    .flatten()
+                                                    .map(|d| {
+                                                        d.borrow().access_modifier().map_or(
+                                                            String::from("internal"),
+                                                            |m| {
+                                                                m.map(|m| m.token.value.clone())
+                                                                    .unwrap_or(String::from(
+                                                                        "internal",
+                                                                    ))
+                                                            },
+                                                        )
+                                                    })
+                                                    .unwrap_or(String::from("internal"))
+                                            ),
+                                            member,
+                                        );
+                                        return None;
+                                    }
                                     let method_ty = {
                                         let decl_ref = decl.borrow();
                                         if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
@@ -2268,7 +2332,7 @@ impl TypeResolver {
                                     return None;
                                 }
                             };
-                            if !self.is_member_accessible(&symbol.borrow(), member) {
+                            if !self.is_member_accessible(symbol.clone(), member) {
                                 self.emit_error(
                                     TrussDiagnosticCode::InaccessibleMember,
                                     format!(
@@ -2296,6 +2360,34 @@ impl TypeResolver {
                                         &*decl.borrow()
                                     && let Some(t) = field_ty
                                 {
+                                    if !self.is_member_symbol_accessible(field.clone(), member) {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::InaccessibleMember,
+                                            format!(
+                                                "'{}' is inaccessible due to '{}' level",
+                                                member.value,
+                                                field
+                                                    .borrow()
+                                                    .get_decl()
+                                                    .ok()
+                                                    .flatten()
+                                                    .map(|d| {
+                                                        d.borrow().access_modifier().map_or(
+                                                            String::from("internal"),
+                                                            |m| {
+                                                                m.map(|m| m.token.value.clone())
+                                                                    .unwrap_or(String::from(
+                                                                        "internal",
+                                                                    ))
+                                                            },
+                                                        )
+                                                    })
+                                                    .unwrap_or(String::from("internal"))
+                                            ),
+                                            member,
+                                        );
+                                        return None;
+                                    }
                                     *ty = Some(t.clone());
                                     return Some(t.clone());
                                 }
@@ -2304,6 +2396,34 @@ impl TypeResolver {
                                 if method.borrow().name().as_ref().ok() == Some(&member.value)
                                     && let Some(decl) = method.borrow().get_decl().ok().flatten()
                                 {
+                                    if !self.is_member_symbol_accessible(method.clone(), member) {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::InaccessibleMember,
+                                            format!(
+                                                "'{}' is inaccessible due to '{}' level",
+                                                member.value,
+                                                method
+                                                    .borrow()
+                                                    .get_decl()
+                                                    .ok()
+                                                    .flatten()
+                                                    .map(|d| {
+                                                        d.borrow().access_modifier().map_or(
+                                                            String::from("internal"),
+                                                            |m| {
+                                                                m.map(|m| m.token.value.clone())
+                                                                    .unwrap_or(String::from(
+                                                                        "internal",
+                                                                    ))
+                                                            },
+                                                        )
+                                                    })
+                                                    .unwrap_or(String::from("internal"))
+                                            ),
+                                            member,
+                                        );
+                                        return None;
+                                    }
                                     let method_ty = {
                                         let decl_ref = decl.borrow();
                                         if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
@@ -3544,21 +3664,68 @@ impl TypeResolver {
         }
     }
 
-    fn is_member_accessible(&self, symbol: &Symbol, member_token: &Token) -> bool {
-        let Some(access) = symbol.get_decl().ok().flatten().and_then(|decl| {
-            decl.borrow()
-                .modifiers()
-                .unwrap()
-                .iter()
-                .find(|m| matches!(m.ty, ModifierType::Access(_)))
-                .cloned()
-        }) else {
-            return true;
+    fn is_member_accessible(&self, container: Rc<RefCell<Symbol>>, member_token: &Token) -> bool {
+        let access_modifier = {
+            let symbol = container.borrow();
+            let Some(m) = symbol.get_decl().ok().flatten().and_then(|decl| {
+                decl.borrow()
+                    .modifiers()
+                    .unwrap()
+                    .iter()
+                    .find(|m| matches!(m.ty, ModifierType::Access(_)))
+                    .cloned()
+            }) else {
+                return true;
+            };
+            m.ty
         };
-        let ModifierType::Access(access) = access.ty;
+        let ModifierType::Access(access) = access_modifier;
         match access {
             AccessModifier::Open | AccessModifier::Public | AccessModifier::Internal => true,
             AccessModifier::Fileprivate => {
+                let symbol = container.borrow();
+                if let Some(decl) = symbol.get_decl().ok().flatten() {
+                    let decl_file = decl.borrow().token().file;
+                    member_token.file == decl_file
+                } else {
+                    true
+                }
+            }
+            AccessModifier::Private => self
+                .current_owner
+                .as_ref()
+                .map_or(false, |owner| Rc::ptr_eq(owner, &container)),
+            AccessModifier::Package => {
+                // TODO: implement package access check
+                true
+            }
+        }
+    }
+
+    fn is_member_symbol_accessible(
+        &self,
+        member: Rc<RefCell<Symbol>>,
+        member_token: &Token,
+    ) -> bool {
+        let access_modifier = {
+            let symbol = member.borrow();
+            let Some(m) = symbol.get_decl().ok().flatten().and_then(|decl| {
+                decl.borrow()
+                    .modifiers()
+                    .unwrap()
+                    .iter()
+                    .find(|m| matches!(m.ty, ModifierType::Access(_)))
+                    .cloned()
+            }) else {
+                return true;
+            };
+            m.ty
+        };
+        let ModifierType::Access(access) = access_modifier;
+        match access {
+            AccessModifier::Open | AccessModifier::Public | AccessModifier::Internal => true,
+            AccessModifier::Fileprivate => {
+                let symbol = member.borrow();
                 if let Some(decl) = symbol.get_decl().ok().flatten() {
                     let decl_file = decl.borrow().token().file;
                     member_token.file == decl_file
@@ -3567,8 +3734,12 @@ impl TypeResolver {
                 }
             }
             AccessModifier::Private => {
-                // TODO: implement is_within_owner_scope
-                true
+                let parent = member.borrow().parent();
+                parent.is_some()
+                    && self
+                        .current_owner
+                        .as_ref()
+                        .map_or(false, |owner| Rc::ptr_eq(owner, &parent.unwrap()))
             }
             AccessModifier::Package => {
                 // TODO: implement package access check
