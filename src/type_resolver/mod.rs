@@ -1569,7 +1569,11 @@ impl TypeResolver {
                 }
             }
             Expression::Call {
-                callee, parameters, ..
+                callee,
+                parameters,
+                overloads,
+                selected_index,
+                ..
             } => {
                 let callee_type = self.infer_type(callee.clone());
 
@@ -1582,6 +1586,19 @@ impl TypeResolver {
                 });
 
                 let callee_type = callee_type?;
+
+                if !overloads.is_empty() {
+                    if let Some(best) = self.resolve_overloaded_call(
+                        callee.clone(),
+                        parameters,
+                        overloads,
+                        selected_index,
+                    ) {
+                        return Some(best);
+                    }
+                    return None;
+                }
+
                 match &*callee_type.borrow() {
                     Type::Function(param_tys, ret_ty, is_vararg) => {
                         if !*is_vararg && parameters.len() != param_tys.len() {
@@ -2988,6 +3005,173 @@ impl TypeResolver {
                 }
             }
             _ => None,
+        }
+    }
+
+    fn get_fn_info_from_symbol(
+        &self,
+        sym: Rc<RefCell<Symbol>>,
+    ) -> Option<(
+        Vec<Rc<RefCell<Type>>>,
+        Rc<RefCell<Type>>,
+        bool,
+        Rc<RefCell<Statement>>,
+    )> {
+        let decl = sym.borrow().get_decl().ok()??;
+        let decl_borrow = decl.borrow();
+        if let Statement::FunctionDecl {
+            ty: Some(fn_type), ..
+        } = &*decl_borrow
+        {
+            let fn_borrow = fn_type.borrow();
+            if let Type::Function(param_tys, ret_ty, is_vararg) = &*fn_borrow {
+                return Some((param_tys.clone(), ret_ty.clone(), *is_vararg, decl.clone()));
+            }
+        }
+        None
+    }
+
+    fn resolve_overloaded_call(
+        &mut self,
+        callee: Rc<RefCell<Expression>>,
+        parameters: &[CallParameter],
+        overloads: &[Rc<RefCell<Symbol>>],
+        selected_index: &mut Option<usize>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let mut best_idx: Option<usize> = None;
+        let mut best_info: Option<(
+            Vec<Rc<RefCell<Type>>>,
+            Rc<RefCell<Type>>,
+            bool,
+            Rc<RefCell<Statement>>,
+        )> = None;
+
+        for (i, sym) in overloads.iter().enumerate() {
+            let Some((param_tys, ret_ty, is_vararg, decl)) =
+                self.get_fn_info_from_symbol(sym.clone())
+            else {
+                continue;
+            };
+
+            if !is_vararg && parameters.len() != param_tys.len() {
+                continue;
+            }
+            if is_vararg && parameters.len() < param_tys.len() {
+                continue;
+            }
+
+            let mut all_match = true;
+            for (j, call_param) in parameters.iter().enumerate() {
+                if j >= param_tys.len() {
+                    break;
+                }
+                let inferred = self.infer_type(call_param.expression.clone());
+                let Some(arg_ty) = inferred else {
+                    all_match = false;
+                    break;
+                };
+                let expected_ty = &param_tys[j];
+                if !Self::types_are_type_compatible(&arg_ty.borrow(), &expected_ty.borrow()) {
+                    all_match = false;
+                    break;
+                }
+            }
+
+            if !all_match {
+                continue;
+            }
+
+            if best_idx.is_some() {
+                let token = &callee.borrow().token();
+                self.emit_error(
+                    TrussDiagnosticCode::AmbiguousOverload,
+                    "Call is ambiguous: multiple overloads match the provided arguments",
+                    token,
+                );
+                return None;
+            }
+
+            best_idx = Some(i);
+            best_info = Some((param_tys, ret_ty, is_vararg, decl));
+        }
+
+        if let Some(idx) = best_idx {
+            *selected_index = Some(idx);
+            if let Some((param_tys, ret_ty, _is_vararg, decl)) = best_info {
+                for (i, param) in parameters.iter().enumerate() {
+                    if i < param_tys.len() {
+                        let expected_ty = param_tys[i].clone();
+                        self.infer_expression_type(param.expression.clone(), expected_ty);
+                        self.check_parameter_label(param, &decl, i);
+                    }
+                }
+                Some(ret_ty)
+            } else {
+                None
+            }
+        } else {
+            let token = &callee.borrow().token();
+            self.emit_error(
+                TrussDiagnosticCode::NoMatchingOverload,
+                "No matching overload found for the provided arguments",
+                token,
+            );
+            None
+        }
+    }
+
+    fn types_are_type_compatible(a: &Type, b: &Type) -> bool {
+        match (a, b) {
+            (Type::Int8, Type::Int8)
+            | (Type::Int16, Type::Int16)
+            | (Type::Int32, Type::Int32)
+            | (Type::Int64, Type::Int64)
+            | (Type::Int128, Type::Int128)
+            | (Type::UInt8, Type::UInt8)
+            | (Type::UInt16, Type::UInt16)
+            | (Type::UInt32, Type::UInt32)
+            | (Type::UInt64, Type::UInt64)
+            | (Type::UInt128, Type::UInt128)
+            | (Type::Float32, Type::Float32)
+            | (Type::Float64, Type::Float64)
+            | (Type::Bool, Type::Bool)
+            | (Type::Char, Type::Char)
+            | (Type::Void, Type::Void)
+            | (Type::Never, Type::Never) => true,
+            (Type::Struct(n1, _), Type::Struct(n2, _))
+            | (Type::Class(n1, _), Type::Class(n2, _))
+            | (Type::Enum(n1, _), Type::Enum(n2, _))
+            | (Type::Protocol(n1, _), Type::Protocol(n2, _)) => n1 == n2,
+            (Type::Pointer(t1), Type::Pointer(t2)) => {
+                Self::types_are_type_compatible(&t1.borrow(), &t2.borrow())
+            }
+            (Type::Tuple(e1), Type::Tuple(e2)) => {
+                e1.len() == e2.len()
+                    && e1.iter().zip(e2.iter()).all(|((_, t1), (_, t2))| {
+                        Self::types_are_type_compatible(&t1.borrow(), &t2.borrow())
+                    })
+            }
+            (Type::Function(p1, r1, v1), Type::Function(p2, r2, v2)) => {
+                v1 == v2
+                    && p1.len() == p2.len()
+                    && p1
+                        .iter()
+                        .zip(p2.iter())
+                        .all(|(t1, t2)| Self::types_are_type_compatible(&t1.borrow(), &t2.borrow()))
+                    && Self::types_are_type_compatible(&r1.borrow(), &r2.borrow())
+            }
+            (Type::GenericParam(n1), Type::GenericParam(n2)) => n1 == n2,
+            (Type::AssociatedType(t1, n1), Type::AssociatedType(t2, n2)) => {
+                n1 == n2 && Self::types_are_type_compatible(&t1.borrow(), &t2.borrow())
+            }
+            (Type::Compound(t1), Type::Compound(t2)) => {
+                t1.len() == t2.len()
+                    && t1
+                        .iter()
+                        .zip(t2.iter())
+                        .all(|(t1, t2)| Self::types_are_type_compatible(&t1.borrow(), &t2.borrow()))
+            }
+            _ => false,
         }
     }
 

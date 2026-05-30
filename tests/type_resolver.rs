@@ -3563,3 +3563,73 @@ fn test_module_with_full_pipeline_no_error() {
         errors
     );
 }
+
+#[test]
+fn test_overloaded_function_call_selects_correct_overload() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } func caller() -> Float64 { foo(y: 3.0) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "overloaded call should resolve, got: {:?}",
+        errors
+    );
+
+    let caller_stmt = program.statements[2].borrow();
+    if let Statement::FunctionDecl { body, .. } = &*caller_stmt {
+        if let FunctionBody::Statements(stmts) = &*body.borrow() {
+            if let Statement::ExpressionStatement { expression } = &*stmts[0].borrow() {
+                let expr = expression.borrow();
+                if let Expression::Call { selected_index, .. } = &*expr {
+                    assert_eq!(
+                        *selected_index,
+                        Some(1),
+                        "should select foo(y: Float64) overload"
+                    );
+                } else {
+                    panic!("Expected Call expression");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_overloaded_function_call_no_match_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } func caller() -> Int32 { foo(x: true) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "expected NoMatchingOverload error for bool arg to overloaded foo"
+    );
+}

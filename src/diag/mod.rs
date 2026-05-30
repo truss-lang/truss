@@ -53,6 +53,8 @@ pub enum TrussDiagnosticCode {
     FieldNotFound,
     InaccessibleMember,
     ProtocolRequirementNotImplemented,
+    NoMatchingOverload,
+    AmbiguousOverload,
 
     IRError,
     UnsupportedFeature,
@@ -113,6 +115,9 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::FieldNotFound => "E0315",
             Self::InaccessibleMember => "E0316",
             Self::ProtocolRequirementNotImplemented => "E0317",
+
+            Self::NoMatchingOverload => "E0318",
+            Self::AmbiguousOverload => "E0319",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",
