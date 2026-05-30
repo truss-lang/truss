@@ -2410,3 +2410,280 @@ fn test_import_wildcard_with_module_decl() {
     );
     assert_eq!(statements.len(), 3);
 }
+
+#[test]
+fn test_generic_function_with_constrained_param_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func compare<T: Equatable>(a: T, b: T) -> Bool { return true }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic function with constrained param should resolve without errors, got: {:?}",
+        errors
+    );
+    if let Statement::FunctionDecl {
+        name,
+        generic_parameters,
+        scope,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "compare");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert_eq!(generic_parameters[0].constraints.len(), 1);
+        assert!(scope.is_some());
+        let scope_ref = scope.as_ref().unwrap().borrow();
+        let t_type = scope_ref.get_type("T");
+        assert!(t_type.is_some(), "Generic param T should be in type_env");
+        if let Some(t) = t_type {
+            assert_eq!(
+                t.borrow().clone(),
+                truss::types::Type::GenericParam("T".to_string())
+            );
+        }
+    } else {
+        panic!("Expected FunctionDecl with generic parameters");
+    }
+}
+
+#[test]
+fn test_generic_function_with_where_clause_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo<T>(x: T) -> T where T: Equatable { return x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic function with where clause should resolve without errors, got: {:?}",
+        errors
+    );
+    if let Statement::FunctionDecl {
+        name,
+        generic_parameters,
+        where_clause,
+        scope,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "foo");
+        assert_eq!(generic_parameters.len(), 1);
+        assert!(where_clause.is_some());
+        assert!(scope.is_some());
+        let t_type = scope.as_ref().unwrap().borrow().get_type("T");
+        assert!(t_type.is_some());
+    } else {
+        panic!("Expected FunctionDecl with where clause");
+    }
+}
+
+#[test]
+fn test_generic_struct_type_param_in_scope() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Stack<Element> { var items: Array<Element> }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic struct should resolve without errors, got: {:?}",
+        errors
+    );
+    if let Statement::StructDecl {
+        name,
+        generic_parameters,
+        scope,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Stack");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "Element");
+        assert!(scope.is_some());
+        let elem_type = scope.as_ref().unwrap().borrow().get_type("Element");
+        assert!(
+            elem_type.is_some(),
+            "Generic param Element should be in struct scope type_env"
+        );
+        if let Some(t) = elem_type {
+            assert_eq!(
+                t.borrow().clone(),
+                truss::types::Type::GenericParam("Element".to_string())
+            );
+        }
+    } else {
+        panic!("Expected StructDecl with generic parameters");
+    }
+}
+
+#[test]
+fn test_generic_function_multi_param_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic function with multiple params should resolve without errors, got: {:?}",
+        errors
+    );
+    if let Statement::FunctionDecl {
+        name,
+        generic_parameters,
+        scope,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "pair");
+        assert_eq!(generic_parameters.len(), 2);
+        assert!(scope.is_some());
+        let scope_ref = scope.as_ref().unwrap().borrow();
+        assert!(
+            scope_ref.get_type("A").is_some(),
+            "Generic param A should be in type_env"
+        );
+        assert!(
+            scope_ref.get_type("B").is_some(),
+            "Generic param B should be in type_env"
+        );
+    } else {
+        panic!("Expected FunctionDecl with multiple generic parameters");
+    }
+}
+
+#[test]
+fn test_generic_protocol_with_assoc_types_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Container<T> { func get() -> T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic protocol should resolve without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_generic_class_with_where_clause_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Box<T> where T: Hashable { var value: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Generic class with where clause should resolve without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_nested_generic_type_in_body_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: Array<Array<Int32>> }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Nested generic type Array<Array<Int32>> should resolve without errors, got: {:?}",
+        errors
+    );
+}
