@@ -3790,3 +3790,110 @@ fn test_import_deep_nested_call() {
         errors
     );
 }
+
+fn run_type_check_var_in_func(code: &str, func_name: &str, var_name: &str) -> Type {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+
+    for stmt in &program.statements {
+        if let Statement::FunctionDecl { name, body, .. } = &*stmt.borrow()
+            && name.value == func_name
+            && let FunctionBody::Statements(statements) = &*body.borrow()
+        {
+            for s in statements {
+                if let Statement::VariableDecl { name, ty, .. } = &*s.borrow()
+                    && name.value == var_name
+                {
+                    return ty.as_ref().unwrap().borrow().clone();
+                }
+            }
+        }
+    }
+    panic!("Variable {} not found in function {}", var_name, func_name);
+}
+
+#[test]
+fn test_generic_function_infer_from_arg() {
+    let ty = run_type_check_var_in_func(
+        "func identity<T>(x: T) -> T { return x }
+         func test() -> Int32 { let a = identity(42) return a }",
+        "test",
+        "a",
+    );
+    assert_eq!(
+        ty,
+        Type::Int32,
+        "Variable 'a' = identity(42) should be Int32, got {}",
+        ty
+    );
+}
+
+#[test]
+fn test_generic_function_infer_from_bool_arg() {
+    let ty = run_type_check_var_in_func(
+        "func identity<T>(x: T) -> T { return x }
+         func test() -> Bool { let a = identity(true) return a }",
+        "test",
+        "a",
+    );
+    assert_eq!(
+        ty,
+        Type::Bool,
+        "Variable 'a' = identity(true) should be Bool, got {}",
+        ty
+    );
+}
+
+#[test]
+fn test_generic_function_explicit_type_arg() {
+    let ty = run_type_check_var_in_func(
+        "func identity<T>(x: T) -> T { return x }
+         func test() -> Int32 { let a = identity<Int32>(42) return a }",
+        "test",
+        "a",
+    );
+    assert_eq!(
+        ty,
+        Type::Int32,
+        "Variable 'a' = identity<Int32>(42) should be Int32, got {}",
+        ty
+    );
+}
+
+#[test]
+fn test_generic_function_type_mismatch_error() {
+    let errors = run_type_check(
+        "func same<T>(x: T, y: T) -> T { return x }
+         func test() -> Int32 { return same(42, true) }",
+    );
+    assert!(
+        errors > 0,
+        "same(42, true) should produce a type mismatch error since T cannot be both Int32 and Bool"
+    );
+}
+
+#[test]
+fn test_generic_function_variable_decl_annotation() {
+    let ty = run_type_check_var_in_func(
+        "func identity<T>(x: T) -> T { return x }
+         func test() -> Int32 { let a: Int32 = identity(42) return a }",
+        "test",
+        "a",
+    );
+    assert_eq!(
+        ty,
+        Type::Int32,
+        "Variable 'a' from identity(42) annotated as Int32 should be Int32, got {}",
+        ty
+    );
+}

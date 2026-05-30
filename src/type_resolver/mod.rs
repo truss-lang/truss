@@ -1583,6 +1583,7 @@ impl TypeResolver {
             }
             Expression::Call {
                 callee,
+                type_parameters,
                 parameters,
                 overloads,
                 selected_index,
@@ -1660,19 +1661,94 @@ impl TypeResolver {
                             );
                         }
 
-                        let func_decl = self.get_function_decl_from_callee(callee.clone());
+                        let generic_mapping = {
+                            let mut mapping: std::collections::HashMap<String, Rc<RefCell<Type>>> =
+                                std::collections::HashMap::new();
+                            let has_generic_param = param_tys
+                                .iter()
+                                .any(|pt| matches!(&*pt.borrow(), Type::GenericParam(_)));
+                            if has_generic_param
+                                && type_parameters.is_some()
+                                && !type_parameters.as_ref().unwrap().is_empty()
+                            {
+                                let func_decl_opt =
+                                    self.get_function_decl_from_callee(callee.clone());
+                                let func_decl = func_decl_opt.or_else(|| {
+                                    if let Expression::Variable { name, .. } = &*callee.borrow() {
+                                        let scope_ref = self.current_scope.as_ref()?.borrow();
+                                        let sym = scope_ref.get_symbol(&name.value)?;
+                                        sym.borrow().get_decl().ok().flatten()
+                                    } else {
+                                        None
+                                    }
+                                });
+                                if let Some(ref decl) = func_decl {
+                                    let tp = type_parameters.clone();
+                                    self.infer_generic_params_from_call(
+                                        decl, &tp, param_tys, parameters,
+                                    )
+                                } else {
+                                    None
+                                }
+                            } else if has_generic_param {
+                                for (i, param) in parameters.iter().enumerate() {
+                                    if i >= param_tys.len() {
+                                        break;
+                                    }
+                                    let param_ty = &param_tys[i];
+                                    let arg_ty = self.infer_type(param.expression.clone())?;
+                                    Self::collect_generic_mappings(
+                                        param_ty.clone(),
+                                        arg_ty,
+                                        &mut mapping,
+                                    );
+                                }
+                                if mapping.is_empty() {
+                                    None
+                                } else {
+                                    Some(mapping)
+                                }
+                            } else {
+                                None
+                            }
+                        };
+
+                        let resolved_ret_ty = if let Some(ref mapping) = generic_mapping {
+                            Self::substitute_generic_params(ret_ty.clone(), mapping)
+                        } else {
+                            ret_ty.clone()
+                        };
 
                         for (i, param) in parameters.iter().enumerate() {
                             if i < param_tys.len() {
-                                let expected_ty = param_tys[i].clone();
+                                let expected_ty = if let Some(ref mapping) = generic_mapping {
+                                    Self::substitute_generic_params(param_tys[i].clone(), mapping)
+                                } else {
+                                    param_tys[i].clone()
+                                };
                                 self.infer_expression_type(param.expression.clone(), expected_ty);
 
-                                if let Some(ref decl) = func_decl {
+                                if let Some(ref decl) = {
+                                    self.get_function_decl_from_callee(callee.clone()).or_else(
+                                        || {
+                                            if let Expression::Variable { name, .. } =
+                                                &*callee.borrow()
+                                            {
+                                                let scope_ref =
+                                                    self.current_scope.as_ref()?.borrow();
+                                                let sym = scope_ref.get_symbol(&name.value)?;
+                                                sym.borrow().get_decl().ok().flatten()
+                                            } else {
+                                                None
+                                            }
+                                        },
+                                    )
+                                } {
                                     self.check_parameter_label(param, decl, i);
                                 }
                             }
                         }
-                        ret_ty.clone()
+                        resolved_ret_ty
                     }
                     Type::Struct(struct_name, _) => {
                         let init_params_info = {
@@ -2847,6 +2923,147 @@ impl TypeResolver {
                 | Type::Float32
                 | Type::Float64
         )
+    }
+
+    fn substitute_generic_params(
+        ty: Rc<RefCell<Type>>,
+        mapping: &std::collections::HashMap<String, Rc<RefCell<Type>>>,
+    ) -> Rc<RefCell<Type>> {
+        let borrowed = ty.borrow();
+        match borrowed.clone() {
+            Type::GenericParam(name) => {
+                drop(borrowed);
+                if let Some(concrete) = mapping.get(&name) {
+                    concrete.clone()
+                } else {
+                    ty.clone()
+                }
+            }
+            Type::Function(param_tys, ret_ty, is_vararg) => {
+                drop(borrowed);
+                let new_params: Vec<Rc<RefCell<Type>>> = param_tys
+                    .iter()
+                    .map(|p| Self::substitute_generic_params(p.clone(), mapping))
+                    .collect();
+                let new_ret = Self::substitute_generic_params(ret_ty.clone(), mapping);
+                Rc::new(RefCell::new(Type::Function(new_params, new_ret, is_vararg)))
+            }
+            Type::Pointer(base) => {
+                drop(borrowed);
+                let new_base = Self::substitute_generic_params(base.clone(), mapping);
+                Rc::new(RefCell::new(Type::Pointer(new_base)))
+            }
+            Type::Tuple(elements) => {
+                drop(borrowed);
+                let new_elements: Vec<(Option<String>, Rc<RefCell<Type>>)> = elements
+                    .into_iter()
+                    .map(|(name, t)| (name, Self::substitute_generic_params(t, mapping)))
+                    .collect();
+                Rc::new(RefCell::new(Type::Tuple(new_elements)))
+            }
+            Type::Compound(types) => {
+                drop(borrowed);
+                let new_types: Vec<Rc<RefCell<Type>>> = types
+                    .into_iter()
+                    .map(|t| Self::substitute_generic_params(t, mapping))
+                    .collect();
+                Rc::new(RefCell::new(Type::Compound(new_types)))
+            }
+            Type::AssociatedType(base, name) => {
+                drop(borrowed);
+                let new_base = Self::substitute_generic_params(base.clone(), mapping);
+                Rc::new(RefCell::new(Type::AssociatedType(new_base, name)))
+            }
+            other => {
+                drop(borrowed);
+                Rc::new(RefCell::new(other))
+            }
+        }
+    }
+
+    fn infer_generic_params_from_call(
+        &mut self,
+        func_decl: &Rc<RefCell<Statement>>,
+        type_parameters: &Option<Vec<Rc<RefCell<Expression>>>>,
+        param_tys: &[Rc<RefCell<Type>>],
+        parameters: &[CallParameter],
+    ) -> Option<std::collections::HashMap<String, Rc<RefCell<Type>>>> {
+        let decl = func_decl.borrow();
+        let generic_params = match &*decl {
+            Statement::FunctionDecl {
+                generic_parameters, ..
+            } => generic_parameters,
+            _ => return None,
+        };
+
+        if generic_params.is_empty() {
+            return None;
+        }
+
+        let mut mapping: std::collections::HashMap<String, Rc<RefCell<Type>>> =
+            std::collections::HashMap::new();
+
+        if let Some(explicit_tps) = type_parameters {
+            for (i, tp_expr) in explicit_tps.iter().enumerate() {
+                if i >= generic_params.len() {
+                    break;
+                }
+                let tp_ty = self.infer_type(tp_expr.clone())?;
+                mapping.insert(generic_params[i].name.value.clone(), tp_ty);
+            }
+            return Some(mapping);
+        }
+
+        for (i, param) in parameters.iter().enumerate() {
+            if i >= param_tys.len() {
+                break;
+            }
+            let param_ty = &param_tys[i];
+            let arg_ty = self.infer_type(param.expression.clone())?;
+
+            Self::collect_generic_mappings(param_ty.clone(), arg_ty, &mut mapping);
+        }
+
+        if mapping.is_empty() {
+            return None;
+        }
+        Some(mapping)
+    }
+
+    fn collect_generic_mappings(
+        param_ty: Rc<RefCell<Type>>,
+        arg_ty: Rc<RefCell<Type>>,
+        mapping: &mut std::collections::HashMap<String, Rc<RefCell<Type>>>,
+    ) {
+        let p_clone = param_ty.borrow().clone();
+        let a_clone = arg_ty.borrow().clone();
+        match (&p_clone, &a_clone) {
+            (Type::GenericParam(name), _) => {
+                if !mapping.contains_key(name) {
+                    mapping.insert(name.clone(), arg_ty.clone());
+                }
+            }
+            (Type::Function(p1, r1, _), Type::Function(p2, r2, _)) => {
+                for (pt, at) in p1.iter().zip(p2.iter()) {
+                    Self::collect_generic_mappings(pt.clone(), at.clone(), mapping);
+                }
+                Self::collect_generic_mappings(r1.clone(), r2.clone(), mapping);
+            }
+            (Type::Pointer(b1), Type::Pointer(b2)) => {
+                Self::collect_generic_mappings(b1.clone(), b2.clone(), mapping);
+            }
+            (Type::Tuple(e1), Type::Tuple(e2)) => {
+                for ((_, t1), (_, t2)) in e1.iter().zip(e2.iter()) {
+                    Self::collect_generic_mappings(t1.clone(), t2.clone(), mapping);
+                }
+            }
+            (Type::Compound(t1), Type::Compound(t2)) => {
+                for (t1, t2) in t1.iter().zip(t2.iter()) {
+                    Self::collect_generic_mappings(t1.clone(), t2.clone(), mapping);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn infer_expression_type(
