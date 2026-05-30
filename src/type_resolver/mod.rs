@@ -813,6 +813,15 @@ impl TypeResolver {
                     }
                 }
             }
+            Statement::ModuleDecl { body, scope, .. } => {
+                if let Some(s) = scope.clone() {
+                    self.enter_scope(s);
+                    for stmt in body {
+                        self.process_decl(stmt.clone());
+                    }
+                    self.leave_scope();
+                }
+            }
             _ => {}
         }
     }
@@ -1274,6 +1283,15 @@ impl TypeResolver {
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
             Statement::Defer { body, .. } => {
                 self.resolve_block_expression(body.clone());
+            }
+            Statement::ModuleDecl { body, scope, .. } => {
+                if let Some(s) = scope.clone() {
+                    self.enter_scope(s);
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                    self.leave_scope();
+                }
             }
             _ => {}
         }

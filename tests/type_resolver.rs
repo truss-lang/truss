@@ -3400,3 +3400,166 @@ fn test_match_multi_pattern_with_guard_type_check() {
         errors
     );
 }
+
+#[test]
+fn test_module_func_body_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let module_id = krate.borrow().modules.get("foo").cloned().unwrap();
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "module func body should type check, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_module_return_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { func bar() -> Int32 { 42 } func baz() -> Int32 { bar() } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let module_id = krate.borrow().modules.get("foo").cloned().unwrap();
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "module func calling another func should type check, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_module_variable_decl_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { func bar() -> Int32 { let a: Int32 = 42 return a } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let module_id = krate.borrow().modules.get("foo").cloned().unwrap();
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "module variable decl should type check, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_nested_module_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { module bar { func baz() -> Int32 { 42 } } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let module_id = krate.borrow().modules.get("foo.bar").cloned().unwrap();
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "nested module func should type check, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_empty_module_no_type_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module foo { }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let module_id = krate.borrow().modules.get("foo").cloned().unwrap();
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "empty module should type check without errors"
+    );
+}
+
+#[test]
+fn test_module_with_full_pipeline_no_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { func add(_ a: Int32, _ b: Int32) -> Int32 { a + b } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let root_module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, root_module);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "full pipeline with module should resolve, got: {:?}",
+        errors
+    );
+}
