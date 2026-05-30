@@ -2379,7 +2379,10 @@ impl Parser {
                 Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
                     self.index += 1;
                     if let Some(ref star) = self.peek() {
-                        if let TokenType::Operator { operator: OperatorType::Multiply } = star.ty {
+                        if let TokenType::Operator {
+                            operator: OperatorType::Multiply,
+                        } = star.ty
+                        {
                             self.index += 1;
                             wildcard = true;
                             break;

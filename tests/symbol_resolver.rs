@@ -2280,3 +2280,133 @@ fn test_get_all_symbols_returns_overloads() {
         }
     }
 }
+
+fn run_resolver(
+    code: &str,
+) -> (
+    Vec<Rc<RefCell<Statement>>>,
+    Rc<RefCell<TrussDiagnosticEngine>>,
+    Rc<RefCell<Crate>>,
+) {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    (program.statements, engine, krate)
+}
+
+#[test]
+fn test_import_module_symbol() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo
+         func test() -> Int32 { return Foo.bar() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for valid import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_module_member() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import Foo.Bar.baz
+         func test() -> Int32 { return baz() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for valid member import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_module_wildcard() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo.*
+         func test() -> Int32 { return bar() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for wildcard import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_module_not_found() {
+    let (statements, engine, _krate) = run_resolver(
+        "import NonExistent
+         func test() -> Int32 { return 42 }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert!(errors > 0, "Expected error for non-existent module import");
+    assert_eq!(statements.len(), 2);
+}
+
+#[test]
+fn test_import_nested_module() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import Foo
+         func test() -> Int32 { return Foo.Bar.baz() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for nested module import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_deep_nested_member() {
+    let (statements, engine, _krate) = run_resolver(
+        "module A { module B { module C { func foo() -> Int32 { return 1 } } } }
+         import A.B.C.foo
+         func test() -> Int32 { return foo() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for deep nested member import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_wildcard_with_module_decl() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Math {
+            func add(a: Int32, b: Int32) -> Int32 { return a + b }
+            func sub(a: Int32, b: Int32) -> Int32 { return a - b }
+         }
+         import Math.*
+         func test() -> Int32 { return add(1, 2) }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for wildcard import with multiple functions, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}

@@ -5966,10 +5966,7 @@ fn test_parse_import_wildcard() {
 fn test_parse_import_member_deep() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "import A.B.C.D.foo".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("import A.B.C.D.foo".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -6054,4 +6051,3 @@ fn test_parse_multiple_imports() {
         panic!("Expected ImportDecl");
     }
 }
-
