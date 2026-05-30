@@ -66,6 +66,7 @@ pub enum KeywordType {
     Break,
     Fallthrough,
     Defer,
+    Module,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -166,6 +167,7 @@ impl KeywordType {
             KeywordType::Break => "break",
             KeywordType::Fallthrough => "fallthrough",
             KeywordType::Defer => "defer",
+            KeywordType::Module => "module",
         }
         .to_string()
     }

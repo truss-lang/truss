@@ -5552,3 +5552,290 @@ fn test_parse_match_multi_pattern_with_guard() {
         panic!("Expected Match with guard on multi-pattern case");
     }
 }
+
+#[test]
+fn test_parse_empty_module() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module foo {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    let stmt = program.statements[0].borrow();
+    if let Statement::ModuleDecl { name, body, .. } = &*stmt {
+        assert_eq!(name.value, "foo");
+        assert!(body.is_empty());
+    } else {
+        panic!("Expected ModuleDecl");
+    }
+}
+
+#[test]
+fn test_parse_module_with_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    let stmt = program.statements[0].borrow();
+    if let Statement::ModuleDecl { name, body, .. } = &*stmt {
+        assert_eq!(name.value, "foo");
+        assert_eq!(body.len(), 1);
+        assert!(
+            matches!(&*body[0].borrow(), Statement::FunctionDecl { name, .. } if name.value == "bar")
+        );
+    } else {
+        panic!("Expected ModuleDecl");
+    }
+}
+
+#[test]
+fn test_parse_module_dotted_path() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module foo.bar { }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    let stmt = program.statements[0].borrow();
+    if let Statement::ModuleDecl {
+        name: outer_name,
+        body,
+        ..
+    } = &*stmt
+    {
+        assert_eq!(outer_name.value, "foo");
+        assert_eq!(body.len(), 1);
+        let inner = body[0].borrow();
+        if let Statement::ModuleDecl {
+            name: inner_name,
+            body: inner_body,
+            ..
+        } = &*inner
+        {
+            assert_eq!(inner_name.value, "bar");
+            assert!(inner_body.is_empty());
+        } else {
+            panic!("Expected nested ModuleDecl");
+        }
+    } else {
+        panic!("Expected ModuleDecl");
+    }
+}
+
+#[test]
+fn test_parse_nested_module() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { module bar { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    let stmt = program.statements[0].borrow();
+    if let Statement::ModuleDecl {
+        name: outer_name,
+        body,
+        ..
+    } = &*stmt
+    {
+        assert_eq!(outer_name.value, "foo");
+        assert_eq!(body.len(), 1);
+        let inner = body[0].borrow();
+        if let Statement::ModuleDecl {
+            name: inner_name,
+            body: inner_body,
+            ..
+        } = &*inner
+        {
+            assert_eq!(inner_name.value, "bar");
+            assert!(inner_body.is_empty());
+        } else {
+            panic!("Expected nested ModuleDecl");
+        }
+    } else {
+        panic!("Expected ModuleDecl");
+    }
+}
+
+#[test]
+fn test_parse_multiple_modules() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { } module bar { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    let stmt0 = program.statements[0].borrow();
+    let stmt1 = program.statements[1].borrow();
+    assert!(matches!(&*stmt0, Statement::ModuleDecl { name, .. } if name.value == "foo"));
+    assert!(matches!(&*stmt1, Statement::ModuleDecl { name, .. } if name.value == "bar"));
+}
+
+#[test]
+fn test_parse_module_missing_name() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module { }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    let diagnostics = engine.borrow().format_all_plain("");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected diagnostic for missing module name"
+    );
+}
+
+#[test]
+fn test_parse_module_missing_brace() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module foo".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    let diagnostics = engine.borrow().format_all_plain("");
+    assert!(
+        !diagnostics.is_empty(),
+        "Expected diagnostic for missing '{{'"
+    );
+}
+
+#[test]
+fn test_dotted_and_nested_module_equivalence() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module foo.bar { }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    let stmt = program.statements[0].borrow();
+    if let Statement::ModuleDecl {
+        name: outer_name,
+        body,
+        ..
+    } = &*stmt
+    {
+        assert_eq!(outer_name.value, "foo");
+        assert_eq!(body.len(), 1);
+        let inner = body[0].borrow();
+        if let Statement::ModuleDecl {
+            name: inner_name,
+            body: inner_body,
+            ..
+        } = &*inner
+        {
+            assert_eq!(inner_name.value, "bar");
+            assert!(inner_body.is_empty());
+        } else {
+            panic!("Expected nested ModuleDecl");
+        }
+
+        let engine2 = create_engine();
+        let mut lexer2 = Lexer::new(
+            CharStream::new(
+                "module foo { module bar { } }".to_string(),
+                Rc::new("".to_string()),
+            ),
+            engine2.clone(),
+        );
+        let mut parser2 = Parser::new(lexer2.get_file(), lexer2.parse(), engine2);
+        let program2 = parser2.parse();
+        let stmt2 = program2.statements[0].borrow();
+        if let Statement::ModuleDecl {
+            name: outer_name2,
+            body: body2,
+            ..
+        } = &*stmt2
+        {
+            assert_eq!(outer_name2.value, "foo");
+            assert_eq!(body2.len(), 1);
+            let inner2 = body2[0].borrow();
+            if let Statement::ModuleDecl {
+                name: inner_name2,
+                body: inner_body2,
+                ..
+            } = &*inner2
+            {
+                assert_eq!(inner_name2.value, "bar");
+                assert!(inner_body2.is_empty());
+            } else {
+                panic!("Expected nested ModuleDecl");
+            }
+        } else {
+            panic!("Expected ModuleDecl");
+        }
+    } else {
+        panic!("Expected ModuleDecl");
+    }
+}
+
+#[test]
+fn test_parse_module_deep_dotted_path() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module a.b.c { }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    let stmt = program.statements[0].borrow();
+    if let Statement::ModuleDecl {
+        name: name_a, body, ..
+    } = &*stmt
+    {
+        assert_eq!(name_a.value, "a");
+        assert_eq!(body.len(), 1);
+        let b_stmt = body[0].borrow();
+        if let Statement::ModuleDecl {
+            name: name_b,
+            body: body_b,
+            ..
+        } = &*b_stmt
+        {
+            assert_eq!(name_b.value, "b");
+            assert_eq!(body_b.len(), 1);
+            let c_stmt = body_b[0].borrow();
+            if let Statement::ModuleDecl {
+                name: name_c,
+                body: body_c,
+                ..
+            } = &*c_stmt
+            {
+                assert_eq!(name_c.value, "c");
+                assert!(body_c.is_empty());
+            } else {
+                panic!("Expected ModuleDecl for c");
+            }
+        } else {
+            panic!("Expected ModuleDecl for b");
+        }
+    } else {
+        panic!("Expected ModuleDecl for a");
+    }
+}

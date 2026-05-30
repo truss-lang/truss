@@ -212,6 +212,7 @@ impl Parser {
                 }
                 KeywordType::Extension => self.parse_extension_decl(modifiers),
                 KeywordType::Typealias => self.parse_typealias(modifiers),
+                KeywordType::Module => self.parse_module_decl(modifiers),
                 _ => {
                     if !modifiers.is_empty() {
                         self.emit_error(
@@ -2271,6 +2272,85 @@ impl Parser {
             name: Box::new(name),
             type_expression: Rc::new(RefCell::new(type_expression)),
         })
+    }
+
+    fn parse_module_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+        if !modifiers.is_empty() {
+            self.emit_error(
+                TrussDiagnosticCode::ModifierNotAllowedHere,
+                "Modifiers are not allowed on 'module' declaration",
+                &modifiers[0].token,
+            );
+        }
+        let token = self.next().unwrap();
+        let Some(first_name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected module name after 'module'",
+                &token,
+            );
+            return Err(());
+        };
+        if !matches!(first_name.ty, TokenType::Identifier) {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected module name but found '{}'", first_name.value),
+                &first_name,
+            );
+            return Err(());
+        }
+
+        let mut path_segments = vec![first_name];
+        while let Some(dot) = self.peek() {
+            if !OperatorType::is_operator(&dot, OperatorType::Dot) {
+                break;
+            }
+            self.index += 1;
+            let Some(name) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    "Expected module name after '.'",
+                    &dot,
+                );
+                return Err(());
+            };
+            if !matches!(name.ty, TokenType::Identifier) {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    format!("Expected module name but found '{}'", name.value),
+                    &name,
+                );
+                return Err(());
+            }
+            path_segments.push(name);
+        }
+
+        let body = self.parse_brace_body()?;
+
+        if path_segments.len() == 1 {
+            Ok(Statement::ModuleDecl {
+                token: Box::new(token),
+                name: Box::new(path_segments.into_iter().next().unwrap()),
+                body,
+                scope: None,
+            })
+        } else {
+            let mut inner = Statement::ModuleDecl {
+                token: Box::new(token.clone()),
+                name: Box::new(path_segments.pop().unwrap()),
+                body,
+                scope: None,
+            };
+            while let Some(segment) = path_segments.pop() {
+                inner = Statement::ModuleDecl {
+                    token: Box::new(token.clone()),
+                    name: Box::new(segment),
+                    body: vec![Rc::new(RefCell::new(inner))],
+                    scope: None,
+                };
+            }
+            Ok(inner)
+        }
     }
 
     fn parse_enum_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {

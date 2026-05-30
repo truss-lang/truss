@@ -160,6 +160,12 @@ pub enum Statement {
         token: Box<Token>,
         body: Rc<RefCell<Expression>>,
     },
+    ModuleDecl {
+        token: Box<Token>,
+        name: Box<Token>,
+        body: Vec<Rc<RefCell<Statement>>>,
+        scope: Option<Rc<RefCell<Scope>>>,
+    },
 }
 
 impl Statement {
@@ -189,6 +195,7 @@ impl Statement {
             Self::Fallthrough { token, .. } => (**token).clone(),
             Self::Break { token, .. } => (**token).clone(),
             Self::Defer { token, .. } => (**token).clone(),
+            Self::ModuleDecl { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -206,6 +213,7 @@ impl Statement {
             Self::Fallthrough { .. } => Ok(vec![]),
             Self::Break { .. } => Ok(vec![]),
             Self::Defer { .. } => Ok(vec![]),
+            Self::ModuleDecl { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
     }
