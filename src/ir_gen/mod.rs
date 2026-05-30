@@ -5052,139 +5052,283 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                     Expression::MemberAccess { object, member, .. } => {
-                        let object_expr = object.borrow();
-                        let object_ty = object_expr.get_ty_ref()?.clone();
-                        drop(object_expr);
-
-                        if let Some(ty) = &object_ty
-                            && let Type::Struct(struct_name, _) = &*ty.borrow()
-                        {
-                            let object_val = self.resolve_expression(object.clone())?.unwrap();
-                            let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
-                                p
-                            } else {
-                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
-                                self.builder.build_store(p, object_val)?;
-                                p
-                            };
-                            method_self_ptr = Some(ptr);
-                            let base_name = format!("{}.{}", struct_name, member.value);
-                            let fn_name = if let Some(idx) = *selected_index
-                                && idx < overloads.len()
-                            {
-                                self.mangle_from_overload(&base_name, &overloads[idx], parameters)
-                                    .unwrap_or(base_name.clone())
-                            } else {
-                                base_name.clone()
-                            };
+                        if self.is_module_expression(object) {
+                            let fn_name = member.value.clone();
                             (fn_name, false)
-                        } else if let Some(ty) = &object_ty
-                            && let Type::Class(class_name, _) = &*ty.borrow()
-                        {
-                            let object_val = self.resolve_expression(object.clone())?.unwrap();
-                            let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
-                                p
-                            } else {
-                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
-                                self.builder.build_store(p, object_val)?;
-                                p
-                            };
-                            let method_name = &member.value;
+                        } else {
+                            let object_expr = object.borrow();
+                            let object_ty = object_expr.get_ty_ref()?.clone();
+                            drop(object_expr);
 
-                            if let Some(slot_idx) =
-                                self.get_vtable_slot_index(class_name, method_name)
+                            if let Some(ty) = &object_ty
+                                && let Type::Struct(struct_name, _) = &*ty.borrow()
                             {
-                                let class_type =
-                                    *self.class_types.borrow().get(class_name).unwrap();
-                                let vtable_ptr_ptr =
-                                    self.builder.build_struct_gep(class_type, ptr, 0, "")?;
-                                let vtable_ptr = self
-                                    .builder
-                                    .build_load(
-                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                        vtable_ptr_ptr,
-                                        "",
-                                    )?
-                                    .into_pointer_value();
-
-                                let vtable_type =
-                                    *self.vtable_types.borrow().get(class_name).unwrap();
-                                let fn_ptr_ptr = self.builder.build_struct_gep(
-                                    vtable_type,
-                                    vtable_ptr,
-                                    slot_idx,
-                                    "",
-                                )?;
-                                let fn_ptr_val = self
-                                    .builder
-                                    .build_load(
-                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                        fn_ptr_ptr,
-                                        "",
-                                    )?
-                                    .into_pointer_value();
-
-                                let Some(owner) = self
-                                    .compute_vtable_method_list(class_name)
-                                    .iter()
-                                    .find(|(n, _)| n == method_name)
-                                    .map(|(_, owner)| owner.clone())
-                                else {
-                                    anyhow::bail!(
-                                        "Method {} not found in vtable for {}",
-                                        method_name,
-                                        class_name
-                                    );
+                                let object_val = self.resolve_expression(object.clone())?.unwrap();
+                                let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                    p
+                                } else {
+                                    let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                    self.builder.build_store(p, object_val)?;
+                                    p
                                 };
-                                let fn_name = format!("{}.{}", owner, method_name);
-                                let declared_fn =
-                                    self.module.get_function(&fn_name).ok_or_else(|| {
-                                        self.emit_error(
-                                            TrussDiagnosticCode::UndefinedFunction,
-                                            format!("Undefined function: '{}'", fn_name),
-                                            None,
-                                        );
-                                        anyhow::anyhow!("Undefined function: {}", fn_name)
-                                    })?;
-                                let fn_type = declared_fn.get_type();
-
-                                let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
-                                    Vec::new();
-                                args.push(ptr.into());
-                                for param in parameters {
-                                    let arg_val =
-                                        self.resolve_expression(param.expression.clone())?.unwrap();
-                                    args.push(arg_val.into());
-                                }
-                                let call_result = self
-                                    .builder
-                                    .build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
-                                match call_result.try_as_basic_value() {
-                                    inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
-                                    _ => return Ok(None),
-                                }
-                            }
-
-                            method_self_ptr = Some(ptr);
-                            let base_name = format!("{}.{}", class_name, method_name);
-                            let fn_name = if let Some(idx) = *selected_index
-                                && idx < overloads.len()
-                            {
-                                self.mangle_from_overload(&base_name, &overloads[idx], parameters)
+                                method_self_ptr = Some(ptr);
+                                let base_name = format!("{}.{}", struct_name, member.value);
+                                let fn_name = if let Some(idx) = *selected_index
+                                    && idx < overloads.len()
+                                {
+                                    self.mangle_from_overload(
+                                        &base_name,
+                                        &overloads[idx],
+                                        parameters,
+                                    )
                                     .unwrap_or(base_name.clone())
-                            } else {
-                                base_name.clone()
-                            };
-                            (fn_name, false)
-                        } else if let Some(ty) = &object_ty
-                            && (matches!(&*ty.borrow(), Type::Compound(..))
-                                || matches!(&*ty.borrow(), Type::Protocol(..)))
-                        {
-                            let is_compound = matches!(&*ty.borrow(), Type::Compound(types) if types.iter().all(|t| matches!(&*t.borrow(), Type::Protocol(..))));
-                            if is_compound {
-                                if let Type::Compound(types) = &*ty.borrow() {
-                                    let names = self.get_compound_protocol_names(types);
-                                    let compound_key = self.build_compound_protocol_key(&names);
+                                } else {
+                                    base_name.clone()
+                                };
+                                (fn_name, false)
+                            } else if let Some(ty) = &object_ty
+                                && let Type::Class(class_name, _) = &*ty.borrow()
+                            {
+                                let object_val = self.resolve_expression(object.clone())?.unwrap();
+                                let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                    p
+                                } else {
+                                    let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                    self.builder.build_store(p, object_val)?;
+                                    p
+                                };
+                                let method_name = &member.value;
+
+                                if let Some(slot_idx) =
+                                    self.get_vtable_slot_index(class_name, method_name)
+                                {
+                                    let class_type =
+                                        *self.class_types.borrow().get(class_name).unwrap();
+                                    let vtable_ptr_ptr =
+                                        self.builder.build_struct_gep(class_type, ptr, 0, "")?;
+                                    let vtable_ptr = self
+                                        .builder
+                                        .build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            vtable_ptr_ptr,
+                                            "",
+                                        )?
+                                        .into_pointer_value();
+
+                                    let vtable_type =
+                                        *self.vtable_types.borrow().get(class_name).unwrap();
+                                    let fn_ptr_ptr = self.builder.build_struct_gep(
+                                        vtable_type,
+                                        vtable_ptr,
+                                        slot_idx,
+                                        "",
+                                    )?;
+                                    let fn_ptr_val = self
+                                        .builder
+                                        .build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            fn_ptr_ptr,
+                                            "",
+                                        )?
+                                        .into_pointer_value();
+
+                                    let Some(owner) = self
+                                        .compute_vtable_method_list(class_name)
+                                        .iter()
+                                        .find(|(n, _)| n == method_name)
+                                        .map(|(_, owner)| owner.clone())
+                                    else {
+                                        anyhow::bail!(
+                                            "Method {} not found in vtable for {}",
+                                            method_name,
+                                            class_name
+                                        );
+                                    };
+                                    let fn_name = format!("{}.{}", owner, method_name);
+                                    let declared_fn =
+                                        self.module.get_function(&fn_name).ok_or_else(|| {
+                                            self.emit_error(
+                                                TrussDiagnosticCode::UndefinedFunction,
+                                                format!("Undefined function: '{}'", fn_name),
+                                                None,
+                                            );
+                                            anyhow::anyhow!("Undefined function: {}", fn_name)
+                                        })?;
+                                    let fn_type = declared_fn.get_type();
+
+                                    let mut args: Vec<
+                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                    > = Vec::new();
+                                    args.push(ptr.into());
+                                    for param in parameters {
+                                        let arg_val = self
+                                            .resolve_expression(param.expression.clone())?
+                                            .unwrap();
+                                        args.push(arg_val.into());
+                                    }
+                                    let call_result = self
+                                        .builder
+                                        .build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
+                                    match call_result.try_as_basic_value() {
+                                        inkwell::values::ValueKind::Basic(val) => {
+                                            return Ok(Some(val));
+                                        }
+                                        _ => return Ok(None),
+                                    }
+                                }
+
+                                method_self_ptr = Some(ptr);
+                                let base_name = format!("{}.{}", class_name, method_name);
+                                let fn_name = if let Some(idx) = *selected_index
+                                    && idx < overloads.len()
+                                {
+                                    self.mangle_from_overload(
+                                        &base_name,
+                                        &overloads[idx],
+                                        parameters,
+                                    )
+                                    .unwrap_or(base_name.clone())
+                                } else {
+                                    base_name.clone()
+                                };
+                                (fn_name, false)
+                            } else if let Some(ty) = &object_ty
+                                && (matches!(&*ty.borrow(), Type::Compound(..))
+                                    || matches!(&*ty.borrow(), Type::Protocol(..)))
+                            {
+                                let is_compound = matches!(&*ty.borrow(), Type::Compound(types) if types.iter().all(|t| matches!(&*t.borrow(), Type::Protocol(..))));
+                                if is_compound {
+                                    if let Type::Compound(types) = &*ty.borrow() {
+                                        let names = self.get_compound_protocol_names(types);
+                                        let compound_key = self.build_compound_protocol_key(&names);
+                                        let object_val =
+                                            self.resolve_expression(object.clone())?.unwrap();
+                                        let ptr =
+                                            if let BasicValueEnum::PointerValue(p) = object_val {
+                                                p
+                                            } else {
+                                                let alloca = self
+                                                    .builder
+                                                    .build_alloca(object_val.get_type(), "")?;
+                                                self.builder.build_store(alloca, object_val)?;
+                                                alloca
+                                            };
+                                        let method_name = &member.value;
+
+                                        if let Some(ct) = self
+                                            .existential_container_types
+                                            .borrow()
+                                            .get(&compound_key)
+                                            .copied()
+                                        {
+                                            let value_ptr_ptr =
+                                                self.builder.build_struct_gep(ct, ptr, 0, "")?;
+                                            let value_ptr = self
+                                                .builder
+                                                .build_load(
+                                                    self.context
+                                                        .ptr_type(inkwell::AddressSpace::from(0)),
+                                                    value_ptr_ptr,
+                                                    "",
+                                                )?
+                                                .into_pointer_value();
+
+                                            for (slot, pname) in names.iter().enumerate() {
+                                                if let Some(wt) = self
+                                                    .protocol_witness_table_types
+                                                    .borrow()
+                                                    .get(pname)
+                                                    .copied()
+                                                {
+                                                    let entries = self
+                                                        .compute_protocol_witness_table_entries(
+                                                            pname,
+                                                        );
+                                                    if let Some(slot_idx) = entries
+                                                        .iter()
+                                                        .position(|(n, k)| {
+                                                            *k == "method" && n == method_name
+                                                        })
+                                                        .map(|i| i as u32)
+                                                    {
+                                                        let wt_ptr_ptr =
+                                                            self.builder.build_struct_gep(
+                                                                ct,
+                                                                ptr,
+                                                                (slot + 1) as u32,
+                                                                "",
+                                                            )?;
+                                                        let wt_ptr = self
+                                                            .builder
+                                                            .build_load(
+                                                                self.context.ptr_type(
+                                                                    inkwell::AddressSpace::from(0),
+                                                                ),
+                                                                wt_ptr_ptr,
+                                                                "",
+                                                            )?
+                                                            .into_pointer_value();
+
+                                                        let fn_ptr_ptr =
+                                                            self.builder.build_struct_gep(
+                                                                wt, wt_ptr, slot_idx, "",
+                                                            )?;
+                                                        let fn_ptr_val = self
+                                                            .builder
+                                                            .build_load(
+                                                                self.context.ptr_type(
+                                                                    inkwell::AddressSpace::from(0),
+                                                                ),
+                                                                fn_ptr_ptr,
+                                                                "",
+                                                            )?
+                                                            .into_pointer_value();
+
+                                                        let method_fn = self
+                                                            .get_protocol_method_fn_type(
+                                                                pname,
+                                                                method_name,
+                                                            );
+                                                        if let Some(fn_type) = method_fn {
+                                                            let mut args: Vec<
+                                                            inkwell::values::BasicMetadataValueEnum<
+                                                                'ctx,
+                                                            >,
+                                                        > = Vec::new();
+                                                            args.push(value_ptr.into());
+                                                            for param in parameters {
+                                                                let arg_val = self
+                                                                    .resolve_expression(
+                                                                        param.expression.clone(),
+                                                                    )?
+                                                                    .unwrap();
+                                                                args.push(arg_val.into());
+                                                            }
+                                                            let call_result =
+                                                                self.builder.build_indirect_call(
+                                                                    fn_type, fn_ptr_val, &args, "",
+                                                                )?;
+                                                            match call_result.try_as_basic_value() {
+                                                            inkwell::values::ValueKind::Basic(
+                                                                val,
+                                                            ) => return Ok(Some(val)),
+                                                            _ => return Ok(None),
+                                                        }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            method_self_ptr = Some(value_ptr);
+                                            (format!("{}.{}", compound_key, method_name), false)
+                                        } else {
+                                            method_self_ptr = Some(ptr);
+                                            (format!("{}.{}", compound_key, method_name), false)
+                                        }
+                                    } else {
+                                        anyhow::bail!("Internal error: expected Compound type");
+                                    }
+                                } else if let Type::Protocol(protocol_name, _) = &*ty.borrow() {
+                                    let protocol_name = protocol_name.clone();
                                     let object_val =
                                         self.resolve_expression(object.clone())?.unwrap();
                                     let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
@@ -5197,12 +5341,20 @@ impl<'ctx> IRGenerator<'ctx> {
                                     };
                                     let method_name = &member.value;
 
-                                    if let Some(ct) = self
+                                    let container_type = self
                                         .existential_container_types
                                         .borrow()
-                                        .get(&compound_key)
-                                        .copied()
-                                    {
+                                        .get(&protocol_name)
+                                        .copied();
+                                    let wt_type = self
+                                        .protocol_witness_table_types
+                                        .borrow()
+                                        .get(&protocol_name)
+                                        .copied();
+                                    let entries =
+                                        self.compute_protocol_witness_table_entries(&protocol_name);
+
+                                    if let (Some(ct), Some(wt)) = (container_type, wt_type) {
                                         let value_ptr_ptr =
                                             self.builder.build_struct_gep(ct, ptr, 0, "")?;
                                         let value_ptr = self
@@ -5215,260 +5367,139 @@ impl<'ctx> IRGenerator<'ctx> {
                                             )?
                                             .into_pointer_value();
 
-                                        for (slot, pname) in names.iter().enumerate() {
-                                            if let Some(wt) = self
-                                                .protocol_witness_table_types
-                                                .borrow()
-                                                .get(pname)
-                                                .copied()
-                                            {
-                                                let entries = self
-                                                    .compute_protocol_witness_table_entries(pname);
-                                                if let Some(slot_idx) = entries
-                                                    .iter()
-                                                    .position(|(n, k)| {
-                                                        *k == "method" && n == method_name
-                                                    })
-                                                    .map(|i| i as u32)
-                                                {
-                                                    let wt_ptr_ptr =
-                                                        self.builder.build_struct_gep(
-                                                            ct,
-                                                            ptr,
-                                                            (slot + 1) as u32,
-                                                            "",
-                                                        )?;
-                                                    let wt_ptr = self
-                                                        .builder
-                                                        .build_load(
-                                                            self.context.ptr_type(
-                                                                inkwell::AddressSpace::from(0),
-                                                            ),
-                                                            wt_ptr_ptr,
-                                                            "",
-                                                        )?
-                                                        .into_pointer_value();
-
-                                                    let fn_ptr_ptr =
-                                                        self.builder.build_struct_gep(
-                                                            wt, wt_ptr, slot_idx, "",
-                                                        )?;
-                                                    let fn_ptr_val = self
-                                                        .builder
-                                                        .build_load(
-                                                            self.context.ptr_type(
-                                                                inkwell::AddressSpace::from(0),
-                                                            ),
-                                                            fn_ptr_ptr,
-                                                            "",
-                                                        )?
-                                                        .into_pointer_value();
-
-                                                    let method_fn = self
-                                                        .get_protocol_method_fn_type(
-                                                            pname,
-                                                            method_name,
-                                                        );
-                                                    if let Some(fn_type) = method_fn {
-                                                        let mut args: Vec<
-                                                            inkwell::values::BasicMetadataValueEnum<
-                                                                'ctx,
-                                                            >,
-                                                        > = Vec::new();
-                                                        args.push(value_ptr.into());
-                                                        for param in parameters {
-                                                            let arg_val = self
-                                                                .resolve_expression(
-                                                                    param.expression.clone(),
-                                                                )?
-                                                                .unwrap();
-                                                            args.push(arg_val.into());
-                                                        }
-                                                        let call_result =
-                                                            self.builder.build_indirect_call(
-                                                                fn_type, fn_ptr_val, &args, "",
-                                                            )?;
-                                                        match call_result.try_as_basic_value() {
-                                                            inkwell::values::ValueKind::Basic(
-                                                                val,
-                                                            ) => return Ok(Some(val)),
-                                                            _ => return Ok(None),
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        method_self_ptr = Some(value_ptr);
-                                        (format!("{}.{}", compound_key, method_name), false)
-                                    } else {
-                                        method_self_ptr = Some(ptr);
-                                        (format!("{}.{}", compound_key, method_name), false)
-                                    }
-                                } else {
-                                    anyhow::bail!("Internal error: expected Compound type");
-                                }
-                            } else if let Type::Protocol(protocol_name, _) = &*ty.borrow() {
-                                let protocol_name = protocol_name.clone();
-                                let object_val = self.resolve_expression(object.clone())?.unwrap();
-                                let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
-                                    p
-                                } else {
-                                    let alloca =
-                                        self.builder.build_alloca(object_val.get_type(), "")?;
-                                    self.builder.build_store(alloca, object_val)?;
-                                    alloca
-                                };
-                                let method_name = &member.value;
-
-                                let container_type = self
-                                    .existential_container_types
-                                    .borrow()
-                                    .get(&protocol_name)
-                                    .copied();
-                                let wt_type = self
-                                    .protocol_witness_table_types
-                                    .borrow()
-                                    .get(&protocol_name)
-                                    .copied();
-                                let entries =
-                                    self.compute_protocol_witness_table_entries(&protocol_name);
-
-                                if let (Some(ct), Some(wt)) = (container_type, wt_type) {
-                                    let value_ptr_ptr =
-                                        self.builder.build_struct_gep(ct, ptr, 0, "")?;
-                                    let value_ptr = self
-                                        .builder
-                                        .build_load(
-                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                            value_ptr_ptr,
-                                            "",
-                                        )?
-                                        .into_pointer_value();
-
-                                    let wt_ptr_ptr =
-                                        self.builder.build_struct_gep(ct, ptr, 1, "")?;
-                                    let wt_ptr = self
-                                        .builder
-                                        .build_load(
-                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                            wt_ptr_ptr,
-                                            "",
-                                        )?
-                                        .into_pointer_value();
-
-                                    if let Some(slot_idx) = entries
-                                        .iter()
-                                        .position(|(n, k)| *k == "method" && n == method_name)
-                                        .map(|i| i as u32)
-                                    {
-                                        let fn_ptr_ptr = self
-                                            .builder
-                                            .build_struct_gep(wt, wt_ptr, slot_idx, "")?;
-                                        let fn_ptr_val = self
+                                        let wt_ptr_ptr =
+                                            self.builder.build_struct_gep(ct, ptr, 1, "")?;
+                                        let wt_ptr = self
                                             .builder
                                             .build_load(
                                                 self.context
                                                     .ptr_type(inkwell::AddressSpace::from(0)),
-                                                fn_ptr_ptr,
+                                                wt_ptr_ptr,
                                                 "",
                                             )?
                                             .into_pointer_value();
 
-                                        let method_fn = self.get_protocol_method_fn_type(
-                                            &protocol_name,
-                                            &method_name,
-                                        );
-                                        if let Some(fn_type) = method_fn {
-                                            let mut args: Vec<
-                                                inkwell::values::BasicMetadataValueEnum<'ctx>,
-                                            > = Vec::new();
-                                            args.push(value_ptr.into());
-                                            for param in parameters {
-                                                let arg_val = self
-                                                    .resolve_expression(param.expression.clone())?
-                                                    .unwrap();
-                                                args.push(arg_val.into());
-                                            }
-                                            let call_result = self.builder.build_indirect_call(
-                                                fn_type, fn_ptr_val, &args, "",
-                                            )?;
-                                            match call_result.try_as_basic_value() {
-                                                inkwell::values::ValueKind::Basic(val) => {
-                                                    return Ok(Some(val));
+                                        if let Some(slot_idx) = entries
+                                            .iter()
+                                            .position(|(n, k)| *k == "method" && n == method_name)
+                                            .map(|i| i as u32)
+                                        {
+                                            let fn_ptr_ptr = self
+                                                .builder
+                                                .build_struct_gep(wt, wt_ptr, slot_idx, "")?;
+                                            let fn_ptr_val = self
+                                                .builder
+                                                .build_load(
+                                                    self.context
+                                                        .ptr_type(inkwell::AddressSpace::from(0)),
+                                                    fn_ptr_ptr,
+                                                    "",
+                                                )?
+                                                .into_pointer_value();
+
+                                            let method_fn = self.get_protocol_method_fn_type(
+                                                &protocol_name,
+                                                &method_name,
+                                            );
+                                            if let Some(fn_type) = method_fn {
+                                                let mut args: Vec<
+                                                    inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                                > = Vec::new();
+                                                args.push(value_ptr.into());
+                                                for param in parameters {
+                                                    let arg_val = self
+                                                        .resolve_expression(
+                                                            param.expression.clone(),
+                                                        )?
+                                                        .unwrap();
+                                                    args.push(arg_val.into());
                                                 }
-                                                _ => return Ok(None),
+                                                let call_result =
+                                                    self.builder.build_indirect_call(
+                                                        fn_type, fn_ptr_val, &args, "",
+                                                    )?;
+                                                match call_result.try_as_basic_value() {
+                                                    inkwell::values::ValueKind::Basic(val) => {
+                                                        return Ok(Some(val));
+                                                    }
+                                                    _ => return Ok(None),
+                                                }
                                             }
                                         }
-                                    }
 
-                                    method_self_ptr = Some(value_ptr);
-                                    (format!("{}.{}", protocol_name, method_name), false)
+                                        method_self_ptr = Some(value_ptr);
+                                        (format!("{}.{}", protocol_name, method_name), false)
+                                    } else {
+                                        method_self_ptr = Some(ptr);
+                                        (format!("{}.{}", protocol_name, method_name), false)
+                                    }
                                 } else {
-                                    method_self_ptr = Some(ptr);
-                                    (format!("{}.{}", protocol_name, method_name), false)
+                                    anyhow::bail!("Unsupported object type for method call");
                                 }
-                            } else {
-                                anyhow::bail!("Unsupported object type for method call");
-                            }
-                        } else if let Some(ty) = &object_ty
-                            && let Type::Enum(enum_name, _) = &*ty.borrow()
-                        {
-                            let case_name = member.value.clone();
-                            let enum_name = enum_name.clone();
-                            let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
+                            } else if let Some(ty) = &object_ty
+                                && let Type::Enum(enum_name, _) = &*ty.borrow()
+                            {
+                                let case_name = member.value.clone();
+                                let enum_name = enum_name.clone();
+                                let case_index =
+                                    self.get_enum_case_index(&enum_name, &case_name)?;
 
-                            let enum_types = self.enum_types.borrow();
-                            let case_llvm_type =
-                                enum_types.get(&enum_name).copied().ok_or_else(|| {
-                                    anyhow::anyhow!("Enum type '{}' not found", enum_name)
-                                })?;
-                            drop(enum_types);
+                                let enum_types = self.enum_types.borrow();
+                                let case_llvm_type =
+                                    enum_types.get(&enum_name).copied().ok_or_else(|| {
+                                        anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                                    })?;
+                                drop(enum_types);
 
-                            let alloca = self
-                                .builder
-                                .build_alloca(case_llvm_type.as_basic_type_enum(), "")?;
+                                let alloca = self
+                                    .builder
+                                    .build_alloca(case_llvm_type.as_basic_type_enum(), "")?;
 
-                            let tag_ptr =
-                                self.builder
-                                    .build_struct_gep(case_llvm_type, alloca, 0, "")?;
-                            let tag_val =
-                                self.context.i8_type().const_int(case_index as u64, false);
-                            self.builder.build_store(tag_ptr, tag_val)?;
-
-                            if !parameters.is_empty() {
-                                let payload_ptr =
+                                let tag_ptr =
                                     self.builder
-                                        .build_struct_gep(case_llvm_type, alloca, 1, "")?;
-                                let enum_payloads = self.enum_payload_types.borrow();
-                                if let Some(payload_type) = enum_payloads.get(&enum_name) {
-                                    for (i, param) in parameters.iter().enumerate() {
-                                        let field_ptr = self.builder.build_struct_gep(
-                                            *payload_type,
-                                            payload_ptr,
-                                            i as u32,
-                                            "",
-                                        )?;
-                                        let arg_val = self
-                                            .resolve_expression(param.expression.clone())?
-                                            .unwrap();
-                                        self.builder.build_store(field_ptr, arg_val)?;
+                                        .build_struct_gep(case_llvm_type, alloca, 0, "")?;
+                                let tag_val =
+                                    self.context.i8_type().const_int(case_index as u64, false);
+                                self.builder.build_store(tag_ptr, tag_val)?;
+
+                                if !parameters.is_empty() {
+                                    let payload_ptr = self.builder.build_struct_gep(
+                                        case_llvm_type,
+                                        alloca,
+                                        1,
+                                        "",
+                                    )?;
+                                    let enum_payloads = self.enum_payload_types.borrow();
+                                    if let Some(payload_type) = enum_payloads.get(&enum_name) {
+                                        for (i, param) in parameters.iter().enumerate() {
+                                            let field_ptr = self.builder.build_struct_gep(
+                                                *payload_type,
+                                                payload_ptr,
+                                                i as u32,
+                                                "",
+                                            )?;
+                                            let arg_val = self
+                                                .resolve_expression(param.expression.clone())?
+                                                .unwrap();
+                                            self.builder.build_store(field_ptr, arg_val)?;
+                                        }
                                     }
                                 }
-                            }
 
-                            let val = self.builder.build_load(
-                                case_llvm_type.as_basic_type_enum(),
-                                alloca,
-                                "",
-                            )?;
-                            return Ok(Some(val));
-                        } else {
-                            self.emit_error(
-                                TrussDiagnosticCode::UnsupportedFeature,
-                                "Method call on non-struct/enum type",
-                                Some(member.as_ref()),
-                            );
-                            anyhow::bail!("Method call on non-struct/enum type");
+                                let val = self.builder.build_load(
+                                    case_llvm_type.as_basic_type_enum(),
+                                    alloca,
+                                    "",
+                                )?;
+                                return Ok(Some(val));
+                            } else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnsupportedFeature,
+                                    "Method call on non-struct/enum type",
+                                    Some(member.as_ref()),
+                                );
+                                anyhow::bail!("Method call on non-struct/enum type");
+                            }
                         }
                     }
                     _ => {
@@ -6481,6 +6512,18 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
                 anyhow::bail!("Cannot infer type")
             }
+        }
+    }
+
+    fn is_module_expression(&self, expr: &Rc<RefCell<Expression>>) -> bool {
+        let expr_ref = expr.borrow();
+        match &*expr_ref {
+            Expression::Variable { symbol, .. } => symbol
+                .as_ref()
+                .and_then(|ws| ws.0.upgrade())
+                .is_some_and(|sym| matches!(&*sym.borrow(), Symbol::Module { .. })),
+            Expression::MemberAccess { object, .. } => self.is_module_expression(object),
+            _ => false,
         }
     }
 

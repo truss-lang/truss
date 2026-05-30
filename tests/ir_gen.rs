@@ -3449,6 +3449,87 @@ fn test_irgen_overloaded_struct_methods_mangled_names() {
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
+fn run_ir_gen(code: &str) -> (String, Rc<RefCell<TrussDiagnosticEngine>>) {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    (llvm_ir, engine)
+}
+
+#[test]
+fn test_irgen_import_module_call() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo
+         func test() -> Int32 { return Foo.bar() }",
+    );
+    assert!(
+        llvm_ir.contains("bar"),
+        "Expected 'bar' function in IR, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_import_wildcard_call() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo.*
+         func test() -> Int32 { return bar() }",
+    );
+    assert!(
+        llvm_ir.contains("bar"),
+        "Expected 'bar' function in IR, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_import_member_call() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import Foo.Bar.baz
+         func test() -> Int32 { return baz() }",
+    );
+    assert!(
+        llvm_ir.contains("baz"),
+        "Expected 'baz' function in IR, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_import_nested_module_call() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import Foo
+         func test() -> Int32 { return Foo.Bar.baz() }",
+    );
+    assert!(
+        llvm_ir.contains("baz"),
+        "Expected 'baz' function in IR, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
 #[test]
 fn test_irgen_overloaded_function_call() {
     let code = "func foo(x: Int32) -> Int32 { return x } func foo(y: Float64) -> Float64 { return y } func caller() -> Float64 { return foo(y: 3.0) }";
