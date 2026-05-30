@@ -2290,13 +2290,6 @@ impl Parser {
     }
 
     fn parse_module_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
-        if !modifiers.is_empty() {
-            self.emit_error(
-                TrussDiagnosticCode::ModifierNotAllowedHere,
-                "Modifiers are not allowed on 'module' declaration",
-                &modifiers[0].token,
-            );
-        }
         let token = self.next().unwrap();
         let Some(first_name) = self.next() else {
             self.emit_error(
@@ -2344,6 +2337,7 @@ impl Parser {
 
         if path_segments.len() == 1 {
             Ok(Statement::ModuleDecl {
+                modifiers,
                 token: Box::new(token),
                 name: Box::new(path_segments.into_iter().next().unwrap()),
                 body,
@@ -2351,6 +2345,7 @@ impl Parser {
             })
         } else {
             let mut inner = Statement::ModuleDecl {
+                modifiers: vec![],
                 token: Box::new(token.clone()),
                 name: Box::new(path_segments.pop().unwrap()),
                 body,
@@ -2358,6 +2353,7 @@ impl Parser {
             };
             while let Some(segment) = path_segments.pop() {
                 inner = Statement::ModuleDecl {
+                    modifiers: vec![],
                     token: Box::new(token.clone()),
                     name: Box::new(segment),
                     body: vec![Rc::new(RefCell::new(inner))],

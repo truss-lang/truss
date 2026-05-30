@@ -801,15 +801,14 @@ impl SymbolResolver {
                     let module_path = path.join(".");
                     let result = { self.krate.borrow().modules.get(&module_path).cloned() };
                     if let Some(module) = result {
-                        let top_name = path[0].clone();
-                        let top_module = { self.krate.borrow().modules.get(&top_name).cloned() };
+                        let name = path.last().unwrap().clone();
                         let module_symbol = Rc::new(RefCell::new(Symbol::Module {
-                            name: top_name.clone(),
+                            name: name.clone(),
                             decl: stmt.clone(),
-                            module: top_module.or_else(|| Some(module)),
+                            module: Some(module),
                         }));
                         let name_token = Token::new(
-                            top_name,
+                            name,
                             crate::lexer::token::TokenType::Identifier,
                             token.position.clone(),
                             token.file.clone(),

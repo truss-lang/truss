@@ -161,6 +161,7 @@ pub enum Statement {
         body: Rc<RefCell<Expression>>,
     },
     ModuleDecl {
+        modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
         body: Vec<Rc<RefCell<Statement>>>,
@@ -219,7 +220,7 @@ impl Statement {
             Self::Fallthrough { .. } => Ok(vec![]),
             Self::Break { .. } => Ok(vec![]),
             Self::Defer { .. } => Ok(vec![]),
-            Self::ModuleDecl { .. } => Ok(vec![]),
+            Self::ModuleDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::ImportDecl { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
