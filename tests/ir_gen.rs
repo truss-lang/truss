@@ -3375,3 +3375,71 @@ fn test_irgen_module_with_nested_func_call() {
     assert!(llvm_ir.contains("call"), "baz should call bar");
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
+
+#[test]
+fn test_irgen_overloaded_functions_mangled_names() {
+    let code = "func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } func caller() -> Float64 { foo(y: 3.0) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains(r#""foo$x$I32""#),
+        "expected mangled name for foo(x: Int32), got:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains(r#""foo$y$F64""#),
+        "expected mangled name for foo(y: Float64), got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_overloaded_function_call() {
+    let code = "func foo(x: Int32) -> Int32 { return x } func foo(y: Float64) -> Float64 { return y } func caller() -> Float64 { return foo(y: 3.0) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("call"),
+        "expected a call instruction in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains(r#""foo$y$F64""#),
+        "expected call to mangled name foo$y$F64, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}

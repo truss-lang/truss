@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use anyhow::Result;
 use inkwell::{
@@ -11,7 +15,9 @@ use inkwell::{
 
 use crate::{
     ast::{
-        expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
+        expression::{
+            AssignmentOperator, BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator,
+        },
         node::Program,
         statement::{
             Accessor, AccessorKind, FunctionBody, Parameter, Pattern, ProtocolMember, Statement,
@@ -64,6 +70,7 @@ pub struct IRGenerator<'ctx> {
     existential_container_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     class_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
     container_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
+    overloaded_fn_names: Rc<RefCell<HashSet<String>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -92,6 +99,7 @@ impl<'ctx> IRGenerator<'ctx> {
             existential_container_types: Rc::new(RefCell::new(HashMap::new())),
             class_refs: Rc::new(RefCell::new(Vec::new())),
             container_refs: Rc::new(RefCell::new(Vec::new())),
+            overloaded_fn_names: Rc::new(RefCell::new(HashSet::new())),
         }
     }
 
@@ -294,6 +302,18 @@ impl<'ctx> IRGenerator<'ctx> {
 
         for stmt in &program.statements {
             self.create_enum_type_bodies(stmt.clone());
+        }
+
+        {
+            let mut counts: HashMap<String, usize> = HashMap::new();
+            for stmt in &program.statements {
+                Self::count_fn_name_frequencies(stmt, &mut counts);
+            }
+            *self.overloaded_fn_names.borrow_mut() = counts
+                .into_iter()
+                .filter(|(_, c)| *c > 1)
+                .map(|(n, _)| n)
+                .collect();
         }
 
         for stmt in &program.statements {
@@ -831,10 +851,163 @@ impl<'ctx> IRGenerator<'ctx> {
         anyhow::bail!("Case '{}' not found in enum '{}'", case_name, enum_name)
     }
 
+    fn count_fn_name_frequencies(
+        stmt: &Rc<RefCell<Statement>>,
+        counts: &mut HashMap<String, usize>,
+    ) {
+        let s = stmt.borrow();
+        match &*s {
+            Statement::FunctionDecl { name, body, .. } => {
+                *counts.entry(name.value.clone()).or_insert(0) += 1;
+                if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                    for s in stmts {
+                        Self::count_fn_name_frequencies(s, counts);
+                    }
+                }
+            }
+            Statement::StructDecl { name, body, .. } => {
+                for s in body {
+                    if let Statement::FunctionDecl { name: mname, .. } = &*s.borrow() {
+                        let key = format!("{}.{}", name.value, mname.value);
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                    Self::count_fn_name_frequencies(s, counts);
+                }
+            }
+            Statement::ClassDecl { name, body, .. } => {
+                for s in body {
+                    if let Statement::FunctionDecl { name: mname, .. } = &*s.borrow() {
+                        let key = format!("{}.{}", name.value, mname.value);
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                    Self::count_fn_name_frequencies(s, counts);
+                }
+            }
+            Statement::EnumDecl { name, body, .. } => {
+                for s in body {
+                    if let Statement::FunctionDecl { name: mname, .. } = &*s.borrow() {
+                        let key = format!("{}.{}", name.value, mname.value);
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                    Self::count_fn_name_frequencies(s, counts);
+                }
+            }
+            Statement::ExtensionDecl {
+                type_name, body, ..
+            } => {
+                for s in body {
+                    if let Statement::FunctionDecl { name: mname, .. } = &*s.borrow() {
+                        let key = format!("{}.{}", type_name.value, mname.value);
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                    Self::count_fn_name_frequencies(s, counts);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn type_to_abbreviation(ty: &Type) -> String {
+        match ty {
+            Type::Int8 => "I8".into(),
+            Type::Int16 => "I16".into(),
+            Type::Int32 => "I32".into(),
+            Type::Int64 => "I64".into(),
+            Type::Int128 => "I128".into(),
+            Type::UInt8 => "U8".into(),
+            Type::UInt16 => "U16".into(),
+            Type::UInt32 => "U32".into(),
+            Type::UInt64 => "U64".into(),
+            Type::UInt128 => "U128".into(),
+            Type::Float32 => "F32".into(),
+            Type::Float64 => "F64".into(),
+            Type::Bool => "B".into(),
+            Type::Char => "C".into(),
+            Type::Void => "V".into(),
+            Type::Never => "N".into(),
+            Type::Struct(name, _)
+            | Type::Class(name, _)
+            | Type::Enum(name, _)
+            | Type::Protocol(name, _) => name.clone(),
+            Type::Pointer(_) => "P".into(),
+            Type::Tuple(_) => "T".into(),
+            Type::GenericParam(name) => name.clone(),
+            Type::AssociatedType(_, name) => name.clone(),
+            Type::Compound(_) => "C".into(),
+            Type::Function(_, _, _) => "F".into(),
+        }
+    }
+
+    fn mangle_fn_name(base_name: &str, params: &[Rc<RefCell<Parameter>>]) -> String {
+        let labels: Vec<String> = params
+            .iter()
+            .map(|p| {
+                let pb = p.borrow();
+                if let Some(label) = &pb.label {
+                    label.value.clone()
+                } else {
+                    pb.name.value.clone()
+                }
+            })
+            .collect();
+        let types: Vec<String> = params
+            .iter()
+            .map(|p| {
+                let pb = p.borrow();
+                pb.ty
+                    .as_ref()
+                    .map(|t| IRGenerator::type_to_abbreviation(&t.borrow()))
+                    .unwrap_or_else(|| "?".into())
+            })
+            .collect();
+        format!("{}${}${}", base_name, labels.join("_"), types.join("_"))
+    }
+
+    fn mangle_from_overload(
+        &self,
+        base_name: &str,
+        sym: &Rc<RefCell<Symbol>>,
+        call_params: &[CallParameter],
+    ) -> Option<String> {
+        if let Ok(Some(decl)) = sym.borrow().get_decl()
+            && let Statement::FunctionDecl { parameters, .. } = &*decl.borrow()
+        {
+            Some(Self::mangle_fn_name(base_name, parameters))
+        } else {
+            let labels: Vec<String> = call_params
+                .iter()
+                .map(|p| {
+                    p.label
+                        .as_ref()
+                        .map(|t| t.value.clone())
+                        .unwrap_or_else(|| "_".into())
+                })
+                .collect();
+            let types: Vec<String> = (0..call_params.len()).map(|_| "?".into()).collect();
+            Some(format!(
+                "{}${}${}",
+                base_name,
+                labels.join("_"),
+                types.join("_")
+            ))
+        }
+    }
+
     fn create_function_declarations(&self, statement: Rc<RefCell<Statement>>) {
-        if let Statement::FunctionDecl { name, ty, body, .. } = &*statement.borrow() {
+        if let Statement::FunctionDecl {
+            name,
+            ty,
+            parameters,
+            body,
+            ..
+        } = &*statement.borrow()
+        {
             if let Some(ty) = ty {
-                let _ = self.create_function_declaration(name, ty);
+                if self.overloaded_fn_names.borrow().contains(&name.value) {
+                    self.create_mangled_function_declaration(name, parameters, ty);
+                } else {
+                    let _ = self.create_function_declaration(name, ty);
+                }
             }
             match &*body.borrow() {
                 FunctionBody::Statements(stmts) => {
@@ -868,6 +1041,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Statement::FunctionDecl {
                     name: method_name,
                     ty,
+                    parameters,
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
@@ -881,8 +1055,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Ok(function_type) =
                         self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
                     {
-                        let llvm_name = format!("{}.{}", name.value, method_name.value);
-                        self.module.add_function(&llvm_name, function_type, None);
+                        let base_name = format!("{}.{}", name.value, method_name.value);
+                        if self.overloaded_fn_names.borrow().contains(&base_name) {
+                            let mangled = Self::mangle_fn_name(&base_name, parameters);
+                            self.module.add_function(&mangled, function_type, None);
+                        } else {
+                            self.module.add_function(&base_name, function_type, None);
+                        }
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
@@ -937,6 +1116,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Statement::FunctionDecl {
                     name: method_name,
                     ty,
+                    parameters,
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
@@ -950,8 +1130,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Ok(function_type) =
                         self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
                     {
-                        let llvm_name = format!("{}.{}", name.value, method_name.value);
-                        self.module.add_function(&llvm_name, function_type, None);
+                        let base_name = format!("{}.{}", name.value, method_name.value);
+                        if self.overloaded_fn_names.borrow().contains(&base_name) {
+                            let mangled = Self::mangle_fn_name(&base_name, parameters);
+                            self.module.add_function(&mangled, function_type, None);
+                        } else {
+                            self.module.add_function(&base_name, function_type, None);
+                        }
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
@@ -1223,6 +1408,22 @@ impl<'ctx> IRGenerator<'ctx> {
             self.module.add_function(&name.value, function_type, None);
         }
         Ok(())
+    }
+
+    fn create_mangled_function_declaration(
+        &self,
+        name: &Token,
+        parameters: &[Rc<RefCell<Parameter>>],
+        ty: &Rc<RefCell<Type>>,
+    ) {
+        if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
+            if let Ok(function_type) =
+                self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
+            {
+                let mangled = Self::mangle_fn_name(&name.value, parameters);
+                self.module.add_function(&mangled, function_type, None);
+            }
+        }
     }
 
     fn compute_vtable_method_list(&self, class_name: &str) -> Vec<(String, String)> {
@@ -2543,7 +2744,14 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.class_refs.borrow_mut().clear();
                     self.container_refs.borrow_mut().clear();
                     let fn_name = if let Some(struct_name) = &saved_struct {
-                        format!("{}.{}", struct_name, name.value)
+                        let base = format!("{}.{}", struct_name, name.value);
+                        if self.overloaded_fn_names.borrow().contains(&base) {
+                            Self::mangle_fn_name(&base, parameters)
+                        } else {
+                            base
+                        }
+                    } else if self.overloaded_fn_names.borrow().contains(&name.value) {
+                        Self::mangle_fn_name(&name.value, parameters)
                     } else {
                         name.value.clone()
                     };
@@ -4691,13 +4899,29 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("Member access on non-struct type");
             }
             Expression::Call {
-                callee, parameters, ..
+                callee,
+                parameters,
+                overloads,
+                selected_index,
+                ..
             } => {
                 let mut method_self_ptr: Option<PointerValue<'ctx>> = None;
                 let (function_name, is_init_call) = match &*callee.borrow() {
                     Expression::Variable { name, .. } => {
                         let name = name.value.clone();
-                        if self.module.get_function(&name).is_some() {
+                        if let Some(idx) = *selected_index
+                            && idx < overloads.len()
+                        {
+                            if let Some(mangled) =
+                                self.mangle_from_overload(&name, &overloads[idx], parameters)
+                            {
+                                (mangled, false)
+                            } else if self.module.get_function(&name).is_some() {
+                                (name, false)
+                            } else {
+                                (format!("{}.init", name), true)
+                            }
+                        } else if self.module.get_function(&name).is_some() {
                             (name, false)
                         } else {
                             (format!("{}.init", name), true)
