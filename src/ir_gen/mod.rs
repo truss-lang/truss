@@ -5612,7 +5612,27 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 for param in parameters {
                     let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
-                    args.push(arg_val.into());
+                    let fn_param_types = function.get_type().get_param_types();
+                    let arg_idx = if is_init_call {
+                        0
+                    } else {
+                        method_self_ptr.is_some() as usize
+                    } + args.len();
+                    if arg_idx < fn_param_types.len()
+                        && fn_param_types[arg_idx] != arg_val.get_type().into()
+                        && fn_param_types[arg_idx].is_pointer_type()
+                    {
+                        let alloca = self.builder.build_alloca(arg_val.get_type(), "")?;
+                        self.builder.build_store(alloca, arg_val)?;
+                        let ptr_val = self.builder.build_pointer_cast(
+                            alloca,
+                            fn_param_types[arg_idx].into_pointer_type(),
+                            "",
+                        )?;
+                        args.push(ptr_val.into());
+                    } else {
+                        args.push(arg_val.into());
+                    }
                 }
 
                 let call_result = self.builder.build_call(function, &args, "")?;
@@ -5630,10 +5650,31 @@ impl<'ctx> IRGenerator<'ctx> {
                         Ok(Some(val))
                     }
                 } else {
-                    match call_result.try_as_basic_value() {
-                        inkwell::values::ValueKind::Basic(val) => Ok(Some(val)),
-                        _ => Ok(None),
+                    let call_val = match call_result.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(val) => val,
+                        _ => return Ok(None),
+                    };
+                    let fn_ret_type = function.get_type().get_return_type();
+                    if let Some(inkwell::types::BasicTypeEnum::PointerType(_)) = fn_ret_type {
+                        if let BasicValueEnum::PointerValue(ptr_val) = call_val {
+                            if let Ok(Some(call_ty)) = expr.borrow().get_ty_ref() {
+                                let t_borrow = call_ty.borrow();
+                                if !matches!(&*t_borrow, Type::Void) {
+                                    if let Ok(expected_ty) = self.resolve_type(call_ty.clone()) {
+                                        if expected_ty != ptr_val.get_type().into() {
+                                            let loaded = self.builder.build_load(
+                                                expected_ty,
+                                                ptr_val,
+                                                "",
+                                            )?;
+                                            return Ok(Some(loaded));
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
+                    Ok(Some(call_val))
                 }
             }
             Expression::TupleLiteral { elements, .. } => {
