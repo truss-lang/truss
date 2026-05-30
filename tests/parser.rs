@@ -5839,3 +5839,158 @@ fn test_parse_module_deep_dotted_path() {
         panic!("Expected ModuleDecl for a");
     }
 }
+
+#[test]
+fn test_parse_overloaded_top_level_functions() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(x: Int32) { x } func foo(y: Float64) { y }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::FunctionDecl {
+        name, parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "foo");
+        assert_eq!(parameters.len(), 1);
+        assert!(
+            matches!(
+                &*parameters[0].borrow().type_expression.borrow(),
+                Expression::Type { name, .. } if name.value == "Int32"
+            ),
+            "Expected Int32 parameter type"
+        );
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+    if let Statement::FunctionDecl {
+        name, parameters, ..
+    } = &*program.statements[1].borrow()
+    {
+        assert_eq!(name.value, "foo");
+        assert_eq!(parameters.len(), 1);
+        assert!(
+            matches!(
+                &*parameters[0].borrow().type_expression.borrow(),
+                Expression::Type { name, .. } if name.value == "Float64"
+            ),
+            "Expected Float64 parameter type"
+        );
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_overloaded_struct_methods() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct S { func bar(a: Int32) { a } func bar(b: Bool) { b } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        assert!(body.len() >= 2);
+        if let Statement::FunctionDecl {
+            name, parameters, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(name.value, "bar");
+            assert_eq!(parameters.len(), 1);
+            assert!(
+                matches!(
+                    &*parameters[0].borrow().type_expression.borrow(),
+                    Expression::Type { name, .. } if name.value == "Int32"
+                ),
+                "Expected Int32 parameter type"
+            );
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+        if let Statement::FunctionDecl {
+            name, parameters, ..
+        } = &*body[1].borrow()
+        {
+            assert_eq!(name.value, "bar");
+            assert_eq!(parameters.len(), 1);
+            assert!(
+                matches!(
+                    &*parameters[0].borrow().type_expression.borrow(),
+                    Expression::Type { name, .. } if name.value == "Bool"
+                ),
+                "Expected Bool parameter type"
+            );
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_overloaded_functions_with_labels() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func process(value x: Int32) { x } func process(label y: Float64) { y }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::FunctionDecl {
+        name, parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "process");
+        assert_eq!(parameters.len(), 1);
+        assert_eq!(
+            parameters[0].borrow().label.as_ref().unwrap().value,
+            "value"
+        );
+        assert_eq!(parameters[0].borrow().name.value, "x");
+        assert!(
+            matches!(
+                &*parameters[0].borrow().type_expression.borrow(),
+                Expression::Type { name, .. } if name.value == "Int32"
+            ),
+            "Expected Int32 parameter type"
+        );
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+    if let Statement::FunctionDecl {
+        name, parameters, ..
+    } = &*program.statements[1].borrow()
+    {
+        assert_eq!(name.value, "process");
+        assert_eq!(parameters.len(), 1);
+        assert_eq!(
+            parameters[0].borrow().label.as_ref().unwrap().value,
+            "label"
+        );
+        assert_eq!(parameters[0].borrow().name.value, "y");
+        assert!(
+            matches!(
+                &*parameters[0].borrow().type_expression.borrow(),
+                Expression::Type { name, .. } if name.value == "Float64"
+            ),
+            "Expected Float64 parameter type"
+        );
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
