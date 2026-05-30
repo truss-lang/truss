@@ -3694,3 +3694,99 @@ fn test_overloaded_struct_method_call_no_match_error() {
         "expected NoMatchingOverload error for bool arg to overloaded method"
     );
 }
+
+fn run_type_check(code: &str) -> usize {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    binding.get_errors().len()
+}
+
+#[test]
+fn test_import_module_call() {
+    let errors = run_type_check(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo
+         func test() -> Int32 { return Foo.bar() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for module import call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_import_wildcard_call() {
+    let errors = run_type_check(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo.*
+         func test() -> Int32 { return bar() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for wildcard import call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_import_member_call() {
+    let errors = run_type_check(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import Foo.Bar.baz
+         func test() -> Int32 { return baz() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for member import call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_import_nested_module_call() {
+    let errors = run_type_check(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import Foo
+         func test() -> Int32 { return Foo.Bar.baz() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for nested module call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_import_module_not_found_error() {
+    let errors = run_type_check(
+        "import NonExistent
+         func test() -> Int32 { return 42 }",
+    );
+    assert!(errors > 0, "Expected error for non-existent module import");
+}
+
+#[test]
+fn test_import_deep_nested_call() {
+    let errors = run_type_check(
+        "module A { module B { module C { func foo() -> Int32 { return 1 } } } }
+         import A
+         func test() -> Int32 { return A.B.C.foo() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for deep nested call, got: {:?}",
+        errors
+    );
+}

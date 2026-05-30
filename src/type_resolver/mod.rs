@@ -1485,6 +1485,19 @@ impl TypeResolver {
                     .ok()?
                     .borrow()
                     .get_type(&name.value);
+                let t = t.or_else(|| {
+                    let scope = self.current_scope.as_ref()?;
+                    let sym = scope.borrow().get_symbol(&name.value)?;
+                    let binding = sym.borrow();
+                    let decl = binding.get_decl().ok().flatten()?;
+                    drop(binding);
+                    let decl_ref = decl.borrow();
+                    match &*decl_ref {
+                        Statement::FunctionDecl { ty: fn_ty, .. } => fn_ty.clone(),
+                        Statement::VariableDecl { ty: var_ty, .. } => var_ty.clone(),
+                        _ => None,
+                    }
+                });
                 let t = t?;
                 *ty = Some(t.clone());
                 t
@@ -2069,6 +2082,9 @@ impl TypeResolver {
                 target_ty
             }
             Expression::MemberAccess { object, member, ty } => {
+                if let Some(result) = self.try_module_member_access(object.clone(), member, ty) {
+                    return Some(result);
+                }
                 let object_ty = self.infer_type(object.clone())?;
                 match &*object_ty.borrow() {
                     Type::Struct(struct_name, _) => {
@@ -3545,6 +3561,70 @@ impl TypeResolver {
                     );
                 }
             }
+        }
+    }
+
+    fn find_module_from_expr(&self, expr: &Expression) -> Option<Rc<RefCell<Module>>> {
+        match expr {
+            Expression::Variable { symbol, .. } => {
+                let ws = symbol.as_ref()?;
+                let sym = ws.0.upgrade()?;
+                let binding = sym.borrow();
+                if let Symbol::Module { module, .. } = &*binding {
+                    module.clone()
+                } else {
+                    None
+                }
+            }
+            Expression::MemberAccess { object, member, .. } => {
+                let obj = object.borrow();
+                let module = self.find_module_from_expr(&obj)?;
+                let scope = module.borrow().scope.clone()?;
+                let sym = scope.borrow().get_symbol(&member.value)?;
+                let binding = sym.borrow();
+                if let Symbol::Module { module, .. } = &*binding {
+                    module.clone()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn try_module_member_access(
+        &mut self,
+        object: Rc<RefCell<Expression>>,
+        member: &Token,
+        ty: &mut Option<Rc<RefCell<Type>>>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let module = self.find_module_from_expr(&object.borrow())?;
+        let scope = module.borrow().scope.clone()?;
+        let sym = scope.borrow().get_symbol(&member.value)?;
+        let binding = sym.borrow();
+
+        if let Symbol::Module { .. } = &*binding {
+            return None;
+        }
+
+        let decl = binding.get_decl().ok()??;
+        drop(binding);
+        drop(scope);
+
+        let member_type = {
+            let decl_ref = decl.borrow();
+            match &*decl_ref {
+                Statement::FunctionDecl { ty: fn_ty, .. } => fn_ty.clone(),
+                Statement::VariableDecl { ty: var_ty, .. } => var_ty.clone(),
+                _ => None,
+            }
+        };
+
+        if let Some(t) = member_type {
+            *ty = Some(t.clone());
+            Some(t)
+        } else {
+            None
         }
     }
 
