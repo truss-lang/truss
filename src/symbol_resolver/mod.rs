@@ -23,6 +23,7 @@ pub struct SymbolResolver {
     current_module: Option<Rc<RefCell<Module>>>,
     current_scope: Option<Rc<RefCell<Scope>>>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
+    root_module_name: String,
 }
 impl SymbolResolver {
     pub fn new(krate: Rc<RefCell<Crate>>, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
@@ -31,10 +32,12 @@ impl SymbolResolver {
             current_module: None,
             current_scope: None,
             engine,
+            root_module_name: String::new(),
         }
     }
 
     pub fn resolve(&mut self, program: &Program, module_name: String) -> Rc<RefCell<Module>> {
+        self.root_module_name = module_name.clone();
         let module = Rc::new(RefCell::new(Module::new(module_name.clone())));
         self.krate
             .borrow_mut()
@@ -750,6 +753,48 @@ impl SymbolResolver {
 
                 self.current_scope = saved;
             }
+            Statement::ModuleDecl {
+                name, body, scope, ..
+            } => {
+                let full_path = {
+                    let parent = self
+                        .current_module
+                        .as_ref()
+                        .map(|m| m.borrow().name.clone());
+                    match parent {
+                        Some(ref p) if *p == self.root_module_name => name.value.clone(),
+                        Some(ref p) => format!("{}.{}", p, name.value),
+                        None => name.value.clone(),
+                    }
+                };
+                let module = Rc::new(RefCell::new(Module::new(full_path.clone())));
+                self.krate
+                    .borrow_mut()
+                    .modules
+                    .insert(full_path, module.clone());
+                if let Some(current) = &self.current_module {
+                    current
+                        .borrow_mut()
+                        .children
+                        .insert(name.value.clone(), module.clone());
+                }
+
+                let module_symbol = Rc::new(RefCell::new(Symbol::Module {
+                    name: name.value.clone(),
+                    decl: stmt.clone(),
+                }));
+                self.enter(module_symbol, name);
+
+                *scope = Some(self.enter_scope(None));
+                module.borrow_mut().scope = scope.clone();
+
+                let saved_module = self.current_module.replace(module);
+                for s in body {
+                    self.register_symbols(s.clone());
+                }
+                self.leave_scope();
+                self.current_module = saved_module;
+            }
             _ => {}
         }
     }
@@ -1120,6 +1165,13 @@ impl SymbolResolver {
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
             Statement::Defer { body, .. } => {
                 self.resolve_expression(body.clone());
+            }
+            Statement::ModuleDecl { body, scope, .. } => {
+                self.enter_scope(scope.clone());
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
+                self.leave_scope();
             }
             _ => {}
         }

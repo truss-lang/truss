@@ -9,6 +9,7 @@ use truss::{
     krate::Crate,
     lexer::{CharStream, Lexer},
     parser::Parser,
+    symbol::Symbol,
     symbol_resolver::SymbolResolver,
 };
 
@@ -1971,6 +1972,218 @@ fn test_match_multi_pattern_with_guard_symbols_resolved() {
         errors.len(),
         0,
         "multi-pattern enum match with guard should resolve without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_module_creates_crate_entry() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module foo { }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine);
+    resolver.resolve(&program, "test".to_string());
+    let modules = &krate.borrow().modules;
+    assert!(
+        modules.contains_key("foo"),
+        "module 'foo' should be in crate"
+    );
+}
+
+#[test]
+fn test_module_registers_symbol_in_parent_scope() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("module foo { }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine);
+    let root_module = resolver.resolve(&program, "test".to_string());
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let sym = root_scope.borrow().get_symbol("foo");
+    assert!(
+        sym.is_some(),
+        "module 'foo' should be registered as symbol in root scope"
+    );
+    assert!(matches!(&*sym.unwrap().borrow(), Symbol::Module { name, .. } if name == "foo"));
+}
+
+#[test]
+fn test_module_func_symbol_registered_in_module_scope() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine);
+    resolver.resolve(&program, "test".to_string());
+    let foo_module = krate.borrow().modules.get("foo").cloned();
+    assert!(foo_module.is_some(), "module 'foo' should be in crate");
+    let foo_scope = foo_module.unwrap().borrow().scope.clone();
+    assert!(foo_scope.is_some(), "module 'foo' should have a scope");
+    let bar_sym = foo_scope.unwrap().borrow().get_symbol("bar");
+    assert!(
+        bar_sym.is_some(),
+        "function 'bar' should be in module 'foo' scope"
+    );
+}
+
+#[test]
+fn test_nested_module_creates_child_entry() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { module bar { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine);
+    resolver.resolve(&program, "test".to_string());
+    let modules = &krate.borrow().modules;
+    assert!(
+        modules.contains_key("foo"),
+        "module 'foo' should be in crate"
+    );
+    assert!(
+        modules.contains_key("foo.bar"),
+        "module 'foo.bar' should be in crate"
+    );
+    let foo_module = modules.get("foo").unwrap().borrow();
+    assert!(
+        foo_module.children.contains_key("bar"),
+        "'bar' should be child of 'foo'"
+    );
+}
+
+#[test]
+fn test_nested_module_func_resolved_in_nested_scope() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { module bar { func baz() -> Int32 { 42 } } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine);
+    resolver.resolve(&program, "test".to_string());
+    let bar_module = krate.borrow().modules.get("foo.bar").cloned();
+    assert!(bar_module.is_some(), "module 'foo.bar' should be in crate");
+    let bar_scope = bar_module.unwrap().borrow().scope.clone();
+    assert!(bar_scope.is_some(), "module 'foo.bar' should have a scope");
+    let baz_sym = bar_scope.unwrap().borrow().get_symbol("baz");
+    assert!(
+        baz_sym.is_some(),
+        "function 'baz' should be in module 'foo.bar' scope"
+    );
+}
+
+#[test]
+fn test_dotted_path_module_creates_nested_modules() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo.bar { func baz() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine);
+    resolver.resolve(&program, "test".to_string());
+    let modules = &krate.borrow().modules;
+    assert!(
+        modules.contains_key("foo"),
+        "module 'foo' should be in crate"
+    );
+    assert!(
+        modules.contains_key("foo.bar"),
+        "module 'foo.bar' should be in crate"
+    );
+    let foo_module = modules.get("foo").unwrap().borrow();
+    assert!(
+        foo_module.children.contains_key("bar"),
+        "'bar' should be child of 'foo'"
+    );
+    let bar_module = modules.get("foo.bar").unwrap().borrow();
+    let bar_scope = bar_module.scope.clone().unwrap();
+    let baz_sym = bar_scope.borrow().get_symbol("baz");
+    assert!(
+        baz_sym.is_some(),
+        "function 'baz' should be in module 'foo.bar' scope"
+    );
+}
+
+#[test]
+fn test_multiple_modules_do_not_conflict() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module a { func fa() {} } module b { func fb() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine);
+    resolver.resolve(&program, "test".to_string());
+    let modules = &krate.borrow().modules;
+    let a_module = modules.get("a").unwrap().borrow();
+    let a_scope = a_module.scope.clone().unwrap();
+    assert!(a_scope.borrow().get_symbol("fa").is_some());
+    assert!(a_scope.borrow().get_symbol("fb").is_none());
+    let b_module = modules.get("b").unwrap().borrow();
+    let b_scope = b_module.scope.clone().unwrap();
+    assert!(b_scope.borrow().get_symbol("fb").is_some());
+    assert!(b_scope.borrow().get_symbol("fa").is_none());
+}
+
+#[test]
+fn test_module_func_call_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "module foo { func bar() -> Int32 { 42 } func baz() -> Int32 { bar() } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let engine_borrow = engine.borrow();
+    let errors = engine_borrow.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "module func call should resolve, got: {:?}",
         errors
     );
 }

@@ -20,9 +20,14 @@ impl Crate {
 pub struct Module {
     pub name: String,
     pub scope: Option<Rc<RefCell<Scope>>>,
+    pub children: HashMap<String, Rc<RefCell<Module>>>,
 }
 impl Module {
     pub fn new(name: String) -> Self {
-        Self { name, scope: None }
+        Self {
+            name,
+            scope: None,
+            children: HashMap::new(),
+        }
     }
 }

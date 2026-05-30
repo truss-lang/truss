@@ -86,6 +86,10 @@ pub enum Symbol {
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
     },
+    Module {
+        name: String,
+        decl: Rc<RefCell<Statement>>,
+    },
 }
 
 impl Symbol {
@@ -104,6 +108,7 @@ impl Symbol {
             Self::Protocol { name, .. } => Ok(name.clone()),
             Self::ProtocolMethod { name, .. } => Ok(name.clone()),
             Self::ProtocolProperty { name, .. } => Ok(name.clone()),
+            Self::Module { name, .. } => Ok(name.clone()),
         }
     }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
@@ -121,6 +126,7 @@ impl Symbol {
             Self::Protocol { decl, .. } => Ok(Some(decl.clone())),
             Self::ProtocolMethod { decl, .. } => Ok(decl.clone()),
             Self::ProtocolProperty { decl, .. } => Ok(decl.clone()),
+            Self::Module { decl, .. } => Ok(Some(decl.clone())),
         }
     }
     pub fn parent(&self) -> Option<Rc<RefCell<Symbol>>> {
