@@ -3633,3 +3633,64 @@ fn test_overloaded_function_call_no_match_error() {
         "expected NoMatchingOverload error for bool arg to overloaded foo"
     );
 }
+
+#[test]
+fn test_overloaded_struct_method_call_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct S { func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } } func test() -> Float64 { let s = S() return s.foo(y: 3.0) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "overloaded struct method call should resolve, got: {:?}",
+        errors
+    );
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow() {
+        if let FunctionBody::Statements(stmts) = &*body.borrow()
+            && let Statement::ExpressionStatement { expression } = &*stmts[1].borrow()
+            && let Expression::Call { selected_index, .. } = &*expression.borrow()
+        {
+            assert_eq!(*selected_index, Some(1), "should select foo(y: Float64)");
+        }
+    }
+}
+
+#[test]
+fn test_overloaded_struct_method_call_no_match_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct S { func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } } func test() -> Int32 { let s = S() return s.foo(x: true) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let binding = engine.borrow();
+    let errors = binding.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "expected NoMatchingOverload error for bool arg to overloaded method"
+    );
+}

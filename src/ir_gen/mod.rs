@@ -963,6 +963,45 @@ impl<'ctx> IRGenerator<'ctx> {
         format!("{}${}${}", base_name, labels.join("_"), types.join("_"))
     }
 
+    fn types_compatible(a: &Type, b: &Type) -> bool {
+        match (a, b) {
+            (Type::Int8, Type::Int8)
+            | (Type::Int16, Type::Int16)
+            | (Type::Int32, Type::Int32)
+            | (Type::Int64, Type::Int64)
+            | (Type::Int128, Type::Int128)
+            | (Type::UInt8, Type::UInt8)
+            | (Type::UInt16, Type::UInt16)
+            | (Type::UInt32, Type::UInt32)
+            | (Type::UInt64, Type::UInt64)
+            | (Type::UInt128, Type::UInt128)
+            | (Type::Float32, Type::Float32)
+            | (Type::Float64, Type::Float64)
+            | (Type::Bool, Type::Bool)
+            | (Type::Char, Type::Char)
+            | (Type::Void, Type::Void)
+            | (Type::Never, Type::Never) => true,
+            (Type::Struct(n1, _), Type::Struct(n2, _))
+            | (Type::Class(n1, _), Type::Class(n2, _))
+            | (Type::Enum(n1, _), Type::Enum(n2, _))
+            | (Type::Protocol(n1, _), Type::Protocol(n2, _)) => n1 == n2,
+            (Type::Pointer(t1), Type::Pointer(t2)) => {
+                Self::types_compatible(&t1.borrow(), &t2.borrow())
+            }
+            (Type::Tuple(e1), Type::Tuple(e2)) => {
+                e1.len() == e2.len()
+                    && e1.iter().zip(e2.iter()).all(|((_, t1), (_, t2))| {
+                        Self::types_compatible(&t1.borrow(), &t2.borrow())
+                    })
+            }
+            (Type::GenericParam(n1), Type::GenericParam(n2)) => n1 == n2,
+            (Type::AssociatedType(t1, n1), Type::AssociatedType(t2, n2)) => {
+                n1 == n2 && Self::types_compatible(&t1.borrow(), &t2.borrow())
+            }
+            _ => false,
+        }
+    }
+
     fn mangle_from_overload(
         &self,
         base_name: &str,
@@ -1711,6 +1750,85 @@ impl<'ctx> IRGenerator<'ctx> {
         names.join(" & ")
     }
 
+    fn find_overloaded_witness_fn(
+        &self,
+        type_name: &str,
+        entry_name: &str,
+        _entry_kind: &str,
+        protocol_name: &str,
+    ) -> Option<String> {
+        let scope = self.program_scope.borrow();
+        let scope_ref = scope.as_ref()?;
+        let symbol = scope_ref.borrow().get_symbol(type_name)?;
+        let sym_borrow = symbol.borrow();
+        let methods = match &*sym_borrow {
+            Symbol::Struct { methods, .. }
+            | Symbol::Class { methods, .. }
+            | Symbol::Enum { methods, .. } => methods.clone(),
+            _ => return None,
+        };
+        drop(sym_borrow);
+        drop(symbol);
+        let proto_symbol = scope_ref.borrow().get_symbol(protocol_name)?;
+        let proto_borrow = proto_symbol.borrow();
+        let proto_methods = match &*proto_borrow {
+            Symbol::Protocol { methods, .. } => methods.clone(),
+            _ => return None,
+        };
+        drop(proto_borrow);
+        drop(proto_symbol);
+
+        let actual_entry_name = entry_name
+            .strip_suffix(".getter")
+            .or_else(|| entry_name.strip_suffix(".setter"))
+            .unwrap_or(entry_name);
+
+        let proto_params = proto_methods
+            .iter()
+            .find(|m| m.borrow().name().as_ref().ok() == Some(&actual_entry_name.to_string()))
+            .and_then(|m| {
+                let decl = m.borrow().get_decl().ok().flatten()?;
+                let decl_ref = decl.borrow();
+                if let Statement::FunctionDecl { parameters, ty, .. } = &*decl_ref {
+                    let fn_ty = ty.as_ref()?;
+                    let fn_borrow = fn_ty.borrow();
+                    if let Type::Function(param_tys, _, _) = &*fn_borrow {
+                        Some((parameters.clone(), param_tys.clone()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            });
+
+        if let Some((_proto_params, proto_param_tys)) = proto_params {
+            for method in &methods {
+                if method.borrow().name().as_ref().ok() != Some(&actual_entry_name.to_string()) {
+                    continue;
+                }
+                let decl = method.borrow().get_decl().ok().flatten()?;
+                let decl_ref = decl.borrow();
+                if let Statement::FunctionDecl { parameters, ty, .. } = &*decl_ref {
+                    let fn_ty = ty.as_ref()?;
+                    let fn_borrow = fn_ty.borrow();
+                    if let Type::Function(param_tys, _, _) = &*fn_borrow {
+                        if param_tys.len() == proto_param_tys.len()
+                            && param_tys
+                                .iter()
+                                .zip(proto_param_tys.iter())
+                                .all(|(a, b)| Self::types_compatible(&a.borrow(), &b.borrow()))
+                        {
+                            let base = format!("{}.{}", type_name, actual_entry_name);
+                            return Some(Self::mangle_fn_name(&base, &parameters));
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
     fn create_protocol_witness_table_types(&self, statement: Rc<RefCell<Statement>>) {
         if let Statement::ProtocolDecl { name, .. } = &*statement.borrow() {
             let protocol_name = &name.value;
@@ -1879,11 +1997,17 @@ impl<'ctx> IRGenerator<'ctx> {
             let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
             let mut const_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
             for (entry_name, entry_kind) in &entries {
-                let fn_name = match *entry_kind {
-                    "method" => format!("{}.{}", type_name, entry_name),
-                    "getter" => format!("{}.{}", type_name, entry_name),
-                    "setter" => format!("{}.{}", type_name, entry_name),
-                    _ => continue,
+                let base_name = format!("{}.{}", type_name, entry_name);
+                let fn_name = if self.overloaded_fn_names.borrow().contains(&base_name) {
+                    self.find_overloaded_witness_fn(
+                        type_name,
+                        entry_name,
+                        entry_kind,
+                        &protocol_name,
+                    )
+                    .unwrap_or(base_name)
+                } else {
+                    base_name
                 };
                 if let Some(func) = self.module.get_function(&fn_name) {
                     const_vals.push(
@@ -4944,7 +5068,16 @@ impl<'ctx> IRGenerator<'ctx> {
                                 p
                             };
                             method_self_ptr = Some(ptr);
-                            (format!("{}.{}", struct_name, member.value), false)
+                            let base_name = format!("{}.{}", struct_name, member.value);
+                            let fn_name = if let Some(idx) = *selected_index
+                                && idx < overloads.len()
+                            {
+                                self.mangle_from_overload(&base_name, &overloads[idx], parameters)
+                                    .unwrap_or(base_name.clone())
+                            } else {
+                                base_name.clone()
+                            };
+                            (fn_name, false)
                         } else if let Some(ty) = &object_ty
                             && let Type::Class(class_name, _) = &*ty.borrow()
                         {
@@ -5033,7 +5166,16 @@ impl<'ctx> IRGenerator<'ctx> {
                             }
 
                             method_self_ptr = Some(ptr);
-                            (format!("{}.{}", class_name, method_name), false)
+                            let base_name = format!("{}.{}", class_name, method_name);
+                            let fn_name = if let Some(idx) = *selected_index
+                                && idx < overloads.len()
+                            {
+                                self.mangle_from_overload(&base_name, &overloads[idx], parameters)
+                                    .unwrap_or(base_name.clone())
+                            } else {
+                                base_name.clone()
+                            };
+                            (fn_name, false)
                         } else if let Some(ty) = &object_ty
                             && (matches!(&*ty.borrow(), Type::Compound(..))
                                 || matches!(&*ty.borrow(), Type::Protocol(..)))

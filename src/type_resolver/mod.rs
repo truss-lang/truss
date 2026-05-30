@@ -1599,6 +1599,28 @@ impl TypeResolver {
                     return None;
                 }
 
+                if overloads.is_empty()
+                    && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
+                {
+                    let member_name = member.value.clone();
+                    let object_clone = object.clone();
+                    if let Some(methods) = self.collect_method_overloads(object_clone, &member_name)
+                    {
+                        if methods.len() > 1 {
+                            *overloads = methods;
+                            if let Some(best) = self.resolve_overloaded_call(
+                                callee.clone(),
+                                parameters,
+                                overloads,
+                                selected_index,
+                            ) {
+                                return Some(best);
+                            }
+                            return None;
+                        }
+                    }
+                }
+
                 match &*callee_type.borrow() {
                     Type::Function(param_tys, ret_ty, is_vararg) => {
                         if !*is_vararg && parameters.len() != param_tys.len() {
@@ -3005,6 +3027,36 @@ impl TypeResolver {
                 }
             }
             _ => None,
+        }
+    }
+
+    fn collect_method_overloads(
+        &mut self,
+        object: Rc<RefCell<Expression>>,
+        member_name: &str,
+    ) -> Option<Vec<Rc<RefCell<Symbol>>>> {
+        let object_ty = self.infer_type(object)?;
+        let type_name = match &*object_ty.borrow() {
+            Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => n.clone(),
+            _ => return None,
+        };
+        let scope = self.current_scope.as_ref().unwrap().borrow();
+        let symbol = scope.get_symbol(&type_name)?;
+        let methods = match &*symbol.borrow() {
+            Symbol::Struct { methods, .. }
+            | Symbol::Class { methods, .. }
+            | Symbol::Enum { methods, .. } => methods.clone(),
+            _ => return None,
+        };
+        let matching: Vec<Rc<RefCell<Symbol>>> = methods
+            .iter()
+            .filter(|m| m.borrow().name().as_ref().ok() == Some(&member_name.to_string()))
+            .cloned()
+            .collect();
+        if matching.is_empty() {
+            None
+        } else {
+            Some(matching)
         }
     }
 
