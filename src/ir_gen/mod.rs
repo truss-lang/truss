@@ -325,6 +325,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     .borrow_mut()
                     .insert(struct_name.clone(), struct_type);
             }
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.declare_struct_types(stmt.clone());
+            }
         }
     }
 
@@ -361,6 +365,10 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 struct_type.set_body(&field_types, false);
             }
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_struct_type_bodies(stmt.clone());
+            }
         }
     }
 
@@ -374,6 +382,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.class_types
                     .borrow_mut()
                     .insert(class_name.clone(), class_type);
+            }
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.declare_class_types(stmt.clone());
             }
         }
     }
@@ -390,6 +402,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 field_types.extend(self.collect_class_stored_field_types(class_name));
 
                 class_type.set_body(&field_types, false);
+            }
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_class_type_bodies(stmt.clone());
             }
         }
     }
@@ -597,6 +613,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     .borrow_mut()
                     .insert(enum_name.clone(), payload_type);
             }
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.declare_enum_types(stmt.clone());
+            }
         }
     }
 
@@ -643,6 +663,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     ];
                     enum_type.set_body(&field_types, false);
                 }
+            }
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_enum_type_bodies(stmt.clone());
             }
         }
     }
@@ -1159,6 +1183,11 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
         }
+        if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_function_declarations(stmt.clone());
+            }
+        }
     }
 
     fn create_extern_declaration(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
@@ -1356,6 +1385,10 @@ impl<'ctx> IRGenerator<'ctx> {
             self.vtable_types
                 .borrow_mut()
                 .insert(class_name.clone(), vtable_type);
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_vtable_types(stmt.clone());
+            }
         }
     }
 
@@ -1405,6 +1438,10 @@ impl<'ctx> IRGenerator<'ctx> {
             self.vtable_globals
                 .borrow_mut()
                 .insert(class_name.clone(), global);
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_vtable_instances(stmt.clone());
+            }
         }
     }
 
@@ -1498,6 +1535,10 @@ impl<'ctx> IRGenerator<'ctx> {
             self.protocol_witness_table_types
                 .borrow_mut()
                 .insert(protocol_name.clone(), wt_type);
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_protocol_witness_table_types(stmt.clone());
+            }
         }
     }
 
@@ -1519,6 +1560,10 @@ impl<'ctx> IRGenerator<'ctx> {
             self.existential_container_types
                 .borrow_mut()
                 .insert(protocol_name.clone(), container_type);
+        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_existential_container_types(stmt.clone());
+            }
         }
     }
 
@@ -1657,6 +1702,11 @@ impl<'ctx> IRGenerator<'ctx> {
             self.protocol_witness_tables
                 .borrow_mut()
                 .insert(key, global);
+        }
+        if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+            for stmt in body {
+                self.create_protocol_witness_tables(stmt.clone());
+            }
         }
     }
 
@@ -2901,6 +2951,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     .unwrap()
                     .deferred_blocks
                     .push(body.clone());
+                Ok(false)
+            }
+            Statement::ModuleDecl { body, .. } => {
+                for stmt in body {
+                    self.resolve_statement(stmt.clone())?;
+                }
                 Ok(false)
             }
             _ => Ok(false),
@@ -5309,10 +5365,8 @@ impl<'ctx> IRGenerator<'ctx> {
                         let match_result = if is_enum {
                             match pattern.as_ref() {
                                 Pattern::EnumCase { case_name, .. } => {
-                                    let idx = self.get_enum_case_index(
-                                        &enum_name,
-                                        &case_name.value,
-                                    )?;
+                                    let idx =
+                                        self.get_enum_case_index(&enum_name, &case_name.value)?;
                                     let expected_tag =
                                         self.context.i8_type().const_int(idx as u64, false);
                                     Some(self.builder.build_int_compare(
@@ -5352,10 +5406,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 if !bindings.is_empty() {
                                     let idx = match pattern.as_ref() {
                                         Pattern::EnumCase { case_name, .. } => {
-                                            self.get_enum_case_index(
-                                                &enum_name,
-                                                &case_name.value,
-                                            )?
+                                            self.get_enum_case_index(&enum_name, &case_name.value)?
                                         }
                                         _ => unreachable!(),
                                     };
@@ -5376,10 +5427,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                         let case_payload_ty = payload_type
                                             .get_field_type_at_index(idx as u32)
                                             .ok_or_else(|| {
-                                                anyhow::anyhow!(
-                                                    "Payload not found at idx {}",
-                                                    idx
-                                                )
+                                                anyhow::anyhow!("Payload not found at idx {}", idx)
                                             })?;
                                         let case_payload_struct_ty =
                                             case_payload_ty.into_struct_type();
@@ -5387,38 +5435,34 @@ impl<'ctx> IRGenerator<'ctx> {
                                         for (j, binding) in bindings.iter().enumerate() {
                                             match binding {
                                                 Pattern::Identifier(tok) => {
-                                                    let field_ptr =
-                                                        self.builder.build_struct_gep(
-                                                            case_payload_struct_ty,
-                                                            case_payload_ptr,
-                                                            j as u32,
-                                                            "",
-                                                        )?;
-                                                    let field_ty =
-                                                        case_payload_struct_ty
-                                                            .get_field_type_at_index(j as u32)
-                                                            .ok_or_else(|| {
-                                                                anyhow::anyhow!(
-                                                                    "Field not found at idx {}",
-                                                                    j
-                                                                )
-                                                            })?;
+                                                    let field_ptr = self.builder.build_struct_gep(
+                                                        case_payload_struct_ty,
+                                                        case_payload_ptr,
+                                                        j as u32,
+                                                        "",
+                                                    )?;
+                                                    let field_ty = case_payload_struct_ty
+                                                        .get_field_type_at_index(j as u32)
+                                                        .ok_or_else(|| {
+                                                            anyhow::anyhow!(
+                                                                "Field not found at idx {}",
+                                                                j
+                                                            )
+                                                        })?;
                                                     let field_val = self
                                                         .builder
                                                         .build_load(field_ty, field_ptr, "")?;
                                                     let var_ptr = self
                                                         .builder
                                                         .build_alloca(field_ty, &tok.value)?;
-                                                    self.builder
-                                                        .build_store(var_ptr, field_val)?;
+                                                    self.builder.build_store(var_ptr, field_val)?;
                                                     self.declare_variable(
                                                         tok.value.clone(),
                                                         var_ptr,
                                                     );
                                                 }
                                                 Pattern::ValueBinding(inner) => {
-                                                    if let Pattern::Identifier(tok) =
-                                                        inner.as_ref()
+                                                    if let Pattern::Identifier(tok) = inner.as_ref()
                                                     {
                                                         let field_ptr =
                                                             self.builder.build_struct_gep(
@@ -5427,28 +5471,20 @@ impl<'ctx> IRGenerator<'ctx> {
                                                                 j as u32,
                                                                 "",
                                                             )?;
-                                                        let field_ty =
-                                                            case_payload_struct_ty
-                                                                .get_field_type_at_index(
-                                                                    j as u32,
+                                                        let field_ty = case_payload_struct_ty
+                                                            .get_field_type_at_index(j as u32)
+                                                            .ok_or_else(|| {
+                                                                anyhow::anyhow!(
+                                                                    "Field not found at idx {}",
+                                                                    j
                                                                 )
-                                                                .ok_or_else(|| {
-                                                                    anyhow::anyhow!(
-                                                                        "Field not found at idx {}",
-                                                                        j
-                                                                    )
-                                                                })?;
+                                                            })?;
                                                         let field_val = self
                                                             .builder
-                                                            .build_load(
-                                                                field_ty, field_ptr, "",
-                                                            )?;
+                                                            .build_load(field_ty, field_ptr, "")?;
                                                         let var_ptr = self
                                                             .builder
-                                                            .build_alloca(
-                                                                field_ty,
-                                                                &tok.value,
-                                                            )?;
+                                                            .build_alloca(field_ty, &tok.value)?;
                                                         self.builder
                                                             .build_store(var_ptr, field_val)?;
                                                         self.declare_variable(
