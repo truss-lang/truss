@@ -1432,10 +1432,35 @@ impl SymbolResolver {
                     self.resolve_expression(t.clone());
                 }
             }
-            Expression::Closure { body, .. } => {
+            Expression::Closure {
+                parameters,
+                return_type,
+                body,
+                scope,
+                ..
+            } => {
+                *scope = Some(self.enter_scope(None));
+                for param in parameters {
+                    let name = param.borrow().name.value.clone();
+                    if name != "_" {
+                        let symbol = Rc::new(RefCell::new(Symbol::Variable {
+                            name: name.clone(),
+                            decl: None,
+                            parameter: None,
+                        }));
+                        self.enter(symbol, &param.borrow().name);
+                    }
+                    if let Some(type_annotation) = &param.borrow().type_annotation {
+                        self.resolve_expression(type_annotation.clone());
+                    }
+                }
+                if let Some(ret) = return_type {
+                    self.resolve_expression(ret.clone());
+                }
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
                 }
+                self.leave_scope();
             }
             Expression::FunctionType { param_types, .. } => {
                 for pt in param_types {

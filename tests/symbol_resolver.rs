@@ -2687,3 +2687,134 @@ fn test_nested_generic_type_in_body_resolves() {
         errors
     );
 }
+
+#[test]
+fn test_closure_parameter_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { (x: Int32) in x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { body: closure_body, .. } = &*init.borrow()
+        && let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow()
+        && let Expression::Variable { symbol, .. } = &*expression.borrow()
+    {
+        assert_ne!(*symbol, None, "Closure parameter 'x' should be resolved");
+    } else {
+        panic!("Expected closure with resolved parameter symbol");
+    }
+}
+
+#[test]
+fn test_closure_captures_outer_variable() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a = 1; let f = { (x: Int32) in a } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let closure_decl = statements.iter().find(|s| {
+            matches!(&*s.borrow(),
+                Statement::VariableDecl { name, .. } if name.value == "f"
+            )
+        }).expect("Expected variable 'f'");
+        if let Statement::VariableDecl { initializer, .. } = &*closure_decl.borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure { body: closure_body, .. } = &*init.borrow()
+            && let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow()
+            && let Expression::Variable { name, symbol, .. } = &*expression.borrow()
+        {
+            assert_eq!(name.value, "a");
+            assert_ne!(*symbol, None, "Captured variable 'a' should be resolved");
+        } else {
+            panic!("Expected closure capturing outer variable");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_closure_has_scope() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { (x: Int32) in x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { scope, .. } = &*init.borrow()
+    {
+        assert!(scope.is_some(), "Closure should have a scope assigned");
+    } else {
+        panic!("Expected closure with scope");
+    }
+}
+
+#[test]
+fn test_closure_no_params_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { in 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { parameters, scope, .. } = &*init.borrow()
+    {
+        assert!(parameters.is_empty());
+        assert!(scope.is_some());
+    } else {
+        panic!("Expected closure with scope");
+    }
+}
