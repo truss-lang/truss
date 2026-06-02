@@ -535,7 +535,6 @@ impl Parser {
             },
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenBrace => {
-                    // Try to detect closure { (params) -> Ret in body } or { in body }
                     let closure_detected = self.index + 1 < self.tokens.len() && {
                         let next = &self.tokens[self.index + 1];
                         if KeywordType::is_keyword(&next, KeywordType::In) {
@@ -547,7 +546,8 @@ impl Parser {
                                 let t = &self.tokens[i];
                                 if SeparatorType::is_separator(&t, SeparatorType::OpenParen) {
                                     depth += 1;
-                                } else if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+                                } else if SeparatorType::is_separator(&t, SeparatorType::CloseParen)
+                                {
                                     depth -= 1;
                                 }
                                 i += 1;
@@ -842,7 +842,6 @@ impl Parser {
                 && SeparatorType::is_separator(&t, SeparatorType::CloseParen)
             {
                 let right = self.next().unwrap();
-                // Check for function type: () -> R
                 if let Some(token) = self.peek()
                     && OperatorType::is_operator(&token, OperatorType::Arrow)
                 {
@@ -909,7 +908,6 @@ impl Parser {
                     return Err(());
                 }
 
-                // Check for function type syntax: (T1, T2, ...) -> R
                 if let Some(token) = self.peek()
                     && OperatorType::is_operator(&token, OperatorType::Arrow)
                 {
@@ -958,7 +956,6 @@ impl Parser {
                 return Err(());
             }
 
-            // Check for function type syntax: (T) -> R
             if let Some(token) = self.peek()
                 && OperatorType::is_operator(&token, OperatorType::Arrow)
             {

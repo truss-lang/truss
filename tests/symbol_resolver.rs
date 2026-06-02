@@ -2709,7 +2709,9 @@ fn test_closure_parameter_resolved() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
         && let Some(init) = initializer
-        && let Expression::Closure { body: closure_body, .. } = &*init.borrow()
+        && let Expression::Closure {
+            body: closure_body, ..
+        } = &*init.borrow()
         && let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow()
         && let Expression::Variable { symbol, .. } = &*expression.borrow()
     {
@@ -2739,14 +2741,19 @@ fn test_closure_captures_outer_variable() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
-        let closure_decl = statements.iter().find(|s| {
-            matches!(&*s.borrow(),
-                Statement::VariableDecl { name, .. } if name.value == "f"
-            )
-        }).expect("Expected variable 'f'");
+        let closure_decl = statements
+            .iter()
+            .find(|s| {
+                matches!(&*s.borrow(),
+                    Statement::VariableDecl { name, .. } if name.value == "f"
+                )
+            })
+            .expect("Expected variable 'f'");
         if let Statement::VariableDecl { initializer, .. } = &*closure_decl.borrow()
             && let Some(init) = initializer
-            && let Expression::Closure { body: closure_body, .. } = &*init.borrow()
+            && let Expression::Closure {
+                body: closure_body, ..
+            } = &*init.borrow()
             && let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow()
             && let Expression::Variable { name, symbol, .. } = &*expression.borrow()
         {
@@ -2810,7 +2817,9 @@ fn test_closure_no_params_resolved() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
         && let Some(init) = initializer
-        && let Expression::Closure { parameters, scope, .. } = &*init.borrow()
+        && let Expression::Closure {
+            parameters, scope, ..
+        } = &*init.borrow()
     {
         assert!(parameters.is_empty());
         assert!(scope.is_some());

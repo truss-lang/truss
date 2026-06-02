@@ -6485,7 +6485,13 @@ fn test_parse_closure_typed_params() {
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
         let init = initializer.as_ref().unwrap().borrow();
-        if let Expression::Closure { parameters, return_type, body, .. } = &*init {
+        if let Expression::Closure {
+            parameters,
+            return_type,
+            body,
+            ..
+        } = &*init
+        {
             assert_eq!(parameters.len(), 2);
             let p0 = parameters[0].borrow();
             assert_eq!(p0.name.value, "x");
@@ -6518,7 +6524,12 @@ fn test_parse_closure_no_return_type() {
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
         let init = initializer.as_ref().unwrap().borrow();
-        if let Expression::Closure { parameters, return_type, .. } = &*init {
+        if let Expression::Closure {
+            parameters,
+            return_type,
+            ..
+        } = &*init
+        {
             assert_eq!(parameters.len(), 2);
             let p0 = parameters[0].borrow();
             assert_eq!(p0.name.value, "x");
@@ -6539,10 +6550,7 @@ fn test_parse_closure_no_return_type() {
 fn test_parse_closure_no_params() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "let f = { in 42 }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("let f = { in 42 }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -6550,7 +6558,12 @@ fn test_parse_closure_no_params() {
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
         let init = initializer.as_ref().unwrap().borrow();
-        if let Expression::Closure { parameters, return_type, .. } = &*init {
+        if let Expression::Closure {
+            parameters,
+            return_type,
+            ..
+        } = &*init
+        {
             assert_eq!(parameters.len(), 0);
             assert!(return_type.is_none());
         } else {
@@ -6576,10 +6589,16 @@ fn test_parse_closure_multi_statement_body() {
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
         let init = initializer.as_ref().unwrap().borrow();
-        if let Expression::Closure { parameters, body, .. } = &*init {
+        if let Expression::Closure {
+            parameters, body, ..
+        } = &*init
+        {
             assert_eq!(parameters.len(), 1);
             assert!(body.len() >= 1);
-            assert!(matches!(&*body[body.len()-1].borrow(), Statement::Return { .. }));
+            assert!(matches!(
+                &*body[body.len() - 1].borrow(),
+                Statement::Return { .. }
+            ));
         } else {
             panic!("Expected Closure expression");
         }
@@ -6601,9 +6620,17 @@ fn test_parse_function_type() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert!(!program.statements.is_empty());
-    if let Statement::VariableDecl { type_expression, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        type_expression, ..
+    } = &*program.statements[0].borrow()
+    {
         let t = type_expression.as_ref().unwrap().borrow();
-        if let Expression::FunctionType { param_types, return_type, .. } = &*t {
+        if let Expression::FunctionType {
+            param_types,
+            return_type,
+            ..
+        } = &*t
+        {
             assert_eq!(param_types.len(), 2);
             assert!(matches!(
                 &*param_types[0].borrow(),
@@ -6634,7 +6661,10 @@ fn test_parse_function_type_single_param() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert!(!program.statements.is_empty());
-    if let Statement::VariableDecl { type_expression, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        type_expression, ..
+    } = &*program.statements[0].borrow()
+    {
         let t = type_expression.as_ref().unwrap().borrow();
         if let Expression::FunctionType { param_types, .. } = &*t {
             assert_eq!(param_types.len(), 1);
@@ -6654,16 +6684,16 @@ fn test_parse_function_type_single_param() {
 fn test_parse_function_type_void_params() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "let f: () -> Void".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("let f: () -> Void".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert!(!program.statements.is_empty());
-    if let Statement::VariableDecl { type_expression, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        type_expression, ..
+    } = &*program.statements[0].borrow()
+    {
         let t = type_expression.as_ref().unwrap().borrow();
         if let Expression::FunctionType { param_types, .. } = &*t {
             assert_eq!(param_types.len(), 0);
@@ -6688,7 +6718,12 @@ fn test_parse_closure_with_function_type_annotation() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert!(!program.statements.is_empty());
-    if let Statement::VariableDecl { type_expression, initializer, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        type_expression,
+        initializer,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert!(type_expression.is_some());
         let t = type_expression.as_ref().unwrap().borrow();
         assert!(matches!(&*t, Expression::FunctionType { .. }));
@@ -6703,10 +6738,7 @@ fn test_parse_closure_with_function_type_annotation() {
 fn test_parse_block_not_closure() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "let b = { 42 }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("let b = { 42 }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
