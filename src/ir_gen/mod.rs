@@ -6014,6 +6014,15 @@ impl<'ctx> IRGenerator<'ctx> {
                         let expr = rt.borrow();
                         expr.get_ty().ok().flatten()
                     })
+                    .or_else(|| {
+                        ty.as_ref().and_then(|t| {
+                            if let Type::Function(_, ret_ty, _) = &*t.borrow() {
+                                Some(ret_ty.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    })
                     .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
 
                 let mut param_types: Vec<Rc<RefCell<Type>>> = Vec::new();

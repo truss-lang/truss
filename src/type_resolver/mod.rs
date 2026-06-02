@@ -29,6 +29,7 @@ pub struct TypeResolver {
     current_return_type: Option<Rc<RefCell<Type>>>,
     current_scope: Option<Rc<RefCell<Scope>>>,
     current_owner: Option<Rc<RefCell<Symbol>>>,
+    closure_expected_type: Option<Rc<RefCell<Type>>>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
 }
 
@@ -40,6 +41,7 @@ impl TypeResolver {
             current_return_type: None,
             current_scope: None,
             current_owner: None,
+            closure_expected_type: None,
             engine,
         }
     }
@@ -2967,10 +2969,11 @@ impl TypeResolver {
                 ty,
                 ..
             } => {
-                let ret_type = return_type
+                let (mut ret_type, ret_type_from_expected) = return_type
                     .as_ref()
                     .and_then(|rt| self.infer_type(rt.clone()))
-                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                    .map(|t| (t, false))
+                    .unwrap_or_else(|| (Rc::new(RefCell::new(Type::Void)), true));
                 let mut param_types = Vec::new();
                 for param in parameters.iter() {
                     let param_type = param
@@ -2986,7 +2989,41 @@ impl TypeResolver {
                 let shorthand_start = parameters.len();
                 if let Some(max_idx) = max_shorthand {
                     let required_params = max_idx as usize + 1;
-                    if required_params > shorthand_start {
+                    if shorthand_start == 0 && self.closure_expected_type.is_none() {
+                        let first_token = body.first()
+                            .and_then(|s| match &*s.borrow() {
+                                Statement::ExpressionStatement { expression } => {
+                                    Some(expression.borrow().token())
+                                }
+                                Statement::Return { value: Some(val), .. } => {
+                                    Some(val.borrow().token())
+                                }
+                                _ => None
+                            });
+                        if let Some(tok) = first_token {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnknownType,
+                                "Cannot infer closure parameter types from shorthand arguments without type context; add explicit type annotation",
+                                &tok,
+                            );
+                        }
+                    } else if shorthand_start == 0 {
+                        if let Some(expected_ty) = &self.closure_expected_type {
+                            if let Type::Function(expected_params, expected_ret, _) = &*expected_ty.borrow() {
+                                for idx in 0..required_params {
+                                    let pt = expected_params.get(idx).cloned()
+                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
+                                    param_types.push(pt);
+                                }
+                                if ret_type_from_expected {
+                                    let ret = Rc::new(RefCell::new(
+                                        Type::clone(&*expected_ret.borrow())
+                                    ));
+                                    let _ = std::mem::replace(&mut ret_type, ret);
+                                }
+                            }
+                        }
+                    } else if required_params > shorthand_start {
                         for _ in shorthand_start..required_params {
                             param_types.push(Rc::new(RefCell::new(Type::Int32)));
                         }
@@ -3143,27 +3180,32 @@ impl TypeResolver {
                 *ty = Some(expected.clone());
             }
             drop(expr_mut);
-        } else if let Some(inferred) = self.infer_type(expression) {
-            let inferred_clone = inferred.borrow().clone();
-            let expected_clone = expected.borrow().clone();
-            let is_protocol_compat =
-                matches!(&expected_clone, Type::Protocol(..) | Type::Compound(..));
-            if !is_protocol_compat && inferred_clone != expected_clone {
+        } else {
+            self.closure_expected_type = Some(expected.clone());
+            let inferred = self.infer_type(expression);
+            self.closure_expected_type = None;
+            if let Some(inferred) = inferred {
+                let inferred_clone = inferred.borrow().clone();
+                let expected_clone = expected.borrow().clone();
+                let is_protocol_compat =
+                    matches!(&expected_clone, Type::Protocol(..) | Type::Compound(..));
+                if !is_protocol_compat && inferred_clone != expected_clone {
+                    self.emit_error(
+                        TrussDiagnosticCode::TypeMismatch,
+                        format!(
+                            "Type mismatch: expected {}, found {}",
+                            expected_clone, inferred_clone
+                        ),
+                        token,
+                    );
+                }
+            } else {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
-                    format!(
-                        "Type mismatch: expected {}, found {}",
-                        expected_clone, inferred_clone
-                    ),
+                    format!("Type mismatch: expected {}", expected.borrow()),
                     token,
                 );
             }
-        } else {
-            self.emit_error(
-                TrussDiagnosticCode::TypeMismatch,
-                format!("Type mismatch: expected {}", expected.borrow()),
-                token,
-            );
         }
     }
 

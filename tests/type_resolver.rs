@@ -4179,23 +4179,12 @@ fn test_closure_shorthand_type_default() {
     let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
-    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
-        && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
-        && let Some(init) = initializer
-        && let Expression::Closure { ty, .. } = &*init.borrow()
-    {
-        assert!(ty.is_some(), "Closure should have a type");
-        let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, _, _) = t {
-            assert_eq!(param_types.len(), 1);
-            assert_eq!(*param_types[0].borrow(), Type::Int32);
-        } else {
-            panic!("Expected Type::Function for closure, got {:?}", t);
-        }
-    }
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty(), "Expected error about missing type context for shorthand arg");
+    drop(engine_ref);
 }
 
 #[test]
@@ -4213,8 +4202,33 @@ fn test_closure_shorthand_type_binary() {
     let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
-    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
     type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty(), "Expected error about missing type context for shorthand args");
+    drop(engine_ref);
+}
+
+#[test]
+fn test_closure_shorthand_with_context() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f: (Int32) -> Int32 = { $0 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let error_count = engine.borrow().get_errors().len();
+    assert_eq!(error_count, 0, "Expected no errors");
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
@@ -4223,10 +4237,48 @@ fn test_closure_shorthand_type_binary() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, _, _) = t {
+        if let Type::Function(param_types, ret_type, _) = t {
+            assert_eq!(param_types.len(), 1);
+            assert_eq!(*param_types[0].borrow(), Type::Int32);
+            assert_eq!(*ret_type.borrow(), Type::Int32);
+        } else {
+            panic!("Expected Type::Function for closure, got {:?}", t);
+        }
+    }
+}
+
+#[test]
+fn test_closure_shorthand_binary_with_context() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f: (Int32, Int32) -> Int32 = { $0 + $1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let error_count = engine.borrow().get_errors().len();
+    assert_eq!(error_count, 0, "Expected no errors");
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { ty, .. } = &*init.borrow()
+    {
+        assert!(ty.is_some(), "Closure should have a type");
+        let t = ty.as_ref().unwrap().borrow().clone();
+        if let Type::Function(param_types, ret_type, _) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*param_types[0].borrow(), Type::Int32);
             assert_eq!(*param_types[1].borrow(), Type::Int32);
+            assert_eq!(*ret_type.borrow(), Type::Int32);
         } else {
             panic!("Expected Type::Function for closure, got {:?}", t);
         }

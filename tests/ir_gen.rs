@@ -4185,7 +4185,7 @@ fn test_irgen_closure_void_return_type() {
 
 #[test]
 fn test_irgen_closure_shorthand_argument() {
-    let code = "func test() -> Int32 { let f = { $0 }; return 0 }";
+    let code = "func test() -> Int32 { let f: (Int32) -> Int32 = { $0 }; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4207,6 +4207,11 @@ fn test_irgen_closure_shorthand_argument() {
     assert!(
         llvm_ir.contains("__closure_0"),
         "Should define __closure_0 function, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        "Closure should take one i32 param and return i32, IR:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -4214,7 +4219,7 @@ fn test_irgen_closure_shorthand_argument() {
 
 #[test]
 fn test_irgen_closure_shorthand_binary() {
-    let code = "func test() -> Int32 { let f = { $0 + $1 }; return 0 }";
+    let code = "func test() -> Int32 { let f: (Int32, Int32) -> Int32 = { $0 + $1 }; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4239,8 +4244,8 @@ fn test_irgen_closure_shorthand_binary() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define void @__closure_0(i32 %"),
-        "Closure should take two i32 params (returning void), IR:\n{}",
+        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        "Closure should take two i32 params and return i32, IR:\n{}",
         llvm_ir
     );
     assert!(llvm_ir.contains("add i32"), "Should have add instruction, IR:\n{}", llvm_ir);
