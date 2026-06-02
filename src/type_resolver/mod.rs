@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{
-        expression::{BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator},
+        expression::{BinaryOperator, CallParameter, CastKind, ElseBranch, Expression, UnaryOperator},
         node::Program,
         statement::{
             AccessModifier, AccessorKind, FunctionBody, ModifierType, Pattern, ProtocolMember,
@@ -835,8 +835,8 @@ impl TypeResolver {
     }
 
     fn process_function_decl_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
-        if let Expression::Block { statements, .. } = &*expr.borrow() {
-            for stmt in statements {
+        if let Expression::Closure { body, .. } = &*expr.borrow() {
+            for stmt in body {
                 self.process_decl(stmt.clone());
             }
         }
@@ -1049,15 +1049,15 @@ impl TypeResolver {
                         &condition.borrow().token(),
                     );
                 }
-                self.resolve_block_expression(body.clone());
+                self.resolve_block_expression(body);
             }
             Statement::Loop { body, .. } => {
-                self.resolve_block_expression(body.clone());
+                self.resolve_block_expression(body);
             }
             Statement::RepeatWhile {
                 body, condition, ..
             } => {
-                self.resolve_block_expression(body.clone());
+                self.resolve_block_expression(body);
                 let cond_ty = self.infer_type(condition.clone());
                 if let Some(cond_ty) = cond_ty
                     && *cond_ty.borrow() != Type::Bool
@@ -1074,7 +1074,7 @@ impl TypeResolver {
             }
             Statement::For { iterator, body, .. } => {
                 let _ = self.infer_type(iterator.clone());
-                self.resolve_block_expression(body.clone());
+                self.resolve_block_expression(body);
             }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
@@ -1286,11 +1286,11 @@ impl TypeResolver {
                         }
                     }
                 }
-                self.resolve_block_expression(else_body.clone());
+                self.resolve_block_expression(else_body);
             }
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
             Statement::Defer { body, .. } => {
-                self.resolve_block_expression(body.clone());
+                self.resolve_block_expression(body);
             }
             Statement::ModuleDecl { body, scope, .. } => {
                 if let Some(s) = scope.clone() {
@@ -1305,11 +1305,60 @@ impl TypeResolver {
         }
     }
 
-    fn resolve_block_expression(&mut self, block_expr: Rc<RefCell<Expression>>) {
-        if let Expression::Block { statements, .. } = &*block_expr.borrow() {
-            for stmt in statements {
-                self.resolve_statement(stmt.clone());
+    fn resolve_block_expression(&mut self, body: &[Rc<RefCell<Statement>>]) {
+        for stmt in body {
+            self.resolve_statement(stmt.clone());
+        }
+    }
+
+    fn get_block_type(&mut self, body: &[Rc<RefCell<Statement>>]) -> Option<Rc<RefCell<Type>>> {
+        let mut last_ty = Rc::new(RefCell::new(Type::Void));
+        for stmt in body.iter() {
+            if let Some(ty) = self.infer_statement_type(stmt.clone()) {
+                last_ty = ty;
             }
+        }
+        Some(last_ty)
+    }
+
+    fn find_max_shorthand(&self, body: &[Rc<RefCell<Statement>>]) -> Option<u32> {
+        let mut max: Option<u32> = None;
+        for stmt in body {
+            match &*stmt.borrow() {
+                Statement::ExpressionStatement { expression } => {
+                    self.find_shorthand_in_expr(expression, &mut max);
+                }
+                Statement::Return { value: Some(val), .. } => {
+                    self.find_shorthand_in_expr(val, &mut max);
+                }
+                _ => {}
+            }
+        }
+        max
+    }
+
+    fn find_shorthand_in_expr(&self, expr: &Rc<RefCell<Expression>>, max: &mut Option<u32>) {
+        match &*expr.borrow() {
+            Expression::ShorthandArgument { index, .. } => {
+                match max {
+                    Some(m) if *index > *m => *max = Some(*index),
+                    None => *max = Some(*index),
+                    _ => {}
+                }
+            }
+            Expression::Binary { left, right, .. } => {
+                self.find_shorthand_in_expr(left, max);
+                self.find_shorthand_in_expr(right, max);
+            }
+            Expression::Unary { expression, .. } => {
+                self.find_shorthand_in_expr(expression, max);
+            }
+            Expression::Call { parameters, .. } => {
+                for param in parameters {
+                    self.find_shorthand_in_expr(&param.expression, max);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -1380,19 +1429,24 @@ impl TypeResolver {
     }
 
     fn infer_if_type(&mut self, expression: Rc<RefCell<Expression>>) -> Option<Rc<RefCell<Type>>> {
-        let (condition, then, else_) = {
+        let condition;
+        let then: Vec<Rc<RefCell<Statement>>>;
+        let else_: Option<ElseBranch>;
+        {
             let expr = expression.borrow();
             let Expression::If {
-                condition,
-                then,
-                else_,
+                condition: cond,
+                then: t,
+                else_: e,
                 ..
             } = &*expr
             else {
                 return None;
             };
-            (condition.clone(), then.clone(), else_.clone())
-        };
+            condition = cond.clone();
+            then = t.clone();
+            else_ = e.clone();
+        }
 
         let cond_ty = self.infer_type(condition.clone())?;
 
@@ -1423,11 +1477,10 @@ impl TypeResolver {
         };
 
         if let Some(ref param_types) = binding_types {
-            if let Expression::Block { scope, .. } = &mut *then.borrow_mut() {
-                if let Some(block_scope) = scope {
-                    if let Expression::Case { bindings, .. } = &*condition.borrow() {
-                        Self::set_binding_types(bindings, param_types, block_scope);
-                    }
+            if let Expression::Case { bindings, .. } = &*condition.borrow() {
+                let current_scope = self.current_scope.clone();
+                if let Some(scope) = current_scope {
+                    Self::set_binding_types(bindings, param_types, &scope);
                 }
             }
         }
@@ -1440,9 +1493,12 @@ impl TypeResolver {
             );
         }
 
-        let then_ty = self.infer_type(then.clone())?;
-        if let Some(else_expr) = else_ {
-            let else_ty = self.infer_type(else_expr.clone())?;
+        let then_ty = self.get_block_type(&then)?;
+        if let Some(else_branch) = else_ {
+            let else_ty = match else_branch {
+                ElseBranch::Block(body) => self.get_block_type(&body)?,
+                ElseBranch::If(if_expr) => self.infer_if_type(if_expr)?,
+            };
             if then_ty.borrow().clone() != else_ty.borrow().clone() {
                 self.emit_error(
                     TrussDiagnosticCode::BranchTypeMismatch,
@@ -1451,7 +1507,7 @@ impl TypeResolver {
                         then_ty.borrow(),
                         else_ty.borrow()
                     ),
-                    &then.borrow().token(),
+                    &condition.borrow().token(),
                 );
             }
         }
@@ -1514,15 +1570,6 @@ impl TypeResolver {
                 let t = self.resolve_type_name(&name.value, name.as_ref())?;
                 *ty = Some(t.clone());
                 t
-            }
-            Expression::Block { statements, .. } => {
-                let mut last_ty = Rc::new(RefCell::new(Type::Void));
-                for stmt in statements.iter() {
-                    if let Some(ty) = self.infer_statement_type(stmt.clone()) {
-                        last_ty = ty;
-                    }
-                }
-                last_ty
             }
             Expression::Binary {
                 left,
@@ -2098,7 +2145,7 @@ impl TypeResolver {
                     }
 
                     let body_ty = self
-                        .infer_type(case.body.clone())
+                        .get_block_type(&case.body)
                         .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
 
                     if *match_ty.borrow() == Type::Void {
@@ -2111,7 +2158,7 @@ impl TypeResolver {
                                 match_ty.borrow(),
                                 body_ty.borrow()
                             ),
-                            &case.body.borrow().token(),
+                            &case.token,
                         );
                     }
 
@@ -2934,6 +2981,18 @@ impl TypeResolver {
                         .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
                     param_types.push(param_type);
                 }
+
+                let max_shorthand = self.find_max_shorthand(body);
+                let shorthand_start = parameters.len();
+                if let Some(max_idx) = max_shorthand {
+                    let required_params = max_idx as usize + 1;
+                    if required_params > shorthand_start {
+                        for _ in shorthand_start..required_params {
+                            param_types.push(Rc::new(RefCell::new(Type::Int32)));
+                        }
+                    }
+                }
+
                 let fn_type = Rc::new(RefCell::new(Type::Function(
                     param_types.clone(),
                     ret_type,
@@ -2956,10 +3015,26 @@ impl TypeResolver {
                             .borrow_mut()
                             .set_type(p.name.value.clone(), param_type);
                     }
+                    if let Some(max_idx) = max_shorthand {
+                        for idx in 0..=max_idx {
+                            let name = format!("${}", idx);
+                            let param_type = param_types
+                                .get(idx as usize)
+                                .cloned()
+                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
+                            self.current_scope
+                                .as_ref()
+                                .unwrap()
+                                .borrow_mut()
+                                .set_type(name, param_type);
+                        }
+                    }
                     for stmt in body.iter() {
                         let s = stmt.borrow();
                         if let Statement::ExpressionStatement { expression } = &*s {
                             self.infer_type(expression.clone());
+                        } else if let Statement::Return { value: Some(value), .. } = &*s {
+                            self.infer_type(value.clone());
                         } else {
                             drop(s);
                             self.process_decl(stmt.clone());
@@ -2987,9 +3062,13 @@ impl TypeResolver {
                 *ty = Some(fn_type.clone());
                 fn_type
             }
-            Expression::ShorthandArgument { ty, .. } => {
+            Expression::ShorthandArgument { index, ty } => {
                 if ty.is_none() {
-                    *ty = Some(Rc::new(RefCell::new(Type::Int32)));
+                    let name = format!("${}", index);
+                    let found = self.current_scope
+                        .as_ref()
+                        .and_then(|s| s.borrow().get_type(&name));
+                    *ty = Some(found.unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32))));
                 }
                 ty.clone().unwrap()
             }
