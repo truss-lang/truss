@@ -16,7 +16,8 @@ use inkwell::{
 use crate::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator,
+            AssignmentOperator, BinaryOperator, CallParameter, CastKind, ElseBranch, Expression,
+            UnaryOperator,
         },
         node::Program,
         statement::{
@@ -34,7 +35,7 @@ use crate::{
 struct Scope<'ctx> {
     variables: HashMap<String, PointerValue<'ctx>>,
     deferred_vars: Vec<(PointerValue<'ctx>, String)>,
-    deferred_blocks: Vec<Rc<RefCell<Expression>>>,
+    deferred_blocks: Vec<Vec<Rc<RefCell<Statement>>>>,
 }
 
 impl<'ctx> Scope<'ctx> {
@@ -189,7 +190,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn emit_all_deinit_calls(&self) {
         let all_blocks: Vec<(
-            Vec<Rc<RefCell<Expression>>>,
+            Vec<Vec<Rc<RefCell<Statement>>>>,
             Vec<(PointerValue<'ctx>, String)>,
         )> = {
             let stack = self.scope_stack.borrow();
@@ -201,11 +202,9 @@ impl<'ctx> IRGenerator<'ctx> {
         };
 
         for (deferred_blocks, deferred_vars) in &all_blocks {
-            for block_expr in deferred_blocks.iter().rev() {
-                if let Expression::Block { statements, .. } = &*block_expr.borrow() {
-                    for stmt in statements {
-                        let _ = self.resolve_statement(stmt.clone());
-                    }
+            for block_stmts in deferred_blocks.iter().rev() {
+                for stmt in block_stmts {
+                    let _ = self.resolve_statement(stmt.clone());
                 }
             }
             for (var_ptr, type_name) in deferred_vars {
@@ -230,11 +229,9 @@ impl<'ctx> IRGenerator<'ctx> {
         let current_block = self.builder.get_insert_block();
         let can_emit = current_block.map_or(false, |b| !b.get_terminator().is_some());
         if can_emit {
-            for block_expr in deferred_blocks.iter().rev() {
-                if let Expression::Block { statements, .. } = &*block_expr.borrow() {
-                    for stmt in statements {
-                        let _ = self.resolve_statement(stmt.clone());
-                    }
+            for block_stmts in deferred_blocks.iter().rev() {
+                for stmt in block_stmts {
+                    let _ = self.resolve_statement(stmt.clone());
                 }
             }
             for (var_ptr, type_name) in &deferred_vars {
@@ -1435,8 +1432,8 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_function_declarations_in_expr(&self, expr: Rc<RefCell<Expression>>) {
-        if let Expression::Block { statements, .. } = &*expr.borrow() {
-            for stmt in statements {
+        if let Expression::Closure { body, .. } = &*expr.borrow() {
+            for stmt in body {
                 self.create_function_declarations(stmt.clone());
             }
         }
@@ -2441,46 +2438,37 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
-    fn resolve_block_expression(&self, block_expr: Rc<RefCell<Expression>>) -> Result<bool> {
-        if let Expression::Block { statements, .. } = &*block_expr.borrow() {
-            self.enter_scope_with_stmts(statements)?;
-            self.resolve_block_stmts(statements)
-        } else {
-            Ok(false)
-        }
+    fn resolve_block_expression(&self, body: &[Rc<RefCell<Statement>>]) -> Result<bool> {
+        self.enter_scope_with_stmts(body)?;
+        self.resolve_block_stmts(body)
     }
 
     fn resolve_block_and_get_value(
         &self,
-        block_expr: Rc<RefCell<Expression>>,
+        body: &[Rc<RefCell<Statement>>],
     ) -> Result<(bool, Option<BasicValueEnum<'ctx>>)> {
-        if let Expression::Block { statements, .. } = &*block_expr.borrow() {
-            self.enter_scope_with_stmts(statements)?;
-            let len = statements.len();
-            let mut last_value = None;
-            for (i, stmt) in statements.iter().enumerate() {
-                let is_last = i == len - 1;
-                let terminates = match &*stmt.borrow() {
-                    Statement::ExpressionStatement { expression } => {
-                        let val = self.resolve_expression(expression.clone())?;
-                        if is_last {
-                            last_value = val;
-                        }
-                        false
+        self.enter_scope_with_stmts(body)?;
+        let len = body.len();
+        let mut last_value = None;
+        for (i, stmt) in body.iter().enumerate() {
+            let is_last = i == len - 1;
+            let terminates = match &*stmt.borrow() {
+                Statement::ExpressionStatement { expression } => {
+                    let val = self.resolve_expression(expression.clone())?;
+                    if is_last {
+                        last_value = val;
                     }
-                    _ => self.resolve_statement(stmt.clone())?,
-                };
-                if terminates {
-                    self.exit_scope();
-                    return Ok((true, None));
+                    false
                 }
+                _ => self.resolve_statement(stmt.clone())?,
+            };
+            if terminates {
+                self.exit_scope();
+                return Ok((true, None));
             }
-            self.exit_scope();
-            Ok((false, last_value))
-        } else {
-            let val = self.resolve_expression(block_expr.clone())?;
-            Ok((false, val))
         }
+        self.exit_scope();
+        Ok((false, last_value))
     }
 
     fn resolve_statement(&self, statement: Rc<RefCell<Statement>>) -> Result<bool> {
@@ -2792,7 +2780,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     .build_conditional_branch(cond_int, body_bb, exit_bb)?;
 
                 self.builder.position_at_end(body_bb);
-                let terminates = self.resolve_block_expression(body.clone())?;
+                let terminates = self.resolve_block_expression(body)?;
 
                 if !terminates {
                     self.builder.build_unconditional_branch(while_bb)?;
@@ -2814,7 +2802,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.build_unconditional_branch(body_bb)?;
 
                 self.builder.position_at_end(body_bb);
-                let terminates = self.resolve_block_expression(body.clone())?;
+                let terminates = self.resolve_block_expression(body)?;
 
                 if !terminates {
                     self.builder.build_unconditional_branch(body_bb)?;
@@ -2838,7 +2826,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.build_unconditional_branch(body_bb)?;
 
                 self.builder.position_at_end(body_bb);
-                let terminates = self.resolve_block_expression(body.clone())?;
+                let terminates = self.resolve_block_expression(body)?;
 
                 if !terminates {
                     self.builder.build_unconditional_branch(cond_bb)?;
@@ -2855,7 +2843,7 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Statement::For { iterator, body, .. } => {
                 let _ = self.resolve_expression(iterator.clone());
-                self.resolve_block_expression(body.clone())?;
+                self.resolve_block_expression(body)?;
                 Ok(false)
             }
             Statement::FunctionDecl {
@@ -3265,7 +3253,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         .build_conditional_branch(match_result, exit_bb, else_bb)?;
 
                     self.builder.position_at_end(else_bb);
-                    self.resolve_block_expression(else_body.clone())?;
+                    self.resolve_block_expression(else_body)?;
                     self.builder.build_unconditional_branch(exit_bb)?;
 
                     self.builder.position_at_end(exit_bb);
@@ -3342,12 +3330,6 @@ impl<'ctx> IRGenerator<'ctx> {
                     .const_null()
                     .into(),
             )),
-            Expression::Block { statements, .. } => {
-                self.enter_scope_with_stmts(statements)?;
-                self.resolve_block_stmts(statements)?;
-
-                Ok(Some(self.context.i32_type().const_int(0, false).into()))
-            }
             Expression::Variable { name, ty, .. } => {
                 let getter_name = format!("{}.getter", name.value);
                 if let Some(getter_fn) = self.module.get_function(&getter_name) {
@@ -4453,19 +4435,19 @@ impl<'ctx> IRGenerator<'ctx> {
                                     _ => {}
                                 }
                             }
-                            let terminates = self.resolve_block_expression(then.clone())?;
+                            let terminates = self.resolve_block_expression(then)?;
                             if !terminates {
                                 self.builder.build_unconditional_branch(exit_bb)?;
                             }
                             self.exit_scope();
                         } else {
-                            let terminates = self.resolve_block_expression(then.clone())?;
+                            let terminates = self.resolve_block_expression(then)?;
                             if !terminates {
                                 self.builder.build_unconditional_branch(exit_bb)?;
                             }
                         }
                     } else {
-                        let terminates = self.resolve_block_expression(then.clone())?;
+                        let terminates = self.resolve_block_expression(then)?;
                         if !terminates {
                             self.builder.build_unconditional_branch(exit_bb)?;
                         }
@@ -4473,12 +4455,12 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     if let Some(else_) = else_ {
                         self.builder.position_at_end(else_bb.unwrap());
-                        let terminates = match &*else_.borrow() {
-                            Expression::Block { .. } => {
-                                self.resolve_block_expression(else_.clone())?
+                        let terminates = match else_ {
+                            ElseBranch::Block(body) => {
+                                self.resolve_block_expression(body)?
                             }
-                            _ => {
-                                self.resolve_expression(else_.clone())?;
+                            ElseBranch::If(if_expr) => {
+                                self.resolve_expression(if_expr.clone())?;
                                 false
                             }
                         };
@@ -4525,7 +4507,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     )?;
 
                     self.builder.position_at_end(then_bb);
-                    let (terminates, then_val) = self.resolve_block_and_get_value(then.clone())?;
+                    let (terminates, then_val) = self.resolve_block_and_get_value(then)?;
                     if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, then_val) {
                         self.builder.build_store(*alloca, val)?;
                     }
@@ -4535,8 +4517,13 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     if let Some(else_) = else_ {
                         self.builder.position_at_end(else_bb.unwrap());
-                        let (terminates, else_val) =
-                            self.resolve_block_and_get_value(else_.clone())?;
+                        let (terminates, else_val) = match else_ {
+                            ElseBranch::Block(body) => self.resolve_block_and_get_value(body)?,
+                            ElseBranch::If(if_expr) => {
+                                let val = self.resolve_expression(if_expr.clone())?;
+                                (false, val)
+                            }
+                        };
                         if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, else_val) {
                             self.builder.build_store(*alloca, val)?;
                         }
@@ -5988,7 +5975,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
 
-                    let _ = self.resolve_expression(case.body.clone())?;
+                    for stmt in &case.body {
+                        let _ = self.resolve_statement(stmt.clone())?;
+                    }
                     if case.guard.is_some() {
                         let _ = self.resolve_expression(case.guard.clone().unwrap());
                     }
@@ -6008,6 +5997,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 parameters,
                 return_type,
                 body,
+                ty,
                 ..
             } => {
                 let counter = {
@@ -6037,23 +6027,57 @@ impl<'ctx> IRGenerator<'ctx> {
                     param_types.push(pt);
                 }
 
-                let fn_llvm_type =
-                    self.get_function_type(ret_type.clone(), param_types.clone(), false)?;
+                let all_param_types: Vec<Rc<RefCell<Type>>> = ty
+                    .as_ref()
+                    .and_then(|t| {
+                        if let Type::Function(pts, _, _) = &*t.borrow() {
+                            Some(pts.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| param_types.clone());
+
+                let fn_llvm_type = self.get_function_type(
+                    ret_type.clone(),
+                    all_param_types.clone(),
+                    false,
+                )?;
                 let function = self.module.add_function(&fn_name, fn_llvm_type, None);
 
                 let current_block = self.builder.get_insert_block();
                 let entry_block = self.context.append_basic_block(function, "entry");
                 self.builder.position_at_end(entry_block);
 
-                self.enter_scope();
+                self.enter_scope_with_stmts(body)?;
+                let mut param_idx = 0u32;
                 for (i, param) in parameters.iter().enumerate() {
                     let param_name = &param.borrow().name.value;
                     let llvm_type = self.resolve_type(param_types[i].clone())?;
                     let alloca_name = self.unique_alloca_name(param_name);
                     let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
-                    let param_value = function.get_nth_param(i as u32).unwrap();
+                    let param_value = function.get_nth_param(param_idx).unwrap();
                     self.builder.build_store(ptr, param_value)?;
                     self.declare_variable(param_name.clone(), ptr);
+                    param_idx += 1;
+                }
+
+                let max_shorthand = self.find_max_shorthand_in_body(body);
+                if let Some(max_idx) = max_shorthand {
+                    for idx in 0..=max_idx {
+                        let shorthand_name = format!("${}", idx);
+                        let param_ty = all_param_types
+                            .get(idx as usize)
+                            .cloned()
+                            .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
+                        let llvm_type = self.resolve_type(param_ty)?;
+                        let alloca_name = self.unique_alloca_name(&shorthand_name);
+                        let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
+                        let param_value = function.get_nth_param(param_idx).unwrap();
+                        self.builder.build_store(ptr, param_value)?;
+                        self.declare_variable(shorthand_name, ptr);
+                        param_idx += 1;
+                    }
                 }
 
                 let is_void = matches!(&*ret_type.borrow(), Type::Void);
@@ -6104,10 +6128,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 ))
             }
             Expression::FunctionType { .. } => Ok(None),
-            Expression::ShorthandArgument { index, .. } => {
+            Expression::ShorthandArgument { index, ty } => {
                 let var_name = format!("${}", index);
                 if let Some(ptr) = self.lookup_variable(&var_name) {
-                    let llvm_type: inkwell::types::BasicTypeEnum = self.context.i32_type().into();
+                    let llvm_type = if let Some(ty) = ty {
+                        self.resolve_type(ty.clone())?
+                    } else {
+                        self.context.i32_type().into()
+                    };
                     let val = self.builder.build_load(llvm_type, ptr, "")?;
                     Ok(Some(val))
                 } else {
@@ -6120,6 +6148,53 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             _ => anyhow::bail!("Expression type not implemented"),
+        }
+    }
+
+    fn find_max_shorthand_in_body(&self, body: &[Rc<RefCell<Statement>>]) -> Option<u32> {
+        let mut max: Option<u32> = None;
+        for stmt in body {
+            match &*stmt.borrow() {
+                Statement::ExpressionStatement { expression } => {
+                    self.find_shorthand_in_expr(expression, &mut max);
+                }
+                Statement::Return {
+                    value: Some(val), ..
+                } => {
+                    self.find_shorthand_in_expr(val, &mut max);
+                }
+                _ => {}
+            }
+        }
+        max
+    }
+
+    fn find_shorthand_in_expr(
+        &self,
+        expr: &Rc<RefCell<Expression>>,
+        max: &mut Option<u32>,
+    ) {
+        match &*expr.borrow() {
+            Expression::ShorthandArgument { index, .. } => {
+                match max {
+                    Some(m) if *index > *m => *max = Some(*index),
+                    None => *max = Some(*index),
+                    _ => {}
+                }
+            }
+            Expression::Binary { left, right, .. } => {
+                self.find_shorthand_in_expr(left, max);
+                self.find_shorthand_in_expr(right, max);
+            }
+            Expression::Unary { expression, .. } => {
+                self.find_shorthand_in_expr(expression, max);
+            }
+            Expression::Call { parameters, .. } => {
+                for param in parameters {
+                    self.find_shorthand_in_expr(&param.expression, max);
+                }
+            }
+            _ => {}
         }
     }
 
