@@ -1503,33 +1503,43 @@ impl SymbolResolver {
         for stmt in stmts {
             match &*stmt.borrow() {
                 Statement::ExpressionStatement { expression } => {
-                    if let Expression::ShorthandArgument { index, .. } = &*expression.borrow() {
-                        match max {
-                            Some(m) => {
-                                if *index > *m {
-                                    *max = Some(*index);
-                                }
-                            }
-                            None => *max = Some(*index),
-                        }
-                    }
+                    Self::find_shorthand_in_expr(expression, max);
                 }
                 Statement::Return {
                     value: Some(val), ..
                 } => {
-                    if let Expression::ShorthandArgument { index, .. } = &*val.borrow() {
-                        match max {
-                            Some(m) => {
-                                if *index > *m {
-                                    *max = Some(*index);
-                                }
-                            }
-                            None => *max = Some(*index),
-                        }
-                    }
+                    Self::find_shorthand_in_expr(val, max);
                 }
                 _ => {}
             }
+        }
+    }
+
+    fn find_shorthand_in_expr(expr: &Rc<RefCell<Expression>>, max: &mut Option<u32>) {
+        match &*expr.borrow() {
+            Expression::ShorthandArgument { index, .. } => {
+                match max {
+                    Some(m) => {
+                        if *index > *m {
+                            *max = Some(*index);
+                        }
+                    }
+                    None => *max = Some(*index),
+                }
+            }
+            Expression::Binary { left, right, .. } => {
+                Self::find_shorthand_in_expr(left, max);
+                Self::find_shorthand_in_expr(right, max);
+            }
+            Expression::Unary { expression, .. } => {
+                Self::find_shorthand_in_expr(expression, max);
+            }
+            Expression::Call { parameters, .. } => {
+                for param in parameters {
+                    Self::find_shorthand_in_expr(&param.expression, max);
+                }
+            }
+            _ => {}
         }
     }
 
