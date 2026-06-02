@@ -225,8 +225,10 @@ impl Parser {
                             &modifiers[0].token,
                         );
                     }
+                    let expr = self.parse_expression()?;
+                    let expr = self.apply_trailing_closure(expr)?;
                     Ok(Statement::ExpressionStatement {
-                        expression: Rc::new(RefCell::new(self.parse_expression()?)),
+                        expression: Rc::new(RefCell::new(expr)),
                     })
                 }
             },
@@ -261,10 +263,38 @@ impl Parser {
                         &modifiers[0].token,
                     );
                 }
+                let expr = self.parse_expression()?;
+                let expr = self.apply_trailing_closure(expr)?;
                 Ok(Statement::ExpressionStatement {
-                    expression: Rc::new(RefCell::new(self.parse_expression()?)),
+                    expression: Rc::new(RefCell::new(expr)),
                 })
             }
+        }
+    }
+
+    fn apply_trailing_closure(&mut self, expr: Expression) -> Result<Expression, ()> {
+        if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+            && matches!(
+                expr,
+                Expression::Variable { .. }
+                    | Expression::MemberAccess { .. }
+                    | Expression::Call { .. }
+            )
+        {
+            let closure = self.parse_closure_expression()?;
+            Ok(Expression::Call {
+                callee: Rc::new(RefCell::new(expr)),
+                type_parameters: None,
+                parameters: vec![CallParameter {
+                    label: None,
+                    expression: Rc::new(RefCell::new(closure)),
+                }],
+                overloads: vec![],
+                selected_index: None,
+            })
+        } else {
+            Ok(expr)
         }
     }
 
@@ -534,43 +564,7 @@ impl Parser {
                 }
             },
             TokenType::Separator { separator } => match separator {
-                SeparatorType::OpenBrace => {
-                    let closure_detected = self.index + 1 < self.tokens.len() && {
-                        let next = &self.tokens[self.index + 1];
-                        if KeywordType::is_keyword(&next, KeywordType::In) {
-                            true
-                        } else if OperatorType::is_operator(&next, OperatorType::Dollar) {
-                            true
-                        } else if SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
-                            let mut depth = 1u32;
-                            let mut i = self.index + 2;
-                            while i < self.tokens.len() && depth > 0 {
-                                let t = &self.tokens[i];
-                                if SeparatorType::is_separator(&t, SeparatorType::OpenParen) {
-                                    depth += 1;
-                                } else if SeparatorType::is_separator(&t, SeparatorType::CloseParen)
-                                {
-                                    depth -= 1;
-                                }
-                                i += 1;
-                            }
-                            if depth == 0 && i < self.tokens.len() {
-                                let after = &self.tokens[i];
-                                OperatorType::is_operator(&after, OperatorType::Arrow)
-                                    || KeywordType::is_keyword(&after, KeywordType::In)
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    };
-                    if closure_detected {
-                        self.parse_closure_expression()
-                    } else {
-                        self.parse_block()
-                    }
-                }
+                SeparatorType::OpenBrace => self.parse_closure_expression(),
                 SeparatorType::OpenParen => {
                     self.index += 1;
                     let left = token;
@@ -1841,7 +1835,8 @@ impl Parser {
             && OperatorType::is_operator(&t, OperatorType::Assign)
         {
             self.index += 1;
-            Some(self.parse_expression()?)
+            let init_expr = self.parse_expression()?;
+            Some(self.apply_trailing_closure(init_expr)?)
         } else {
             None
         };
@@ -3065,7 +3060,9 @@ impl Parser {
         {
             parameters = Vec::new();
             return_type = None;
-        } else {
+        } else if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenParen)
+        {
             let Some(open) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
@@ -3174,6 +3171,9 @@ impl Parser {
                 );
                 return Err(());
             }
+        } else {
+            parameters = Vec::new();
+            return_type = None;
         }
 
         let mut body = Vec::new();
@@ -3912,7 +3912,7 @@ impl Parser {
             return Err(());
         }
 
-        let else_body = self.parse_expression()?;
+        let else_body = self.parse_block()?;
 
         Ok(Statement::Guard {
             token: Box::new(token),

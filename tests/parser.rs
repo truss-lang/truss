@@ -6746,7 +6746,7 @@ fn test_parse_block_not_closure() {
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
         let init = initializer.as_ref().unwrap().borrow();
-        assert!(matches!(&*init, Expression::Block { .. }));
+        assert!(matches!(&*init, Expression::Closure { .. }));
     } else {
         panic!("Expected VariableDecl");
     }
