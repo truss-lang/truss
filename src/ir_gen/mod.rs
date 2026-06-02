@@ -3400,6 +3400,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     };
                     let val = self.builder.build_load(llvm_type, field_ptr, "")?;
                     Ok(Some(val))
+                } else if let Some(fn_val) = self.module.get_function(&name.value) {
+                    let fn_ptr = fn_val.as_global_value().as_pointer_value();
+                    let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                    Ok(Some(
+                        self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?.into(),
+                    ))
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,
