@@ -2912,17 +2912,48 @@ impl TypeResolver {
                 *ty = Some(result.clone());
                 result
             }
-            Expression::Closure { ty, .. } => {
-                if ty.is_none() {
-                    *ty = Some(Rc::new(RefCell::new(Type::Void)));
+            Expression::Closure {
+                parameters,
+                return_type,
+                body: _,
+                ty,
+                ..
+            } => {
+                let ret_type = return_type
+                    .as_ref()
+                    .and_then(|rt| self.infer_type(rt.clone()))
+                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                let mut param_types = Vec::new();
+                for param in parameters {
+                    let param_type = param
+                        .borrow()
+                        .type_annotation
+                        .as_ref()
+                        .and_then(|ta| self.infer_type(ta.clone()))
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                    param_types.push(param_type);
                 }
-                ty.clone().unwrap()
+                let fn_type = Rc::new(RefCell::new(Type::Function(
+                    param_types,
+                    ret_type,
+                    false,
+                )));
+                *ty = Some(fn_type.clone());
+                fn_type
             }
-            Expression::FunctionType { ty, .. } => {
-                if ty.is_none() {
-                    *ty = Some(Rc::new(RefCell::new(Type::Void)));
-                }
-                ty.clone().unwrap()
+            Expression::FunctionType {
+                param_types, return_type, ty, ..
+            } => {
+                let params: Vec<Rc<RefCell<Type>>> = param_types
+                    .iter()
+                    .filter_map(|pt| self.infer_type(pt.clone()))
+                    .collect();
+                let ret = self
+                    .infer_type(return_type.clone())
+                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                let fn_type = Rc::new(RefCell::new(Type::Function(params, ret, false)));
+                *ty = Some(fn_type.clone());
+                fn_type
             }
         };
         Some(result)

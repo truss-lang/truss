@@ -3960,3 +3960,155 @@ fn test_open_struct_field_accessible_from_outside() {
         errors
     );
 }
+
+#[test]
+fn test_closure_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { (x: Int32, y: Int32) -> Int32 in x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { ty, parameters, .. } = &*init.borrow()
+    {
+        assert!(ty.is_some(), "Closure should have a type");
+        let t = ty.as_ref().unwrap().borrow().clone();
+        if let Type::Function(param_types, ret_type, is_vararg) = t {
+            assert_eq!(param_types.len(), 2);
+            assert_eq!(*param_types[0].borrow(), Type::Int32);
+            assert_eq!(*param_types[1].borrow(), Type::Int32);
+            assert_eq!(*ret_type.borrow(), Type::Int32);
+            assert!(!is_vararg);
+        } else {
+            panic!("Expected Type::Function for closure, got {:?}", t);
+        }
+        assert_eq!(parameters.len(), 2);
+    } else {
+        panic!("Expected closure with type");
+    }
+}
+
+#[test]
+fn test_closure_no_params_no_return_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { in 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { ty, .. } = &*init.borrow()
+    {
+        assert!(ty.is_some(), "Empty closure should have a type");
+        let t = ty.as_ref().unwrap().borrow().clone();
+        if let Type::Function(param_types, ret_type, is_vararg) = t {
+            assert_eq!(param_types.len(), 0);
+            assert_eq!(*ret_type.borrow(), Type::Void);
+            assert!(!is_vararg);
+        } else {
+            panic!("Expected Type::Function for closure, got {:?}", t);
+        }
+    } else {
+        panic!("Expected closure with type");
+    }
+}
+
+#[test]
+fn test_function_type_expression_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f: (Int32) -> Bool }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { type_expression, .. } = &*statements[0].borrow()
+        && let Some(te) = type_expression
+        && let Expression::FunctionType { ty, .. } = &*te.borrow()
+    {
+        assert!(ty.is_some(), "FunctionType should have a resolved type");
+        let t = ty.as_ref().unwrap().borrow().clone();
+        if let Type::Function(param_types, ret_type, is_vararg) = t {
+            assert_eq!(param_types.len(), 1);
+            assert_eq!(*param_types[0].borrow(), Type::Int32);
+            assert_eq!(*ret_type.borrow(), Type::Bool);
+            assert!(!is_vararg);
+        } else {
+            panic!("Expected Type::Function for function type, got {:?}", t);
+        }
+    } else {
+        panic!("Expected FunctionType with resolved type");
+    }
+}
+
+#[test]
+fn test_closure_untyped_params_inferred() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { (x, y) in x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { ty, .. } = &*init.borrow()
+    {
+        assert!(ty.is_some(), "Closure should have a type");
+        let t = ty.as_ref().unwrap().borrow().clone();
+        if let Type::Function(param_types, ret_type, is_vararg) = t {
+            assert_eq!(param_types.len(), 2);
+            assert_eq!(*ret_type.borrow(), Type::Void);
+            assert!(!is_vararg);
+        } else {
+            panic!("Expected Type::Function for closure, got {:?}", t);
+        }
+    } else {
+        panic!("Expected closure with type");
+    }
+}
