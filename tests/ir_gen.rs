@@ -3680,15 +3680,19 @@ fn test_irgen_closure_simple() {
     type_resolver.resolve(&program, module_id.clone());
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(
-        &program,
-        module_id.borrow().scope.clone().unwrap(),
-    );
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("__closure_0"), "Should define __closure_0 function, IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("define i32 @__closure_0(i32 %"), "Closure should have i32 parameter and return i32");
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        "Closure should have i32 parameter and return i32"
+    );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -3709,14 +3713,15 @@ fn test_irgen_closure_no_params() {
     type_resolver.resolve(&program, module_id.clone());
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(
-        &program,
-        module_id.borrow().scope.clone().unwrap(),
-    );
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("__closure_0"), "Should define __closure_0 function, IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir
+    );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -3737,15 +3742,19 @@ fn test_irgen_closure_multi_param() {
     type_resolver.resolve(&program, module_id.clone());
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(
-        &program,
-        module_id.borrow().scope.clone().unwrap(),
-    );
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("__closure_0"), "Should define __closure_0 function, IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("define i32 @__closure_0(i32 %"), "Closure should have i32 params");
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        "Closure should have i32 params"
+    );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -3766,14 +3775,84 @@ fn test_irgen_closure_with_return() {
     type_resolver.resolve(&program, module_id.clone());
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
-    let module = ir_gen.generate(
-        &program,
-        module_id.borrow().scope.clone().unwrap(),
-    );
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("__closure_0"), "Should define __closure_0 function, IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("ret i32"), "Closure body should have return instruction");
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("ret i32"),
+        "Closure body should have return instruction"
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_closure_call() {
+    let code = "func test() -> Int32 { let f = { (x: Int32) -> Int32 in x }; return f(42) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    assert!(
+        llvm_ir.contains("call i32"),
+        "Should have a call i32 instruction, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function"
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_higher_order_call() {
+    let code = "func apply(fn: (Int32) -> Int32, x: Int32) -> Int32 { return fn(x) }
+                 func test() -> Int32 { return apply(fn: { (y: Int32) -> Int32 in y }, x: 42) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    assert!(
+        llvm_ir.contains("define i32 @apply"),
+        "Should define apply function"
+    );
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function"
+    );
+    assert!(
+        llvm_ir.contains("call i32"),
+        "Should have call instructions"
+    );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }

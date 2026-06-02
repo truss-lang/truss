@@ -5514,6 +5514,35 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 };
 
+                let callee_ty = match &*callee.borrow() {
+                    Expression::Variable { ty, .. } => ty.clone(),
+                    Expression::MemberAccess { ty, .. } => ty.clone(),
+                    _ => None,
+                };
+                if let Some(ty) = callee_ty
+                    && let Type::Function(param_tys, ret_ty, is_vararg) = &*ty.borrow()
+                    && self.module.get_function(&function_name).is_none()
+                {
+                    let fn_ptr_val = self.resolve_expression(callee.clone())?.unwrap();
+                    let fn_llvm_type =
+                        self.get_function_type(ret_ty.clone(), param_tys.clone(), *is_vararg)?;
+                    let fn_ptr = fn_ptr_val.into_pointer_value();
+
+                    let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                    for param in parameters {
+                        let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                        args.push(arg_val.into());
+                    }
+
+                    let call_result =
+                        self.builder
+                            .build_indirect_call(fn_llvm_type, fn_ptr, &args, "")?;
+                    match call_result.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
+                        _ => return Ok(None),
+                    }
+                }
+
                 let function = self.module.get_function(&function_name).ok_or_else(|| {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedFunction,
@@ -6035,8 +6064,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 if let Statement::ExpressionStatement { expression } =
                                     &*stmt.borrow()
                                 {
-                                    let value =
-                                        self.resolve_expression(expression.clone())?;
+                                    let value = self.resolve_expression(expression.clone())?;
                                     if let Some(value) = value {
                                         self.builder.build_return(Some(&value))?;
                                         has_return = true;
@@ -6066,14 +6094,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 let fn_ptr = function.as_global_value().as_pointer_value();
                 let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                 Ok(Some(
-                    self.builder
-                        .build_bit_cast(fn_ptr, ptr_ty, "")?
-                        .into(),
+                    self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?.into(),
                 ))
             }
-            Expression::FunctionType { .. } => {
-                Ok(None)
-            }
+            Expression::FunctionType { .. } => Ok(None),
             _ => anyhow::bail!("Expression type not implemented"),
         }
     }
@@ -6452,9 +6476,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
                 anyhow::bail!("Void type is handled specially as void return type");
             }
-            Type::Function(_, _, _) => {
-                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
-            }
+            Type::Function(_, _, _) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
             Type::Pointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
             Type::Struct(name, _) => {
                 if let Some(struct_type) = self.struct_types.borrow().get(name) {
