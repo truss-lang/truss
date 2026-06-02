@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{
-        expression::Expression,
+        expression::{ElseBranch, Expression},
         node::Program,
         statement::{
             AccessorKind, FunctionBody, ImportKind, Pattern, ProtocolMember, Statement,
@@ -444,10 +444,8 @@ impl SymbolResolver {
                 self.register_symbols(statement.clone());
             }
             Statement::Defer { body, .. } => {
-                if let Expression::Block { statements, .. } = &*body.borrow() {
-                    for stmt in statements {
-                        self.register_symbols(stmt.clone());
-                    }
+                for stmt in body {
+                    self.register_symbols(stmt.clone());
                 }
             }
             Statement::ProtocolDecl {
@@ -895,8 +893,8 @@ impl SymbolResolver {
     }
 
     fn register_function_symbols_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
-        if let Expression::Block { statements, .. } = &*expr.borrow() {
-            for stmt in statements {
+        if let Expression::Closure { body, .. } = &*expr.borrow() {
+            for stmt in body {
                 self.register_symbols(stmt.clone());
             }
         } else if let Expression::TupleLiteral { elements, .. } = &*expr.borrow() {
@@ -1251,7 +1249,9 @@ impl SymbolResolver {
                     }
                 };
 
-                self.resolve_expression(else_body.clone());
+                for stmt in else_body {
+                    self.resolve_statement(stmt.clone());
+                }
 
                 if let Some(bindings) = case_bindings {
                     Self::resolve_pattern_bindings(&bindings, self);
@@ -1259,7 +1259,9 @@ impl SymbolResolver {
             }
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
             Statement::Defer { body, .. } => {
-                self.resolve_expression(body.clone());
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
             }
             Statement::ModuleDecl { body, scope, .. } => {
                 self.enter_scope(scope.clone());
@@ -1286,13 +1288,6 @@ impl SymbolResolver {
 
     fn resolve_expression(&mut self, expr: Rc<RefCell<Expression>>) {
         match &mut *expr.borrow_mut() {
-            Expression::Block { statements, scope } => {
-                self.enter_scope(scope.clone());
-                for stmt in statements {
-                    self.resolve_statement(stmt.clone());
-                }
-                self.leave_scope();
-            }
             Expression::Variable { name, symbol, .. } => match self.resolve_symbol(name) {
                 Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
                 Err(_) => {
@@ -1384,27 +1379,29 @@ impl SymbolResolver {
                 };
 
                 if !case_bindings.is_empty() {
-                    if let Expression::Block { statements, scope } = &mut *then.borrow_mut() {
-                        if let Some(existing_scope) = scope.as_ref() {
-                            self.enter_scope(Some(existing_scope.clone()));
-                        } else {
-                            let new_scope = self.enter_scope(None);
-                            *scope = Some(new_scope);
-                        }
-                        Self::resolve_pattern_bindings(&case_bindings, self);
-                        for stmt in statements {
-                            self.resolve_statement(stmt.clone());
-                        }
-                        self.leave_scope();
-                    } else {
-                        self.resolve_expression(then.clone());
+                    self.enter_scope(None);
+                    Self::resolve_pattern_bindings(&case_bindings, self);
+                    for stmt in then {
+                        self.resolve_statement(stmt.clone());
                     }
+                    self.leave_scope();
                 } else {
-                    self.resolve_expression(then.clone());
+                    for stmt in then {
+                        self.resolve_statement(stmt.clone());
+                    }
                 }
 
                 if let Some(else_) = else_ {
-                    self.resolve_expression(else_.clone());
+                    match else_ {
+                        ElseBranch::Block(body) => {
+                            for stmt in body {
+                                self.resolve_statement(stmt.clone());
+                            }
+                        }
+                        ElseBranch::If(if_expr) => {
+                            self.resolve_expression(if_expr.clone());
+                        }
+                    }
                 }
             }
             Expression::Case { expression, .. } => {
@@ -1417,7 +1414,9 @@ impl SymbolResolver {
                     for p in &case.patterns {
                         Self::resolve_pattern_bindings_ref(p.as_ref(), self);
                     }
-                    self.resolve_expression(case.body.clone());
+                    for stmt in &case.body {
+                        self.resolve_statement(stmt.clone());
+                    }
                     if let Some(guard) = &case.guard {
                         self.resolve_expression(guard.clone());
                     }

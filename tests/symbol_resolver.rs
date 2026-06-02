@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::{
-        expression::Expression,
+        expression::{ElseBranch, Expression},
         statement::{FunctionBody, Statement},
     },
     diag::TrussDiagnosticEngine,
@@ -1759,11 +1759,7 @@ fn test_defer_nested_scope_symbol_resolved() {
         && let Statement::Defer {
             body: defer_body, ..
         } = &*statements[0].borrow()
-        && let Expression::Block {
-            statements: defer_stmts,
-            ..
-        } = &*defer_body.borrow()
-        && let Statement::VariableDecl { name, .. } = &*defer_stmts[0].borrow()
+        && let Statement::VariableDecl { name, .. } = &*defer_body[0].borrow()
     {
         assert_eq!(name.value, "a");
     } else {
@@ -1827,13 +1823,9 @@ fn test_symbol_resolve_if_expression_branches() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[2].borrow()
         && let Expression::If { then, else_, .. } = &*expression.borrow()
-        && let Expression::Block {
-            statements: then_stmts,
-            ..
-        } = &*then.borrow()
         && let Statement::ExpressionStatement {
             expression: then_expr,
-        } = &*then_stmts[0].borrow()
+        } = &*then[0].borrow()
         && let Expression::Variable {
             symbol: then_sym, ..
         } = &*then_expr.borrow()
@@ -1842,11 +1834,7 @@ fn test_symbol_resolve_if_expression_branches() {
             *then_sym, None,
             "Variable in then branch should have resolved symbol"
         );
-        if let Some(else_expr) = else_
-            && let Expression::Block {
-                statements: else_stmts,
-                ..
-            } = &*else_expr.borrow()
+        if let Some(ElseBranch::Block(else_stmts)) = else_
             && let Statement::ExpressionStatement {
                 expression: else_expr_val,
             } = &*else_stmts[0].borrow()
@@ -2825,5 +2813,84 @@ fn test_closure_no_params_resolved() {
         assert!(scope.is_some());
     } else {
         panic!("Expected closure with scope");
+    }
+}
+
+#[test]
+fn test_closure_shorthand_argument_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { $0 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    drop(engine_ref);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure {
+            body: closure_body,
+            scope,
+            ..
+        } = &*init.borrow()
+    {
+        assert!(scope.is_some(), "Closure should have a scope");
+        assert_eq!(closure_body.len(), 1);
+        if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow() {
+            assert!(matches!(
+                &*expression.borrow(),
+                Expression::ShorthandArgument { index: 0, .. }
+            ));
+        } else {
+            panic!("Expected ExpressionStatement with ShorthandArgument");
+        }
+    } else {
+        panic!("Expected closure with shorthand argument");
+    }
+}
+
+#[test]
+fn test_closure_shorthand_multi_args_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { $0 + $1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    drop(engine_ref);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { scope, .. } = &*init.borrow()
+    {
+        assert!(scope.is_some(), "Closure should have a scope");
+    } else {
+        panic!("Expected closure");
     }
 }
