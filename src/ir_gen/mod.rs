@@ -71,6 +71,7 @@ pub struct IRGenerator<'ctx> {
     class_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
     container_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
     overloaded_fn_names: Rc<RefCell<HashSet<String>>>,
+    closure_counter: Rc<RefCell<u32>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -100,6 +101,7 @@ impl<'ctx> IRGenerator<'ctx> {
             class_refs: Rc::new(RefCell::new(Vec::new())),
             container_refs: Rc::new(RefCell::new(Vec::new())),
             overloaded_fn_names: Rc::new(RefCell::new(HashSet::new())),
+            closure_counter: Rc::new(RefCell::new(0)),
         }
     }
 
@@ -5967,6 +5969,111 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.position_at_end(exit_bb);
                 Ok(None)
             }
+            Expression::Closure {
+                parameters,
+                return_type,
+                body,
+                ..
+            } => {
+                let counter = {
+                    let mut c = self.closure_counter.borrow_mut();
+                    let val = *c;
+                    *c += 1;
+                    val
+                };
+                let fn_name = format!("__closure_{}", counter);
+
+                let ret_type = return_type
+                    .as_ref()
+                    .and_then(|rt| {
+                        let expr = rt.borrow();
+                        expr.get_ty().ok().flatten()
+                    })
+                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+
+                let mut param_types: Vec<Rc<RefCell<Type>>> = Vec::new();
+                for param in parameters {
+                    let pt = param
+                        .borrow()
+                        .type_annotation
+                        .as_ref()
+                        .and_then(|ta| ta.borrow().get_ty().ok().flatten())
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
+                    param_types.push(pt);
+                }
+
+                let fn_llvm_type =
+                    self.get_function_type(ret_type.clone(), param_types.clone(), false)?;
+                let function = self.module.add_function(&fn_name, fn_llvm_type, None);
+
+                let current_block = self.builder.get_insert_block();
+                let entry_block = self.context.append_basic_block(function, "entry");
+                self.builder.position_at_end(entry_block);
+
+                self.enter_scope();
+                for (i, param) in parameters.iter().enumerate() {
+                    let param_name = &param.borrow().name.value;
+                    let llvm_type = self.resolve_type(param_types[i].clone())?;
+                    let alloca_name = self.unique_alloca_name(param_name);
+                    let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
+                    let param_value = function.get_nth_param(i as u32).unwrap();
+                    self.builder.build_store(ptr, param_value)?;
+                    self.declare_variable(param_name.clone(), ptr);
+                }
+
+                let is_void = matches!(&*ret_type.borrow(), Type::Void);
+                match &body[..] {
+                    [] if is_void => {
+                        self.builder.build_return(None)?;
+                    }
+                    stmts => {
+                        let stmt_count = stmts.len();
+                        let mut has_return = false;
+                        for (i, stmt) in stmts.iter().enumerate() {
+                            let is_last = i == stmt_count - 1;
+                            if is_last && !is_void {
+                                if let Statement::ExpressionStatement { expression } =
+                                    &*stmt.borrow()
+                                {
+                                    let value =
+                                        self.resolve_expression(expression.clone())?;
+                                    if let Some(value) = value {
+                                        self.builder.build_return(Some(&value))?;
+                                        has_return = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if self.resolve_statement(stmt.clone())? {
+                                has_return = true;
+                                break;
+                            }
+                        }
+                        if !has_return {
+                            if is_void {
+                                self.builder.build_return(None)?;
+                            }
+                        }
+                    }
+                }
+
+                self.exit_scope();
+
+                if let Some(block) = current_block {
+                    self.builder.position_at_end(block);
+                }
+
+                let fn_ptr = function.as_global_value().as_pointer_value();
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                Ok(Some(
+                    self.builder
+                        .build_bit_cast(fn_ptr, ptr_ty, "")?
+                        .into(),
+                ))
+            }
+            Expression::FunctionType { .. } => {
+                Ok(None)
+            }
             _ => anyhow::bail!("Expression type not implemented"),
         }
     }
@@ -6346,12 +6453,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("Void type is handled specially as void return type");
             }
             Type::Function(_, _, _) => {
-                self.emit_error(
-                    TrussDiagnosticCode::NestedFunctionType,
-                    "Nested function types are not supported",
-                    None,
-                );
-                anyhow::bail!("Nested function types are not supported");
+                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
             Type::Pointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
             Type::Struct(name, _) => {

@@ -2915,7 +2915,8 @@ impl TypeResolver {
             Expression::Closure {
                 parameters,
                 return_type,
-                body: _,
+                body,
+                scope,
                 ty,
                 ..
             } => {
@@ -2924,7 +2925,7 @@ impl TypeResolver {
                     .and_then(|rt| self.infer_type(rt.clone()))
                     .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
                 let mut param_types = Vec::new();
-                for param in parameters {
+                for param in parameters.iter() {
                     let param_type = param
                         .borrow()
                         .type_annotation
@@ -2934,15 +2935,46 @@ impl TypeResolver {
                     param_types.push(param_type);
                 }
                 let fn_type = Rc::new(RefCell::new(Type::Function(
-                    param_types,
+                    param_types.clone(),
                     ret_type,
                     false,
                 )));
                 *ty = Some(fn_type.clone());
+
+                if let Some(sc) = scope {
+                    self.enter_scope(sc.clone());
+                    for (i, param) in parameters.iter().enumerate() {
+                        let p = param.borrow();
+                        let param_type = if i < param_types.len() {
+                            param_types[i].clone()
+                        } else {
+                            Rc::new(RefCell::new(Type::Void))
+                        };
+                        self.current_scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_type(p.name.value.clone(), param_type);
+                    }
+                    for stmt in body.iter() {
+                        let s = stmt.borrow();
+                        if let Statement::ExpressionStatement { expression } = &*s {
+                            self.infer_type(expression.clone());
+                        } else {
+                            drop(s);
+                            self.process_decl(stmt.clone());
+                        }
+                    }
+                    self.leave_scope();
+                }
+
                 fn_type
             }
             Expression::FunctionType {
-                param_types, return_type, ty, ..
+                param_types,
+                return_type,
+                ty,
+                ..
             } => {
                 let params: Vec<Rc<RefCell<Type>>> = param_types
                     .iter()

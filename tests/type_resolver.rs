@@ -4039,6 +4039,45 @@ fn test_closure_no_params_no_return_type() {
 }
 
 #[test]
+fn test_closure_body_variable_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { (x: Int32) -> Int32 in x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Closure { body: closure_body, scope, .. } = &*init.borrow()
+    {
+        assert!(scope.is_some(), "Closure should have a scope from SymbolResolver");
+        if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow()
+            && let Expression::Variable { name, ty, .. } = &*expression.borrow()
+        {
+            assert_eq!(name.value, "x");
+            assert!(ty.is_some(), "Variable 'x' should have its type set by TypeResolver");
+            let t = ty.as_ref().unwrap().borrow().clone();
+            assert_eq!(t, Type::Int32);
+        } else {
+            panic!("Expected closure body variable with type");
+        }
+    } else {
+        panic!("Expected closure with scope");
+    }
+}
+
+#[test]
 fn test_function_type_expression_resolved() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
@@ -4057,7 +4096,9 @@ fn test_function_type_expression_resolved() {
     type_resolver.resolve(&program, module_id);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { type_expression, .. } = &*statements[0].borrow()
+        && let Statement::VariableDecl {
+            type_expression, ..
+        } = &*statements[0].borrow()
         && let Some(te) = type_expression
         && let Expression::FunctionType { ty, .. } = &*te.borrow()
     {
