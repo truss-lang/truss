@@ -18,6 +18,12 @@ pub struct CallParameter {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ClosureParameter {
+    pub name: Box<Token>,
+    pub type_annotation: Option<Rc<RefCell<Expression>>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Block {
         statements: Vec<Rc<RefCell<Statement>>>,
@@ -158,6 +164,18 @@ pub enum Expression {
         types: Vec<Rc<RefCell<Expression>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    Closure {
+        parameters: Vec<Rc<RefCell<ClosureParameter>>>,
+        return_type: Option<Rc<RefCell<Expression>>>,
+        body: Vec<Rc<RefCell<Statement>>>,
+        scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+    FunctionType {
+        param_types: Vec<Rc<RefCell<Expression>>>,
+        return_type: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 impl Expression {
@@ -172,6 +190,8 @@ impl Expression {
             Self::SelfType { ty, .. } => Ok(ty.clone()),
             Self::AnyType { ty, .. } => Ok(ty.clone()),
             Self::CompoundType { ty, .. } => Ok(ty.clone()),
+            Self::Closure { ty, .. } => Ok(ty.clone()),
+            Self::FunctionType { ty, .. } => Ok(ty.clone()),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
@@ -187,6 +207,8 @@ impl Expression {
             Self::SelfType { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
+            Self::Closure { ty, .. } => Ok(ty),
+            Self::FunctionType { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
@@ -202,6 +224,8 @@ impl Expression {
             Self::SelfType { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
+            Self::Closure { ty, .. } => Ok(ty),
+            Self::FunctionType { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
@@ -288,6 +312,39 @@ impl Expression {
             Expression::AnyType { inner, .. } => inner.borrow().token(),
             Expression::CompoundType { types, .. } => types[0].borrow().token(),
             Expression::AssociatedTypeAccess { object, .. } => object.borrow().token(),
+            Expression::Closure { body, .. } => {
+                if let Some(last) = body.last() {
+                    match &*last.borrow() {
+                        Statement::ExpressionStatement { expression } => {
+                            expression.borrow().token()
+                        }
+                        _ => Token::new(
+                            "".to_string(),
+                            TokenType::Identifier,
+                            Position {
+                                pos: 0,
+                                line: 0,
+                                col: 0,
+                                len: 0,
+                            },
+                            Rc::new("".to_string()),
+                        ),
+                    }
+                } else {
+                    Token::new(
+                        "".to_string(),
+                        TokenType::Identifier,
+                        Position {
+                            pos: 0,
+                            line: 0,
+                            col: 0,
+                            len: 0,
+                        },
+                        Rc::new("".to_string()),
+                    )
+                }
+            }
+            Expression::FunctionType { param_types, .. } => param_types[0].borrow().token(),
         }
     }
 }

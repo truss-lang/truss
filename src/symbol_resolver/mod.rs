@@ -1432,6 +1432,16 @@ impl SymbolResolver {
                     self.resolve_expression(t.clone());
                 }
             }
+            Expression::Closure { body, .. } => {
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
+            }
+            Expression::FunctionType { param_types, .. } => {
+                for pt in param_types {
+                    self.resolve_expression(pt.clone());
+                }
+            }
             _ => {}
         }
     }

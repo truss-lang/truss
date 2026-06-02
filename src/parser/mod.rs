@@ -5,7 +5,8 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CallParameter, CastKind, Expression, UnaryOperator,
+            AssignmentOperator, BinaryOperator, CallParameter, CastKind, ClosureParameter,
+            Expression, UnaryOperator,
         },
         node::Program,
         statement::{
@@ -533,7 +534,41 @@ impl Parser {
                 }
             },
             TokenType::Separator { separator } => match separator {
-                SeparatorType::OpenBrace => self.parse_block(),
+                SeparatorType::OpenBrace => {
+                    // Try to detect closure { (params) -> Ret in body } or { in body }
+                    let closure_detected = self.index + 1 < self.tokens.len() && {
+                        let next = &self.tokens[self.index + 1];
+                        if KeywordType::is_keyword(&next, KeywordType::In) {
+                            true
+                        } else if SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
+                            let mut depth = 1u32;
+                            let mut i = self.index + 2;
+                            while i < self.tokens.len() && depth > 0 {
+                                let t = &self.tokens[i];
+                                if SeparatorType::is_separator(&t, SeparatorType::OpenParen) {
+                                    depth += 1;
+                                } else if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+                                    depth -= 1;
+                                }
+                                i += 1;
+                            }
+                            if depth == 0 && i < self.tokens.len() {
+                                let after = &self.tokens[i];
+                                OperatorType::is_operator(&after, OperatorType::Arrow)
+                                    || KeywordType::is_keyword(&after, KeywordType::In)
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    };
+                    if closure_detected {
+                        self.parse_closure_expression()
+                    } else {
+                        self.parse_block()
+                    }
+                }
                 SeparatorType::OpenParen => {
                     self.index += 1;
                     let left = token;
@@ -807,6 +842,18 @@ impl Parser {
                 && SeparatorType::is_separator(&t, SeparatorType::CloseParen)
             {
                 let right = self.next().unwrap();
+                // Check for function type: () -> R
+                if let Some(token) = self.peek()
+                    && OperatorType::is_operator(&token, OperatorType::Arrow)
+                {
+                    self.index += 1;
+                    let return_type = self.parse_type_expression()?;
+                    return Ok(Expression::FunctionType {
+                        param_types: vec![],
+                        return_type: Rc::new(RefCell::new(return_type)),
+                        ty: None,
+                    });
+                }
                 let void_token = Token::new(
                     "Void".to_string(),
                     TokenType::Identifier,
@@ -862,6 +909,19 @@ impl Parser {
                     return Err(());
                 }
 
+                // Check for function type syntax: (T1, T2, ...) -> R
+                if let Some(token) = self.peek()
+                    && OperatorType::is_operator(&token, OperatorType::Arrow)
+                {
+                    self.index += 1;
+                    let return_type = self.parse_type_expression()?;
+                    return Ok(Expression::FunctionType {
+                        param_types: elements.into_iter().map(|(_, t)| t).collect(),
+                        return_type: Rc::new(RefCell::new(return_type)),
+                        ty: None,
+                    });
+                }
+
                 let mut tuple_type_expr: Expression = Expression::TupleType {
                     left: Box::new(left),
                     elements,
@@ -896,6 +956,19 @@ impl Parser {
                     &right,
                 );
                 return Err(());
+            }
+
+            // Check for function type syntax: (T) -> R
+            if let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::Arrow)
+            {
+                self.index += 1;
+                let return_type = self.parse_type_expression()?;
+                return Ok(Expression::FunctionType {
+                    param_types: vec![first],
+                    return_type: Rc::new(RefCell::new(return_type)),
+                    ty: None,
+                });
             }
 
             let mut type_expr = Rc::try_unwrap(first).ok().unwrap().into_inner();
@@ -2938,6 +3011,166 @@ impl Parser {
                 TrussDiagnosticCode::MissingSeparator,
                 format!("Expected '}}' but found '{}'", next.value),
                 &next,
+            );
+            Err(())
+        }
+    }
+
+    fn parse_closure_expression(&mut self) -> Result<Expression, ()> {
+        self.index += 1;
+        let parameters: Vec<Rc<RefCell<ClosureParameter>>>;
+        let return_type: Option<Rc<RefCell<Expression>>>;
+
+        if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::In)
+        {
+            parameters = Vec::new();
+            return_type = None;
+            self.index += 1;
+        } else {
+            let Some(open) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected '(' for closure parameters",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    format!("Expected '(' but found '{}'", open.value),
+                    &open,
+                );
+                return Err(());
+            }
+
+            let mut params = Vec::new();
+            if let Some(token) = self.peek()
+                && !SeparatorType::is_separator(&token, SeparatorType::CloseParen)
+            {
+                loop {
+                    let Some(name) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedExpression,
+                            "Expected parameter name",
+                            &self.tokens[self.index.saturating_sub(1)],
+                        );
+                        return Err(());
+                    };
+                    if TokenType::Identifier != name.ty {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            format!("Expected parameter name but found '{}'", name.value),
+                            &name,
+                        );
+                        return Err(());
+                    }
+
+                    let type_annotation = if let Some(token) = self.peek()
+                        && SeparatorType::is_separator(&token, SeparatorType::Colon)
+                    {
+                        self.index += 1;
+                        Some(Rc::new(RefCell::new(self.parse_type_expression()?)))
+                    } else {
+                        None
+                    };
+
+                    params.push(Rc::new(RefCell::new(ClosureParameter {
+                        name: Box::new(name),
+                        type_annotation,
+                    })));
+
+                    if let Some(token) = self.peek()
+                        && SeparatorType::is_separator(&token, SeparatorType::Comma)
+                    {
+                        self.index += 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            let Some(close) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected ')' to close closure parameters",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    format!("Expected ')' but found '{}'", close.value),
+                    &close,
+                );
+                return Err(());
+            }
+
+            parameters = params;
+
+            let ret = if let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::Arrow)
+            {
+                self.index += 1;
+                Some(Rc::new(RefCell::new(self.parse_type_expression()?)))
+            } else {
+                None
+            };
+            return_type = ret;
+
+            let Some(in_token) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected 'in' in closure expression",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !KeywordType::is_keyword(&in_token, KeywordType::In) {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    format!("Expected 'in' but found '{}'", in_token.value),
+                    &in_token,
+                );
+                return Err(());
+            }
+        }
+
+        let mut body = Vec::new();
+        while let Some(token) = self.peek() {
+            if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
+                break;
+            }
+            if let Ok(stmt) = self.parse_statement() {
+                body.push(Rc::new(RefCell::new(stmt)));
+            } else {
+                self.skip();
+            }
+        }
+
+        let Some(close) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '}' to close closure",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
+            Ok(Expression::Closure {
+                parameters,
+                return_type,
+                body,
+                scope: None,
+                ty: None,
+            })
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '}}' but found '{}'", close.value),
+                &close,
             );
             Err(())
         }

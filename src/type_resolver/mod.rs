@@ -2912,6 +2912,18 @@ impl TypeResolver {
                 *ty = Some(result.clone());
                 result
             }
+            Expression::Closure { ty, .. } => {
+                if ty.is_none() {
+                    *ty = Some(Rc::new(RefCell::new(Type::Void)));
+                }
+                ty.clone().unwrap()
+            }
+            Expression::FunctionType { ty, .. } => {
+                if ty.is_none() {
+                    *ty = Some(Rc::new(RefCell::new(Type::Void)));
+                }
+                ty.clone().unwrap()
+            }
         };
         Some(result)
     }
