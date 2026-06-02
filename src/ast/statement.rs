@@ -97,23 +97,23 @@ pub enum Statement {
     },
     Loop {
         token: Box<Token>,
-        body: Rc<RefCell<Expression>>,
+        body: Vec<Rc<RefCell<Statement>>>,
     },
     While {
         token: Box<Token>,
         condition: Rc<RefCell<Expression>>,
-        body: Rc<RefCell<Expression>>,
+        body: Vec<Rc<RefCell<Statement>>>,
     },
     RepeatWhile {
         token: Box<Token>,
-        body: Rc<RefCell<Expression>>,
+        body: Vec<Rc<RefCell<Statement>>>,
         condition: Rc<RefCell<Expression>>,
     },
     For {
         token: Box<Token>,
         pattern: Rc<Pattern>,
         iterator: Rc<RefCell<Expression>>,
-        body: Rc<RefCell<Expression>>,
+        body: Vec<Rc<RefCell<Statement>>>,
     },
     Throw {
         token: Box<Token>,
@@ -148,7 +148,7 @@ pub enum Statement {
     Guard {
         token: Box<Token>,
         condition: Rc<RefCell<Expression>>,
-        else_body: Rc<RefCell<Expression>>,
+        else_body: Vec<Rc<RefCell<Statement>>>,
     },
     Fallthrough {
         token: Box<Token>,
@@ -158,7 +158,7 @@ pub enum Statement {
     },
     Defer {
         token: Box<Token>,
-        body: Rc<RefCell<Expression>>,
+        body: Vec<Rc<RefCell<Statement>>>,
     },
     ModuleDecl {
         modifiers: Vec<Modifier>,
@@ -335,7 +335,7 @@ pub struct MatchCase {
     pub token: Box<Token>,
     pub patterns: Vec<Rc<Pattern>>,
     pub guard: Option<Rc<RefCell<Expression>>>,
-    pub body: Rc<RefCell<Expression>>,
+    pub body: Vec<Rc<RefCell<Statement>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

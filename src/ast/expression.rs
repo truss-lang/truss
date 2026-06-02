@@ -25,10 +25,6 @@ pub struct ClosureParameter {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
-    Block {
-        statements: Vec<Rc<RefCell<Statement>>>,
-        scope: Option<Rc<RefCell<Scope>>>,
-    },
     IntegerLiteral {
         token: Box<Token>,
         value: i128,
@@ -104,8 +100,8 @@ pub enum Expression {
     },
     If {
         condition: Rc<RefCell<Expression>>,
-        then: Rc<RefCell<Expression>>,
-        else_: Option<Rc<RefCell<Expression>>>,
+        then: Vec<Rc<RefCell<Statement>>>,
+        else_: Option<ElseBranch>,
         ty: Option<Rc<RefCell<Type>>>,
     },
     Case {
@@ -271,45 +267,6 @@ impl Expression {
                 }
                 _ => (**token).clone(),
             },
-            Expression::Block { statements, .. } => {
-                if let Some(last) = statements.last() {
-                    match &*last.borrow() {
-                        Statement::ExpressionStatement { expression } => {
-                            expression.borrow().token()
-                        }
-                        Statement::Return { token, value } => {
-                            if let Some(value) = value {
-                                value.borrow().token()
-                            } else {
-                                (**token).clone()
-                            }
-                        }
-                        _ => Token::new(
-                            "".to_string(),
-                            TokenType::Identifier,
-                            Position {
-                                pos: 0,
-                                line: 0,
-                                col: 0,
-                                len: 0,
-                            },
-                            Rc::new("".to_string()),
-                        ),
-                    }
-                } else {
-                    Token::new(
-                        "".to_string(),
-                        TokenType::Identifier,
-                        Position {
-                            pos: 0,
-                            line: 0,
-                            col: 0,
-                            len: 0,
-                        },
-                        Rc::new("".to_string()),
-                    )
-                }
-            }
             Expression::MemberAccess { object, .. } => object.borrow().token(),
             Expression::TupleLiteral { left, .. } => (**left).clone(),
             Expression::TupleType { left, .. } => (**left).clone(),
@@ -365,6 +322,12 @@ impl Expression {
             ),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ElseBranch {
+    Block(Vec<Rc<RefCell<Statement>>>),
+    If(Rc<RefCell<Expression>>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

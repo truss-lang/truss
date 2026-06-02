@@ -6,7 +6,7 @@ use crate::{
     ast::{
         expression::{
             AssignmentOperator, BinaryOperator, CallParameter, CastKind, ClosureParameter,
-            Expression, UnaryOperator,
+            ElseBranch, Expression, UnaryOperator,
         },
         node::Program,
         statement::{
@@ -1578,7 +1578,7 @@ impl Parser {
             let body = self.parse_block()?;
             Ok(Statement::Loop {
                 token: Box::new(token),
-                body: Rc::new(RefCell::new(body)),
+                body,
             })
         } else {
             self.emit_error(
@@ -1600,7 +1600,7 @@ impl Parser {
             Ok(Statement::While {
                 token: Box::new(token),
                 condition: Rc::new(RefCell::new(condition)),
-                body: Rc::new(RefCell::new(body)),
+                body,
             })
         } else {
             self.emit_error(
@@ -1632,7 +1632,7 @@ impl Parser {
             let condition = self.parse_expression()?;
             Ok(Statement::RepeatWhile {
                 token: Box::new(token),
-                body: Rc::new(RefCell::new(body)),
+                body,
                 condition: Rc::new(RefCell::new(condition)),
             })
         } else {
@@ -1673,7 +1673,7 @@ impl Parser {
                 token: Box::new(token),
                 pattern: Rc::new(pattern),
                 iterator: Rc::new(RefCell::new(iterator)),
-                body: Rc::new(RefCell::new(body)),
+                body,
             })
         } else {
             self.emit_error(
@@ -3008,7 +3008,7 @@ impl Parser {
         })
     }
 
-    fn parse_block(&mut self) -> Result<Expression, ()> {
+    fn parse_block(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>, ()> {
         self.index += 1;
         let mut statements = Vec::new();
         while let Some(token) = self.peek() {
@@ -3030,10 +3030,7 @@ impl Parser {
             return Err(());
         };
         if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
-            Ok(Expression::Block {
-                statements,
-                scope: None,
-            })
+            Ok(statements)
         } else {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
@@ -3310,11 +3307,11 @@ impl Parser {
             if let Some(token) = self.peek()
                 && KeywordType::is_keyword(&token, KeywordType::If)
             {
-                Some(self.parse_if()?)
+                Some(ElseBranch::If(Rc::new(RefCell::new(self.parse_if()?))))
             } else if let Some(token) = self.peek()
                 && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
             {
-                Some(self.parse_block()?)
+                Some(ElseBranch::Block(self.parse_block()?))
             } else {
                 self.emit_error(
                     TrussDiagnosticCode::UnexpectedToken,
@@ -3328,11 +3325,12 @@ impl Parser {
         };
         Ok(Expression::If {
             condition: Rc::new(RefCell::new(condition)),
-            then: Rc::new(RefCell::new(then)),
-            else_: else_.map(RefCell::new).map(Rc::new),
+            then,
+            else_,
             ty: None,
         })
     }
+
     fn parse_case_expression(&mut self) -> Result<Expression, ()> {
         let case_token = self.next().unwrap();
 
@@ -3778,7 +3776,7 @@ impl Parser {
                     token: Box::new(t),
                     patterns: vec![Rc::new(Pattern::Ignore)],
                     guard: None,
-                    body: Rc::new(RefCell::new(body)),
+                    body,
                 });
                 continue;
             }
@@ -3837,7 +3835,7 @@ impl Parser {
                 token: Box::new(case_token),
                 patterns,
                 guard,
-                body: Rc::new(RefCell::new(body)),
+                body,
             });
         }
 
@@ -3849,7 +3847,7 @@ impl Parser {
         })
     }
 
-    fn parse_match_case_body(&mut self) -> Result<Expression, ()> {
+    fn parse_match_case_body(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>, ()> {
         if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
@@ -3860,35 +3858,26 @@ impl Parser {
                 match keyword {
                     KeywordType::Fallthrough => {
                         let stmt = self.parse_fallthrough()?;
-                        return Ok(Expression::Block {
-                            statements: vec![Rc::new(RefCell::new(stmt))],
-                            scope: None,
-                        });
+                        return Ok(vec![Rc::new(RefCell::new(stmt))]);
                     }
                     KeywordType::Break => {
                         let stmt = self.parse_break()?;
-                        return Ok(Expression::Block {
-                            statements: vec![Rc::new(RefCell::new(stmt))],
-                            scope: None,
-                        });
+                        return Ok(vec![Rc::new(RefCell::new(stmt))]);
                     }
                     KeywordType::Case | KeywordType::Default => {
-                        return Ok(Expression::Block {
-                            statements: vec![],
-                            scope: None,
-                        });
+                        return Ok(vec![]);
                     }
                     _ => {}
                 }
             }
             if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
-                return Ok(Expression::Block {
-                    statements: vec![],
-                    scope: None,
-                });
+                return Ok(vec![]);
             }
         }
-        self.parse_expression()
+        let expr = self.parse_expression()?;
+        Ok(vec![Rc::new(RefCell::new(Statement::ExpressionStatement {
+            expression: Rc::new(RefCell::new(expr)),
+        }))])
     }
 
     fn parse_guard(&mut self) -> Result<Statement, ()> {
@@ -3917,7 +3906,7 @@ impl Parser {
         Ok(Statement::Guard {
             token: Box::new(token),
             condition: Rc::new(RefCell::new(condition)),
-            else_body: Rc::new(RefCell::new(else_body)),
+            else_body,
         })
     }
 
@@ -3941,23 +3930,21 @@ impl Parser {
             && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
             let body = self.parse_block()?;
-            if let Expression::Block { ref statements, .. } = body {
-                for stmt in statements {
-                    if Self::is_forbidden_in_defer(&*stmt.borrow()) {
-                        self.emit_error(
-                            TrussDiagnosticCode::ControlFlowNotAllowedInDefer,
-                            format!(
-                                "'{}' is not allowed in defer body",
-                                stmt.borrow().token().value
-                            ),
-                            &stmt.borrow().token(),
-                        );
-                    }
+            for stmt in &body {
+                if Self::is_forbidden_in_defer(&*stmt.borrow()) {
+                    self.emit_error(
+                        TrussDiagnosticCode::ControlFlowNotAllowedInDefer,
+                        format!(
+                            "'{}' is not allowed in defer body",
+                            stmt.borrow().token().value
+                        ),
+                        &stmt.borrow().token(),
+                    );
                 }
             }
             Ok(Statement::Defer {
                 token: Box::new(token),
-                body: Rc::new(RefCell::new(body)),
+                body,
             })
         } else {
             self.emit_error(

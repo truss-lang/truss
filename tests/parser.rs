@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::{
-        expression::{AssignmentOperator, BinaryOperator, CastKind, Expression, UnaryOperator},
+        expression::{AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression, UnaryOperator},
         statement::{
             AccessModifier, AccessorKind, FunctionBody, ImportKind, Modifier, ModifierType,
             Parameter, Pattern, ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
@@ -2786,15 +2786,7 @@ fn test_parse_if_case_no_bindings() {
         assert_eq!(enum_type.as_ref().unwrap().value, "Option");
         assert_eq!(case_name.value, "none");
         assert!(bindings.is_empty());
-        if let Expression::Block {
-            statements: then_stmts,
-            ..
-        } = &*then.borrow()
-        {
-            assert!(then_stmts.is_empty());
-        } else {
-            panic!("Expected block expression for then branch");
-        }
+        assert!(then.is_empty());
     } else {
         panic!(
             "Expected If with Case condition, got: {:?}",
@@ -2923,7 +2915,7 @@ fn test_parse_if_case_else_if() {
         assert_eq!(enum_type.as_ref().unwrap().value, "Status");
         assert_eq!(case_name.value, "idle");
         assert!(else_.is_some());
-        if let Some(else_expr) = else_ {
+        if let Some(ElseBranch::If(else_expr)) = else_ {
             if let Expression::If {
                 condition: else_cond,
                 ..
@@ -5026,7 +5018,7 @@ fn test_parse_guard_statement() {
         } = &*statements[0].borrow()
     {
         assert!(matches!(&*condition.borrow(), Expression::Case { .. }));
-        assert!(matches!(&*else_body.borrow(), Expression::Block { .. }));
+        assert!(!else_body.is_empty());
     } else {
         panic!("Expected Guard statement");
     }
@@ -5058,22 +5050,8 @@ fn test_parse_fallthrough_and_break() {
         && let Expression::Match { cases, .. } = &*expression.borrow()
     {
         assert_eq!(cases.len(), 2);
-        if let Expression::Block {
-            statements: stmts, ..
-        } = &*cases[0].body.borrow()
-        {
-            assert!(matches!(&*stmts[0].borrow(), Statement::Fallthrough { .. }));
-        } else {
-            panic!("Expected block with fallthrough");
-        }
-        if let Expression::Block {
-            statements: stmts, ..
-        } = &*cases[1].body.borrow()
-        {
-            assert!(matches!(&*stmts[0].borrow(), Statement::Break { .. }));
-        } else {
-            panic!("Expected block with break");
-        }
+        assert!(matches!(&*cases[0].body[0].borrow(), Statement::Fallthrough { .. }));
+        assert!(matches!(&*cases[1].body[0].borrow(), Statement::Break { .. }));
     } else {
         panic!("Expected Match with fallthrough/break");
     }
@@ -5374,14 +5352,10 @@ fn test_parse_defer_statement() {
         && let Statement::Defer {
             body: defer_body, ..
         } = &*statements[0].borrow()
-        && let Expression::Block {
-            statements: block_stmts,
-            ..
-        } = &*defer_body.borrow()
     {
-        assert_eq!(block_stmts.len(), 1);
+        assert_eq!(defer_body.len(), 1);
         assert!(matches!(
-            &*block_stmts[0].borrow(),
+            &*defer_body[0].borrow(),
             Statement::ExpressionStatement { .. }
         ));
     } else {
@@ -5407,15 +5381,11 @@ fn test_parse_defer_nested() {
             body: outer_defer_body,
             ..
         } = &*statements[0].borrow()
-        && let Expression::Block {
-            statements: outer_stmts,
-            ..
-        } = &*outer_defer_body.borrow()
     {
-        assert_eq!(outer_stmts.len(), 2);
-        assert!(matches!(&*outer_stmts[0].borrow(), Statement::Defer { .. }));
+        assert_eq!(outer_defer_body.len(), 2);
+        assert!(matches!(&*outer_defer_body[0].borrow(), Statement::Defer { .. }));
         assert!(matches!(
-            &*outer_stmts[1].borrow(),
+            &*outer_defer_body[1].borrow(),
             Statement::ExpressionStatement { .. }
         ));
     } else {
@@ -5482,7 +5452,7 @@ fn test_parse_if_as_variable_initializer() {
             &*condition.borrow(),
             Expression::BooleanLiteral { .. }
         ));
-        assert!(matches!(&*then.borrow(), Expression::Block { .. }));
+        assert!(!then.is_empty());
         assert!(else_.is_some());
     } else {
         panic!("Expected VariableDecl with If initializer");
@@ -5525,9 +5495,8 @@ fn test_parse_if_elseif_chain() {
         && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
         && let Some(init) = initializer
         && let Expression::If { else_, .. } = &*init.borrow()
-        && let Some(else_expr) = else_
     {
-        assert!(matches!(&*else_expr.borrow(), Expression::If { .. }));
+        assert!(matches!(else_, Some(ElseBranch::If(_))));
     } else {
         panic!("Expected VariableDecl with if-else if chain");
     }
@@ -6781,6 +6750,133 @@ fn test_parse_shorthand_argument() {
                 ));
             } else {
                 panic!("Expected ExpressionStatement in closure body");
+            }
+        } else {
+            panic!("Expected VariableDecl with closure initializer");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_shorthand_argument_plus() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { $0 + $1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure {
+                body: closure_body, ..
+            } = &*init.borrow()
+        {
+            assert_eq!(closure_body.len(), 1);
+            if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow() {
+                if let Expression::Binary { left, right, operator, .. } = &*expression.borrow() {
+                    assert_eq!(*operator, BinaryOperator::Plus);
+                    assert!(matches!(&*left.borrow(), Expression::ShorthandArgument { index: 0, .. }));
+                    assert!(matches!(&*right.borrow(), Expression::ShorthandArgument { index: 1, .. }));
+                } else {
+                    panic!("Expected Binary expression");
+                }
+            } else {
+                panic!("Expected ExpressionStatement");
+            }
+        } else {
+            panic!("Expected VariableDecl with closure initializer");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_shorthand_argument_multi() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { $0 + $1 * $2 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure { body: closure_body, .. } = &*init.borrow()
+        {
+            assert_eq!(closure_body.len(), 1);
+            if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow() {
+                let mut shorthand_count = 0;
+                collect_shorthand_args(expression, &mut shorthand_count);
+                assert_eq!(shorthand_count, 3);
+            }
+        } else {
+            panic!("Expected VariableDecl with closure initializer");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+fn collect_shorthand_args(expr: &Rc<RefCell<Expression>>, count: &mut u32) {
+    match &*expr.borrow() {
+        Expression::ShorthandArgument { .. } => *count += 1,
+        Expression::Binary { left, right, .. } => {
+            collect_shorthand_args(left, count);
+            collect_shorthand_args(right, count);
+        }
+        Expression::Unary { expression, .. } => {
+            collect_shorthand_args(expression, count);
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn test_parse_shorthand_argument_with_explicit_params() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { (x: Int32, y: Int32) in $0 + $1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure {
+                parameters,
+                body: closure_body,
+                ..
+            } = &*init.borrow()
+        {
+            assert_eq!(parameters.len(), 2);
+            assert_eq!(closure_body.len(), 1);
+            if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow() {
+                assert!(matches!(&*expression.borrow(), Expression::Binary { .. }));
             }
         } else {
             panic!("Expected VariableDecl with closure initializer");
