@@ -4059,14 +4059,24 @@ fn test_closure_body_variable_type_resolved() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
         && let Some(init) = initializer
-        && let Expression::Closure { body: closure_body, scope, .. } = &*init.borrow()
+        && let Expression::Closure {
+            body: closure_body,
+            scope,
+            ..
+        } = &*init.borrow()
     {
-        assert!(scope.is_some(), "Closure should have a scope from SymbolResolver");
+        assert!(
+            scope.is_some(),
+            "Closure should have a scope from SymbolResolver"
+        );
         if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow()
             && let Expression::Variable { name, ty, .. } = &*expression.borrow()
         {
             assert_eq!(name.value, "x");
-            assert!(ty.is_some(), "Variable 'x' should have its type set by TypeResolver");
+            assert!(
+                ty.is_some(),
+                "Variable 'x' should have its type set by TypeResolver"
+            );
             let t = ty.as_ref().unwrap().borrow().clone();
             assert_eq!(t, Type::Int32);
         } else {

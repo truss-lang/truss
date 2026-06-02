@@ -122,6 +122,10 @@ pub enum Expression {
         cases: Vec<MatchCase>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    ShorthandArgument {
+        index: u32,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     Cast {
         token: Box<Token>,
         kind_tokens: Option<(Box<Token>, Box<Token>)>,
@@ -192,6 +196,7 @@ impl Expression {
             Self::CompoundType { ty, .. } => Ok(ty.clone()),
             Self::Closure { ty, .. } => Ok(ty.clone()),
             Self::FunctionType { ty, .. } => Ok(ty.clone()),
+            Self::ShorthandArgument { ty, .. } => Ok(ty.clone()),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
@@ -209,6 +214,7 @@ impl Expression {
             Self::CompoundType { ty, .. } => Ok(ty),
             Self::Closure { ty, .. } => Ok(ty),
             Self::FunctionType { ty, .. } => Ok(ty),
+            Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
@@ -226,6 +232,7 @@ impl Expression {
             Self::CompoundType { ty, .. } => Ok(ty),
             Self::Closure { ty, .. } => Ok(ty),
             Self::FunctionType { ty, .. } => Ok(ty),
+            Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
@@ -345,6 +352,17 @@ impl Expression {
                 }
             }
             Expression::FunctionType { param_types, .. } => param_types[0].borrow().token(),
+            Expression::ShorthandArgument { .. } => Token::new(
+                "".to_string(),
+                TokenType::Identifier,
+                Position {
+                    pos: 0,
+                    line: 0,
+                    col: 0,
+                    len: 0,
+                },
+                Rc::new("".to_string()),
+            ),
         }
     }
 }

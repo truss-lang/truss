@@ -539,6 +539,8 @@ impl Parser {
                         let next = &self.tokens[self.index + 1];
                         if KeywordType::is_keyword(&next, KeywordType::In) {
                             true
+                        } else if OperatorType::is_operator(&next, OperatorType::Dollar) {
+                            true
                         } else if SeparatorType::is_separator(&next, SeparatorType::OpenParen) {
                             let mut depth = 1u32;
                             let mut i = self.index + 2;
@@ -656,6 +658,40 @@ impl Parser {
                     self.emit_error(
                         TrussDiagnosticCode::ExpectedExpression,
                         format!("Unexpected separator '{}'", token.value),
+                        &token,
+                    );
+                    Err(())
+                }
+            },
+            TokenType::Operator { operator } => match operator {
+                OperatorType::Dollar => {
+                    self.index += 1;
+                    let Some(idx_token) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedExpression,
+                            "Expected integer after '$'",
+                            &self.tokens[self.index.saturating_sub(1)],
+                        );
+                        return Err(());
+                    };
+                    if let TokenType::IntegerLiteral { value } = idx_token.ty {
+                        Ok(Expression::ShorthandArgument {
+                            index: value as u32,
+                            ty: None,
+                        })
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            format!("Expected integer after '$' but found '{}'", idx_token.value),
+                            &idx_token,
+                        );
+                        Err(())
+                    }
+                }
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedExpression,
+                        format!("Unexpected operator '{}'", token.value),
                         &token,
                     );
                     Err(())
@@ -3024,6 +3060,11 @@ impl Parser {
             parameters = Vec::new();
             return_type = None;
             self.index += 1;
+        } else if let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::Dollar)
+        {
+            parameters = Vec::new();
+            return_type = None;
         } else {
             let Some(open) = self.next() else {
                 self.emit_error(
@@ -3222,6 +3263,15 @@ impl Parser {
             return Err(());
         };
         if SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
+            if let Some(token) = self.peek()
+                && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
+            {
+                let closure = self.parse_closure_expression()?;
+                parameters.push(CallParameter {
+                    label: None,
+                    expression: Rc::new(RefCell::new(closure)),
+                });
+            }
             Ok(Expression::Call {
                 callee: Rc::new(RefCell::new(callee)),
                 type_parameters,

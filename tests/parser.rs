@@ -6751,3 +6751,41 @@ fn test_parse_block_not_closure() {
         panic!("Expected VariableDecl");
     }
 }
+
+#[test]
+fn test_parse_shorthand_argument() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { $0 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure {
+                body: closure_body, ..
+            } = &*init.borrow()
+        {
+            if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow() {
+                assert!(matches!(
+                    &*expression.borrow(),
+                    Expression::ShorthandArgument { .. }
+                ));
+            } else {
+                panic!("Expected ExpressionStatement in closure body");
+            }
+        } else {
+            panic!("Expected VariableDecl with closure initializer");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}

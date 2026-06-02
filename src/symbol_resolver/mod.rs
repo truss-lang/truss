@@ -11,7 +11,7 @@ use crate::{
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     krate::{Crate, Module},
-    lexer::token::Token,
+    lexer::token::{Position, Token, TokenType},
     scope::Scope,
     symbol::{Symbol, WeakSymbol},
     types::Type,
@@ -1457,8 +1457,37 @@ impl SymbolResolver {
                 if let Some(ret) = return_type {
                     self.resolve_expression(ret.clone());
                 }
-                for stmt in body {
+                for stmt in body.iter() {
                     self.resolve_statement(stmt.clone());
+                }
+                let max_shorthand = {
+                    let mut max = None;
+                    Self::find_max_shorthand(body, &mut max);
+                    max
+                };
+                if let Some(max_idx) = max_shorthand {
+                    for i in 0..=max_idx {
+                        let name = format!("${}", i);
+                        let sym = Rc::new(RefCell::new(Symbol::Variable {
+                            name: name.clone(),
+                            decl: None,
+                            parameter: None,
+                        }));
+                        self.enter(
+                            sym,
+                            &Token::new(
+                                name,
+                                TokenType::Identifier,
+                                Position {
+                                    pos: 0,
+                                    line: 0,
+                                    col: 0,
+                                    len: 0,
+                                },
+                                Rc::new("".to_string()),
+                            ),
+                        );
+                    }
                 }
                 self.leave_scope();
             }
@@ -1468,6 +1497,40 @@ impl SymbolResolver {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn find_max_shorthand(stmts: &[Rc<RefCell<Statement>>], max: &mut Option<u32>) {
+        for stmt in stmts {
+            match &*stmt.borrow() {
+                Statement::ExpressionStatement { expression } => {
+                    if let Expression::ShorthandArgument { index, .. } = &*expression.borrow() {
+                        match max {
+                            Some(m) => {
+                                if *index > *m {
+                                    *max = Some(*index);
+                                }
+                            }
+                            None => *max = Some(*index),
+                        }
+                    }
+                }
+                Statement::Return {
+                    value: Some(val), ..
+                } => {
+                    if let Expression::ShorthandArgument { index, .. } = &*val.borrow() {
+                        match max {
+                            Some(m) => {
+                                if *index > *m {
+                                    *max = Some(*index);
+                                }
+                            }
+                            None => *max = Some(*index),
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 

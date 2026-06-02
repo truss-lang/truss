@@ -6104,6 +6104,21 @@ impl<'ctx> IRGenerator<'ctx> {
                 ))
             }
             Expression::FunctionType { .. } => Ok(None),
+            Expression::ShorthandArgument { index, .. } => {
+                let var_name = format!("${}", index);
+                if let Some(ptr) = self.lookup_variable(&var_name) {
+                    let llvm_type: inkwell::types::BasicTypeEnum = self.context.i32_type().into();
+                    let val = self.builder.build_load(llvm_type, ptr, "")?;
+                    Ok(Some(val))
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedVariable,
+                        format!("Undefined shorthand argument '${}'", index),
+                        None,
+                    );
+                    anyhow::bail!("Undefined shorthand argument: ${}", index)
+                }
+            }
             _ => anyhow::bail!("Expression type not implemented"),
         }
     }

@@ -125,6 +125,7 @@ pub enum OperatorType {
     RangeTo,          // ..
     RangeUntil,       // ..<
     OpenRange,        // ...
+    Dollar,           // $
 }
 
 impl KeywordType {

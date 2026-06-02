@@ -2987,6 +2987,12 @@ impl TypeResolver {
                 *ty = Some(fn_type.clone());
                 fn_type
             }
+            Expression::ShorthandArgument { ty, .. } => {
+                if ty.is_none() {
+                    *ty = Some(Rc::new(RefCell::new(Type::Int32)));
+                }
+                ty.clone().unwrap()
+            }
         };
         Some(result)
     }
