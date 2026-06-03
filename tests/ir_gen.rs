@@ -2728,6 +2728,194 @@ fn test_irgen_extension_protocol_witness_table() {
 }
 
 #[test]
+fn test_irgen_extension_static_method_struct() {
+    let code = "struct Foo {} extension Foo { static func bar() -> Int32 { 42 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("define i32 @Foo.bar"),
+        "static method should generate Foo.bar:\n{}",
+        llvm_ir
+    );
+    assert!(
+        !llvm_ir.contains("define i32 @Foo.bar(i32"),
+        "static method should NOT take i32 (self) as first parameter:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("ret i32 42"),
+        "static method should return 42:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_extension_static_method_class() {
+    let code = "class Foo {} extension Foo { static func bar() -> Int32 { 42 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("define i32 @Foo.bar"),
+        "static method in class extension should generate Foo.bar:\n{}",
+        llvm_ir
+    );
+    assert!(
+        !llvm_ir.contains("define i32 @Foo.bar(ptr"),
+        "static method in class extension should NOT take ptr (self) as first parameter:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_extension_static_method_enum() {
+    let code = "enum Foo { case a } extension Foo { static func bar() -> Int32 { 42 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("define i32 @Foo.bar"),
+        "static method in enum extension should generate Foo.bar:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_extension_static_method_protocol() {
+    let code = "protocol Foo {} extension Foo { static func bar() -> Int32 { 42 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("define i32 @Foo.bar"),
+        "static method in protocol extension should generate Foo.bar:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_extension_instance_method_has_self_param() {
+    let code = "struct Foo {} extension Foo { func bar() -> Int32 { 42 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("define i32 @Foo.bar(ptr"),
+        "instance method in extension should have ptr (self) as first parameter:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_extension_static_method_with_params() {
+    let code = "struct Calc {} extension Calc { static func add(a: Int32, b: Int32) -> Int32 { a + b } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("define i32 @Calc.add"),
+        "static method with params should generate Calc.add:\n{}",
+        llvm_ir
+    );
+    assert!(
+        !llvm_ir.contains("define i32 @Calc.add(ptr"),
+        "static method with params should NOT have ptr (self) as first parameter, got:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
 fn test_irgen_guard_case_success() {
     let code = r#"
         enum Option { case none case some(Int32) }

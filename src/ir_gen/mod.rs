@@ -1337,16 +1337,22 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Statement::FunctionDecl {
                     name: method_name,
                     ty,
+                    static_method,
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
                     && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
                 {
-                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                        Type::Void,
-                    )))));
-                    let mut all_param_types = vec![self_param];
-                    all_param_types.extend(param_types.iter().cloned());
+                    let all_param_types: Vec<Rc<RefCell<Type>>> = if *static_method {
+                        param_types.clone()
+                    } else {
+                        let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                            Type::Void,
+                        )))));
+                        let mut all_param_types = vec![self_param];
+                        all_param_types.extend(param_types.iter().cloned());
+                        all_param_types
+                    };
                     if let Ok(function_type) =
                         self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
                     {
@@ -2851,6 +2857,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 name,
                 parameters,
                 body,
+                static_method,
                 ..
             } => {
                 if let Type::Function(_parameter_types, return_type, _) = &*ty.borrow() {
@@ -2880,7 +2887,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Some(struct_name) = &*self.current_struct.borrow() {
                         let is_class_method = self.class_types.borrow().contains_key(struct_name);
                         let is_struct_method = self.struct_types.borrow().contains_key(struct_name);
-                        if is_struct_method || is_class_method {
+                        if !static_method && (is_struct_method || is_class_method) {
                             let self_ptr = function.get_nth_param(0).unwrap();
                             let self_ptr = self_ptr.into_pointer_value();
                             self.declare_variable("self".to_string(), self_ptr);
