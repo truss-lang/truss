@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
@@ -36,6 +36,7 @@ pub struct TypeResolver {
     initialized_lets: Vec<HashSet<String>>,
     initialized_properties: HashSet<String>,
     is_in_init: bool,
+    superclass_map: HashMap<String, Rc<RefCell<Type>>>,
 }
 
 impl TypeResolver {
@@ -51,6 +52,7 @@ impl TypeResolver {
             initialized_lets: Vec::new(),
             initialized_properties: HashSet::new(),
             is_in_init: false,
+            superclass_map: HashMap::new(),
         }
     }
 
@@ -283,6 +285,18 @@ impl TypeResolver {
 
                 if let Some(superclass_expr) = superclass {
                     self.infer_type(superclass_expr.clone());
+                    if let Expression::Type { name: super_name, .. } = &*superclass_expr.borrow() {
+                        let super_ty = self
+                            .current_scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .get_type(&super_name.value);
+                        if let Some(super_ty) = super_ty {
+                            self.superclass_map
+                                .insert(name.value.clone(), super_ty);
+                        }
+                    }
                 }
                 for conformance in conformances.iter() {
                     self.infer_type(conformance.clone());
@@ -2874,7 +2888,7 @@ impl TypeResolver {
                 t
             }
             Expression::SuperKeyword { token, ty, .. } => {
-                let t = self
+                let self_ty = self
                     .current_scope
                     .as_ref()
                     .ok_or_else(|| {
@@ -2887,9 +2901,28 @@ impl TypeResolver {
                     .ok()?
                     .borrow()
                     .get_type("self");
-                let t = t?;
-                *ty = Some(t.clone());
-                t
+                let self_ty = self_ty?;
+                let class_name = self_ty.borrow().to_string();
+                let class_name = class_name
+                    .strip_prefix("Class(")
+                    .and_then(|s| s.strip_suffix(')'))
+                    .map(|s| s.to_string());
+
+                let super_ty = class_name
+                    .as_ref()
+                    .and_then(|name| self.superclass_map.get(name).cloned());
+
+                if let Some(super_ty) = super_ty {
+                    *ty = Some(super_ty.clone());
+                    super_ty
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::TypeError,
+                        "'super' is only available in classes with a superclass",
+                        token.as_ref(),
+                    );
+                    return None;
+                }
             }
             Expression::SelfType { ty, .. } => {
                 let t = self.current_scope.as_ref()?.borrow().get_type("Self");

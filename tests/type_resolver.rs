@@ -2097,6 +2097,83 @@ fn test_protocol_type_registered() {
 }
 
 #[test]
+fn test_super_keyword_type_in_subclass_method() {
+    let code = r#"
+        class Animal {}
+        class Dog: Animal {
+            func get_super_type() -> Animal {
+                return super
+            }
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ClassDecl { body, .. } = &*program.statements[1].borrow() {
+        if let Statement::FunctionDecl { body: fn_body, .. } = &*body[0].borrow()
+            && let FunctionBody::Statements(statements) = &*fn_body.borrow()
+            && let Statement::Return { value, .. } = &*statements[0].borrow()
+            && let Some(value) = value
+            && let Expression::SuperKeyword { ty, .. } = &*value.borrow()
+        {
+            let super_ty = ty.as_ref().expect("super should have a type");
+            match &*super_ty.borrow() {
+                Type::Class(name, _) => assert_eq!(name, "Animal"),
+                other => panic!("Expected Class(Animal) type for super, got {:?}", other),
+            }
+        } else {
+            panic!("Unexpected AST structure");
+        }
+    } else {
+        panic!("Expected ClassDecl for Dog");
+    }
+}
+
+#[test]
+fn test_super_keyword_without_superclass_error() {
+    let code = r#"
+        class Animal {
+            func test() -> Void {
+                let x = super
+            }
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "Should emit error for 'super' in class without superclass"
+    );
+}
+
+#[test]
 fn test_protocol_type_with_method() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
