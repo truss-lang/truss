@@ -4138,6 +4138,46 @@ impl TypeResolver {
         })
     }
 
+    fn get_set_access_modifier(stmt: &Statement) -> Option<AccessModifier> {
+        stmt.modifiers().ok().and_then(|modifiers| {
+            modifiers.iter().find_map(|m| {
+                if let ModifierType::AccessSet(ref access) = m.ty {
+                    Some(*access)
+                } else {
+                    None
+                }
+            })
+        })
+    }
+
+    fn is_setter_accessible(
+        &self,
+        set_access: &AccessModifier,
+        member: Rc<RefCell<Symbol>>,
+        member_token: &Token,
+    ) -> bool {
+        match set_access {
+            AccessModifier::Open | AccessModifier::Public | AccessModifier::Internal => true,
+            AccessModifier::Fileprivate => {
+                let symbol = member.borrow();
+                if let Some(decl) = symbol.get_decl().ok().flatten() {
+                    let decl_file = decl.borrow().token().file;
+                    member_token.file == decl_file
+                } else {
+                    true
+                }
+            }
+            AccessModifier::Private => {
+                member.borrow().parent().and_then(|p| {
+                    self.current_owner
+                        .as_ref()
+                        .map(|owner| Rc::ptr_eq(owner, &p))
+                }).unwrap_or(false)
+            }
+            AccessModifier::Package => true,
+        }
+    }
+
     fn validate_member_access_levels(
         &self,
         container_access: Option<AccessModifier>,
@@ -4446,6 +4486,23 @@ impl TypeResolver {
                                     {
                                         if name == &member.value {
                                             if *is_var {
+                                                let prop_clone = prop.clone();
+                                                let set_check = {
+                                                    let d = prop_clone.borrow();
+                                                    d.get_decl().ok().flatten().and_then(|decl| {
+                                                        Self::get_set_access_modifier(&*decl.borrow())
+                                                    })
+                                                };
+                                                if let Some(set_access) = set_check {
+                                                    if !self.is_setter_accessible(&set_access, prop_clone, &token) {
+                                                        self.emit_error(
+                                                            TrussDiagnosticCode::InvalidMemberAccessLevel,
+                                                            format!("Cannot assign to property '{}' due to setter access level", name),
+                                                            &token,
+                                                        );
+                                                        return;
+                                                    }
+                                                }
                                                 return;
                                             }
                                             if self.is_in_init {

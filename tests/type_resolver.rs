@@ -2174,6 +2174,39 @@ fn test_super_keyword_without_superclass_error() {
 }
 
 #[test]
+fn test_private_set_blocks_external_write() {
+    let code = r#"
+        struct Foo {
+            private(set) var x: Int32
+        }
+        func test() -> Int32 {
+            var f: Foo
+            f.x = 10
+            return f.x
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "Should emit error for writing to private(set) property from outside"
+    );
+}
+
+#[test]
 fn test_protocol_type_with_method() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
