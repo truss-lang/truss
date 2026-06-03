@@ -3260,3 +3260,89 @@ fn test_struct_var_property_is_var() {
         panic!("Expected StructDecl with scope");
     }
 }
+
+#[test]
+fn test_address_of_variable_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test(v: Int32) { &v }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Unary {
+            expression: inner,
+            operator,
+            is_prefix,
+        } = &*expression.borrow()
+    {
+        assert_eq!(operator, &truss::ast::expression::UnaryOperator::AddressOf);
+        assert!(is_prefix);
+        if let Expression::Variable { symbol, .. } = &*inner.borrow() {
+            assert_ne!(*symbol, None);
+        } else {
+            panic!("Expected variable inside address-of");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_address_of_deref_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test(p: Int32*) { &*p }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Unary {
+            expression: addr_expr,
+            operator,
+            is_prefix,
+        } = &*expression.borrow()
+    {
+        assert_eq!(operator, &truss::ast::expression::UnaryOperator::AddressOf);
+        assert!(is_prefix);
+        if let Expression::Unary {
+            expression: deref_inner,
+            operator: deref_op,
+            ..
+        } = &*addr_expr.borrow()
+        {
+            assert_eq!(deref_op, &truss::ast::expression::UnaryOperator::Deref);
+            if let Expression::Variable { symbol, .. } = &*deref_inner.borrow() {
+                assert_ne!(*symbol, None);
+            } else {
+                panic!("Expected variable inside &*");
+            }
+        } else {
+            panic!("Expected deref inside &*");
+        }
+    } else {
+        panic!();
+    }
+}
