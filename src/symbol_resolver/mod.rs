@@ -92,6 +92,7 @@ impl SymbolResolver {
                     methods: vec![],
                     constructors: vec![],
                     destrcutor: None,
+                    subscripts: vec![],
                 }));
                 self.enter(struct_symbol.clone(), name);
                 let Symbol::Struct {
@@ -99,6 +100,7 @@ impl SymbolResolver {
                     methods,
                     constructors,
                     destrcutor,
+                    subscripts: _subscripts,
                     ..
                 } = &mut *struct_symbol.borrow_mut()
                 else {
@@ -219,6 +221,62 @@ impl SymbolResolver {
                                 self.register_symbols(s.clone());
                             }
                         }
+                    } else if let Statement::SubscriptDecl { .. } = &*field_stmt.borrow() {
+                        let sub_sym = Rc::new(RefCell::new(Symbol::StructSubscript {
+                            name: "subscript".to_string(),
+                            parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
+                            decl: Some(field_stmt.clone()),
+                        }));
+                        _subscripts.push(sub_sym.clone());
+                        {
+                            let stmt = field_stmt.borrow();
+                            if let Statement::SubscriptDecl { parameters, accessors, .. } = &*stmt {
+                                for accessor in accessors {
+                                    let acc_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                                    let saved = self.current_scope.clone();
+                                    self.current_scope = Some(acc_scope.clone());
+                                    for param in parameters {
+                                        let param_name = param.borrow().name.value.clone();
+                                        if param_name != "_" {
+                                            let param_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                                name: param_name,
+                                                decl: None,
+                                                parameter: Some(param.clone()),
+                                                is_var: true,
+                                            }));
+                                            self.enter(param_sym, &param.borrow().name);
+                                        }
+                                    }
+                                    if let Some(p) = &accessor.parameter {
+                                        let param_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                            name: p.value.clone(),
+                                            decl: None,
+                                            parameter: None,
+                                            is_var: true,
+                                        }));
+                                        self.enter(param_sym, p);
+                                    } else {
+                                        let param_name = match accessor.kind {
+                                            AccessorKind::DidSet => "oldValue",
+                                            _ => "newValue",
+                                        };
+                                        let param_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                            name: param_name.to_string(),
+                                            decl: None,
+                                            parameter: None,
+                                            is_var: true,
+                                        }));
+                                        if let Some(scope) = self.current_scope.clone() {
+                                            scope.borrow_mut().set_symbol(param_sym);
+                                        }
+                                    }
+                                    for s in &accessor.body {
+                                        self.resolve_statement(s.clone());
+                                    }
+                                    self.current_scope = saved;
+                                }
+                            }
+                        }
                     } else {
                         self.register_symbols(field_stmt.clone());
                     }
@@ -240,6 +298,7 @@ impl SymbolResolver {
                     constructors: vec![],
                     destrcutor: None,
                     superclass: None,
+                    subscripts: vec![],
                 }));
                 self.enter(class_symbol.clone(), name);
                 let Symbol::Class {
@@ -247,6 +306,7 @@ impl SymbolResolver {
                     methods,
                     constructors,
                     destrcutor,
+                    subscripts: _subscripts,
                     ..
                 } = &mut *class_symbol.borrow_mut()
                 else {
@@ -367,6 +427,62 @@ impl SymbolResolver {
                                 self.register_symbols(s.clone());
                             }
                         }
+                    } else if let Statement::SubscriptDecl { .. } = &*field_stmt.borrow() {
+                        let sub_sym = Rc::new(RefCell::new(Symbol::ClassSubscript {
+                            name: "subscript".to_string(),
+                            parent: WeakSymbol(Rc::downgrade(&class_symbol)),
+                            decl: Some(field_stmt.clone()),
+                        }));
+                        _subscripts.push(sub_sym.clone());
+                        {
+                            let stmt = field_stmt.borrow();
+                            if let Statement::SubscriptDecl { parameters, accessors, .. } = &*stmt {
+                                for accessor in accessors {
+                                    let acc_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                                    let saved = self.current_scope.clone();
+                                    self.current_scope = Some(acc_scope.clone());
+                                    for param in parameters {
+                                        let param_name = param.borrow().name.value.clone();
+                                        if param_name != "_" {
+                                            let param_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                                name: param_name,
+                                                decl: None,
+                                                parameter: Some(param.clone()),
+                                                is_var: true,
+                                            }));
+                                            self.enter(param_sym, &param.borrow().name);
+                                        }
+                                    }
+                                    if let Some(p) = &accessor.parameter {
+                                        let param_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                            name: p.value.clone(),
+                                            decl: None,
+                                            parameter: None,
+                                            is_var: true,
+                                        }));
+                                        self.enter(param_sym, p);
+                                    } else {
+                                        let param_name = match accessor.kind {
+                                            AccessorKind::DidSet => "oldValue",
+                                            _ => "newValue",
+                                        };
+                                        let param_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                            name: param_name.to_string(),
+                                            decl: None,
+                                            parameter: None,
+                                            is_var: true,
+                                        }));
+                                        if let Some(scope) = self.current_scope.clone() {
+                                            scope.borrow_mut().set_symbol(param_sym);
+                                        }
+                                    }
+                                    for s in &accessor.body {
+                                        self.resolve_statement(s.clone());
+                                    }
+                                    self.current_scope = saved;
+                                }
+                            }
+                        }
                     } else {
                         self.register_symbols(field_stmt.clone());
                     }
@@ -470,11 +586,13 @@ impl SymbolResolver {
                     decl: stmt.clone(),
                     methods: vec![],
                     properties: vec![],
+                    subscripts: vec![],
                 }));
                 self.enter(protocol_symbol.clone(), name);
                 let Symbol::Protocol {
                     methods,
                     properties,
+                    subscripts: _subscripts,
                     ..
                 } = &mut *protocol_symbol.borrow_mut()
                 else {
@@ -597,12 +715,14 @@ impl SymbolResolver {
                         methods,
                         constructors,
                         destrcutor,
+                        subscripts: _subscripts,
                         ..
                     }
                     | Symbol::Class {
                         methods,
                         constructors,
                         destrcutor,
+                        subscripts: _subscripts,
                         ..
                     } => {
                         for field_stmt in body {
@@ -684,6 +804,13 @@ impl SymbolResolver {
                                         self.register_symbols(s.clone());
                                     }
                                 }
+                            } else if let Statement::SubscriptDecl { .. } = &*field_stmt.borrow() {
+                                let sub_sym = Rc::new(RefCell::new(Symbol::StructSubscript {
+                                    name: "subscript".to_string(),
+                                    parent: WeakSymbol(Rc::downgrade(&target_sym)),
+                                    decl: Some(field_stmt.clone()),
+                                }));
+                                _subscripts.push(sub_sym.clone());
                             } else {
                                 self.register_symbols(field_stmt.clone());
                             }
@@ -723,7 +850,7 @@ impl SymbolResolver {
                             }
                         }
                     }
-                    Symbol::Protocol { methods, .. } => {
+                    Symbol::Protocol { methods, subscripts: _subscripts, .. } => {
                         for field_stmt in body {
                             if let Statement::FunctionDecl {
                                 name: method_name, ..
@@ -752,6 +879,13 @@ impl SymbolResolver {
                                         FunctionBody::None => {}
                                     }
                                 }
+                            } else if let Statement::SubscriptDecl { .. } = &*field_stmt.borrow() {
+                                let sub_sym = Rc::new(RefCell::new(Symbol::ProtocolSubscript {
+                                    name: "subscript".to_string(),
+                                    parent: WeakSymbol(Rc::downgrade(&target_sym)),
+                                    decl: Some(field_stmt.clone()),
+                                }));
+                                _subscripts.push(sub_sym.clone());
                             } else {
                                 self.register_symbols(field_stmt.clone());
                             }
