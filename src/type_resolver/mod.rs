@@ -3666,6 +3666,9 @@ impl TypeResolver {
                     None
                 }
             }
+            UnaryOperator::AddressOf => {
+                Some(Rc::new(RefCell::new(Type::Pointer(operand))))
+            }
             _ => None,
         }
     }
