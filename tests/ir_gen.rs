@@ -4576,6 +4576,111 @@ fn test_irgen_address_of_variable() {
 }
 
 #[test]
+fn test_irgen_struct_subscript_getter() {
+    let code = r#"
+        struct Array {
+            subscript[idx: Int32] -> Int32 {
+                get { return 42 }
+            }
+        }
+        func test(a: Array) -> Int32 {
+            return a[0]
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(engine.borrow().get_errors().len(), 0, "Expected no errors: {:?}", engine.borrow().get_errors());
+    assert!(llvm_ir.contains("@Array.subscript.getter"), "Expected subscript.getter in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_struct_subscript_get_set() {
+    let code = r#"
+        struct Array {
+            subscript[idx: Int32] -> Int32 {
+                get { return 42 }
+                set(newValue) { }
+            }
+        }
+        func test(a: Array) -> Int32 {
+            a[0] = 1
+            return a[0]
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(engine.borrow().get_errors().len(), 0, "Expected no errors: {:?}", engine.borrow().get_errors());
+    assert!(llvm_ir.contains("@Array.subscript.getter"), "Expected subscript.getter in IR:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("@Array.subscript.setter"), "Expected subscript.setter in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_class_subscript_getter() {
+    let code = r#"
+        class Array {
+            subscript[idx: Int32] -> Int32 {
+                get { return 42 }
+            }
+        }
+        func test(a: Array) -> Int32 {
+            return a[0]
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(engine.borrow().get_errors().len(), 0, "Expected no errors: {:?}", engine.borrow().get_errors());
+    assert!(llvm_ir.contains("subscript.getter"), "Expected subscript getter in vtable:\n{}", llvm_ir);
+}
+
+#[test]
 fn test_irgen_address_of_deref() {
     let code = "func test(p: Int32*) -> Int32* { return &*p }";
     let engine = create_engine();

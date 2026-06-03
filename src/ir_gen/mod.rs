@@ -1130,6 +1130,31 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
+                if let Statement::SubscriptDecl {
+                    accessors,
+                    ty: Some(ty),
+                    ..
+                } = &*stmt.borrow()
+                    && let Type::Function(param_types, return_type, _) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Void)))));
+                    let mut all_param_types = vec![self_param];
+                    for pt in param_types {
+                        all_param_types.push(pt.clone());
+                    }
+                    let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
+                    if let Ok(getter_type) = self.get_function_type(return_type.clone(), all_param_types.clone(), false) {
+                        self.module.add_function(&format!("{}.subscript.getter", name.value), getter_type, None);
+                    }
+                    if has_set {
+                        let void_ty = Rc::new(RefCell::new(Type::Void));
+                        let mut setter_param_types = all_param_types.clone();
+                        setter_param_types.push(return_type.clone());
+                        if let Ok(setter_type) = self.get_function_type(void_ty, setter_param_types, false) {
+                            self.module.add_function(&format!("{}.subscript.setter", name.value), setter_type, None);
+                        }
+                    }
+                }
             }
             let deinit_name = format!("{}.deinit", name.value);
             if self.module.get_function(&deinit_name).is_none() {
@@ -1308,6 +1333,31 @@ impl<'ctx> IRGenerator<'ctx> {
                     {
                         let llvm_name = format!("{}.deinit", name.value);
                         self.module.add_function(&llvm_name, function_type, None);
+                    }
+                }
+                if let Statement::SubscriptDecl {
+                    accessors,
+                    ty: Some(ty),
+                    ..
+                } = &*stmt.borrow()
+                    && let Type::Function(param_types, return_type, _) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Void)))));
+                    let mut all_param_types = vec![self_param];
+                    for pt in param_types {
+                        all_param_types.push(pt.clone());
+                    }
+                    let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
+                    if let Ok(getter_type) = self.get_function_type(return_type.clone(), all_param_types.clone(), false) {
+                        self.module.add_function(&format!("{}.subscript.getter", name.value), getter_type, None);
+                    }
+                    if has_set {
+                        let void_ty = Rc::new(RefCell::new(Type::Void));
+                        let mut setter_param_types = all_param_types.clone();
+                        setter_param_types.push(return_type.clone());
+                        if let Ok(setter_type) = self.get_function_type(void_ty, setter_param_types, false) {
+                            self.module.add_function(&format!("{}.subscript.setter", name.value), setter_type, None);
+                        }
                     }
                 }
             }
