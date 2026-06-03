@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
+use std::collections::HashSet;
+
 use crate::{
     ast::{
         expression::{BinaryOperator, CallParameter, CastKind, ElseBranch, Expression, UnaryOperator},
@@ -31,6 +33,9 @@ pub struct TypeResolver {
     current_owner: Option<Rc<RefCell<Symbol>>>,
     closure_expected_type: Option<Rc<RefCell<Type>>>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
+    initialized_lets: Vec<HashSet<String>>,
+    initialized_properties: HashSet<String>,
+    is_in_init: bool,
 }
 
 impl TypeResolver {
@@ -43,6 +48,9 @@ impl TypeResolver {
             current_owner: None,
             closure_expected_type: None,
             engine,
+            initialized_lets: Vec::new(),
+            initialized_properties: HashSet::new(),
+            is_in_init: false,
         }
     }
 
@@ -959,6 +967,7 @@ impl TypeResolver {
                 };
                 self.current_return_type = Some(ret_type.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
+                self.initialized_lets.push(HashSet::new());
 
                 for param in parameters.iter() {
                     if let Some(param_ty) = param.borrow().ty.clone() {
@@ -972,6 +981,7 @@ impl TypeResolver {
 
                 self.resolve_function_body(body.clone());
 
+                self.initialized_lets.pop();
                 self.leave_scope();
                 self.current_return_type = last_return_type;
             }
@@ -982,6 +992,10 @@ impl TypeResolver {
                 ..
             } => {
                 self.enter_scope(scope.as_ref().unwrap().clone());
+                self.initialized_lets.push(HashSet::new());
+                let saved_in_init = self.is_in_init;
+                self.is_in_init = true;
+                self.initialized_properties.clear();
 
                 for param in parameters.iter() {
                     if let Some(param_ty) = param.borrow().ty.clone() {
@@ -994,6 +1008,8 @@ impl TypeResolver {
                 }
 
                 self.resolve_function_body(body.clone());
+                self.is_in_init = saved_in_init;
+                self.initialized_lets.pop();
                 self.leave_scope();
             }
             Statement::DeinitDecl { body, scope, .. } => {
@@ -1159,6 +1175,7 @@ impl TypeResolver {
                                 };
                                 self.current_return_type = Some(ret_type.clone());
                                 self.enter_scope(fn_scope.as_ref().unwrap().clone());
+                                self.initialized_lets.push(HashSet::new());
                                 for param in parameters.iter() {
                                     if let Some(param_ty) = param.borrow().ty.clone() {
                                         self.current_scope
@@ -1169,6 +1186,7 @@ impl TypeResolver {
                                     }
                                 }
                                 self.resolve_function_body(body.clone());
+                                self.initialized_lets.pop();
                                 self.leave_scope();
                                 self.current_return_type = last_return_type;
                             }
@@ -1624,6 +1642,9 @@ impl TypeResolver {
             } => {
                 let operand_ty = self.infer_type(expression.clone())?;
                 if let Some(result) = self.check_unary(*operator, operand_ty.clone()) {
+                    if matches!(operator, UnaryOperator::Inc | UnaryOperator::Dec) {
+                        self.check_writable(expression.clone());
+                    }
                     result
                 } else {
                     let token = expression.borrow().token();
@@ -1938,6 +1959,8 @@ impl TypeResolver {
             }
             Expression::Assignment { left, right, .. } => {
                 let left_ty = self.infer_type(left.clone())?;
+
+                self.check_writable(left.clone());
 
                 let right_ty = self
                     .infer_expression_type(right.clone(), left_ty.clone())
@@ -4222,6 +4245,107 @@ impl TypeResolver {
             Some(t)
         } else {
             None
+        }
+    }
+
+    fn check_writable(&mut self, expr: Rc<RefCell<Expression>>) {
+        let token = expr.borrow().token();
+        match &*expr.borrow() {
+            Expression::Variable { symbol, name, .. } => {
+                if let Some(ws) = symbol {
+                    let sym = ws.0.upgrade();
+                    if let Some(sym) = sym {
+                        let binding = sym.borrow();
+                        if let Symbol::Variable { is_var, .. } = &*binding {
+                            if *is_var {
+                                return;
+                            }
+                            if let Some(decl) = binding.get_decl().ok().flatten() {
+                                let has_initializer = {
+                                    let decl_ref = decl.borrow();
+                                    matches!(&*decl_ref, Statement::VariableDecl { initializer: Some(_), .. })
+                                };
+                                if has_initializer {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::AssignToImmutable,
+                                        format!("Cannot assign to 'let' variable '{}'", name.value),
+                                        &token,
+                                    );
+                                    return;
+                                }
+                                if self.initialized_lets.last().map_or(false, |s| s.contains(&name.value)) {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::AssignToImmutable,
+                                        format!("Cannot assign to 'let' variable '{}' again", name.value),
+                                        &token,
+                                    );
+                                    return;
+                                }
+                                if let Some(scope) = &self.current_scope {
+                                    scope.borrow().get_symbol(&name.value);
+                                }
+                                if let Some(set) = self.initialized_lets.last_mut() {
+                                    set.insert(name.value.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Expression::MemberAccess { object, member, .. } => {
+                let object_ty = self.infer_type(object.clone());
+                if let Some(object_ty) = object_ty {
+                    let type_name = match &*object_ty.borrow() {
+                        Type::Struct(n, _) | Type::Class(n, _) => Some(n.clone()),
+                        _ => None,
+                    };
+                    if let Some(type_name) = type_name {
+                        if let Some(scope) = &self.current_scope {
+                            let scope_ref = scope.borrow();
+                            if let Some(symbol) = scope_ref.get_symbol(&type_name) {
+                                let binding = symbol.borrow();
+                                let properties = match &*binding {
+                                    Symbol::Struct { properties, .. }
+                                    | Symbol::Class { properties, .. } => properties.clone(),
+                                    _ => vec![],
+                                };
+                                drop(binding);
+                                for prop in &properties {
+                                    let prop_binding = prop.borrow();
+                                    if let Symbol::StructProperty { name, is_var, .. }
+                                    | Symbol::ClassProperty { name, is_var, .. } = &*prop_binding
+                                    {
+                                        if name == &member.value {
+                                            if *is_var {
+                                                return;
+                                            }
+                                            if self.is_in_init {
+                                                if self.initialized_properties.contains(name) {
+                                                    self.emit_error(
+                                                        TrussDiagnosticCode::AssignToImmutable,
+                                                        format!("Cannot assign to 'let' property '{}' again", name),
+                                                        &token,
+                                                    );
+                                                } else {
+                                                    self.initialized_properties.insert(name.clone());
+                                                }
+                                            } else {
+                                                self.emit_error(
+                                                    TrussDiagnosticCode::AssignToImmutable,
+                                                    format!("Cannot assign to 'let' property '{}'", name),
+                                                    &token,
+                                                );
+                                            }
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     }
 

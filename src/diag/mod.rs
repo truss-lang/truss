@@ -55,6 +55,7 @@ pub enum TrussDiagnosticCode {
     ProtocolRequirementNotImplemented,
     NoMatchingOverload,
     AmbiguousOverload,
+    AssignToImmutable,
 
     IRError,
     UnsupportedFeature,
@@ -118,6 +119,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
 
             Self::NoMatchingOverload => "E0318",
             Self::AmbiguousOverload => "E0319",
+            Self::AssignToImmutable => "E0320",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",
