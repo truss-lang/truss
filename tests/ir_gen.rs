@@ -4505,3 +4505,47 @@ fn test_irgen_closure_shorthand_multi_args() {
     assert!(llvm_ir.contains("call i32 "), "IR:\n{}", llvm_ir);
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
+
+#[test]
+fn test_irgen_super_method_call() {
+    let code = r#"
+        class Animal {
+            func speak() -> Int32 { return 1 }
+        }
+        class Dog: Animal {
+            func speak() -> Int32 { return 2 }
+            func call_super() -> Int32 { return super.speak() }
+        }
+        func run_test() -> Int32 {
+            var d: Dog
+            return d.call_super()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(llvm_ir.contains("Animal.speak"), "Expected Animal.speak definition:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("Dog.speak"), "Expected Dog.speak definition:\n{}", llvm_ir);
+    assert!(llvm_ir.contains("Dog.call_super"), "Expected Dog.call_super definition:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("call i32 @Animal.speak"),
+        "Expected direct call to Animal.speak (not through vtable):\n{}",
+        llvm_ir
+    );
+}

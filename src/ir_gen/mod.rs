@@ -3427,6 +3427,33 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("'self' is only available inside methods");
                 }
             }
+            Expression::SuperKeyword { ty, token, .. } => {
+                let self_ptr = self.builder.get_insert_block()
+                    .and_then(|block| block.get_parent())
+                    .and_then(|func| func.get_nth_param(0))
+                    .map(|val| val.into_pointer_value());
+                if let Some(ptr) = self_ptr {
+                    let llvm_type = if let Some(ty) = ty {
+                        self.resolve_type(ty.clone())?
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeInferenceFailed,
+                            "Cannot infer type for 'super'",
+                            Some(token),
+                        );
+                        anyhow::bail!("Cannot infer type for 'super'");
+                    };
+                    let val = self.builder.build_load(llvm_type, ptr, "")?;
+                    Ok(Some(val))
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedVariable,
+                        "'super' is only available inside class methods",
+                        Some(token),
+                    );
+                    anyhow::bail!("'super' is only available inside class methods");
+                }
+            }
             Expression::Binary {
                 left,
                 operator,
@@ -4071,9 +4098,11 @@ impl<'ctx> IRGenerator<'ctx> {
                             };
 
                             let setter_entry = format!("{}.setter", field_name);
-                            if let Some(slot_idx) =
-                                self.get_vtable_slot_index(&class_name, &setter_entry)
-                            {
+                            let is_super = matches!(&*object.borrow(), Expression::SuperKeyword { .. });
+                            if !is_super {
+                                if let Some(slot_idx) =
+                                    self.get_vtable_slot_index(&class_name, &setter_entry)
+                                {
                                 let class_type =
                                     *self.class_types.borrow().get(&class_name).unwrap();
                                 let vtable_ptr_ptr = self
@@ -4129,6 +4158,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     "",
                                 )?;
                                 return Ok(Some(right_val));
+                            }
                             }
 
                             let field_index =
@@ -4672,56 +4702,59 @@ impl<'ctx> IRGenerator<'ctx> {
                     };
 
                     let getter_entry = format!("{}.getter", field_name);
-                    if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, &getter_entry) {
-                        let class_type = *self.class_types.borrow().get(&class_name).unwrap();
-                        let vtable_ptr_ptr = self
-                            .builder
-                            .build_struct_gep(class_type, class_ptr, 0, "")?;
-                        let vtable_ptr = self
-                            .builder
-                            .build_load(
-                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                vtable_ptr_ptr,
+                    let is_super = matches!(&*object.borrow(), Expression::SuperKeyword { .. });
+                    if !is_super {
+                        if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, &getter_entry) {
+                            let class_type = *self.class_types.borrow().get(&class_name).unwrap();
+                            let vtable_ptr_ptr = self
+                                .builder
+                                .build_struct_gep(class_type, class_ptr, 0, "")?;
+                            let vtable_ptr = self
+                                .builder
+                                .build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    vtable_ptr_ptr,
+                                    "",
+                                )?
+                                .into_pointer_value();
+
+                            let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
+                            let fn_ptr_ptr =
+                                self.builder
+                                    .build_struct_gep(vtable_type, vtable_ptr, slot_idx, "")?;
+                            let fn_ptr_val = self
+                                .builder
+                                .build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    fn_ptr_ptr,
+                                    "",
+                                )?
+                                .into_pointer_value();
+
+                            let method_list = self.compute_vtable_method_list(&class_name);
+                            let (_, owner) = method_list
+                                .iter()
+                                .find(|(n, _)| n == &getter_entry)
+                                .unwrap();
+                            let declared_fn_name = format!("{}.{}.getter", owner, field_name);
+                            let declared_fn =
+                                self.module.get_function(&declared_fn_name).ok_or_else(|| {
+                                    anyhow::anyhow!("Getter function {} not found", declared_fn_name)
+                                })?;
+                            let fn_type = declared_fn.get_type();
+
+                            let result = self.builder.build_indirect_call(
+                                fn_type,
+                                fn_ptr_val,
+                                &[class_ptr.into()],
                                 "",
-                            )?
-                            .into_pointer_value();
-
-                        let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
-                        let fn_ptr_ptr =
-                            self.builder
-                                .build_struct_gep(vtable_type, vtable_ptr, slot_idx, "")?;
-                        let fn_ptr_val = self
-                            .builder
-                            .build_load(
-                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                fn_ptr_ptr,
-                                "",
-                            )?
-                            .into_pointer_value();
-
-                        let method_list = self.compute_vtable_method_list(&class_name);
-                        let (_, owner) = method_list
-                            .iter()
-                            .find(|(n, _)| n == &getter_entry)
-                            .unwrap();
-                        let declared_fn_name = format!("{}.{}.getter", owner, field_name);
-                        let declared_fn =
-                            self.module.get_function(&declared_fn_name).ok_or_else(|| {
-                                anyhow::anyhow!("Getter function {} not found", declared_fn_name)
-                            })?;
-                        let fn_type = declared_fn.get_type();
-
-                        let result = self.builder.build_indirect_call(
-                            fn_type,
-                            fn_ptr_val,
-                            &[class_ptr.into()],
-                            "",
-                        )?;
-                        let result_val = match result.try_as_basic_value() {
-                            inkwell::values::ValueKind::Basic(val) => val,
-                            _ => anyhow::bail!("Getter call did not return a value"),
-                        };
-                        return Ok(Some(result_val));
+                            )?;
+                            let result_val = match result.try_as_basic_value() {
+                                inkwell::values::ValueKind::Basic(val) => val,
+                                _ => anyhow::bail!("Getter call did not return a value"),
+                            };
+                            return Ok(Some(result_val));
+                        }
                     }
 
                     let field_index =
@@ -5100,6 +5133,41 @@ impl<'ctx> IRGenerator<'ctx> {
                                     p
                                 };
                                 let method_name = &member.value;
+
+                                let is_super = matches!(&*object.borrow(), Expression::SuperKeyword { .. });
+
+                                if is_super {
+                                    let fn_name = format!("{}.{}", class_name, method_name);
+                                    let declared_fn =
+                                        self.module.get_function(&fn_name).ok_or_else(|| {
+                                            self.emit_error(
+                                                TrussDiagnosticCode::UndefinedFunction,
+                                                format!("Undefined function: '{}'", fn_name),
+                                                None,
+                                            );
+                                            anyhow::anyhow!("Undefined function: {}", fn_name)
+                                        })?;
+
+                                    let mut args: Vec<
+                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                    > = Vec::new();
+                                    args.push(ptr.into());
+                                    for param in parameters {
+                                        let arg_val = self
+                                            .resolve_expression(param.expression.clone())?
+                                            .unwrap();
+                                        args.push(arg_val.into());
+                                    }
+                                    let call_result = self
+                                        .builder
+                                        .build_call(declared_fn, &args, "")?;
+                                    match call_result.try_as_basic_value() {
+                                        inkwell::values::ValueKind::Basic(val) => {
+                                            return Ok(Some(val));
+                                        }
+                                        _ => return Ok(None),
+                                    }
+                                }
 
                                 if let Some(slot_idx) =
                                     self.get_vtable_slot_index(class_name, method_name)
