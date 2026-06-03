@@ -3352,7 +3352,7 @@ fn test_struct_subscript_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Matrix { subscript[row: Int32, col: Int32] -> Int32 { get { return 0 } } }".to_string(),
+            "struct Matrix { subscript(row: Int32, col: Int32) -> Int32 { get { return 0 } } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3374,7 +3374,7 @@ fn test_class_subscript_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "class MyArray { subscript[index: Int32] -> Int32 { get { return 0 } set { } } }".to_string(),
+            "class MyArray { subscript(index: Int32) -> Int32 { get { return 0 } set { } } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3396,7 +3396,7 @@ fn test_protocol_subscript_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "protocol Subscriptable { subscript[index: Int32] -> Int32 { get set } }".to_string(),
+            "protocol Subscriptable { subscript(index: Int32) -> Int32 { get set } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3418,7 +3418,7 @@ fn test_extension_subscript_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Array { } extension Array { subscript[index: Int32] -> Int32 { get { return 0 } } }".to_string(),
+            "struct Array { } extension Array { subscript(index: Int32) -> Int32 { get { return 0 } } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),

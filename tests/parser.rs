@@ -7414,7 +7414,7 @@ fn test_parse_subscript_decl_get() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "subscript[index: Int32] -> Int32 { get { return 0 } }".to_string(),
+            "subscript(index: Int32) -> Int32 { get { return 0 } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7442,7 +7442,7 @@ fn test_parse_subscript_decl_get_set() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "subscript[index: Int32] -> Int32 { get { return 0 } set(newValue) { } }".to_string(),
+            "subscript(index: Int32) -> Int32 { get { return 0 } set(newValue) { } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7471,7 +7471,7 @@ fn test_parse_subscript_decl_implicit_get() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "subscript[index: Int32] -> Int32 { return 0 }".to_string(),
+            "subscript(index: Int32) -> Int32 { return 0 }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7498,7 +7498,7 @@ fn test_parse_subscript_with_label() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "subscript[key: String] -> Int32 { get { return 0 } }".to_string(),
+            "subscript(key: String) -> Int32 { get { return 0 } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7577,7 +7577,7 @@ fn test_parse_subscript_in_struct() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Matrix { subscript[row: Int32, col: Int32] -> Int32 { get { return 0 } } }".to_string(),
+            "struct Matrix { subscript(row: Int32, col: Int32) -> Int32 { get { return 0 } } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7605,7 +7605,7 @@ fn test_parse_subscript_in_protocol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "protocol Subscriptable { subscript[index: Int32] -> Int32 { get set } }".to_string(),
+            "protocol Subscriptable { subscript(index: Int32) -> Int32 { get set } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7633,7 +7633,7 @@ fn test_parse_subscript_in_class() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "class MyArray { subscript[index: Int32] -> Int32 { get { return 0 } set { } } }".to_string(),
+            "class MyArray { subscript(index: Int32) -> Int32 { get { return 0 } set { } } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),

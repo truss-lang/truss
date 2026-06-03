@@ -4579,7 +4579,7 @@ fn test_irgen_address_of_variable() {
 fn test_irgen_struct_subscript_getter() {
     let code = r#"
         struct Array {
-            subscript[idx: Int32] -> Int32 {
+            subscript(idx: Int32) -> Int32 {
                 get { return 42 }
             }
         }
@@ -4613,7 +4613,7 @@ fn test_irgen_struct_subscript_getter() {
 fn test_irgen_struct_subscript_get_set() {
     let code = r#"
         struct Array {
-            subscript[idx: Int32] -> Int32 {
+            subscript(idx: Int32) -> Int32 {
                 get { return 42 }
                 set(newValue) { }
             }
@@ -4650,7 +4650,7 @@ fn test_irgen_struct_subscript_get_set() {
 fn test_irgen_class_subscript_getter() {
     let code = r#"
         class Array {
-            subscript[idx: Int32] -> Int32 {
+            subscript(idx: Int32) -> Int32 {
                 get { return 42 }
             }
         }

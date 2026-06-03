@@ -1616,15 +1616,15 @@ impl Parser {
         let Some(open) = self.next() else {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
-                "Expected '[' after 'subscript'",
+                "Expected '(' after 'subscript'",
                 &token,
             );
             return Err(());
         };
-        if !SeparatorType::is_separator(&open, SeparatorType::OpenBracket) {
+        if !SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
-                format!("Expected '[' but found '{}'", open.value),
+                format!("Expected '(' but found '{}'", open.value),
                 &open,
             );
             return Err(());
@@ -1632,7 +1632,7 @@ impl Parser {
         let mut parameters = Vec::new();
         let mut has_variadic = false;
         while let Some(t) = self.peek() {
-            if SeparatorType::is_separator(&t, SeparatorType::CloseBracket) {
+            if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                 break;
             }
             if let TokenType::Operator { .. } = t.ty
@@ -1779,15 +1779,15 @@ impl Parser {
         let Some(close) = self.next() else {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
-                "Expected ']' to close subscript parameter list",
+                "Expected ')' to close subscript parameter list",
                 &self.tokens[self.index.saturating_sub(1)],
             );
             return Err(());
         };
-        if !SeparatorType::is_separator(&close, SeparatorType::CloseBracket) {
+        if !SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
-                format!("Expected ']' but found '{}'", close.value),
+                format!("Expected ')' but found '{}'", close.value),
                 &close,
             );
             return Err(());
@@ -3255,22 +3255,22 @@ impl Parser {
                         let Some(open) = self.next() else {
                             self.emit_error(
                                 TrussDiagnosticCode::MissingSeparator,
-                                "Expected '[' after 'subscript'",
+                                "Expected '(' after 'subscript'",
                                 &sub_token,
                             );
                             return Err(());
                         };
-                        if !SeparatorType::is_separator(&open, SeparatorType::OpenBracket) {
+                        if !SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
                             self.emit_error(
                                 TrussDiagnosticCode::MissingSeparator,
-                                format!("Expected '[' but found '{}'", open.value),
+                                format!("Expected '(' but found '{}'", open.value),
                                 &open,
                             );
                             return Err(());
                         }
                         let mut parameters = Vec::new();
                         while let Some(t) = self.peek() {
-                            if SeparatorType::is_separator(&t, SeparatorType::CloseBracket) {
+                            if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
                                 break;
                             }
                             let Some(first) = self.next() else {
@@ -3346,15 +3346,15 @@ impl Parser {
                         let Some(close) = self.next() else {
                             self.emit_error(
                                 TrussDiagnosticCode::MissingSeparator,
-                                "Expected ']' to close subscript parameter list",
+                                "Expected ')' to close subscript parameter list",
                                 &self.tokens[self.index.saturating_sub(1)],
                             );
                             return Err(());
                         };
-                        if !SeparatorType::is_separator(&close, SeparatorType::CloseBracket) {
+                        if !SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
                             self.emit_error(
                                 TrussDiagnosticCode::MissingSeparator,
-                                format!("Expected ']' but found '{}'", close.value),
+                                format!("Expected ')' but found '{}'", close.value),
                                 &close,
                             );
                             return Err(());

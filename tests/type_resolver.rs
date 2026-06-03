@@ -4791,7 +4791,7 @@ fn test_struct_subscript_return_type() {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Matrix { subscript[row: Int32, col: Int32] -> Int32 { get { return 0 } } }
+            "struct Matrix { subscript(row: Int32, col: Int32) -> Int32 { get { return 0 } } }
              func test(m: Matrix) -> Int32 { return m[0, 1] }".to_string(),
             Rc::new("".to_string()),
         ),
@@ -4823,7 +4823,7 @@ fn test_struct_subscript_implicit_get() {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Array { subscript[index: Int32] -> Int32 { return 42 } }
+            "struct Array { subscript(index: Int32) -> Int32 { return 42 } }
              func test(a: Array) -> Int32 { return a[0] }".to_string(),
             Rc::new("".to_string()),
         ),
@@ -4846,7 +4846,7 @@ fn test_class_subscript_return_type() {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(
-            "class MyArray { subscript[index: Int32] -> Int32 { get { return 0 } set { } } }
+            "class MyArray { subscript(index: Int32) -> Int32 { get { return 0 } set { } } }
              func test(a: MyArray) -> Int32 { return a[0] }".to_string(),
             Rc::new("".to_string()),
         ),
