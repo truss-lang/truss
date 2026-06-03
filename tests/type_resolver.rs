@@ -4074,14 +4074,14 @@ fn test_internal_struct_field_accessible_from_outside() {
 }
 
 #[test]
-fn test_open_struct_field_accessible_from_outside() {
+fn test_public_struct_field_accessible_from_outside_2() {
     let errors = run_type_check(
-        "struct Foo { open let x: Int32 }
+        "struct Foo { public let x: Int32 }
          func test(f: Foo) -> Int32 { return f.x }",
     );
     assert_eq!(
         errors, 0,
-        "Expected no errors for open field access, got {}",
+        "Expected no errors for public field access, got {}",
         errors
     );
 }
@@ -4592,4 +4592,44 @@ fn test_assign_to_var_property_ok() {
     let errors = engine_ref.get_errors();
     let assign_errors: Vec<_> = errors.iter().filter(|d| d.code == TrussDiagnosticCode::AssignToImmutable).collect();
     assert_eq!(assign_errors.len(), 0, "Expected 0 AssignToImmutable for var property assign, got {:?}", errors);
+}
+
+#[test]
+fn test_open_on_struct_member_errors() {
+    let errors = run_type_check(
+        "struct Foo { open var x: Int32 }",
+    );
+    assert_eq!(errors, 1, "Expected 1 error for open on struct member, got {}", errors);
+}
+
+#[test]
+fn test_open_on_class_member_ok() {
+    let errors = run_type_check(
+        "class Foo { open var x: Int32 }",
+    );
+    assert_eq!(errors, 0, "Expected 0 errors for open on class member, got {}", errors);
+}
+
+#[test]
+fn test_member_access_exceeds_container_level() {
+    let errors = run_type_check(
+        "internal struct Foo { public var x: Int32 }",
+    );
+    assert_eq!(errors, 1, "Expected 1 error for member access exceeding container, got {}", errors);
+}
+
+#[test]
+fn test_member_access_equal_to_container_ok() {
+    let errors = run_type_check(
+        "public struct Foo { public var x: Int32 }",
+    );
+    assert_eq!(errors, 0, "Expected 0 errors for member access equal to container, got {}", errors);
+}
+
+#[test]
+fn test_member_access_more_restrictive_ok() {
+    let errors = run_type_check(
+        "public struct Foo { private var x: Int32 }",
+    );
+    assert_eq!(errors, 0, "Expected 0 errors for member access more restrictive than container, got {}", errors);
 }

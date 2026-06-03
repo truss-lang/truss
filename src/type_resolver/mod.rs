@@ -71,6 +71,15 @@ impl TypeResolver {
     }
 
     fn process_decl(&mut self, statement: Rc<RefCell<Statement>>) {
+        let container_access = {
+            let stmt_ref = statement.borrow();
+            Self::get_access_modifier(&stmt_ref)
+        };
+        let is_container_class = {
+            let stmt_ref = statement.borrow();
+            matches!(&*stmt_ref, Statement::ClassDecl { .. })
+        };
+
         match &mut *statement.borrow_mut() {
             Statement::FunctionDecl {
                 name,
@@ -187,7 +196,7 @@ impl TypeResolver {
                     .unwrap()
                     .borrow_mut()
                     .set_type("self".to_string(), self_ty);
-                for stmt in body {
+                for stmt in body.iter() {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
                             name: method_name,
@@ -241,6 +250,7 @@ impl TypeResolver {
                 }
                 self.leave_scope();
                 self.current_owner = prev_owner;
+                self.validate_member_access_levels(container_access.clone(), is_container_class, body);
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::ClassDecl {
@@ -293,7 +303,7 @@ impl TypeResolver {
                     .unwrap()
                     .borrow_mut()
                     .set_type("self".to_string(), self_ty);
-                for stmt in body {
+                for stmt in body.iter() {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
                             name: method_name,
@@ -347,6 +357,7 @@ impl TypeResolver {
                 }
                 self.leave_scope();
                 self.current_owner = prev_owner;
+                self.validate_member_access_levels(container_access.clone(), is_container_class, body);
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::EnumDecl {
@@ -4051,6 +4062,73 @@ impl TypeResolver {
 
     fn leave_scope(&mut self) {
         self.current_scope = self.current_scope.clone().unwrap().borrow().parent.clone();
+    }
+
+    fn access_level_value(access: &AccessModifier) -> u8 {
+        match access {
+            AccessModifier::Open => 6,
+            AccessModifier::Public => 5,
+            AccessModifier::Package => 4,
+            AccessModifier::Internal => 3,
+            AccessModifier::Fileprivate => 2,
+            AccessModifier::Private => 1,
+        }
+    }
+
+    fn get_access_modifier(stmt: &Statement) -> Option<AccessModifier> {
+        stmt.modifiers().ok().and_then(|modifiers| {
+            modifiers.iter().find_map(|m| {
+                if let ModifierType::Access(ref access) = m.ty {
+                    Some(*access)
+                } else {
+                    None
+                }
+            })
+        })
+    }
+
+    fn validate_member_access_levels(
+        &self,
+        container_access: Option<AccessModifier>,
+        is_class: bool,
+        body: &[Rc<RefCell<Statement>>],
+    ) {
+        let container_value = container_access
+            .as_ref()
+            .map(Self::access_level_value)
+            .unwrap_or(3);
+
+        for member in body {
+            let member_ref = member.borrow();
+            let Some(member_access) = Self::get_access_modifier(&member_ref) else {
+                continue;
+            };
+
+            if member_access == AccessModifier::Open && !is_class {
+                let token = member_ref.token();
+                self.emit_error(
+                    TrussDiagnosticCode::OpenOnlyOnClass,
+                    "'open' is only allowed on class declarations and class members",
+                    &token,
+                );
+                continue;
+            }
+
+            let member_value = Self::access_level_value(&member_access);
+            if member_value > container_value {
+                if let Some(container_access) = &container_access {
+                    let token = member_ref.token();
+                    self.emit_error(
+                        TrussDiagnosticCode::InvalidMemberAccessLevel,
+                        format!(
+                            "Member's access level '{:?}' cannot be higher than container's access level '{:?}'",
+                            member_access, container_access
+                        ),
+                        &token,
+                    );
+                }
+            }
+        }
     }
 
     fn check_protocol_conformances(

@@ -248,7 +248,7 @@ pub enum ModifierType {
     Static,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AccessModifier {
     Open,
     Public,

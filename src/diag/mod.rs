@@ -56,6 +56,8 @@ pub enum TrussDiagnosticCode {
     NoMatchingOverload,
     AmbiguousOverload,
     AssignToImmutable,
+    InvalidMemberAccessLevel,
+    OpenOnlyOnClass,
 
     IRError,
     UnsupportedFeature,
@@ -120,6 +122,8 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::NoMatchingOverload => "E0318",
             Self::AmbiguousOverload => "E0319",
             Self::AssignToImmutable => "E0320",
+            Self::InvalidMemberAccessLevel => "E0321",
+            Self::OpenOnlyOnClass => "E0322",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",
