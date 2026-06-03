@@ -30,6 +30,7 @@ pub enum Symbol {
         methods: Vec<Rc<RefCell<Symbol>>>,
         constructors: Vec<Rc<RefCell<Symbol>>>,
         destrcutor: Option<Rc<RefCell<Symbol>>>,
+        subscripts: Vec<Rc<RefCell<Symbol>>>,
     },
     StructProperty {
         name: String,
@@ -42,6 +43,11 @@ pub enum Symbol {
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
     },
+    StructSubscript {
+        name: String,
+        parent: WeakSymbol,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
     Class {
         name: String,
         decl: Rc<RefCell<Statement>>,
@@ -50,6 +56,7 @@ pub enum Symbol {
         constructors: Vec<Rc<RefCell<Symbol>>>,
         destrcutor: Option<Rc<RefCell<Symbol>>>,
         superclass: Option<WeakSymbol>,
+        subscripts: Vec<Rc<RefCell<Symbol>>>,
     },
     ClassProperty {
         name: String,
@@ -58,6 +65,11 @@ pub enum Symbol {
         is_var: bool,
     },
     ClassMethod {
+        name: String,
+        parent: WeakSymbol,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
+    ClassSubscript {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
@@ -79,6 +91,7 @@ pub enum Symbol {
         decl: Rc<RefCell<Statement>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
         properties: Vec<Rc<RefCell<Symbol>>>,
+        subscripts: Vec<Rc<RefCell<Symbol>>>,
     },
     ProtocolMethod {
         name: String,
@@ -86,6 +99,11 @@ pub enum Symbol {
         decl: Option<Rc<RefCell<Statement>>>,
     },
     ProtocolProperty {
+        name: String,
+        parent: WeakSymbol,
+        decl: Option<Rc<RefCell<Statement>>>,
+    },
+    ProtocolSubscript {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
@@ -105,14 +123,17 @@ impl Symbol {
             Self::Struct { name, .. } => Ok(name.clone()),
             Self::StructProperty { name, .. } => Ok(name.clone()),
             Self::StructMethod { name, .. } => Ok(name.clone()),
+            Self::StructSubscript { name, .. } => Ok(name.clone()),
             Self::Class { name, .. } => Ok(name.clone()),
             Self::ClassProperty { name, .. } => Ok(name.clone()),
             Self::ClassMethod { name, .. } => Ok(name.clone()),
+            Self::ClassSubscript { name, .. } => Ok(name.clone()),
             Self::Enum { name, .. } => Ok(name.clone()),
             Self::EnumCase { name, .. } => Ok(name.clone()),
             Self::Protocol { name, .. } => Ok(name.clone()),
             Self::ProtocolMethod { name, .. } => Ok(name.clone()),
             Self::ProtocolProperty { name, .. } => Ok(name.clone()),
+            Self::ProtocolSubscript { name, .. } => Ok(name.clone()),
             Self::Module { name, .. } => Ok(name.clone()),
         }
     }
@@ -123,14 +144,17 @@ impl Symbol {
             Self::Struct { decl, .. } => Ok(Some(decl.clone())),
             Self::StructProperty { decl, .. } => Ok(decl.clone()),
             Self::StructMethod { decl, .. } => Ok(decl.clone()),
+            Self::StructSubscript { decl, .. } => Ok(decl.clone()),
             Self::Class { decl, .. } => Ok(Some(decl.clone())),
             Self::ClassProperty { decl, .. } => Ok(decl.clone()),
             Self::ClassMethod { decl, .. } => Ok(decl.clone()),
+            Self::ClassSubscript { decl, .. } => Ok(decl.clone()),
             Self::Enum { decl, .. } => Ok(Some(decl.clone())),
             Self::EnumCase { decl, .. } => Ok(decl.clone()),
             Self::Protocol { decl, .. } => Ok(Some(decl.clone())),
             Self::ProtocolMethod { decl, .. } => Ok(decl.clone()),
             Self::ProtocolProperty { decl, .. } => Ok(decl.clone()),
+            Self::ProtocolSubscript { decl, .. } => Ok(decl.clone()),
             Self::Module { decl, .. } => Ok(Some(decl.clone())),
         }
     }
@@ -138,11 +162,14 @@ impl Symbol {
         match self {
             Self::StructProperty { parent, .. }
             | Self::StructMethod { parent, .. }
+            | Self::StructSubscript { parent, .. }
             | Self::ClassProperty { parent, .. }
             | Self::ClassMethod { parent, .. }
+            | Self::ClassSubscript { parent, .. }
             | Self::EnumCase { parent, .. }
             | Self::ProtocolMethod { parent, .. }
-            | Self::ProtocolProperty { parent, .. } => Some(parent.0.upgrade().unwrap()),
+            | Self::ProtocolProperty { parent, .. }
+            | Self::ProtocolSubscript { parent, .. } => Some(parent.0.upgrade().unwrap()),
             _ => None,
         }
     }

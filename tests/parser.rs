@@ -7409,6 +7409,245 @@ fn test_parse_shorthand_argument_multi() {
     }
 }
 
+#[test]
+fn test_parse_subscript_decl_get() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "subscript[index: Int32] -> Int32 { get { return 0 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::SubscriptDecl {
+        parameters,
+        accessors,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(parameters.len(), 1);
+        assert_eq!(parameters[0].borrow().name.value, "index");
+        assert_eq!(accessors.len(), 1);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+    } else {
+        panic!("Expected SubscriptDecl");
+    }
+}
+
+#[test]
+fn test_parse_subscript_decl_get_set() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "subscript[index: Int32] -> Int32 { get { return 0 } set(newValue) { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::SubscriptDecl {
+        parameters,
+        accessors,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(parameters.len(), 1);
+        assert_eq!(accessors.len(), 2);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+        assert_eq!(accessors[1].parameter.as_ref().unwrap().value, "newValue");
+    } else {
+        panic!("Expected SubscriptDecl");
+    }
+}
+
+#[test]
+fn test_parse_subscript_decl_implicit_get() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "subscript[index: Int32] -> Int32 { return 0 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::SubscriptDecl {
+        parameters,
+        accessors,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(parameters.len(), 1);
+        assert_eq!(accessors.len(), 1);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+    } else {
+        panic!("Expected SubscriptDecl");
+    }
+}
+
+#[test]
+fn test_parse_subscript_with_label() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "subscript[key: String] -> Int32 { get { return 0 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::SubscriptDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters.len(), 1);
+        assert_eq!(parameters[0].borrow().name.value, "key");
+    } else {
+        panic!("Expected SubscriptDecl");
+    }
+}
+
+#[test]
+fn test_parse_subscript_access_single_index() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "arr[0]".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::SubscriptAccess { object, parameters, .. } = &*expression.borrow() {
+            if let Expression::Variable { name, .. } = &*object.borrow() {
+                assert_eq!(name.value, "arr");
+            } else {
+                panic!("Expected Variable as object");
+            }
+            assert_eq!(parameters.len(), 1);
+            if let Expression::IntegerLiteral { value, .. } = &*parameters[0].expression.borrow() {
+                assert_eq!(*value, 0);
+            } else {
+                panic!("Expected IntegerLiteral as index");
+            }
+        } else {
+            panic!("Expected SubscriptAccess");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_subscript_access_multi_index() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "matrix[row, col]".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::SubscriptAccess { parameters, .. } = &*expression.borrow() {
+            assert_eq!(parameters.len(), 2);
+        } else {
+            panic!("Expected SubscriptAccess");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_subscript_in_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Matrix { subscript[row: Int32, col: Int32] -> Int32 { get { return 0 } } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        assert!(body.iter().any(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. })), "struct body has {} items, expected SubscriptDecl", body.len());
+        let subscript_stmt = body.iter().find(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. })).unwrap();
+        if let Statement::SubscriptDecl { parameters, .. } = &*subscript_stmt.borrow() {
+            assert_eq!(parameters.len(), 2);
+            assert_eq!(parameters[0].borrow().name.value, "row");
+            assert_eq!(parameters[1].borrow().name.value, "col");
+        } else {
+            panic!("Expected SubscriptDecl in struct body");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_subscript_in_protocol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Subscriptable { subscript[index: Int32] -> Int32 { get set } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
+        let subscript_members: Vec<_> = members.iter().filter(|m| matches!(m, ProtocolMember::Subscript { .. })).collect();
+        assert_eq!(subscript_members.len(), 1);
+        if let ProtocolMember::Subscript { parameters, accessors, .. } = subscript_members[0] {
+            assert_eq!(parameters.len(), 1);
+            assert_eq!(accessors.get, true);
+            assert_eq!(accessors.set, true);
+        } else {
+            panic!("Expected ProtocolMember::Subscript");
+        }
+    } else {
+        panic!("Expected ProtocolDecl");
+    }
+}
+
+#[test]
+fn test_parse_subscript_in_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class MyArray { subscript[index: Int32] -> Int32 { get { return 0 } set { } } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ClassDecl { body, .. } = &*program.statements[0].borrow() {
+        assert!(body.iter().any(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. })));
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
 fn collect_shorthand_args(expr: &Rc<RefCell<Expression>>, count: &mut u32) {
     match &*expr.borrow() {
         Expression::ShorthandArgument { .. } => *count += 1,

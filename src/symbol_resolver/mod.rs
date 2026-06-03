@@ -551,6 +551,7 @@ impl SymbolResolver {
                         } => {
                             self.resolve_expression(type_expression.clone());
                         }
+                        ProtocolMember::Subscript { .. } => {}
                     }
                 }
                 self.leave_scope();
@@ -1192,6 +1193,7 @@ impl SymbolResolver {
                         } => {
                             self.resolve_expression(type_expression.clone());
                         }
+                        ProtocolMember::Subscript { .. } => {}
                     }
                 }
                 self.leave_scope();

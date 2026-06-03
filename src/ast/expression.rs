@@ -180,6 +180,11 @@ pub enum Expression {
         return_type: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    SubscriptAccess {
+        object: Rc<RefCell<Expression>>,
+        parameters: Vec<CallParameter>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 impl Expression {
@@ -199,6 +204,7 @@ impl Expression {
             Self::FunctionType { ty, .. } => Ok(ty.clone()),
             Self::ShorthandArgument { ty, .. } => Ok(ty.clone()),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty.clone()),
+            Self::SubscriptAccess { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -218,6 +224,7 @@ impl Expression {
             Self::FunctionType { ty, .. } => Ok(ty),
             Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
+            Self::SubscriptAccess { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -237,6 +244,7 @@ impl Expression {
             Self::FunctionType { ty, .. } => Ok(ty),
             Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
+            Self::SubscriptAccess { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -328,6 +336,7 @@ impl Expression {
                 },
                 Rc::new("".to_string()),
             ),
+            Expression::SubscriptAccess { object, .. } => object.borrow().token(),
         }
     }
 }

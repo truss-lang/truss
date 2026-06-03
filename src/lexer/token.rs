@@ -71,6 +71,7 @@ pub enum KeywordType {
     Import,
     Package,
     Static,
+    Subscript,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -177,6 +178,7 @@ impl KeywordType {
             KeywordType::Import => "import",
             KeywordType::Package => "package",
             KeywordType::Static => "static",
+            KeywordType::Subscript => "subscript",
         }
         .to_string()
     }

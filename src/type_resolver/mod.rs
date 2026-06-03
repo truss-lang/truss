@@ -725,6 +725,7 @@ impl TypeResolver {
                                 }
                             }
                         }
+                        ProtocolMember::Subscript { .. } => {}
                     }
                 }
                 self.leave_scope();
@@ -1229,6 +1230,7 @@ impl TypeResolver {
                                 }
                             }
                         }
+                        ProtocolMember::Subscript { .. } => {}
                     }
                 }
                 self.leave_scope();
@@ -3193,6 +3195,15 @@ impl TypeResolver {
                     *ty = Some(found.unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32))));
                 }
                 ty.clone().unwrap()
+            }
+            Expression::SubscriptAccess { object, parameters: _, ty } => {
+                if let Some(_) = ty {
+                    ty.clone().unwrap()
+                } else {
+                    let object_ty = self.infer_type(object.clone()).unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                    *ty = Some(object_ty.clone());
+                    object_ty
+                }
             }
         };
         Some(result)

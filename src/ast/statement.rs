@@ -173,6 +173,17 @@ pub enum Statement {
         path: Vec<String>,
         kind: ImportKind,
     },
+    SubscriptDecl {
+        modifiers: Vec<Modifier>,
+        token: Box<Token>,
+        generic_parameters: Vec<GenericParameter>,
+        parameters: Vec<Rc<RefCell<Parameter>>>,
+        return_type_expression: Rc<RefCell<Expression>>,
+        where_clause: Option<Vec<WhereRequirement>>,
+        accessors: Vec<Accessor>,
+        scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 impl Statement {
@@ -204,6 +215,7 @@ impl Statement {
             Self::Defer { token, .. } => (**token).clone(),
             Self::ModuleDecl { token, .. } => (**token).clone(),
             Self::ImportDecl { token, .. } => (**token).clone(),
+            Self::SubscriptDecl { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -223,6 +235,7 @@ impl Statement {
             Self::Defer { .. } => Ok(vec![]),
             Self::ModuleDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::ImportDecl { .. } => Ok(vec![]),
+            Self::SubscriptDecl { modifiers, .. } => Ok(modifiers.clone()),
             _ => anyhow::bail!(""),
         }
     }
@@ -376,6 +389,14 @@ pub enum ProtocolMember {
         token: Box<Token>,
         name: Box<Token>,
         type_expression: Rc<RefCell<Expression>>,
+    },
+    Subscript {
+        modifiers: Vec<Modifier>,
+        token: Box<Token>,
+        generic_parameters: Vec<GenericParameter>,
+        parameters: Vec<Rc<RefCell<Parameter>>>,
+        return_type_expression: Rc<RefCell<Expression>>,
+        accessors: ProtocolAccessorSet,
     },
 }
 
