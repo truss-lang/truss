@@ -1371,6 +1371,18 @@ impl SymbolResolver {
                     );
                 }
             },
+            Expression::SuperKeyword { token, .. } => {
+                let in_method = self.current_scope.as_ref().and_then(|scope| {
+                    scope.borrow().get_symbol("self")
+                }).is_some();
+                if !in_method {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedVariable,
+                        format!("'super' is only available inside class methods"),
+                        token.as_ref(),
+                    );
+                }
+            }
             Expression::Binary { left, right, .. } => {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())
