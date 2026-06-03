@@ -804,6 +804,274 @@ fn test_parse_deref_with_binary() {
 }
 
 #[test]
+fn test_parse_address_of() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = &v }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression,
+            operator,
+            is_prefix,
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &UnaryOperator::AddressOf);
+        assert!(is_prefix);
+        if let Expression::Variable { name, .. } = &*expression.borrow() {
+            assert_eq!(name.value, "v");
+        } else {
+            panic!("Expected variable expression");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_address_of_deref() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = &*p }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression: outer,
+            operator,
+            is_prefix,
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &UnaryOperator::AddressOf);
+        assert!(is_prefix);
+        if let Expression::Unary {
+            expression: inner,
+            operator: inner_op,
+            is_prefix: inner_prefix,
+        } = &*outer.borrow()
+        {
+            assert_eq!(inner_op, &UnaryOperator::Deref);
+            assert!(inner_prefix);
+            if let Expression::Variable { name, .. } = &*inner.borrow() {
+                assert_eq!(name.value, "p");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected deref inside address-of");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_deref_address_of() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = *&v }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression: outer,
+            operator,
+            is_prefix,
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &UnaryOperator::Deref);
+        assert!(is_prefix);
+        if let Expression::Unary {
+            expression: inner,
+            operator: inner_op,
+            is_prefix: inner_prefix,
+        } = &*outer.borrow()
+        {
+            assert_eq!(inner_op, &UnaryOperator::AddressOf);
+            assert!(inner_prefix);
+            if let Expression::Variable { name, .. } = &*inner.borrow() {
+                assert_eq!(name.value, "v");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected address-of inside deref");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_address_of_binary() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = &a + &b }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Binary { left, right, operator, .. } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &BinaryOperator::Plus);
+        if let Expression::Unary {
+            expression: left_inner,
+            operator: left_op,
+            ..
+        } = &*left.borrow()
+        {
+            assert_eq!(left_op, &UnaryOperator::AddressOf);
+            if let Expression::Variable { name, .. } = &*left_inner.borrow() {
+                assert_eq!(name.value, "a");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected address-of on left");
+        }
+        if let Expression::Unary {
+            expression: right_inner,
+            operator: right_op,
+            ..
+        } = &*right.borrow()
+        {
+            assert_eq!(right_op, &UnaryOperator::AddressOf);
+            if let Expression::Variable { name, .. } = &*right_inner.borrow() {
+                assert_eq!(name.value, "b");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected address-of on right");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_deref_postfix_inc() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = *p++ }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression: outer,
+            operator,
+            is_prefix,
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &UnaryOperator::Deref);
+        assert!(is_prefix);
+        if let Expression::Unary {
+            expression: inner,
+            operator: inner_op,
+            is_prefix: inner_prefix,
+        } = &*outer.borrow()
+        {
+            assert_eq!(inner_op, &UnaryOperator::Inc);
+            assert!(!inner_prefix);
+            if let Expression::Variable { name, .. } = &*inner.borrow() {
+                assert_eq!(name.value, "p");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected postfix inc inside deref");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_deref_prefix_inc() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = *++p }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression: outer,
+            operator,
+            is_prefix,
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(operator, &UnaryOperator::Deref);
+        assert!(is_prefix);
+        if let Expression::Unary {
+            expression: inner,
+            operator: inner_op,
+            is_prefix: inner_prefix,
+        } = &*outer.borrow()
+        {
+            assert_eq!(inner_op, &UnaryOperator::Inc);
+            assert!(inner_prefix);
+            if let Expression::Variable { name, .. } = &*inner.borrow() {
+                assert_eq!(name.value, "p");
+            } else {
+                panic!("Expected variable expression");
+            }
+        } else {
+            panic!("Expected prefix inc inside deref");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_cast_regular() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

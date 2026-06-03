@@ -3882,6 +3882,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid type for dereference");
                         }
                     }
+                    UnaryOperator::AddressOf => {
+                        anyhow::bail!("AddressOf operator not yet supported in IR generation");
+                    }
                 }
             }
             Expression::Assignment {

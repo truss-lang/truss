@@ -423,6 +423,7 @@ impl Parser {
             | OperatorType::Inc
             | OperatorType::Dec
             | OperatorType::BitNot
+            | OperatorType::BitAnd
             | OperatorType::Multiply = operator
         {
             self.index += 1;

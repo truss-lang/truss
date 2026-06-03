@@ -379,6 +379,7 @@ pub enum UnaryOperator {
     OpenRange,
     BitNot,
     Deref,
+    AddressOf,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssignmentOperator {
@@ -429,6 +430,7 @@ impl UnaryOperator {
             OperatorType::OpenRange => Some(UnaryOperator::OpenRange),
             OperatorType::BitNot => Some(UnaryOperator::BitNot),
             OperatorType::Multiply => Some(UnaryOperator::Deref),
+            OperatorType::BitAnd => Some(UnaryOperator::AddressOf),
             _ => None,
         }
     }
