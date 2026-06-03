@@ -439,8 +439,8 @@ impl<'ctx> IRGenerator<'ctx> {
         };
 
         let sym_borrow = symbol.borrow();
-        let (decl, fields) = match &*sym_borrow {
-            Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
+        let (decl, properties) = match &*sym_borrow {
+            Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
             _ => return vec![],
         };
         drop(sym_borrow);
@@ -460,7 +460,7 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
 
-        for field in fields.iter() {
+        for field in properties.iter() {
             if let Ok(Some(field_decl)) = field.borrow().get_decl() {
                 if let Statement::VariableDecl {
                     accessors,
@@ -498,9 +498,9 @@ impl<'ctx> IRGenerator<'ctx> {
             return;
         };
         let sym_borrow = symbol.borrow();
-        let (decl, fields) = match &*sym_borrow {
-            Symbol::Struct { decl, fields, .. } => (decl.clone(), fields.clone()),
-            Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
+        let (decl, properties) = match &*sym_borrow {
+            Symbol::Struct { decl, properties, .. } => (decl.clone(), properties.clone()),
+            Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
             _ => return,
         };
         drop(sym_borrow);
@@ -535,7 +535,7 @@ impl<'ctx> IRGenerator<'ctx> {
         for param in parameters {
             let param_name = param.borrow().name.value.clone();
             let mut stored_idx = 0usize;
-            for field in fields.iter() {
+            for field in properties.iter() {
                 let Ok(field_name) = field.borrow().name() else {
                     continue;
                 };
@@ -693,10 +693,10 @@ impl<'ctx> IRGenerator<'ctx> {
     fn get_stored_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
-            && let Symbol::Struct { fields, .. } = &*symbol.borrow()
+            && let Symbol::Struct { properties, .. } = &*symbol.borrow()
         {
             let mut stored_idx = 0;
-            for field in fields.iter() {
+            for field in properties.iter() {
                 if let Some(decl) = field.borrow().get_decl().ok().flatten()
                     && let Statement::VariableDecl { accessors, .. } = &*decl.borrow()
                 {
@@ -725,9 +725,9 @@ impl<'ctx> IRGenerator<'ctx> {
             && let Some(symbol) = scope.borrow().get_symbol(class_name)
         {
             let binding = symbol.borrow();
-            let (decl, fields) = match &*binding {
-                Symbol::Struct { decl, fields, .. } => (decl.clone(), fields.clone()),
-                Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
+            let (decl, properties) = match &*binding {
+                Symbol::Struct { decl, properties, .. } => (decl.clone(), properties.clone()),
+                Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
                 _ => {
                     return Err(anyhow::anyhow!(
                         "Symbol '{}' is not a struct or class",
@@ -761,7 +761,7 @@ impl<'ctx> IRGenerator<'ctx> {
             };
 
             let mut stored_idx = 0;
-            for field in fields.iter() {
+            for field in properties.iter() {
                 if let Some(field_decl) = field.borrow().get_decl().ok().flatten()
                     && let Statement::VariableDecl { accessors, .. } = &*field_decl.borrow()
                 {
@@ -799,8 +799,8 @@ impl<'ctx> IRGenerator<'ctx> {
         };
 
         let sym_borrow = symbol.borrow();
-        let (decl, fields) = match &*sym_borrow {
-            Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
+        let (decl, properties) = match &*sym_borrow {
+            Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
             _ => return 0,
         };
         drop(sym_borrow);
@@ -820,7 +820,7 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
 
-        for field in fields.iter() {
+        for field in properties.iter() {
             if let Ok(Some(field_decl)) = field.borrow().get_decl() {
                 if let Statement::VariableDecl { accessors, .. } = &*field_decl.borrow() {
                     let has_get_set = accessors
@@ -1484,7 +1484,7 @@ impl<'ctx> IRGenerator<'ctx> {
         let sym_borrow = symbol.borrow();
         let Symbol::Class {
             methods,
-            fields,
+            properties,
             superclass,
             destrcutor,
             ..
@@ -1499,7 +1499,7 @@ impl<'ctx> IRGenerator<'ctx> {
         let _has_destrcutor = destrcutor.is_some();
 
         let mut own_property_entry_names: Vec<String> = Vec::new();
-        for field in fields {
+        for field in properties {
             if let Ok(Some(field_decl)) = field.borrow().get_decl()
                 && let Ok(field_name) = field.borrow().name()
                 && let Statement::VariableDecl {
@@ -6697,9 +6697,9 @@ impl<'ctx> IRGenerator<'ctx> {
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
         {
             let binding = symbol.borrow();
-            let (decl, fields) = match &*binding {
-                Symbol::Struct { decl, fields, .. } => (decl.clone(), fields.clone()),
-                Symbol::Class { decl, fields, .. } => (decl.clone(), fields.clone()),
+            let (decl, properties) = match &*binding {
+                Symbol::Struct { decl, properties, .. } => (decl.clone(), properties.clone()),
+                Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
                 _ => {
                     return Err(anyhow::anyhow!(
                         "Symbol '{}' is not a struct or class",
@@ -6709,7 +6709,7 @@ impl<'ctx> IRGenerator<'ctx> {
             };
             drop(binding);
 
-            for field in fields.iter() {
+            for field in properties.iter() {
                 if field.borrow().name().as_ref().ok() == Some(&field_name.to_string())
                     && let Some(field_decl) = field.borrow().get_decl().ok().flatten()
                     && let Statement::VariableDecl { ty: Some(ty), .. } = &*field_decl.borrow()

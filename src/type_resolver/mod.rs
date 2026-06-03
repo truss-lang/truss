@@ -2224,7 +2224,7 @@ impl TypeResolver {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(struct_name)
                             && let Symbol::Struct {
-                                fields, methods, ..
+                                properties, methods, ..
                             } = &*symbol.borrow()
                         {
                             if !self.is_member_accessible(symbol.clone(), member) {
@@ -2248,7 +2248,7 @@ impl TypeResolver {
                                 );
                                 return None;
                             }
-                            for field in fields {
+                            for field in properties {
                                 if field.borrow().name().as_ref().ok() == Some(&member.value)
                                     && let Some(decl) = field.borrow().get_decl().ok().flatten()
                                     && let Statement::VariableDecl { ty: field_ty, .. } =
@@ -2362,13 +2362,13 @@ impl TypeResolver {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(class_name) {
                             let binding = symbol.borrow();
-                            let (fields, methods) = match &*binding {
+                            let (properties, methods) = match &*binding {
                                 Symbol::Struct {
-                                    fields, methods, ..
+                                    properties, methods, ..
                                 }
                                 | Symbol::Class {
-                                    fields, methods, ..
-                                } => (fields, methods),
+                                    properties, methods, ..
+                                } => (properties, methods),
                                 _ => {
                                     self.emit_error(
                                         TrussDiagnosticCode::FieldNotFound,
@@ -2402,7 +2402,7 @@ impl TypeResolver {
                                 );
                                 return None;
                             }
-                            for field in fields {
+                            for field in properties {
                                 if field.borrow().name().as_ref().ok() == Some(&member.value)
                                     && let Some(decl) = field.borrow().get_decl().ok().flatten()
                                     && let Statement::VariableDecl { ty: field_ty, .. } =
@@ -4111,20 +4111,20 @@ impl TypeResolver {
                 continue;
             };
 
-            let (type_methods, type_fields): (Vec<String>, Vec<String>) = {
+            let (type_methods, type_properties): (Vec<String>, Vec<String>) = {
                 let type_sym = type_symbol.borrow();
                 match &*type_sym {
                     Symbol::Struct {
-                        methods, fields, ..
+                        methods, properties, ..
                     }
                     | Symbol::Class {
-                        methods, fields, ..
+                        methods, properties, ..
                     } => (
                         methods
                             .iter()
                             .filter_map(|m| m.borrow().name().ok())
                             .collect(),
-                        fields
+                        properties
                             .iter()
                             .filter_map(|f| f.borrow().name().ok())
                             .collect(),
@@ -4147,7 +4147,7 @@ impl TypeResolver {
             }
 
             for req_prop in &required_properties {
-                if !type_fields.contains(req_prop) {
+                if !type_properties.contains(req_prop) {
                     self.emit_error(
                         TrussDiagnosticCode::ProtocolRequirementNotImplemented,
                         format!(

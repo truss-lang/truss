@@ -1,0 +1,24 @@
+protocol P {
+    func draw()
+}
+protocol P2 {
+    func run()
+}
+class S:P, P2 {
+    func draw() {
+        let a = 1
+    }
+    func run() {
+        let b = 2
+    }
+}
+func t() {
+    let s = S()
+    s.draw()
+    let p: any P & P2 = s
+    p.draw()
+    match '1' {
+        case '1', '2':
+        default:
+    }
+}

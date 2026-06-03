@@ -25,12 +25,12 @@ pub enum Symbol {
     Struct {
         name: String,
         decl: Rc<RefCell<Statement>>,
-        fields: Vec<Rc<RefCell<Symbol>>>,
+        properties: Vec<Rc<RefCell<Symbol>>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
         constructors: Vec<Rc<RefCell<Symbol>>>,
         destrcutor: Option<Rc<RefCell<Symbol>>>,
     },
-    StructField {
+    StructProperty {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
@@ -43,13 +43,13 @@ pub enum Symbol {
     Class {
         name: String,
         decl: Rc<RefCell<Statement>>,
-        fields: Vec<Rc<RefCell<Symbol>>>,
+        properties: Vec<Rc<RefCell<Symbol>>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
         constructors: Vec<Rc<RefCell<Symbol>>>,
         destrcutor: Option<Rc<RefCell<Symbol>>>,
         superclass: Option<WeakSymbol>,
     },
-    ClassField {
+    ClassProperty {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
@@ -100,10 +100,10 @@ impl Symbol {
             Self::Function { name, .. } => Ok(name.clone()),
             Self::Variable { name, .. } => Ok(name.clone()),
             Self::Struct { name, .. } => Ok(name.clone()),
-            Self::StructField { name, .. } => Ok(name.clone()),
+            Self::StructProperty { name, .. } => Ok(name.clone()),
             Self::StructMethod { name, .. } => Ok(name.clone()),
             Self::Class { name, .. } => Ok(name.clone()),
-            Self::ClassField { name, .. } => Ok(name.clone()),
+            Self::ClassProperty { name, .. } => Ok(name.clone()),
             Self::ClassMethod { name, .. } => Ok(name.clone()),
             Self::Enum { name, .. } => Ok(name.clone()),
             Self::EnumCase { name, .. } => Ok(name.clone()),
@@ -118,10 +118,10 @@ impl Symbol {
             Self::Function { decl, .. } => Ok(Some(decl.clone())),
             Self::Variable { decl, .. } => Ok(decl.clone()),
             Self::Struct { decl, .. } => Ok(Some(decl.clone())),
-            Self::StructField { decl, .. } => Ok(decl.clone()),
+            Self::StructProperty { decl, .. } => Ok(decl.clone()),
             Self::StructMethod { decl, .. } => Ok(decl.clone()),
             Self::Class { decl, .. } => Ok(Some(decl.clone())),
-            Self::ClassField { decl, .. } => Ok(decl.clone()),
+            Self::ClassProperty { decl, .. } => Ok(decl.clone()),
             Self::ClassMethod { decl, .. } => Ok(decl.clone()),
             Self::Enum { decl, .. } => Ok(Some(decl.clone())),
             Self::EnumCase { decl, .. } => Ok(decl.clone()),
@@ -133,9 +133,9 @@ impl Symbol {
     }
     pub fn parent(&self) -> Option<Rc<RefCell<Symbol>>> {
         match self {
-            Self::StructField { parent, .. }
+            Self::StructProperty { parent, .. }
             | Self::StructMethod { parent, .. }
-            | Self::ClassField { parent, .. }
+            | Self::ClassProperty { parent, .. }
             | Self::ClassMethod { parent, .. }
             | Self::EnumCase { parent, .. }
             | Self::ProtocolMethod { parent, .. }

@@ -88,14 +88,14 @@ impl SymbolResolver {
                 let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
                     name: name.value.clone(),
                     decl: stmt.clone(),
-                    fields: vec![],
+                    properties: vec![],
                     methods: vec![],
                     constructors: vec![],
                     destrcutor: None,
                 }));
                 self.enter(struct_symbol.clone(), name);
                 let Symbol::Struct {
-                    fields,
+                    properties: fields,
                     methods,
                     constructors,
                     destrcutor,
@@ -130,7 +130,7 @@ impl SymbolResolver {
                         name: field_name, ..
                     } = &*field_stmt.borrow()
                     {
-                        let field_symbol = Rc::new(RefCell::new(Symbol::StructField {
+                        let field_symbol = Rc::new(RefCell::new(Symbol::StructProperty {
                             name: field_name.value.clone(),
                             parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
@@ -230,7 +230,7 @@ impl SymbolResolver {
                 let class_symbol = Rc::new(RefCell::new(Symbol::Class {
                     name: name.value.clone(),
                     decl: stmt.clone(),
-                    fields: vec![],
+                    properties: vec![],
                     methods: vec![],
                     constructors: vec![],
                     destrcutor: None,
@@ -238,7 +238,7 @@ impl SymbolResolver {
                 }));
                 self.enter(class_symbol.clone(), name);
                 let Symbol::Class {
-                    fields,
+                    properties: fields,
                     methods,
                     constructors,
                     destrcutor,
@@ -273,7 +273,7 @@ impl SymbolResolver {
                         name: field_name, ..
                     } = &*field_stmt.borrow()
                     {
-                        let field_symbol = Rc::new(RefCell::new(Symbol::ClassField {
+                        let field_symbol = Rc::new(RefCell::new(Symbol::ClassProperty {
                             name: field_name.value.clone(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
