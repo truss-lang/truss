@@ -3477,29 +3477,52 @@ impl Parser {
             let TokenType::Keyword { keyword } = token.ty else {
                 break;
             };
-            let ty = match keyword {
-                KeywordType::Open => ModifierType::Access(AccessModifier::Open),
-                KeywordType::Public => ModifierType::Access(AccessModifier::Public),
-                KeywordType::Internal => ModifierType::Access(AccessModifier::Internal),
-                KeywordType::Fileprivate => ModifierType::Access(AccessModifier::Fileprivate),
-                KeywordType::Private => ModifierType::Access(AccessModifier::Private),
-                KeywordType::Package => ModifierType::Access(AccessModifier::Package),
-                KeywordType::Static => ModifierType::Static,
-                _ => {
-                    break;
+            let is_set_syntax = matches!(keyword, KeywordType::Open | KeywordType::Public | KeywordType::Internal | KeywordType::Fileprivate | KeywordType::Private | KeywordType::Package)
+                && self.is_set_modifier_syntax();
+            let ty = if is_set_syntax {
+                let modifier = match keyword {
+                    KeywordType::Open => AccessModifier::Open,
+                    KeywordType::Public => AccessModifier::Public,
+                    KeywordType::Internal => AccessModifier::Internal,
+                    KeywordType::Fileprivate => AccessModifier::Fileprivate,
+                    KeywordType::Private => AccessModifier::Private,
+                    KeywordType::Package => AccessModifier::Package,
+                    _ => unreachable!(),
+                };
+                ModifierType::AccessSet(modifier)
+            } else {
+                match keyword {
+                    KeywordType::Open => ModifierType::Access(AccessModifier::Open),
+                    KeywordType::Public => ModifierType::Access(AccessModifier::Public),
+                    KeywordType::Internal => ModifierType::Access(AccessModifier::Internal),
+                    KeywordType::Fileprivate => ModifierType::Access(AccessModifier::Fileprivate),
+                    KeywordType::Private => ModifierType::Access(AccessModifier::Private),
+                    KeywordType::Package => ModifierType::Access(AccessModifier::Package),
+                    KeywordType::Static => ModifierType::Static,
+                    _ => {
+                        break;
+                    }
                 }
             };
-            if modifiers.iter().any(|m| {
-                m.ty == ty
-                    || (matches!(m.ty, ModifierType::Access(_))
-                        && matches!(ty, ModifierType::Access(_)))
-            }) {
+            let duplicate = if matches!(ty, ModifierType::AccessSet(_)) {
+                modifiers.iter().any(|m| matches!(m.ty, ModifierType::AccessSet(_)))
+            } else {
+                modifiers.iter().any(|m| {
+                    m.ty == ty
+                        || (matches!(m.ty, ModifierType::Access(_))
+                            && matches!(ty, ModifierType::Access(_)))
+                })
+            };
+            if duplicate {
                 self.emit_error(
                     TrussDiagnosticCode::DuplicateModifier,
                     format!("Duplicate modifier: '{}'", token.value),
                     &token,
                 );
                 self.index += 1;
+                if is_set_syntax {
+                    self.index += 3;
+                }
                 continue;
             }
             modifiers.push(Modifier {
@@ -3507,8 +3530,18 @@ impl Parser {
                 ty,
             });
             self.index += 1;
+            if is_set_syntax {
+                self.index += 3;
+            }
         }
         Ok(modifiers)
+    }
+
+    fn is_set_modifier_syntax(&self) -> bool {
+        self.index + 3 < self.tokens.len()
+            && self.tokens[self.index + 1].ty == TokenType::Separator { separator: SeparatorType::OpenParen }
+            && self.tokens[self.index + 2].value == "set"
+            && self.tokens[self.index + 3].ty == TokenType::Separator { separator: SeparatorType::CloseParen }
     }
 
     #[allow(dead_code)]

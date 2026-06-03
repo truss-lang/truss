@@ -2580,6 +2580,83 @@ fn test_duplicate_package_with_private() {
 }
 
 #[test]
+fn test_parse_private_set_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "private(set) var name: Int32".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::VariableDecl { modifiers, .. } = &*program.statements[0].borrow() {
+        assert_eq!(modifiers.len(), 1);
+        assert!(matches!(
+            modifiers[0].ty,
+            ModifierType::AccessSet(AccessModifier::Private)
+        ));
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_public_private_set_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public private(set) var name: Int32".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::VariableDecl { modifiers, .. } = &*program.statements[0].borrow() {
+        assert_eq!(modifiers.len(), 2);
+        assert!(matches!(
+            modifiers[0].ty,
+            ModifierType::Access(AccessModifier::Public)
+        ));
+        assert!(matches!(
+            modifiers[1].ty,
+            ModifierType::AccessSet(AccessModifier::Private)
+        ));
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_internal_set_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public internal(set) var name: Int32".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::VariableDecl { modifiers, .. } = &*program.statements[0].borrow() {
+        assert_eq!(modifiers.len(), 2);
+        assert!(matches!(
+            modifiers[0].ty,
+            ModifierType::Access(AccessModifier::Public)
+        ));
+        assert!(matches!(
+            modifiers[1].ty,
+            ModifierType::AccessSet(AccessModifier::Internal)
+        ));
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
 fn test_modifier_on_return() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

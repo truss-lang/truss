@@ -245,6 +245,7 @@ pub struct Modifier {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ModifierType {
     Access(AccessModifier),
+    AccessSet(AccessModifier),
     Static,
 }
 

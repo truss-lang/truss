@@ -714,6 +714,39 @@ fn test_super_keyword_in_class_method() {
 }
 
 #[test]
+fn test_super_keyword_in_class_method_multiline() {
+    let engine = create_engine();
+    let code = r#"
+        class Animal {
+            func speak() -> Int32 { return 1 }
+        }
+        class Dog: Animal {
+            func speak() -> Int32 { return 2 }
+            func call_super() -> Int32 { return super.speak() }
+        }
+        func run_test() -> Int32 {
+            var d: Dog
+            return d.call_super()
+        }
+    "#;
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+}
+
+#[test]
 fn test_super_keyword_outside_method_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
