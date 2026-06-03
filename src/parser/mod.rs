@@ -554,6 +554,13 @@ impl Parser {
                         symbol: None,
                     })
                 }
+                KeywordType::SuperKw => {
+                    self.index += 1;
+                    Ok(Expression::SuperKeyword {
+                        token: Box::new(token),
+                        ty: None,
+                    })
+                }
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,

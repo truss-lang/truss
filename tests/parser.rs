@@ -3809,6 +3809,77 @@ fn test_parse_self_as_expression_statement() {
 }
 
 #[test]
+fn test_parse_super_keyword() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test() { super }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+    {
+        assert!(matches!(
+            *expression.borrow(),
+            Expression::SuperKeyword { .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_super_member_access() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { super.field }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*expression.borrow()
+    {
+        assert_eq!(member.value, "field");
+        assert!(matches!(*object.borrow(), Expression::SuperKeyword { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_super_method_call() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { super.method() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Call { callee, .. } = &*expression.borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
+    {
+        assert_eq!(member.value, "method");
+        assert!(matches!(*object.borrow(), Expression::SuperKeyword { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_named_tuple_literal() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

@@ -72,3 +72,19 @@ fn test_parse_char_literal() {
     assert_eq!(tokens[0].ty, TokenType::CharLiteral { value: 'a' });
     assert_eq!(tokens[1].ty, TokenType::CharLiteral { value: '\n' });
 }
+
+#[test]
+fn test_parse_super_keyword() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new("super".to_string(), Rc::new("".to_string())),
+        engine,
+    );
+    let tokens = lexer.parse();
+    assert_eq!(
+        tokens[0].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::SuperKw
+        }
+    );
+}
