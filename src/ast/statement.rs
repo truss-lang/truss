@@ -18,6 +18,7 @@ pub enum Statement {
         where_clause: Option<Vec<WhereRequirement>>,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
+        static_method: bool,
     },
     VariableDecl {
         modifiers: Vec<Modifier>,
@@ -244,6 +245,7 @@ pub struct Modifier {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ModifierType {
     Access(AccessModifier),
+    Static,
 }
 
 #[derive(Debug, Clone, PartialEq)]

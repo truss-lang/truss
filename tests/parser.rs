@@ -1633,6 +1633,164 @@ fn test_parse_extension_of_protocol() {
     }
 }
 
+#[test]
+fn test_parse_extension_static_method_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo {} extension Foo { static func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::ExtensionDecl {
+        type_name, body, ..
+    } = &*program.statements[1].borrow()
+    {
+        assert_eq!(type_name.value, "Foo");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl {
+            name, static_method, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(name.value, "bar");
+            assert!(static_method);
+        } else {
+            panic!("Expected FunctionDecl in extension body");
+        }
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_static_method_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Foo {} extension Foo { static func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::ExtensionDecl {
+        type_name, body, ..
+    } = &*program.statements[1].borrow()
+    {
+        assert_eq!(type_name.value, "Foo");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl {
+            name, static_method, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(name.value, "bar");
+            assert!(static_method);
+        } else {
+            panic!("Expected FunctionDecl in extension body");
+        }
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_static_method_enum() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum Foo { case a } extension Foo { static func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::ExtensionDecl {
+        type_name, body, ..
+    } = &*program.statements[1].borrow()
+    {
+        assert_eq!(type_name.value, "Foo");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl {
+            name, static_method, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(name.value, "bar");
+            assert!(static_method);
+        } else {
+            panic!("Expected FunctionDecl in extension body");
+        }
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_static_method_protocol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Foo {} extension Foo { static func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::ExtensionDecl {
+        type_name, body, ..
+    } = &*program.statements[1].borrow()
+    {
+        assert_eq!(type_name.value, "Foo");
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl {
+            name, static_method, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(name.value, "bar");
+            assert!(static_method);
+        } else {
+            panic!("Expected FunctionDecl in extension body");
+        }
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_instance_method_not_static() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo {} extension Foo { func bar() -> Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ExtensionDecl {
+        body, ..
+    } = &*program.statements[1].borrow()
+    {
+        if let Statement::FunctionDecl {
+            name, static_method, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(name.value, "bar");
+            assert!(!static_method);
+        }
+    }
+}
+
 fn collect_modifiers(stmt: &Statement) -> Vec<Modifier> {
     match stmt {
         Statement::FunctionDecl { modifiers, .. }

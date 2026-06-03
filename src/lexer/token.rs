@@ -69,6 +69,7 @@ pub enum KeywordType {
     Module,
     Import,
     Package,
+    Static,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -173,6 +174,7 @@ impl KeywordType {
             KeywordType::Module => "module",
             KeywordType::Import => "import",
             KeywordType::Package => "package",
+            KeywordType::Static => "static",
         }
         .to_string()
     }

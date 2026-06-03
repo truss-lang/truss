@@ -3881,7 +3881,9 @@ impl TypeResolver {
             };
             m.ty
         };
-        let ModifierType::Access(access) = access_modifier;
+        let ModifierType::Access(access) = &access_modifier else {
+            return true;
+        };
         match access {
             AccessModifier::Open | AccessModifier::Public | AccessModifier::Internal => true,
             AccessModifier::Fileprivate => {
@@ -3923,7 +3925,9 @@ impl TypeResolver {
             };
             m.ty
         };
-        let ModifierType::Access(access) = access_modifier;
+        let ModifierType::Access(access) = &access_modifier else {
+            return true;
+        };
         match access {
             AccessModifier::Open | AccessModifier::Public | AccessModifier::Internal => true,
             AccessModifier::Fileprivate => {

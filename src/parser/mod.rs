@@ -1478,6 +1478,7 @@ impl Parser {
                 ty: None,
             })
         } else {
+            let static_method = modifiers.iter().any(|m| m.ty == ModifierType::Static);
             Ok(Statement::FunctionDecl {
                 modifiers,
                 token: Box::new(token),
@@ -1489,6 +1490,7 @@ impl Parser {
                 where_clause,
                 scope: None,
                 ty: None,
+                static_method,
             })
         }
     }
@@ -3475,19 +3477,12 @@ impl Parser {
                 KeywordType::Fileprivate => ModifierType::Access(AccessModifier::Fileprivate),
                 KeywordType::Private => ModifierType::Access(AccessModifier::Private),
                 KeywordType::Package => ModifierType::Access(AccessModifier::Package),
+                KeywordType::Static => ModifierType::Static,
                 _ => {
                     break;
                 }
             };
-            if modifiers
-                .iter()
-                .find(|m| {
-                    m.ty == ty
-                        || (matches!(m.ty, ModifierType::Access(_))
-                            && matches!(ty, ModifierType::Access(_)))
-                })
-                .is_some()
-            {
+            if modifiers.iter().any(|m| m.ty == ty) {
                 self.emit_error(
                     TrussDiagnosticCode::DuplicateModifier,
                     format!("Duplicate modifier: '{}'", token.value),
