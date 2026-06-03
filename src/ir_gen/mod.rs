@@ -440,7 +440,9 @@ impl<'ctx> IRGenerator<'ctx> {
 
         let sym_borrow = symbol.borrow();
         let (decl, properties) = match &*sym_borrow {
-            Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
+            Symbol::Class {
+                decl, properties, ..
+            } => (decl.clone(), properties.clone()),
             _ => return vec![],
         };
         drop(sym_borrow);
@@ -499,8 +501,12 @@ impl<'ctx> IRGenerator<'ctx> {
         };
         let sym_borrow = symbol.borrow();
         let (decl, properties) = match &*sym_borrow {
-            Symbol::Struct { decl, properties, .. } => (decl.clone(), properties.clone()),
-            Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
+            Symbol::Struct {
+                decl, properties, ..
+            } => (decl.clone(), properties.clone()),
+            Symbol::Class {
+                decl, properties, ..
+            } => (decl.clone(), properties.clone()),
             _ => return,
         };
         drop(sym_borrow);
@@ -726,8 +732,12 @@ impl<'ctx> IRGenerator<'ctx> {
         {
             let binding = symbol.borrow();
             let (decl, properties) = match &*binding {
-                Symbol::Struct { decl, properties, .. } => (decl.clone(), properties.clone()),
-                Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
+                Symbol::Struct {
+                    decl, properties, ..
+                } => (decl.clone(), properties.clone()),
+                Symbol::Class {
+                    decl, properties, ..
+                } => (decl.clone(), properties.clone()),
                 _ => {
                     return Err(anyhow::anyhow!(
                         "Symbol '{}' is not a struct or class",
@@ -800,7 +810,9 @@ impl<'ctx> IRGenerator<'ctx> {
 
         let sym_borrow = symbol.borrow();
         let (decl, properties) = match &*sym_borrow {
-            Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
+            Symbol::Class {
+                decl, properties, ..
+            } => (decl.clone(), properties.clone()),
             _ => return 0,
         };
         drop(sym_borrow);
@@ -1137,21 +1149,37 @@ impl<'ctx> IRGenerator<'ctx> {
                 } = &*stmt.borrow()
                     && let Type::Function(param_types, return_type, _) = &*ty.borrow()
                 {
-                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Void)))));
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
                     let mut all_param_types = vec![self_param];
                     for pt in param_types {
                         all_param_types.push(pt.clone());
                     }
-                    let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
-                    if let Ok(getter_type) = self.get_function_type(return_type.clone(), all_param_types.clone(), false) {
-                        self.module.add_function(&format!("{}.subscript.getter", name.value), getter_type, None);
+                    let has_set = accessors
+                        .iter()
+                        .any(|a| matches!(a.kind, AccessorKind::Set));
+                    if let Ok(getter_type) =
+                        self.get_function_type(return_type.clone(), all_param_types.clone(), false)
+                    {
+                        self.module.add_function(
+                            &format!("{}.subscript.getter", name.value),
+                            getter_type,
+                            None,
+                        );
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
                         let mut setter_param_types = all_param_types.clone();
                         setter_param_types.push(return_type.clone());
-                        if let Ok(setter_type) = self.get_function_type(void_ty, setter_param_types, false) {
-                            self.module.add_function(&format!("{}.subscript.setter", name.value), setter_type, None);
+                        if let Ok(setter_type) =
+                            self.get_function_type(void_ty, setter_param_types, false)
+                        {
+                            self.module.add_function(
+                                &format!("{}.subscript.setter", name.value),
+                                setter_type,
+                                None,
+                            );
                         }
                     }
                 }
@@ -1278,21 +1306,37 @@ impl<'ctx> IRGenerator<'ctx> {
                 } = &*stmt.borrow()
                     && let Type::Function(param_types, return_type, _) = &*ty.borrow()
                 {
-                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Void)))));
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
                     let mut all_param_types = vec![self_param];
                     for pt in param_types {
                         all_param_types.push(pt.clone());
                     }
-                    let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
-                    if let Ok(getter_type) = self.get_function_type(return_type.clone(), all_param_types.clone(), false) {
-                        self.module.add_function(&format!("{}.subscript.getter", name.value), getter_type, None);
+                    let has_set = accessors
+                        .iter()
+                        .any(|a| matches!(a.kind, AccessorKind::Set));
+                    if let Ok(getter_type) =
+                        self.get_function_type(return_type.clone(), all_param_types.clone(), false)
+                    {
+                        self.module.add_function(
+                            &format!("{}.subscript.getter", name.value),
+                            getter_type,
+                            None,
+                        );
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
                         let mut setter_param_types = all_param_types.clone();
                         setter_param_types.push(return_type.clone());
-                        if let Ok(setter_type) = self.get_function_type(void_ty, setter_param_types, false) {
-                            self.module.add_function(&format!("{}.subscript.setter", name.value), setter_type, None);
+                        if let Ok(setter_type) =
+                            self.get_function_type(void_ty, setter_param_types, false)
+                        {
+                            self.module.add_function(
+                                &format!("{}.subscript.setter", name.value),
+                                setter_type,
+                                None,
+                            );
                         }
                     }
                 }
@@ -1367,21 +1411,37 @@ impl<'ctx> IRGenerator<'ctx> {
                 } = &*stmt.borrow()
                     && let Type::Function(param_types, return_type, _) = &*ty.borrow()
                 {
-                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Void)))));
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
                     let mut all_param_types = vec![self_param];
                     for pt in param_types {
                         all_param_types.push(pt.clone());
                     }
-                    let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
-                    if let Ok(getter_type) = self.get_function_type(return_type.clone(), all_param_types.clone(), false) {
-                        self.module.add_function(&format!("{}.subscript.getter", name.value), getter_type, None);
+                    let has_set = accessors
+                        .iter()
+                        .any(|a| matches!(a.kind, AccessorKind::Set));
+                    if let Ok(getter_type) =
+                        self.get_function_type(return_type.clone(), all_param_types.clone(), false)
+                    {
+                        self.module.add_function(
+                            &format!("{}.subscript.getter", name.value),
+                            getter_type,
+                            None,
+                        );
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
                         let mut setter_param_types = all_param_types.clone();
                         setter_param_types.push(return_type.clone());
-                        if let Ok(setter_type) = self.get_function_type(void_ty, setter_param_types, false) {
-                            self.module.add_function(&format!("{}.subscript.setter", name.value), setter_type, None);
+                        if let Ok(setter_type) =
+                            self.get_function_type(void_ty, setter_param_types, false)
+                        {
+                            self.module.add_function(
+                                &format!("{}.subscript.setter", name.value),
+                                setter_type,
+                                None,
+                            );
                         }
                     }
                 }
@@ -1421,9 +1481,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     let all_param_types: Vec<Rc<RefCell<Type>>> = if *static_method {
                         param_types.clone()
                     } else {
-                        let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Void,
-                        )))));
+                        let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(
+                            RefCell::new(Type::Void),
+                        ))));
                         let mut all_param_types = vec![self_param];
                         all_param_types.extend(param_types.iter().cloned());
                         all_param_types
@@ -1614,10 +1674,16 @@ impl<'ctx> IRGenerator<'ctx> {
             if let Ok(Some(decl)) = sub.borrow().get_decl()
                 && let Statement::SubscriptDecl { accessors, .. } = &*decl.borrow()
             {
-                if accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get)) {
+                if accessors
+                    .iter()
+                    .any(|a| matches!(a.kind, AccessorKind::Get))
+                {
                     own_property_entry_names.push("subscript.getter".to_string());
                 }
-                if accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set)) {
+                if accessors
+                    .iter()
+                    .any(|a| matches!(a.kind, AccessorKind::Set))
+                {
                     own_property_entry_names.push("subscript.setter".to_string());
                 }
             }
@@ -2866,7 +2932,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             _ => continue,
                         };
                         let function = if let Some(f) = self.module.get_function(&fn_name) {
-                            if f.get_first_basic_block().is_some() { continue; }
+                            if f.get_first_basic_block().is_some() {
+                                continue;
+                            }
                             f
                         } else {
                             continue;
@@ -2876,13 +2944,19 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.builder.position_at_end(entry);
                         let ptr_param = function.get_nth_param(0).unwrap().into_pointer_value();
                         self.enter_scope();
-                        *self.current_accessor_struct.borrow_mut() = Some((sname.clone(), ptr_param));
+                        *self.current_accessor_struct.borrow_mut() =
+                            Some((sname.clone(), ptr_param));
                         let mut param_idx = 1u32;
                         for param in parameters {
                             let param_name = param.borrow().name.value.clone();
                             if param_name != "_" {
                                 if let Some(param_val) = function.get_nth_param(param_idx) {
-                                    if let Some(pt) = param.borrow().ty.clone().and_then(|t| self.resolve_type(t).ok()) {
+                                    if let Some(pt) = param
+                                        .borrow()
+                                        .ty
+                                        .clone()
+                                        .and_then(|t| self.resolve_type(t).ok())
+                                    {
                                         let alloca_name = self.unique_alloca_name(&param_name);
                                         let ptr = self.builder.build_alloca(pt, &alloca_name)?;
                                         self.builder.build_store(ptr, param_val)?;
@@ -2893,8 +2967,11 @@ impl<'ctx> IRGenerator<'ctx> {
                             }
                         }
                         if matches!(accessor.kind, AccessorKind::Set) {
-                            let setter_param_name = accessor.parameter.as_ref()
-                                .map(|t| t.value.clone()).unwrap_or_else(|| "newValue".to_string());
+                            let setter_param_name = accessor
+                                .parameter
+                                .as_ref()
+                                .map(|t| t.value.clone())
+                                .unwrap_or_else(|| "newValue".to_string());
                             if let Some(new_val) = function.get_nth_param(param_idx) {
                                 let (_, return_type, _) = match &*ty.borrow() {
                                     Type::Function(_, ret, _) => ((), ret.clone(), false),
@@ -2911,13 +2988,20 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.enter_scope_with_stmts(&accessor.body)?;
                         let mut has_return = false;
                         for s in &accessor.body {
-                            if self.resolve_statement(s.clone())? { has_return = true; break; }
+                            if self.resolve_statement(s.clone())? {
+                                has_return = true;
+                                break;
+                            }
                         }
-                        if !has_return { self.builder.build_return(None)?; }
+                        if !has_return {
+                            self.builder.build_return(None)?;
+                        }
                         self.exit_scope();
                         self.exit_scope();
                         *self.current_accessor_struct.borrow_mut() = None;
-                        if let Some(block) = current_block { self.builder.position_at_end(block); }
+                        if let Some(block) = current_block {
+                            self.builder.position_at_end(block);
+                        }
                     }
                 }
                 Ok(false)
@@ -3586,7 +3670,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Expression::SuperKeyword { ty, token, .. } => {
-                let self_ptr = self.builder.get_insert_block()
+                let self_ptr = self
+                    .builder
+                    .get_insert_block()
                     .and_then(|block| block.get_parent())
                     .and_then(|func| func.get_nth_param(0))
                     .map(|val| val.into_pointer_value());
@@ -4056,7 +4142,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             let ptr_val = self.resolve_expression(deref_target.clone())?;
                             return Ok(ptr_val);
                         }
-                        anyhow::bail!("AddressOf operator not yet supported for this expression in IR generation");
+                        anyhow::bail!(
+                            "AddressOf operator not yet supported for this expression in IR generation"
+                        );
                     }
                 }
             }
@@ -4274,67 +4362,69 @@ impl<'ctx> IRGenerator<'ctx> {
                             };
 
                             let setter_entry = format!("{}.setter", field_name);
-                            let is_super = matches!(&*object.borrow(), Expression::SuperKeyword { .. });
+                            let is_super =
+                                matches!(&*object.borrow(), Expression::SuperKeyword { .. });
                             if !is_super {
                                 if let Some(slot_idx) =
                                     self.get_vtable_slot_index(&class_name, &setter_entry)
                                 {
-                                let class_type =
-                                    *self.class_types.borrow().get(&class_name).unwrap();
-                                let vtable_ptr_ptr = self
-                                    .builder
-                                    .build_struct_gep(class_type, class_ptr, 0, "")?;
-                                let vtable_ptr = self
-                                    .builder
-                                    .build_load(
-                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                        vtable_ptr_ptr,
-                                        "",
-                                    )?
-                                    .into_pointer_value();
+                                    let class_type =
+                                        *self.class_types.borrow().get(&class_name).unwrap();
+                                    let vtable_ptr_ptr = self
+                                        .builder
+                                        .build_struct_gep(class_type, class_ptr, 0, "")?;
+                                    let vtable_ptr = self
+                                        .builder
+                                        .build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            vtable_ptr_ptr,
+                                            "",
+                                        )?
+                                        .into_pointer_value();
 
-                                let vtable_type =
-                                    *self.vtable_types.borrow().get(&class_name).unwrap();
-                                let fn_ptr_ptr = self.builder.build_struct_gep(
-                                    vtable_type,
-                                    vtable_ptr,
-                                    slot_idx,
-                                    "",
-                                )?;
-                                let fn_ptr_val = self
-                                    .builder
-                                    .build_load(
-                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                        fn_ptr_ptr,
+                                    let vtable_type =
+                                        *self.vtable_types.borrow().get(&class_name).unwrap();
+                                    let fn_ptr_ptr = self.builder.build_struct_gep(
+                                        vtable_type,
+                                        vtable_ptr,
+                                        slot_idx,
                                         "",
-                                    )?
-                                    .into_pointer_value();
+                                    )?;
+                                    let fn_ptr_val = self
+                                        .builder
+                                        .build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            fn_ptr_ptr,
+                                            "",
+                                        )?
+                                        .into_pointer_value();
 
-                                let method_list = self.compute_vtable_method_list(&class_name);
-                                let (_, owner) = method_list
-                                    .iter()
-                                    .find(|(n, _)| n == &setter_entry)
-                                    .unwrap();
-                                let declared_fn_name = format!("{}.{}.setter", owner, field_name);
-                                let declared_fn = self
-                                    .module
-                                    .get_function(&declared_fn_name)
-                                    .ok_or_else(|| {
+                                    let method_list = self.compute_vtable_method_list(&class_name);
+                                    let (_, owner) = method_list
+                                        .iter()
+                                        .find(|(n, _)| n == &setter_entry)
+                                        .unwrap();
+                                    let declared_fn_name =
+                                        format!("{}.{}.setter", owner, field_name);
+                                    let declared_fn = self
+                                        .module
+                                        .get_function(&declared_fn_name)
+                                        .ok_or_else(|| {
                                         anyhow::anyhow!(
                                             "Setter function {} not found",
                                             declared_fn_name
                                         )
                                     })?;
-                                let fn_type = declared_fn.get_type();
+                                    let fn_type = declared_fn.get_type();
 
-                                self.builder.build_indirect_call(
-                                    fn_type,
-                                    fn_ptr_val,
-                                    &[class_ptr.into(), right_val.into()],
-                                    "",
-                                )?;
-                                return Ok(Some(right_val));
-                            }
+                                    self.builder.build_indirect_call(
+                                        fn_type,
+                                        fn_ptr_val,
+                                        &[class_ptr.into(), right_val.into()],
+                                        "",
+                                    )?;
+                                    return Ok(Some(right_val));
+                                }
                             }
 
                             let field_index =
@@ -4364,7 +4454,12 @@ impl<'ctx> IRGenerator<'ctx> {
                         );
                         anyhow::bail!("Cannot infer type");
                     }
-                } else if let Expression::SubscriptAccess { object: sub_object, parameters: sub_params, .. } = &*left.borrow() {
+                } else if let Expression::SubscriptAccess {
+                    object: sub_object,
+                    parameters: sub_params,
+                    ..
+                } = &*left.borrow()
+                {
                     let sub_ty = {
                         let obj = sub_object.borrow();
                         obj.get_ty_ref()?.clone()
@@ -4385,7 +4480,8 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let Some(setter_fn) = self.module.get_function(&setter_name) {
                             let mut args = vec![struct_ptr.into()];
                             for p in sub_params {
-                                let arg_val = self.resolve_expression(p.expression.clone())?.unwrap();
+                                let arg_val =
+                                    self.resolve_expression(p.expression.clone())?.unwrap();
                                 args.push(arg_val.into());
                             }
                             args.push(right_val.into());
@@ -4406,32 +4502,59 @@ impl<'ctx> IRGenerator<'ctx> {
                             ptr
                         };
                         let setter_entry = "subscript.setter";
-                        if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, setter_entry) {
+                        if let Some(slot_idx) =
+                            self.get_vtable_slot_index(&class_name, setter_entry)
+                        {
                             let class_type = *self.class_types.borrow().get(&class_name).unwrap();
-                            let vtable_ptr_ptr = self.builder.build_struct_gep(class_type, class_ptr, 0, "")?;
-                            let vtable_ptr = self.builder.build_load(
-                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                vtable_ptr_ptr, "",
-                            )?.into_pointer_value();
+                            let vtable_ptr_ptr = self
+                                .builder
+                                .build_struct_gep(class_type, class_ptr, 0, "")?;
+                            let vtable_ptr = self
+                                .builder
+                                .build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    vtable_ptr_ptr,
+                                    "",
+                                )?
+                                .into_pointer_value();
                             let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
-                            let fn_ptr_ptr = self.builder.build_struct_gep(vtable_type, vtable_ptr, slot_idx, "")?;
-                            let fn_ptr_val = self.builder.build_load(
-                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
-                                fn_ptr_ptr, "",
-                            )?.into_pointer_value();
+                            let fn_ptr_ptr = self.builder.build_struct_gep(
+                                vtable_type,
+                                vtable_ptr,
+                                slot_idx,
+                                "",
+                            )?;
+                            let fn_ptr_val = self
+                                .builder
+                                .build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    fn_ptr_ptr,
+                                    "",
+                                )?
+                                .into_pointer_value();
                             let method_list = self.compute_vtable_method_list(&class_name);
-                            let (_, owner) = method_list.iter().find(|(n, _)| n == &setter_entry).unwrap();
+                            let (_, owner) = method_list
+                                .iter()
+                                .find(|(n, _)| n == &setter_entry)
+                                .unwrap();
                             let declared_fn_name = format!("{}.subscript.setter", owner);
-                            let declared_fn = self.module.get_function(&declared_fn_name)
-                                .ok_or_else(|| anyhow::anyhow!("Subscript setter function {} not found", declared_fn_name))?;
+                            let declared_fn =
+                                self.module.get_function(&declared_fn_name).ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Subscript setter function {} not found",
+                                        declared_fn_name
+                                    )
+                                })?;
                             let fn_type = declared_fn.get_type();
                             let mut args = vec![class_ptr.into()];
                             for p in sub_params {
-                                let arg_val = self.resolve_expression(p.expression.clone())?.unwrap();
+                                let arg_val =
+                                    self.resolve_expression(p.expression.clone())?.unwrap();
                                 args.push(arg_val.into());
                             }
                             args.push(right_val.into());
-                            self.builder.build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
+                            self.builder
+                                .build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
                             return Ok(Some(right_val));
                         }
                     }
@@ -4741,9 +4864,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Some(else_) = else_ {
                         self.builder.position_at_end(else_bb.unwrap());
                         let terminates = match else_ {
-                            ElseBranch::Block(body) => {
-                                self.resolve_block_expression(body)?
-                            }
+                            ElseBranch::Block(body) => self.resolve_block_expression(body)?,
                             ElseBranch::If(if_expr) => {
                                 self.resolve_expression(if_expr.clone())?;
                                 false
@@ -4952,7 +5073,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     let getter_entry = format!("{}.getter", field_name);
                     let is_super = matches!(&*object.borrow(), Expression::SuperKeyword { .. });
                     if !is_super {
-                        if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, &getter_entry) {
+                        if let Some(slot_idx) =
+                            self.get_vtable_slot_index(&class_name, &getter_entry)
+                        {
                             let class_type = *self.class_types.borrow().get(&class_name).unwrap();
                             let vtable_ptr_ptr = self
                                 .builder
@@ -4967,9 +5090,12 @@ impl<'ctx> IRGenerator<'ctx> {
                                 .into_pointer_value();
 
                             let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
-                            let fn_ptr_ptr =
-                                self.builder
-                                    .build_struct_gep(vtable_type, vtable_ptr, slot_idx, "")?;
+                            let fn_ptr_ptr = self.builder.build_struct_gep(
+                                vtable_type,
+                                vtable_ptr,
+                                slot_idx,
+                                "",
+                            )?;
                             let fn_ptr_val = self
                                 .builder
                                 .build_load(
@@ -4987,7 +5113,10 @@ impl<'ctx> IRGenerator<'ctx> {
                             let declared_fn_name = format!("{}.{}.getter", owner, field_name);
                             let declared_fn =
                                 self.module.get_function(&declared_fn_name).ok_or_else(|| {
-                                    anyhow::anyhow!("Getter function {} not found", declared_fn_name)
+                                    anyhow::anyhow!(
+                                        "Getter function {} not found",
+                                        declared_fn_name
+                                    )
                                 })?;
                             let fn_type = declared_fn.get_type();
 
@@ -5382,7 +5511,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                 };
                                 let method_name = &member.value;
 
-                                let is_super = matches!(&*object.borrow(), Expression::SuperKeyword { .. });
+                                let is_super =
+                                    matches!(&*object.borrow(), Expression::SuperKeyword { .. });
 
                                 if is_super {
                                     let fn_name = format!("{}.{}", class_name, method_name);
@@ -5406,9 +5536,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                             .unwrap();
                                         args.push(arg_val.into());
                                     }
-                                    let call_result = self
-                                        .builder
-                                        .build_call(declared_fn, &args, "")?;
+                                    let call_result =
+                                        self.builder.build_call(declared_fn, &args, "")?;
                                     match call_result.try_as_basic_value() {
                                         inkwell::values::ValueKind::Basic(val) => {
                                             return Ok(Some(val));
@@ -6370,11 +6499,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     })
                     .unwrap_or_else(|| param_types.clone());
 
-                let fn_llvm_type = self.get_function_type(
-                    ret_type.clone(),
-                    all_param_types.clone(),
-                    false,
-                )?;
+                let fn_llvm_type =
+                    self.get_function_type(ret_type.clone(), all_param_types.clone(), false)?;
                 let function = self.module.add_function(&fn_name, fn_llvm_type, None);
 
                 let current_block = self.builder.get_insert_block();
@@ -6501,19 +6627,13 @@ impl<'ctx> IRGenerator<'ctx> {
         max
     }
 
-    fn find_shorthand_in_expr(
-        &self,
-        expr: &Rc<RefCell<Expression>>,
-        max: &mut Option<u32>,
-    ) {
+    fn find_shorthand_in_expr(&self, expr: &Rc<RefCell<Expression>>, max: &mut Option<u32>) {
         match &*expr.borrow() {
-            Expression::ShorthandArgument { index, .. } => {
-                match max {
-                    Some(m) if *index > *m => *max = Some(*index),
-                    None => *max = Some(*index),
-                    _ => {}
-                }
-            }
+            Expression::ShorthandArgument { index, .. } => match max {
+                Some(m) if *index > *m => *max = Some(*index),
+                None => *max = Some(*index),
+                _ => {}
+            },
             Expression::Binary { left, right, .. } => {
                 self.find_shorthand_in_expr(left, max);
                 self.find_shorthand_in_expr(right, max);
@@ -7014,8 +7134,12 @@ impl<'ctx> IRGenerator<'ctx> {
         {
             let binding = symbol.borrow();
             let (decl, properties) = match &*binding {
-                Symbol::Struct { decl, properties, .. } => (decl.clone(), properties.clone()),
-                Symbol::Class { decl, properties, .. } => (decl.clone(), properties.clone()),
+                Symbol::Struct {
+                    decl, properties, ..
+                } => (decl.clone(), properties.clone()),
+                Symbol::Class {
+                    decl, properties, ..
+                } => (decl.clone(), properties.clone()),
                 _ => {
                     return Err(anyhow::anyhow!(
                         "Symbol '{}' is not a struct or class",

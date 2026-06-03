@@ -1670,7 +1670,9 @@ impl Parser {
                 } else {
                     has_variadic = true;
                 }
-                let Some(comma_or_close) = self.peek() else { break };
+                let Some(comma_or_close) = self.peek() else {
+                    break;
+                };
                 if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
@@ -1750,7 +1752,9 @@ impl Parser {
                 } else {
                     has_variadic = true;
                 }
-                let Some(comma_or_close) = self.peek() else { break };
+                let Some(comma_or_close) = self.peek() else {
+                    break;
+                };
                 if SeparatorType::is_separator(&comma_or_close, SeparatorType::Comma) {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
@@ -1819,7 +1823,10 @@ impl Parser {
             );
             return Err(());
         };
-        if !accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get)) {
+        if !accessors
+            .iter()
+            .any(|a| matches!(a.kind, AccessorKind::Get))
+        {
             self.emit_error(
                 TrussDiagnosticCode::UnexpectedToken,
                 "Subscript must have at least a get accessor",
@@ -3251,7 +3258,8 @@ impl Parser {
                     }
                     TokenType::Keyword { keyword } if keyword == KeywordType::Subscript => {
                         let sub_token = self.next().unwrap();
-                        let generic_parameters = self.parse_generic_parameters()?.unwrap_or_default();
+                        let generic_parameters =
+                            self.parse_generic_parameters()?.unwrap_or_default();
                         let Some(open) = self.next() else {
                             self.emit_error(
                                 TrussDiagnosticCode::MissingSeparator,
@@ -3305,7 +3313,10 @@ impl Parser {
                                 if TokenType::Identifier != second.ty {
                                     self.emit_error(
                                         TrussDiagnosticCode::ExpectedIdentifier,
-                                        format!("Expected parameter name but found '{}'", second.value),
+                                        format!(
+                                            "Expected parameter name but found '{}'",
+                                            second.value
+                                        ),
                                         &second,
                                     );
                                     return Err(());
@@ -3388,8 +3399,14 @@ impl Parser {
                                 }
                                 if let TokenType::Identifier = t.ty {
                                     match t.value.as_str() {
-                                        "get" => { get = true; self.index += 1; }
-                                        "set" => { set = true; self.index += 1; }
+                                        "get" => {
+                                            get = true;
+                                            self.index += 1;
+                                        }
+                                        "set" => {
+                                            set = true;
+                                            self.index += 1;
+                                        }
                                         _ => {
                                             self.emit_error(
                                                 TrussDiagnosticCode::UnexpectedToken,
@@ -3948,8 +3965,15 @@ impl Parser {
             let TokenType::Keyword { keyword } = token.ty else {
                 break;
             };
-            let is_set_syntax = matches!(keyword, KeywordType::Open | KeywordType::Public | KeywordType::Internal | KeywordType::Fileprivate | KeywordType::Private | KeywordType::Package)
-                && self.is_set_modifier_syntax();
+            let is_set_syntax = matches!(
+                keyword,
+                KeywordType::Open
+                    | KeywordType::Public
+                    | KeywordType::Internal
+                    | KeywordType::Fileprivate
+                    | KeywordType::Private
+                    | KeywordType::Package
+            ) && self.is_set_modifier_syntax();
             let ty = if is_set_syntax {
                 let modifier = match keyword {
                     KeywordType::Open => AccessModifier::Open,
@@ -3976,7 +4000,9 @@ impl Parser {
                 }
             };
             let duplicate = if matches!(ty, ModifierType::AccessSet(_)) {
-                modifiers.iter().any(|m| matches!(m.ty, ModifierType::AccessSet(_)))
+                modifiers
+                    .iter()
+                    .any(|m| matches!(m.ty, ModifierType::AccessSet(_)))
             } else {
                 modifiers.iter().any(|m| {
                     m.ty == ty
@@ -4010,9 +4036,15 @@ impl Parser {
 
     fn is_set_modifier_syntax(&self) -> bool {
         self.index + 3 < self.tokens.len()
-            && self.tokens[self.index + 1].ty == TokenType::Separator { separator: SeparatorType::OpenParen }
+            && self.tokens[self.index + 1].ty
+                == TokenType::Separator {
+                    separator: SeparatorType::OpenParen,
+                }
             && self.tokens[self.index + 2].value == "set"
-            && self.tokens[self.index + 3].ty == TokenType::Separator { separator: SeparatorType::CloseParen }
+            && self.tokens[self.index + 3].ty
+                == TokenType::Separator {
+                    separator: SeparatorType::CloseParen,
+                }
     }
 
     #[allow(dead_code)]
@@ -4385,9 +4417,11 @@ impl Parser {
             }
         }
         let expr = self.parse_expression()?;
-        Ok(vec![Rc::new(RefCell::new(Statement::ExpressionStatement {
-            expression: Rc::new(RefCell::new(expr)),
-        }))])
+        Ok(vec![Rc::new(RefCell::new(
+            Statement::ExpressionStatement {
+                expression: Rc::new(RefCell::new(expr)),
+            },
+        ))])
     }
 
     fn parse_guard(&mut self) -> Result<Statement, ()> {

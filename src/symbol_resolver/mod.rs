@@ -230,20 +230,28 @@ impl SymbolResolver {
                         _subscripts.push(sub_sym.clone());
                         {
                             let stmt = field_stmt.borrow();
-                            if let Statement::SubscriptDecl { parameters, accessors, .. } = &*stmt {
+                            if let Statement::SubscriptDecl {
+                                parameters,
+                                accessors,
+                                ..
+                            } = &*stmt
+                            {
                                 for accessor in accessors {
-                                    let acc_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                                    let acc_scope = Rc::new(RefCell::new(Scope::new(
+                                        self.current_scope.clone(),
+                                    )));
                                     let saved = self.current_scope.clone();
                                     self.current_scope = Some(acc_scope.clone());
                                     for param in parameters {
                                         let param_name = param.borrow().name.value.clone();
                                         if param_name != "_" {
-                                            let param_sym = Rc::new(RefCell::new(Symbol::Variable {
-                                                name: param_name,
-                                                decl: None,
-                                                parameter: Some(param.clone()),
-                                                is_var: true,
-                                            }));
+                                            let param_sym =
+                                                Rc::new(RefCell::new(Symbol::Variable {
+                                                    name: param_name,
+                                                    decl: None,
+                                                    parameter: Some(param.clone()),
+                                                    is_var: true,
+                                                }));
                                             self.enter(param_sym, &param.borrow().name);
                                         }
                                     }
@@ -436,20 +444,28 @@ impl SymbolResolver {
                         _subscripts.push(sub_sym.clone());
                         {
                             let stmt = field_stmt.borrow();
-                            if let Statement::SubscriptDecl { parameters, accessors, .. } = &*stmt {
+                            if let Statement::SubscriptDecl {
+                                parameters,
+                                accessors,
+                                ..
+                            } = &*stmt
+                            {
                                 for accessor in accessors {
-                                    let acc_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                                    let acc_scope = Rc::new(RefCell::new(Scope::new(
+                                        self.current_scope.clone(),
+                                    )));
                                     let saved = self.current_scope.clone();
                                     self.current_scope = Some(acc_scope.clone());
                                     for param in parameters {
                                         let param_name = param.borrow().name.value.clone();
                                         if param_name != "_" {
-                                            let param_sym = Rc::new(RefCell::new(Symbol::Variable {
-                                                name: param_name,
-                                                decl: None,
-                                                parameter: Some(param.clone()),
-                                                is_var: true,
-                                            }));
+                                            let param_sym =
+                                                Rc::new(RefCell::new(Symbol::Variable {
+                                                    name: param_name,
+                                                    decl: None,
+                                                    parameter: Some(param.clone()),
+                                                    is_var: true,
+                                                }));
                                             self.enter(param_sym, &param.borrow().name);
                                         }
                                     }
@@ -850,7 +866,11 @@ impl SymbolResolver {
                             }
                         }
                     }
-                    Symbol::Protocol { methods, subscripts: _subscripts, .. } => {
+                    Symbol::Protocol {
+                        methods,
+                        subscripts: _subscripts,
+                        ..
+                    } => {
                         for field_stmt in body {
                             if let Statement::FunctionDecl {
                                 name: method_name, ..
@@ -1508,9 +1528,11 @@ impl SymbolResolver {
                 }
             },
             Expression::SuperKeyword { token, .. } => {
-                let in_method = self.current_scope.as_ref().and_then(|scope| {
-                    scope.borrow().get_symbol("self")
-                }).is_some();
+                let in_method = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().get_symbol("self"))
+                    .is_some();
                 if !in_method {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,
@@ -1686,16 +1708,14 @@ impl SymbolResolver {
 
     fn find_shorthand_in_expr(expr: &Rc<RefCell<Expression>>, max: &mut Option<u32>) {
         match &*expr.borrow() {
-            Expression::ShorthandArgument { index, .. } => {
-                match max {
-                    Some(m) => {
-                        if *index > *m {
-                            *max = Some(*index);
-                        }
+            Expression::ShorthandArgument { index, .. } => match max {
+                Some(m) => {
+                    if *index > *m {
+                        *max = Some(*index);
                     }
-                    None => *max = Some(*index),
                 }
-            }
+                None => *max = Some(*index),
+            },
             Expression::Binary { left, right, .. } => {
                 Self::find_shorthand_in_expr(left, max);
                 Self::find_shorthand_in_expr(right, max);

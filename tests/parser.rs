@@ -2,7 +2,9 @@ use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::{
-        expression::{AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression, UnaryOperator},
+        expression::{
+            AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression, UnaryOperator,
+        },
         statement::{
             AccessModifier, AccessorKind, FunctionBody, ImportKind, Modifier, ModifierType,
             Parameter, Pattern, ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
@@ -943,7 +945,12 @@ fn test_parse_address_of_binary() {
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
         && let Some(init_expr) = initializer
-        && let Expression::Binary { left, right, operator, .. } = &*init_expr.borrow()
+        && let Expression::Binary {
+            left,
+            right,
+            operator,
+            ..
+        } = &*init_expr.borrow()
     {
         assert_eq!(operator, &BinaryOperator::Plus);
         if let Expression::Unary {
@@ -1921,7 +1928,9 @@ fn test_parse_extension_static_method_struct() {
         assert_eq!(type_name.value, "Foo");
         assert_eq!(body.len(), 1);
         if let Statement::FunctionDecl {
-            name, static_method, ..
+            name,
+            static_method,
+            ..
         } = &*body[0].borrow()
         {
             assert_eq!(name.value, "bar");
@@ -1954,7 +1963,9 @@ fn test_parse_extension_static_method_class() {
         assert_eq!(type_name.value, "Foo");
         assert_eq!(body.len(), 1);
         if let Statement::FunctionDecl {
-            name, static_method, ..
+            name,
+            static_method,
+            ..
         } = &*body[0].borrow()
         {
             assert_eq!(name.value, "bar");
@@ -1987,7 +1998,9 @@ fn test_parse_extension_static_method_enum() {
         assert_eq!(type_name.value, "Foo");
         assert_eq!(body.len(), 1);
         if let Statement::FunctionDecl {
-            name, static_method, ..
+            name,
+            static_method,
+            ..
         } = &*body[0].borrow()
         {
             assert_eq!(name.value, "bar");
@@ -2020,7 +2033,9 @@ fn test_parse_extension_static_method_protocol() {
         assert_eq!(type_name.value, "Foo");
         assert_eq!(body.len(), 1);
         if let Statement::FunctionDecl {
-            name, static_method, ..
+            name,
+            static_method,
+            ..
         } = &*body[0].borrow()
         {
             assert_eq!(name.value, "bar");
@@ -2045,12 +2060,11 @@ fn test_parse_extension_instance_method_not_static() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ExtensionDecl {
-        body, ..
-    } = &*program.statements[1].borrow()
-    {
+    if let Statement::ExtensionDecl { body, .. } = &*program.statements[1].borrow() {
         if let Statement::FunctionDecl {
-            name, static_method, ..
+            name,
+            static_method,
+            ..
         } = &*body[0].borrow()
         {
             assert_eq!(name.value, "bar");
@@ -5624,8 +5638,14 @@ fn test_parse_fallthrough_and_break() {
         && let Expression::Match { cases, .. } = &*expression.borrow()
     {
         assert_eq!(cases.len(), 2);
-        assert!(matches!(&*cases[0].body[0].borrow(), Statement::Fallthrough { .. }));
-        assert!(matches!(&*cases[1].body[0].borrow(), Statement::Break { .. }));
+        assert!(matches!(
+            &*cases[0].body[0].borrow(),
+            Statement::Fallthrough { .. }
+        ));
+        assert!(matches!(
+            &*cases[1].body[0].borrow(),
+            Statement::Break { .. }
+        ));
     } else {
         panic!("Expected Match with fallthrough/break");
     }
@@ -5957,7 +5977,10 @@ fn test_parse_defer_nested() {
         } = &*statements[0].borrow()
     {
         assert_eq!(outer_defer_body.len(), 2);
-        assert!(matches!(&*outer_defer_body[0].borrow(), Statement::Defer { .. }));
+        assert!(matches!(
+            &*outer_defer_body[0].borrow(),
+            Statement::Defer { .. }
+        ));
         assert!(matches!(
             &*outer_defer_body[1].borrow(),
             Statement::ExpressionStatement { .. }
@@ -7357,10 +7380,22 @@ fn test_parse_shorthand_argument_plus() {
         {
             assert_eq!(closure_body.len(), 1);
             if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow() {
-                if let Expression::Binary { left, right, operator, .. } = &*expression.borrow() {
+                if let Expression::Binary {
+                    left,
+                    right,
+                    operator,
+                    ..
+                } = &*expression.borrow()
+                {
                     assert_eq!(*operator, BinaryOperator::Plus);
-                    assert!(matches!(&*left.borrow(), Expression::ShorthandArgument { index: 0, .. }));
-                    assert!(matches!(&*right.borrow(), Expression::ShorthandArgument { index: 1, .. }));
+                    assert!(matches!(
+                        &*left.borrow(),
+                        Expression::ShorthandArgument { index: 0, .. }
+                    ));
+                    assert!(matches!(
+                        &*right.borrow(),
+                        Expression::ShorthandArgument { index: 1, .. }
+                    ));
                 } else {
                     panic!("Expected Binary expression");
                 }
@@ -7393,7 +7428,9 @@ fn test_parse_shorthand_argument_multi() {
     {
         if let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
             && let Some(init) = initializer
-            && let Expression::Closure { body: closure_body, .. } = &*init.borrow()
+            && let Expression::Closure {
+                body: closure_body, ..
+            } = &*init.borrow()
         {
             assert_eq!(closure_body.len(), 1);
             if let Statement::ExpressionStatement { expression } = &*closure_body[0].borrow() {
@@ -7518,17 +7555,17 @@ fn test_parse_subscript_with_label() {
 fn test_parse_subscript_access_single_index() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "arr[0]".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("arr[0]".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
-        if let Expression::SubscriptAccess { object, parameters, .. } = &*expression.borrow() {
+        if let Expression::SubscriptAccess {
+            object, parameters, ..
+        } = &*expression.borrow()
+        {
             if let Expression::Variable { name, .. } = &*object.borrow() {
                 assert_eq!(name.value, "arr");
             } else {
@@ -7552,10 +7589,7 @@ fn test_parse_subscript_access_single_index() {
 fn test_parse_subscript_access_multi_index() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "matrix[row, col]".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("matrix[row, col]".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -7577,7 +7611,8 @@ fn test_parse_subscript_in_struct() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Matrix { subscript(row: Int32, col: Int32) -> Int32 { get { return 0 } } }".to_string(),
+            "struct Matrix { subscript(row: Int32, col: Int32) -> Int32 { get { return 0 } } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7586,8 +7621,16 @@ fn test_parse_subscript_in_struct() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
-        assert!(body.iter().any(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. })), "struct body has {} items, expected SubscriptDecl", body.len());
-        let subscript_stmt = body.iter().find(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. })).unwrap();
+        assert!(
+            body.iter()
+                .any(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. })),
+            "struct body has {} items, expected SubscriptDecl",
+            body.len()
+        );
+        let subscript_stmt = body
+            .iter()
+            .find(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. }))
+            .unwrap();
         if let Statement::SubscriptDecl { parameters, .. } = &*subscript_stmt.borrow() {
             assert_eq!(parameters.len(), 2);
             assert_eq!(parameters[0].borrow().name.value, "row");
@@ -7614,9 +7657,17 @@ fn test_parse_subscript_in_protocol() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
-        let subscript_members: Vec<_> = members.iter().filter(|m| matches!(m, ProtocolMember::Subscript { .. })).collect();
+        let subscript_members: Vec<_> = members
+            .iter()
+            .filter(|m| matches!(m, ProtocolMember::Subscript { .. }))
+            .collect();
         assert_eq!(subscript_members.len(), 1);
-        if let ProtocolMember::Subscript { parameters, accessors, .. } = subscript_members[0] {
+        if let ProtocolMember::Subscript {
+            parameters,
+            accessors,
+            ..
+        } = subscript_members[0]
+        {
             assert_eq!(parameters.len(), 1);
             assert_eq!(accessors.get, true);
             assert_eq!(accessors.set, true);
@@ -7633,7 +7684,8 @@ fn test_parse_subscript_in_class() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "class MyArray { subscript(index: Int32) -> Int32 { get { return 0 } set { } } }".to_string(),
+            "class MyArray { subscript(index: Int32) -> Int32 { get { return 0 } set { } } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7642,7 +7694,10 @@ fn test_parse_subscript_in_class() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ClassDecl { body, .. } = &*program.statements[0].borrow() {
-        assert!(body.iter().any(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. })));
+        assert!(
+            body.iter()
+                .any(|s| matches!(&*s.borrow(), Statement::SubscriptDecl { .. }))
+        );
     } else {
         panic!("Expected ClassDecl");
     }

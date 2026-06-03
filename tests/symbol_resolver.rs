@@ -750,10 +750,7 @@ fn test_super_keyword_in_class_method_multiline() {
 fn test_super_keyword_outside_method_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "func test() { super }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("func test() { super }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -3029,7 +3026,12 @@ fn test_closure_shorthand_argument_resolved() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no symbol resolution errors: {:?}",
+        errors
+    );
     drop(engine_ref);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3075,7 +3077,12 @@ fn test_closure_shorthand_multi_args_resolved() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no symbol resolution errors: {:?}",
+        errors
+    );
     drop(engine_ref);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3108,7 +3115,12 @@ fn test_let_variable_is_not_var() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no symbol resolution errors: {:?}",
+        errors
+    );
     drop(engine_ref);
     if let Statement::FunctionDecl { scope, .. } = &*program.statements[0].borrow()
         && let Some(scope) = scope
@@ -3149,7 +3161,12 @@ fn test_var_variable_is_var() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no symbol resolution errors: {:?}",
+        errors
+    );
     drop(engine_ref);
     if let Statement::FunctionDecl { scope, .. } = &*program.statements[0].borrow()
         && let Some(scope) = scope
@@ -3190,7 +3207,12 @@ fn test_struct_let_property_is_not_var() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no symbol resolution errors: {:?}",
+        errors
+    );
     drop(engine_ref);
     if let Statement::StructDecl { name, scope, .. } = &*program.statements[0].borrow()
         && let Some(scope) = scope
@@ -3202,7 +3224,11 @@ fn test_struct_let_property_is_not_var() {
             assert_eq!(properties.len(), 1);
             let prop = properties[0].borrow();
             match &*prop {
-                Symbol::StructProperty { name: pname, is_var, .. } => {
+                Symbol::StructProperty {
+                    name: pname,
+                    is_var,
+                    ..
+                } => {
                     assert_eq!(pname, "x");
                     assert!(!is_var, "let property should have is_var = false");
                 }
@@ -3235,7 +3261,12 @@ fn test_struct_var_property_is_var() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no symbol resolution errors: {:?}",
+        errors
+    );
     drop(engine_ref);
     if let Statement::StructDecl { name, scope, .. } = &*program.statements[0].borrow()
         && let Some(scope) = scope
@@ -3247,7 +3278,11 @@ fn test_struct_var_property_is_var() {
             assert_eq!(properties.len(), 1);
             let prop = properties[0].borrow();
             match &*prop {
-                Symbol::StructProperty { name: pname, is_var, .. } => {
+                Symbol::StructProperty {
+                    name: pname,
+                    is_var,
+                    ..
+                } => {
                     assert_eq!(pname, "x");
                     assert!(is_var, "var property should have is_var = true");
                 }
@@ -3352,7 +3387,8 @@ fn test_struct_subscript_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Matrix { subscript(row: Int32, col: Int32) -> Int32 { get { return 0 } } }".to_string(),
+            "struct Matrix { subscript(row: Int32, col: Int32) -> Int32 { get { return 0 } } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3366,7 +3402,12 @@ fn test_struct_subscript_symbol() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should resolve without errors, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should resolve without errors, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -3374,7 +3415,8 @@ fn test_class_subscript_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "class MyArray { subscript(index: Int32) -> Int32 { get { return 0 } set { } } }".to_string(),
+            "class MyArray { subscript(index: Int32) -> Int32 { get { return 0 } set { } } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3388,7 +3430,12 @@ fn test_class_subscript_symbol() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should resolve without errors, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should resolve without errors, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -3410,7 +3457,12 @@ fn test_protocol_subscript_symbol() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should resolve without errors, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should resolve without errors, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -3432,5 +3484,10 @@ fn test_extension_subscript_symbol() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should resolve without errors, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should resolve without errors, got: {:?}",
+        errors
+    );
 }

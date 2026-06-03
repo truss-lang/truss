@@ -2884,7 +2884,8 @@ fn test_irgen_extension_instance_method_has_self_param() {
 
 #[test]
 fn test_irgen_extension_static_method_with_params() {
-    let code = "struct Calc {} extension Calc { static func add(a: Int32, b: Int32) -> Int32 { a + b } }";
+    let code =
+        "struct Calc {} extension Calc { static func add(a: Int32, b: Int32) -> Int32 { a + b } }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4367,7 +4368,11 @@ fn test_irgen_closure_void_return_type() {
         "Closure should return void, IR:\n{}",
         llvm_ir
     );
-    assert!(llvm_ir.contains("ret void"), "Should have ret void, IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("ret void"),
+        "Should have ret void, IR:\n{}",
+        llvm_ir
+    );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -4436,7 +4441,11 @@ fn test_irgen_closure_shorthand_binary() {
         "Closure should take two i32 params and return i32, IR:\n{}",
         llvm_ir
     );
-    assert!(llvm_ir.contains("add i32"), "Should have add instruction, IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("add i32"),
+        "Should have add instruction, IR:\n{}",
+        llvm_ir
+    );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -4466,7 +4475,11 @@ fn test_irgen_closure_shorthand_with_type_annotation() {
         "Should define __closure_0 function, IR:\n{}",
         llvm_ir
     );
-    assert!(llvm_ir.contains("define i32 @__closure_0(i32 %"), "IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        "IR:\n{}",
+        llvm_ir
+    );
     assert!(llvm_ir.contains("call i32 "), "IR:\n{}", llvm_ir);
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
@@ -4540,9 +4553,21 @@ fn test_irgen_super_method_call() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
-    assert!(llvm_ir.contains("Animal.speak"), "Expected Animal.speak definition:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Dog.speak"), "Expected Dog.speak definition:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("Dog.call_super"), "Expected Dog.call_super definition:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("Animal.speak"),
+        "Expected Animal.speak definition:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Dog.speak"),
+        "Expected Dog.speak definition:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("Dog.call_super"),
+        "Expected Dog.call_super definition:\n{}",
+        llvm_ir
+    );
     assert!(
         llvm_ir.contains("call i32 @Animal.speak"),
         "Expected direct call to Animal.speak (not through vtable):\n{}",
@@ -4571,8 +4596,17 @@ fn test_irgen_address_of_variable() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert_eq!(engine.borrow().get_errors().len(), 0, "Expected no errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("test"), "Expected function test in IR:\n{}", llvm_ir);
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("test"),
+        "Expected function test in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -4605,8 +4639,17 @@ fn test_irgen_struct_subscript_getter() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert_eq!(engine.borrow().get_errors().len(), 0, "Expected no errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("@Array.subscript.getter"), "Expected subscript.getter in IR:\n{}", llvm_ir);
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("@Array.subscript.getter"),
+        "Expected subscript.getter in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -4641,9 +4684,22 @@ fn test_irgen_struct_subscript_get_set() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert_eq!(engine.borrow().get_errors().len(), 0, "Expected no errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("@Array.subscript.getter"), "Expected subscript.getter in IR:\n{}", llvm_ir);
-    assert!(llvm_ir.contains("@Array.subscript.setter"), "Expected subscript.setter in IR:\n{}", llvm_ir);
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("@Array.subscript.getter"),
+        "Expected subscript.getter in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("@Array.subscript.setter"),
+        "Expected subscript.setter in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -4676,8 +4732,17 @@ fn test_irgen_class_subscript_getter() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert_eq!(engine.borrow().get_errors().len(), 0, "Expected no errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("subscript.getter"), "Expected subscript getter in vtable:\n{}", llvm_ir);
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("subscript.getter"),
+        "Expected subscript getter in vtable:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -4701,6 +4766,15 @@ fn test_irgen_address_of_deref() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert_eq!(engine.borrow().get_errors().len(), 0, "Expected no errors: {:?}", engine.borrow().get_errors());
-    assert!(llvm_ir.contains("test"), "Expected function test in IR:\n{}", llvm_ir);
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("test"),
+        "Expected function test in IR:\n{}",
+        llvm_ir
+    );
 }

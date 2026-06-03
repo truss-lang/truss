@@ -2859,7 +2859,9 @@ fn test_extension_static_method_struct_type_resolved() {
     );
 
     if let Statement::ExtensionDecl { body, .. } = &*program.statements[1].borrow()
-        && let Statement::FunctionDecl { ty, static_method, .. } = &*body[0].borrow()
+        && let Statement::FunctionDecl {
+            ty, static_method, ..
+        } = &*body[0].borrow()
         && let Some(ty) = ty
     {
         assert!(static_method);
@@ -4418,7 +4420,10 @@ fn test_closure_shorthand_type_default() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "Expected error about missing type context for shorthand arg");
+    assert!(
+        !errors.is_empty(),
+        "Expected error about missing type context for shorthand arg"
+    );
     drop(engine_ref);
 }
 
@@ -4441,7 +4446,10 @@ fn test_closure_shorthand_type_binary() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "Expected error about missing type context for shorthand args");
+    assert!(
+        !errors.is_empty(),
+        "Expected error about missing type context for shorthand args"
+    );
     drop(engine_ref);
 }
 
@@ -4520,7 +4528,6 @@ fn test_closure_shorthand_binary_with_context() {
     }
 }
 
-
 #[test]
 fn test_assign_to_let_variable_errors() {
     let engine = create_engine();
@@ -4540,7 +4547,12 @@ fn test_assign_to_let_variable_errors() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 1, "Expected 1 error for assign to let, got {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        1,
+        "Expected 1 error for assign to let, got {:?}",
+        errors
+    );
     let diag = &errors[0];
     assert_eq!(diag.code, TrussDiagnosticCode::AssignToImmutable);
 }
@@ -4564,7 +4576,12 @@ fn test_assign_to_var_variable_ok() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected 0 errors for assign to var, got {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected 0 errors for assign to var, got {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -4586,7 +4603,12 @@ fn test_assign_to_uninited_let_variable_ok() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected 0 errors for first assign to uninited let, got {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected 0 errors for first assign to uninited let, got {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -4608,7 +4630,12 @@ fn test_double_assign_to_let_variable_errors() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 1, "Expected 1 error for double assign to let, got {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        1,
+        "Expected 1 error for double assign to let, got {:?}",
+        errors
+    );
     let diag = &errors[0];
     assert_eq!(diag.code, TrussDiagnosticCode::AssignToImmutable);
 }
@@ -4632,8 +4659,16 @@ fn test_inc_on_let_variable_errors() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    let assign_errors: Vec<_> = errors.iter().filter(|d| d.code == TrussDiagnosticCode::AssignToImmutable).collect();
-    assert_eq!(assign_errors.len(), 1, "Expected 1 AssignToImmutable error for inc on let, got {:?}", errors);
+    let assign_errors: Vec<_> = errors
+        .iter()
+        .filter(|d| d.code == TrussDiagnosticCode::AssignToImmutable)
+        .collect();
+    assert_eq!(
+        assign_errors.len(),
+        1,
+        "Expected 1 AssignToImmutable error for inc on let, got {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -4655,7 +4690,12 @@ fn test_inc_on_var_variable_ok() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected 0 errors for inc on var, got {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected 0 errors for inc on var, got {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -4677,8 +4717,16 @@ fn test_assign_to_let_property_outside_init_errors() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    let assign_errors: Vec<_> = errors.iter().filter(|d| d.code == TrussDiagnosticCode::AssignToImmutable).collect();
-    assert_eq!(assign_errors.len(), 1, "Expected 1 AssignToImmutable error for let property assign outside init, got {:?}", errors);
+    let assign_errors: Vec<_> = errors
+        .iter()
+        .filter(|d| d.code == TrussDiagnosticCode::AssignToImmutable)
+        .collect();
+    assert_eq!(
+        assign_errors.len(),
+        1,
+        "Expected 1 AssignToImmutable error for let property assign outside init, got {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -4700,48 +4748,66 @@ fn test_assign_to_var_property_ok() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    let assign_errors: Vec<_> = errors.iter().filter(|d| d.code == TrussDiagnosticCode::AssignToImmutable).collect();
-    assert_eq!(assign_errors.len(), 0, "Expected 0 AssignToImmutable for var property assign, got {:?}", errors);
+    let assign_errors: Vec<_> = errors
+        .iter()
+        .filter(|d| d.code == TrussDiagnosticCode::AssignToImmutable)
+        .collect();
+    assert_eq!(
+        assign_errors.len(),
+        0,
+        "Expected 0 AssignToImmutable for var property assign, got {:?}",
+        errors
+    );
 }
 
 #[test]
 fn test_open_on_struct_member_errors() {
-    let errors = run_type_check(
-        "struct Foo { open var x: Int32 }",
+    let errors = run_type_check("struct Foo { open var x: Int32 }");
+    assert_eq!(
+        errors, 1,
+        "Expected 1 error for open on struct member, got {}",
+        errors
     );
-    assert_eq!(errors, 1, "Expected 1 error for open on struct member, got {}", errors);
 }
 
 #[test]
 fn test_open_on_class_member_ok() {
-    let errors = run_type_check(
-        "class Foo { open var x: Int32 }",
+    let errors = run_type_check("class Foo { open var x: Int32 }");
+    assert_eq!(
+        errors, 0,
+        "Expected 0 errors for open on class member, got {}",
+        errors
     );
-    assert_eq!(errors, 0, "Expected 0 errors for open on class member, got {}", errors);
 }
 
 #[test]
 fn test_member_access_exceeds_container_level() {
-    let errors = run_type_check(
-        "internal struct Foo { public var x: Int32 }",
+    let errors = run_type_check("internal struct Foo { public var x: Int32 }");
+    assert_eq!(
+        errors, 1,
+        "Expected 1 error for member access exceeding container, got {}",
+        errors
     );
-    assert_eq!(errors, 1, "Expected 1 error for member access exceeding container, got {}", errors);
 }
 
 #[test]
 fn test_member_access_equal_to_container_ok() {
-    let errors = run_type_check(
-        "public struct Foo { public var x: Int32 }",
+    let errors = run_type_check("public struct Foo { public var x: Int32 }");
+    assert_eq!(
+        errors, 0,
+        "Expected 0 errors for member access equal to container, got {}",
+        errors
     );
-    assert_eq!(errors, 0, "Expected 0 errors for member access equal to container, got {}", errors);
 }
 
 #[test]
 fn test_member_access_more_restrictive_ok() {
-    let errors = run_type_check(
-        "public struct Foo { private var x: Int32 }",
+    let errors = run_type_check("public struct Foo { private var x: Int32 }");
+    assert_eq!(
+        errors, 0,
+        "Expected 0 errors for member access more restrictive than container, got {}",
+        errors
     );
-    assert_eq!(errors, 0, "Expected 0 errors for member access more restrictive than container, got {}", errors);
 }
 
 #[test]
@@ -4762,7 +4828,12 @@ fn test_address_of_variable_type() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for &v, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for &v, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -4783,7 +4854,12 @@ fn test_address_of_deref_type() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for &*p, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for &*p, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -4792,7 +4868,8 @@ fn test_struct_subscript_return_type() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct Matrix { subscript(row: Int32, col: Int32) -> Int32 { get { return 0 } } }
-             func test(m: Matrix) -> Int32 { return m[0, 1] }".to_string(),
+             func test(m: Matrix) -> Int32 { return m[0, 1] }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -4806,13 +4883,27 @@ fn test_struct_subscript_return_type() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Struct subscript should resolve, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Struct subscript should resolve, got: {:?}",
+        errors
+    );
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
-        && let Statement::Return { value: Some(ret_val), .. } = &*stmts[0].borrow()
-        && let Expression::SubscriptAccess { ty: Some(ref_ty), .. } = &*ret_val.borrow()
+        && let Statement::Return {
+            value: Some(ret_val),
+            ..
+        } = &*stmts[0].borrow()
+        && let Expression::SubscriptAccess {
+            ty: Some(ref_ty), ..
+        } = &*ret_val.borrow()
     {
-        assert_eq!(*ref_ty.borrow(), Type::Int32, "Subscript should return Int32");
+        assert_eq!(
+            *ref_ty.borrow(),
+            Type::Int32,
+            "Subscript should return Int32"
+        );
     } else {
         panic!("Expected subscript access with Int32 return type");
     }
@@ -4824,7 +4915,8 @@ fn test_struct_subscript_implicit_get() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct Array { subscript(index: Int32) -> Int32 { return 42 } }
-             func test(a: Array) -> Int32 { return a[0] }".to_string(),
+             func test(a: Array) -> Int32 { return a[0] }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -4838,7 +4930,12 @@ fn test_struct_subscript_implicit_get() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Implicit get subscript should resolve, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Implicit get subscript should resolve, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -4847,7 +4944,8 @@ fn test_class_subscript_return_type() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "class MyArray { subscript(index: Int32) -> Int32 { get { return 0 } set { } } }
-             func test(a: MyArray) -> Int32 { return a[0] }".to_string(),
+             func test(a: MyArray) -> Int32 { return a[0] }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -4861,13 +4959,27 @@ fn test_class_subscript_return_type() {
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Class subscript should resolve, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Class subscript should resolve, got: {:?}",
+        errors
+    );
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
-        && let Statement::Return { value: Some(ret_val), .. } = &*stmts[0].borrow()
-        && let Expression::SubscriptAccess { ty: Some(ref_ty), .. } = &*ret_val.borrow()
+        && let Statement::Return {
+            value: Some(ret_val),
+            ..
+        } = &*stmts[0].borrow()
+        && let Expression::SubscriptAccess {
+            ty: Some(ref_ty), ..
+        } = &*ret_val.borrow()
     {
-        assert_eq!(*ref_ty.borrow(), Type::Int32, "Class subscript should return Int32");
+        assert_eq!(
+            *ref_ty.borrow(),
+            Type::Int32,
+            "Class subscript should return Int32"
+        );
     } else {
         panic!("Expected subscript access with Int32 return type");
     }

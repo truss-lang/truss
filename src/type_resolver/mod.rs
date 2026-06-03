@@ -4,7 +4,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{
-        expression::{BinaryOperator, CallParameter, CastKind, ElseBranch, Expression, UnaryOperator},
+        expression::{
+            BinaryOperator, CallParameter, CastKind, ElseBranch, Expression, UnaryOperator,
+        },
         node::Program,
         statement::{
             AccessModifier, AccessorKind, FunctionBody, ModifierType, Pattern, ProtocolMember,
@@ -252,7 +254,11 @@ impl TypeResolver {
                 }
                 self.leave_scope();
                 self.current_owner = prev_owner;
-                self.validate_member_access_levels(container_access.clone(), is_container_class, body);
+                self.validate_member_access_levels(
+                    container_access.clone(),
+                    is_container_class,
+                    body,
+                );
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::ClassDecl {
@@ -285,7 +291,10 @@ impl TypeResolver {
 
                 if let Some(superclass_expr) = superclass {
                     self.infer_type(superclass_expr.clone());
-                    if let Expression::Type { name: super_name, .. } = &*superclass_expr.borrow() {
+                    if let Expression::Type {
+                        name: super_name, ..
+                    } = &*superclass_expr.borrow()
+                    {
                         let super_ty = self
                             .current_scope
                             .as_ref()
@@ -293,8 +302,7 @@ impl TypeResolver {
                             .borrow()
                             .get_type(&super_name.value);
                         if let Some(super_ty) = super_ty {
-                            self.superclass_map
-                                .insert(name.value.clone(), super_ty);
+                            self.superclass_map.insert(name.value.clone(), super_ty);
                         }
                     }
                 }
@@ -371,7 +379,11 @@ impl TypeResolver {
                 }
                 self.leave_scope();
                 self.current_owner = prev_owner;
-                self.validate_member_access_levels(container_access.clone(), is_container_class, body);
+                self.validate_member_access_levels(
+                    container_access.clone(),
+                    is_container_class,
+                    body,
+                );
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::EnumDecl {
@@ -864,7 +876,8 @@ impl TypeResolver {
                 ty,
                 ..
             } => {
-                let ret_type = self.infer_type(return_type_expression.clone())
+                let ret_type = self
+                    .infer_type(return_type_expression.clone())
                     .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
                 let mut param_types = Vec::new();
                 for param in parameters.iter() {
@@ -1368,10 +1381,10 @@ impl TypeResolver {
                 parameters,
                 return_type_expression,
                 accessors,
-                ty,
                 ..
             } => {
-                let ret_type = self.infer_type(return_type_expression.clone())
+                let ret_type = self
+                    .infer_type(return_type_expression.clone())
                     .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
                 let saved_return_type = self.current_return_type.clone();
                 for accessor in accessors {
@@ -1399,7 +1412,9 @@ impl TypeResolver {
                                     AccessorKind::DidSet => "oldValue".to_string(),
                                     _ => "newValue".to_string(),
                                 });
-                            acc_scope.borrow_mut().set_type(param_name, ret_type.clone());
+                            acc_scope
+                                .borrow_mut()
+                                .set_type(param_name, ret_type.clone());
                         }
                     }
                     for s in &accessor.body {
@@ -1445,7 +1460,9 @@ impl TypeResolver {
                 Statement::ExpressionStatement { expression } => {
                     self.find_shorthand_in_expr(expression, &mut max);
                 }
-                Statement::Return { value: Some(val), .. } => {
+                Statement::Return {
+                    value: Some(val), ..
+                } => {
                     self.find_shorthand_in_expr(val, &mut max);
                 }
                 _ => {}
@@ -1456,13 +1473,11 @@ impl TypeResolver {
 
     fn find_shorthand_in_expr(&self, expr: &Rc<RefCell<Expression>>, max: &mut Option<u32>) {
         match &*expr.borrow() {
-            Expression::ShorthandArgument { index, .. } => {
-                match max {
-                    Some(m) if *index > *m => *max = Some(*index),
-                    None => *max = Some(*index),
-                    _ => {}
-                }
-            }
+            Expression::ShorthandArgument { index, .. } => match max {
+                Some(m) if *index > *m => *max = Some(*index),
+                None => *max = Some(*index),
+                _ => {}
+            },
             Expression::Binary { left, right, .. } => {
                 self.find_shorthand_in_expr(left, max);
                 self.find_shorthand_in_expr(right, max);
@@ -2344,7 +2359,9 @@ impl TypeResolver {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(struct_name)
                             && let Symbol::Struct {
-                                properties, methods, ..
+                                properties,
+                                methods,
+                                ..
                             } = &*symbol.borrow()
                         {
                             if !self.is_member_accessible(symbol.clone(), member) {
@@ -2484,10 +2501,14 @@ impl TypeResolver {
                             let binding = symbol.borrow();
                             let (properties, methods) = match &*binding {
                                 Symbol::Struct {
-                                    properties, methods, ..
+                                    properties,
+                                    methods,
+                                    ..
                                 }
                                 | Symbol::Class {
-                                    properties, methods, ..
+                                    properties,
+                                    methods,
+                                    ..
                                 } => (properties, methods),
                                 _ => {
                                     self.emit_error(
@@ -3147,16 +3168,15 @@ impl TypeResolver {
                 if let Some(max_idx) = max_shorthand {
                     let required_params = max_idx as usize + 1;
                     if shorthand_start == 0 && self.closure_expected_type.is_none() {
-                        let first_token = body.first()
-                            .and_then(|s| match &*s.borrow() {
-                                Statement::ExpressionStatement { expression } => {
-                                    Some(expression.borrow().token())
-                                }
-                                Statement::Return { value: Some(val), .. } => {
-                                    Some(val.borrow().token())
-                                }
-                                _ => None
-                            });
+                        let first_token = body.first().and_then(|s| match &*s.borrow() {
+                            Statement::ExpressionStatement { expression } => {
+                                Some(expression.borrow().token())
+                            }
+                            Statement::Return {
+                                value: Some(val), ..
+                            } => Some(val.borrow().token()),
+                            _ => None,
+                        });
                         if let Some(tok) = first_token {
                             self.emit_error(
                                 TrussDiagnosticCode::UnknownType,
@@ -3166,16 +3186,19 @@ impl TypeResolver {
                         }
                     } else if shorthand_start == 0 {
                         if let Some(expected_ty) = &self.closure_expected_type {
-                            if let Type::Function(expected_params, expected_ret, _) = &*expected_ty.borrow() {
+                            if let Type::Function(expected_params, expected_ret, _) =
+                                &*expected_ty.borrow()
+                            {
                                 for idx in 0..required_params {
-                                    let pt = expected_params.get(idx).cloned()
+                                    let pt = expected_params
+                                        .get(idx)
+                                        .cloned()
                                         .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
                                     param_types.push(pt);
                                 }
                                 if ret_type_from_expected {
-                                    let ret = Rc::new(RefCell::new(
-                                        Type::clone(&*expected_ret.borrow())
-                                    ));
+                                    let ret =
+                                        Rc::new(RefCell::new(Type::clone(&*expected_ret.borrow())));
                                     let _ = std::mem::replace(&mut ret_type, ret);
                                 }
                             }
@@ -3227,7 +3250,10 @@ impl TypeResolver {
                         let s = stmt.borrow();
                         if let Statement::ExpressionStatement { expression } = &*s {
                             self.infer_type(expression.clone());
-                        } else if let Statement::Return { value: Some(value), .. } = &*s {
+                        } else if let Statement::Return {
+                            value: Some(value), ..
+                        } = &*s
+                        {
                             self.infer_type(value.clone());
                         } else {
                             drop(s);
@@ -3259,19 +3285,26 @@ impl TypeResolver {
             Expression::ShorthandArgument { index, ty } => {
                 if ty.is_none() {
                     let name = format!("${}", index);
-                    let found = self.current_scope
+                    let found = self
+                        .current_scope
                         .as_ref()
                         .and_then(|s| s.borrow().get_type(&name));
                     *ty = Some(found.unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32))));
                 }
                 ty.clone().unwrap()
             }
-            Expression::SubscriptAccess { object, parameters, ty } => {
+            Expression::SubscriptAccess {
+                object,
+                parameters,
+                ty,
+            } => {
                 if let Some(t) = ty {
                     t.clone()
                 } else {
                     let object_ty = self.infer_type(object.clone());
-                    let result = object_ty.clone().unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                    let result = object_ty
+                        .clone()
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
                     if let Some(ref object_t) = object_ty {
                         let object_t_clone = object_t.borrow().clone();
                         let lookup_result = match &object_t_clone {
@@ -3280,13 +3313,15 @@ impl TypeResolver {
                                 let scope = self.current_scope.as_ref().unwrap().borrow();
                                 scope.get_symbol(&struct_name).and_then(|symbol| {
                                     let subscripts = match &*symbol.borrow() {
-                                        Symbol::Struct { subscripts, .. } | Symbol::Class { subscripts, .. } => subscripts.clone(),
+                                        Symbol::Struct { subscripts, .. }
+                                        | Symbol::Class { subscripts, .. } => subscripts.clone(),
                                         _ => vec![],
                                     };
                                     drop(scope);
                                     for sub in subscripts {
                                         if let Some(decl) = sub.borrow().get_decl().ok().flatten()
-                                            && let Statement::SubscriptDecl { ty: sub_ty, .. } = &*decl.borrow()
+                                            && let Statement::SubscriptDecl { ty: sub_ty, .. } =
+                                                &*decl.borrow()
                                             && let Some(t) = sub_ty
                                         {
                                             if let Type::Function(_, ret_type, _) = &*t.borrow() {
@@ -3786,9 +3821,7 @@ impl TypeResolver {
                     None
                 }
             }
-            UnaryOperator::AddressOf => {
-                Some(Rc::new(RefCell::new(Type::Pointer(operand))))
-            }
+            UnaryOperator::AddressOf => Some(Rc::new(RefCell::new(Type::Pointer(operand)))),
             _ => None,
         }
     }
@@ -4290,13 +4323,15 @@ impl TypeResolver {
                     true
                 }
             }
-            AccessModifier::Private => {
-                member.borrow().parent().and_then(|p| {
+            AccessModifier::Private => member
+                .borrow()
+                .parent()
+                .and_then(|p| {
                     self.current_owner
                         .as_ref()
                         .map(|owner| Rc::ptr_eq(owner, &p))
-                }).unwrap_or(false)
-            }
+                })
+                .unwrap_or(false),
             AccessModifier::Package => true,
         }
     }
@@ -4430,10 +4465,14 @@ impl TypeResolver {
                 let type_sym = type_symbol.borrow();
                 match &*type_sym {
                     Symbol::Struct {
-                        methods, properties, ..
+                        methods,
+                        properties,
+                        ..
                     }
                     | Symbol::Class {
-                        methods, properties, ..
+                        methods,
+                        properties,
+                        ..
                     } => (
                         methods
                             .iter()
@@ -4555,7 +4594,13 @@ impl TypeResolver {
                             if let Some(decl) = binding.get_decl().ok().flatten() {
                                 let has_initializer = {
                                     let decl_ref = decl.borrow();
-                                    matches!(&*decl_ref, Statement::VariableDecl { initializer: Some(_), .. })
+                                    matches!(
+                                        &*decl_ref,
+                                        Statement::VariableDecl {
+                                            initializer: Some(_),
+                                            ..
+                                        }
+                                    )
                                 };
                                 if has_initializer {
                                     self.emit_error(
@@ -4565,10 +4610,17 @@ impl TypeResolver {
                                     );
                                     return;
                                 }
-                                if self.initialized_lets.last().map_or(false, |s| s.contains(&name.value)) {
+                                if self
+                                    .initialized_lets
+                                    .last()
+                                    .map_or(false, |s| s.contains(&name.value))
+                                {
                                     self.emit_error(
                                         TrussDiagnosticCode::AssignToImmutable,
-                                        format!("Cannot assign to 'let' variable '{}' again", name.value),
+                                        format!(
+                                            "Cannot assign to 'let' variable '{}' again",
+                                            name.value
+                                        ),
                                         &token,
                                     );
                                     return;
@@ -4613,11 +4665,17 @@ impl TypeResolver {
                                                 let set_check = {
                                                     let d = prop_clone.borrow();
                                                     d.get_decl().ok().flatten().and_then(|decl| {
-                                                        Self::get_set_access_modifier(&*decl.borrow())
+                                                        Self::get_set_access_modifier(
+                                                            &*decl.borrow(),
+                                                        )
                                                     })
                                                 };
                                                 if let Some(set_access) = set_check {
-                                                    if !self.is_setter_accessible(&set_access, prop_clone, &token) {
+                                                    if !self.is_setter_accessible(
+                                                        &set_access,
+                                                        prop_clone,
+                                                        &token,
+                                                    ) {
                                                         self.emit_error(
                                                             TrussDiagnosticCode::InvalidMemberAccessLevel,
                                                             format!("Cannot assign to property '{}' due to setter access level", name),
@@ -4636,12 +4694,16 @@ impl TypeResolver {
                                                         &token,
                                                     );
                                                 } else {
-                                                    self.initialized_properties.insert(name.clone());
+                                                    self.initialized_properties
+                                                        .insert(name.clone());
                                                 }
                                             } else {
                                                 self.emit_error(
                                                     TrussDiagnosticCode::AssignToImmutable,
-                                                    format!("Cannot assign to 'let' property '{}'", name),
+                                                    format!(
+                                                        "Cannot assign to 'let' property '{}'",
+                                                        name
+                                                    ),
                                                     &token,
                                                 );
                                             }
