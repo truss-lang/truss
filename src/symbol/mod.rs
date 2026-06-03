@@ -21,6 +21,7 @@ pub enum Symbol {
         name: String,
         decl: Option<Rc<RefCell<Statement>>>,
         parameter: Option<Rc<RefCell<Parameter>>>,
+        is_var: bool,
     },
     Struct {
         name: String,
@@ -34,6 +35,7 @@ pub enum Symbol {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
+        is_var: bool,
     },
     StructMethod {
         name: String,
@@ -53,6 +55,7 @@ pub enum Symbol {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
+        is_var: bool,
     },
     ClassMethod {
         name: String,

@@ -3006,3 +3006,175 @@ fn test_closure_shorthand_multi_args_resolved() {
         panic!("Expected closure");
     }
 }
+
+#[test]
+fn test_let_variable_is_not_var() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a = 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    drop(engine_ref);
+    if let Statement::FunctionDecl { scope, .. } = &*program.statements[0].borrow()
+        && let Some(scope) = scope
+    {
+        let scope_ref = scope.borrow();
+        if let Some(symbol) = scope_ref.get_symbol("a") {
+            let sym = symbol.borrow();
+            match &*sym {
+                Symbol::Variable { is_var, .. } => {
+                    assert!(!is_var, "let variable should have is_var = false");
+                }
+                _ => panic!("Expected Variable symbol"),
+            }
+        } else {
+            panic!("Variable 'a' not found in scope");
+        }
+    } else {
+        panic!("Expected FunctionDecl with scope");
+    }
+}
+
+#[test]
+fn test_var_variable_is_var() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { var a = 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    drop(engine_ref);
+    if let Statement::FunctionDecl { scope, .. } = &*program.statements[0].borrow()
+        && let Some(scope) = scope
+    {
+        let scope_ref = scope.borrow();
+        if let Some(symbol) = scope_ref.get_symbol("a") {
+            let sym = symbol.borrow();
+            match &*sym {
+                Symbol::Variable { is_var, .. } => {
+                    assert!(is_var, "var variable should have is_var = true");
+                }
+                _ => panic!("Expected Variable symbol"),
+            }
+        } else {
+            panic!("Variable 'a' not found in scope");
+        }
+    } else {
+        panic!("Expected FunctionDecl with scope");
+    }
+}
+
+#[test]
+fn test_struct_let_property_is_not_var() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { let x: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    drop(engine_ref);
+    if let Statement::StructDecl { name, scope, .. } = &*program.statements[0].borrow()
+        && let Some(scope) = scope
+    {
+        let scope_ref = scope.borrow();
+        if let Some(symbol) = scope_ref.get_symbol(&name.value)
+            && let Symbol::Struct { properties, .. } = &*symbol.borrow()
+        {
+            assert_eq!(properties.len(), 1);
+            let prop = properties[0].borrow();
+            match &*prop {
+                Symbol::StructProperty { name: pname, is_var, .. } => {
+                    assert_eq!(pname, "x");
+                    assert!(!is_var, "let property should have is_var = false");
+                }
+                _ => panic!("Expected StructProperty symbol"),
+            }
+        } else {
+            panic!("Struct 'Foo' not found");
+        }
+    } else {
+        panic!("Expected StructDecl with scope");
+    }
+}
+
+#[test]
+fn test_struct_var_property_is_var() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { var x: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no symbol resolution errors: {:?}", errors);
+    drop(engine_ref);
+    if let Statement::StructDecl { name, scope, .. } = &*program.statements[0].borrow()
+        && let Some(scope) = scope
+    {
+        let scope_ref = scope.borrow();
+        if let Some(symbol) = scope_ref.get_symbol(&name.value)
+            && let Symbol::Struct { properties, .. } = &*symbol.borrow()
+        {
+            assert_eq!(properties.len(), 1);
+            let prop = properties[0].borrow();
+            match &*prop {
+                Symbol::StructProperty { name: pname, is_var, .. } => {
+                    assert_eq!(pname, "x");
+                    assert!(is_var, "var property should have is_var = true");
+                }
+                _ => panic!("Expected StructProperty symbol"),
+            }
+        } else {
+            panic!("Struct 'Foo' not found");
+        }
+    } else {
+        panic!("Expected StructDecl with scope");
+    }
+}

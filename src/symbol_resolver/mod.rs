@@ -122,18 +122,23 @@ impl SymbolResolver {
                         name: "self".to_string(),
                         decl: None,
                         parameter: None,
+                        is_var: true,
                     }));
                     self.enter(self_sym, name);
                 }
                 for field_stmt in body {
                     if let Statement::VariableDecl {
-                        name: field_name, ..
+                        name: field_name,
+                        token: field_token,
+                        ..
                     } = &*field_stmt.borrow()
                     {
+                        let is_var = field_token.value == "var";
                         let field_symbol = Rc::new(RefCell::new(Symbol::StructProperty {
                             name: field_name.value.clone(),
                             parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
+                            is_var,
                         }));
                         fields.push(field_symbol.clone());
                         self.enter(field_symbol, field_name);
@@ -265,18 +270,23 @@ impl SymbolResolver {
                         name: "self".to_string(),
                         decl: None,
                         parameter: None,
+                        is_var: true,
                     }));
                     self.enter(self_sym, name);
                 }
                 for field_stmt in body {
                     if let Statement::VariableDecl {
-                        name: field_name, ..
+                        name: field_name,
+                        token: field_token,
+                        ..
                     } = &*field_stmt.borrow()
                     {
+                        let is_var = field_token.value == "var";
                         let field_symbol = Rc::new(RefCell::new(Symbol::ClassProperty {
                             name: field_name.value.clone(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
+                            is_var,
                         }));
                         fields.push(field_symbol.clone());
                         self.enter(field_symbol, field_name);
@@ -931,6 +941,7 @@ impl SymbolResolver {
                             name,
                             decl: None,
                             parameter: Some(parameter.clone()),
+                            is_var: true,
                         }));
                         self.enter(symbol, &parameter.borrow().name);
                     }
@@ -948,15 +959,18 @@ impl SymbolResolver {
             }
             Statement::VariableDecl {
                 name,
+                token: var_token,
                 initializer,
                 accessors,
                 ..
             } => {
                 if name.value != "_" {
+                    let is_var = var_token.value == "var";
                     let symbol = Rc::new(RefCell::new(Symbol::Variable {
                         name: name.value.clone(),
                         decl: Some(stmt.clone()),
                         parameter: None,
+                        is_var,
                     }));
                     self.enter(symbol, name);
                 }
@@ -973,6 +987,7 @@ impl SymbolResolver {
                             name: format!("_{}", name.value),
                             decl: None,
                             parameter: None,
+                            is_var: true,
                         }));
                         accessor_scope.borrow_mut().set_symbol(backing_sym);
                         if let Some(param) = &accessor.parameter {
@@ -980,6 +995,7 @@ impl SymbolResolver {
                                 name: param.value.clone(),
                                 decl: None,
                                 parameter: None,
+                                is_var: true,
                             }));
                             self.enter(param_sym, param);
                         } else {
@@ -991,6 +1007,7 @@ impl SymbolResolver {
                                 name: param_name.to_string(),
                                 decl: None,
                                 parameter: None,
+                                is_var: true,
                             }));
                             if let Some(scope) = self.current_scope.clone() {
                                 scope.borrow_mut().set_symbol(param_sym);
@@ -1092,6 +1109,7 @@ impl SymbolResolver {
                             name,
                             decl: None,
                             parameter: Some(parameter.clone()),
+                            is_var: true,
                         }));
                         self.enter(symbol, &parameter.borrow().name);
                     }
@@ -1147,6 +1165,7 @@ impl SymbolResolver {
                                             name,
                                             decl: None,
                                             parameter: Some(parameter.clone()),
+                                            is_var: true,
                                         }));
                                         self.enter(symbol, &parameter.borrow().name);
                                     }
@@ -1446,6 +1465,7 @@ impl SymbolResolver {
                             name: name.clone(),
                             decl: None,
                             parameter: None,
+                            is_var: true,
                         }));
                         self.enter(symbol, &param.borrow().name);
                     }
@@ -1471,6 +1491,7 @@ impl SymbolResolver {
                             name: name.clone(),
                             decl: None,
                             parameter: None,
+                            is_var: true,
                         }));
                         self.enter(
                             sym,
@@ -1551,6 +1572,7 @@ impl SymbolResolver {
                         name: name.value.clone(),
                         decl: None,
                         parameter: None,
+                        is_var: true,
                     }));
                     resolver.enter(sym, name);
                 }
@@ -1578,6 +1600,7 @@ impl SymbolResolver {
                             name: name.value.clone(),
                             decl: None,
                             parameter: None,
+                            is_var: true,
                         }));
                         resolver.enter(sym, name);
                     }
