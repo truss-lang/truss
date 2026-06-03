@@ -3883,7 +3883,22 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                     UnaryOperator::AddressOf => {
-                        anyhow::bail!("AddressOf operator not yet supported in IR generation");
+                        let inner = expr.borrow();
+                        if let Expression::Variable { name, .. } = &*inner {
+                            if let Some(ptr) = self.lookup_variable(&name.value) {
+                                return Ok(Some(ptr.into()));
+                            }
+                        }
+                        if let Expression::Unary {
+                            expression: deref_target,
+                            operator: UnaryOperator::Deref,
+                            ..
+                        } = &*inner
+                        {
+                            let ptr_val = self.resolve_expression(deref_target.clone())?;
+                            return Ok(ptr_val);
+                        }
+                        anyhow::bail!("AddressOf operator not yet supported for this expression in IR generation");
                     }
                 }
             }
