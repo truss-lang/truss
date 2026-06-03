@@ -1271,6 +1271,31 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
+                if let Statement::SubscriptDecl {
+                    accessors,
+                    ty: Some(ty),
+                    ..
+                } = &*stmt.borrow()
+                    && let Type::Function(param_types, return_type, _) = &*ty.borrow()
+                {
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Void)))));
+                    let mut all_param_types = vec![self_param];
+                    for pt in param_types {
+                        all_param_types.push(pt.clone());
+                    }
+                    let has_set = accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set));
+                    if let Ok(getter_type) = self.get_function_type(return_type.clone(), all_param_types.clone(), false) {
+                        self.module.add_function(&format!("{}.subscript.getter", name.value), getter_type, None);
+                    }
+                    if has_set {
+                        let void_ty = Rc::new(RefCell::new(Type::Void));
+                        let mut setter_param_types = all_param_types.clone();
+                        setter_param_types.push(return_type.clone());
+                        if let Ok(setter_type) = self.get_function_type(void_ty, setter_param_types, false) {
+                            self.module.add_function(&format!("{}.subscript.setter", name.value), setter_type, None);
+                        }
+                    }
+                }
             }
             let init_name = format!("{}.init", name.value);
             if self.module.get_function(&init_name).is_none() {
@@ -1535,6 +1560,7 @@ impl<'ctx> IRGenerator<'ctx> {
         let Symbol::Class {
             methods,
             properties,
+            subscripts,
             superclass,
             destrcutor,
             ..
@@ -1581,6 +1607,18 @@ impl<'ctx> IRGenerator<'ctx> {
                     if is_var {
                         own_property_entry_names.push(format!("{}.setter", field_name));
                     }
+                }
+            }
+        }
+        for sub in subscripts {
+            if let Ok(Some(decl)) = sub.borrow().get_decl()
+                && let Statement::SubscriptDecl { accessors, .. } = &*decl.borrow()
+            {
+                if accessors.iter().any(|a| matches!(a.kind, AccessorKind::Get)) {
+                    own_property_entry_names.push("subscript.getter".to_string());
+                }
+                if accessors.iter().any(|a| matches!(a.kind, AccessorKind::Set)) {
+                    own_property_entry_names.push("subscript.setter".to_string());
                 }
             }
         }
@@ -2810,6 +2848,76 @@ impl<'ctx> IRGenerator<'ctx> {
                             llvm_var_type,
                             None,
                         )?;
+                    }
+                }
+                Ok(false)
+            }
+            Statement::SubscriptDecl {
+                parameters,
+                accessors,
+                ty: Some(ty),
+                ..
+            } => {
+                if let Some(ref sname) = *self.current_struct.borrow() {
+                    for accessor in accessors {
+                        let fn_name = match accessor.kind {
+                            AccessorKind::Get => format!("{}.subscript.getter", sname),
+                            AccessorKind::Set => format!("{}.subscript.setter", sname),
+                            _ => continue,
+                        };
+                        let function = if let Some(f) = self.module.get_function(&fn_name) {
+                            if f.get_first_basic_block().is_some() { continue; }
+                            f
+                        } else {
+                            continue;
+                        };
+                        let current_block = self.builder.get_insert_block();
+                        let entry = self.context.append_basic_block(function, "entry");
+                        self.builder.position_at_end(entry);
+                        let ptr_param = function.get_nth_param(0).unwrap().into_pointer_value();
+                        self.enter_scope();
+                        *self.current_accessor_struct.borrow_mut() = Some((sname.clone(), ptr_param));
+                        let mut param_idx = 1u32;
+                        for param in parameters {
+                            let param_name = param.borrow().name.value.clone();
+                            if param_name != "_" {
+                                if let Some(param_val) = function.get_nth_param(param_idx) {
+                                    if let Some(pt) = param.borrow().ty.clone().and_then(|t| self.resolve_type(t).ok()) {
+                                        let alloca_name = self.unique_alloca_name(&param_name);
+                                        let ptr = self.builder.build_alloca(pt, &alloca_name)?;
+                                        self.builder.build_store(ptr, param_val)?;
+                                        self.declare_variable(param_name, ptr);
+                                    }
+                                }
+                                param_idx += 1;
+                            }
+                        }
+                        if matches!(accessor.kind, AccessorKind::Set) {
+                            let setter_param_name = accessor.parameter.as_ref()
+                                .map(|t| t.value.clone()).unwrap_or_else(|| "newValue".to_string());
+                            if let Some(new_val) = function.get_nth_param(param_idx) {
+                                let (_, return_type, _) = match &*ty.borrow() {
+                                    Type::Function(_, ret, _) => ((), ret.clone(), false),
+                                    _ => continue,
+                                };
+                                if let Ok(ret_ty) = self.resolve_type(return_type) {
+                                    let alloca_name = self.unique_alloca_name(&setter_param_name);
+                                    let ptr = self.builder.build_alloca(ret_ty, &alloca_name)?;
+                                    self.builder.build_store(ptr, new_val)?;
+                                    self.declare_variable(setter_param_name, ptr);
+                                }
+                            }
+                        }
+                        self.enter_scope_with_stmts(&accessor.body)?;
+                        let mut has_return = false;
+                        for s in &accessor.body {
+                            if self.resolve_statement(s.clone())? { has_return = true; break; }
+                        }
+                        if !has_return { self.builder.build_return(None)?; }
+                        self.exit_scope();
+                        self.exit_scope();
+                        *self.current_accessor_struct.borrow_mut() = None;
+                        if let Some(block) = current_block { self.builder.position_at_end(block); }
                     }
                 }
                 Ok(false)
@@ -4256,6 +4364,78 @@ impl<'ctx> IRGenerator<'ctx> {
                         );
                         anyhow::bail!("Cannot infer type");
                     }
+                } else if let Expression::SubscriptAccess { object: sub_object, parameters: sub_params, .. } = &*left.borrow() {
+                    let sub_ty = {
+                        let obj = sub_object.borrow();
+                        obj.get_ty_ref()?.clone()
+                    };
+                    if let Some(ty) = &sub_ty
+                        && let Type::Struct(struct_name, _) = &*ty.borrow()
+                    {
+                        let struct_name = struct_name.clone();
+                        let object_val = self.resolve_expression(sub_object.clone())?.unwrap();
+                        let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                            ptr
+                        } else {
+                            let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                            self.builder.build_store(ptr, object_val)?;
+                            ptr
+                        };
+                        let setter_name = format!("{}.subscript.setter", struct_name);
+                        if let Some(setter_fn) = self.module.get_function(&setter_name) {
+                            let mut args = vec![struct_ptr.into()];
+                            for p in sub_params {
+                                let arg_val = self.resolve_expression(p.expression.clone())?.unwrap();
+                                args.push(arg_val.into());
+                            }
+                            args.push(right_val.into());
+                            self.builder.build_call(setter_fn, &args, "")?;
+                            return Ok(Some(right_val));
+                        }
+                    }
+                    if let Some(ty) = &sub_ty
+                        && let Type::Class(class_name, _) = &*ty.borrow()
+                    {
+                        let class_name = class_name.clone();
+                        let object_val = self.resolve_expression(sub_object.clone())?.unwrap();
+                        let class_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                            ptr
+                        } else {
+                            let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                            self.builder.build_store(ptr, object_val)?;
+                            ptr
+                        };
+                        let setter_entry = "subscript.setter";
+                        if let Some(slot_idx) = self.get_vtable_slot_index(&class_name, setter_entry) {
+                            let class_type = *self.class_types.borrow().get(&class_name).unwrap();
+                            let vtable_ptr_ptr = self.builder.build_struct_gep(class_type, class_ptr, 0, "")?;
+                            let vtable_ptr = self.builder.build_load(
+                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                vtable_ptr_ptr, "",
+                            )?.into_pointer_value();
+                            let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
+                            let fn_ptr_ptr = self.builder.build_struct_gep(vtable_type, vtable_ptr, slot_idx, "")?;
+                            let fn_ptr_val = self.builder.build_load(
+                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                fn_ptr_ptr, "",
+                            )?.into_pointer_value();
+                            let method_list = self.compute_vtable_method_list(&class_name);
+                            let (_, owner) = method_list.iter().find(|(n, _)| n == &setter_entry).unwrap();
+                            let declared_fn_name = format!("{}.subscript.setter", owner);
+                            let declared_fn = self.module.get_function(&declared_fn_name)
+                                .ok_or_else(|| anyhow::anyhow!("Subscript setter function {} not found", declared_fn_name))?;
+                            let fn_type = declared_fn.get_type();
+                            let mut args = vec![class_ptr.into()];
+                            for p in sub_params {
+                                let arg_val = self.resolve_expression(p.expression.clone())?.unwrap();
+                                args.push(arg_val.into());
+                            }
+                            args.push(right_val.into());
+                            self.builder.build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
+                            return Ok(Some(right_val));
+                        }
+                    }
+                    anyhow::bail!("Subscript assignment requires struct or class type")
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::UnsupportedFeature,
