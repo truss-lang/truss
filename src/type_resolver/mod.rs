@@ -857,6 +857,31 @@ impl TypeResolver {
                     }
                 }
             }
+            Statement::SubscriptDecl {
+                parameters,
+                return_type_expression,
+                accessors,
+                ty,
+                ..
+            } => {
+                let ret_type = self.infer_type(return_type_expression.clone())
+                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                let mut param_types = Vec::new();
+                for param in parameters.iter() {
+                    let pt = self.infer_type(param.borrow().type_expression.clone());
+                    if let Some(ref pt) = pt {
+                        param.borrow_mut().ty = Some(pt.clone());
+                        param_types.push(pt.clone());
+                    }
+                }
+                let fn_type = Rc::new(RefCell::new(Type::Function(param_types, ret_type, false)));
+                *ty = Some(fn_type);
+                for accessor in accessors {
+                    for s in &accessor.body {
+                        self.process_decl(s.clone());
+                    }
+                }
+            }
             Statement::ModuleDecl { body, scope, .. } => {
                 if let Some(s) = scope.clone() {
                     self.enter_scope(s);
@@ -1338,6 +1363,51 @@ impl TypeResolver {
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
             Statement::Defer { body, .. } => {
                 self.resolve_block_expression(body);
+            }
+            Statement::SubscriptDecl {
+                parameters,
+                return_type_expression,
+                accessors,
+                ty,
+                ..
+            } => {
+                let ret_type = self.infer_type(return_type_expression.clone())
+                    .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                let saved_return_type = self.current_return_type.clone();
+                for accessor in accessors {
+                    let acc_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                    self.enter_scope(acc_scope.clone());
+                    for param in parameters.iter() {
+                        let param_name = param.borrow().name.value.clone();
+                        if param_name != "_" {
+                            if let Some(param_ty) = param.borrow().ty.clone() {
+                                acc_scope.borrow_mut().set_type(param_name, param_ty);
+                            }
+                        }
+                    }
+                    match accessor.kind {
+                        AccessorKind::Get => {
+                            self.current_return_type = Some(ret_type.clone());
+                        }
+                        AccessorKind::Set | AccessorKind::WillSet | AccessorKind::DidSet => {
+                            self.current_return_type = Some(Rc::new(RefCell::new(Type::Void)));
+                            let param_name = accessor
+                                .parameter
+                                .as_ref()
+                                .map(|t| t.value.clone())
+                                .unwrap_or_else(|| match accessor.kind {
+                                    AccessorKind::DidSet => "oldValue".to_string(),
+                                    _ => "newValue".to_string(),
+                                });
+                            acc_scope.borrow_mut().set_type(param_name, ret_type.clone());
+                        }
+                    }
+                    for s in &accessor.body {
+                        self.resolve_statement(s.clone());
+                    }
+                    self.leave_scope();
+                }
+                self.current_return_type = saved_return_type;
             }
             Statement::ModuleDecl { body, scope, .. } => {
                 if let Some(s) = scope.clone() {
@@ -3196,13 +3266,52 @@ impl TypeResolver {
                 }
                 ty.clone().unwrap()
             }
-            Expression::SubscriptAccess { object, parameters: _, ty } => {
-                if let Some(_) = ty {
-                    ty.clone().unwrap()
+            Expression::SubscriptAccess { object, parameters, ty } => {
+                if let Some(t) = ty {
+                    t.clone()
                 } else {
-                    let object_ty = self.infer_type(object.clone()).unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
-                    *ty = Some(object_ty.clone());
-                    object_ty
+                    let object_ty = self.infer_type(object.clone());
+                    let result = object_ty.clone().unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
+                    if let Some(ref object_t) = object_ty {
+                        let object_t_clone = object_t.borrow().clone();
+                        let lookup_result = match &object_t_clone {
+                            Type::Struct(struct_name, _) | Type::Class(struct_name, _) => {
+                                let struct_name = struct_name.clone();
+                                let scope = self.current_scope.as_ref().unwrap().borrow();
+                                scope.get_symbol(&struct_name).and_then(|symbol| {
+                                    let subscripts = match &*symbol.borrow() {
+                                        Symbol::Struct { subscripts, .. } | Symbol::Class { subscripts, .. } => subscripts.clone(),
+                                        _ => vec![],
+                                    };
+                                    drop(scope);
+                                    for sub in subscripts {
+                                        if let Some(decl) = sub.borrow().get_decl().ok().flatten()
+                                            && let Statement::SubscriptDecl { ty: sub_ty, .. } = &*decl.borrow()
+                                            && let Some(t) = sub_ty
+                                        {
+                                            if let Type::Function(_, ret_type, _) = &*t.borrow() {
+                                                return Some(ret_type.clone());
+                                            }
+                                        }
+                                    }
+                                    None
+                                })
+                            }
+                            _ => None,
+                        };
+                        if let Some(ret_type) = lookup_result {
+                            for p in parameters.iter() {
+                                self.infer_type(p.expression.clone());
+                            }
+                            *ty = Some(ret_type.clone());
+                            return Some(ret_type);
+                        }
+                    }
+                    for p in parameters.iter() {
+                        self.infer_type(p.expression.clone());
+                    }
+                    *ty = Some(result.clone());
+                    result
                 }
             }
         };

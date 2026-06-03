@@ -4785,3 +4785,90 @@ fn test_address_of_deref_type() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors for &*p, got: {:?}", errors);
 }
+
+#[test]
+fn test_struct_subscript_return_type() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Matrix { subscript[row: Int32, col: Int32] -> Int32 { get { return 0 } } }
+             func test(m: Matrix) -> Int32 { return m[0, 1] }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Struct subscript should resolve, got: {:?}", errors);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::Return { value: Some(ret_val), .. } = &*stmts[0].borrow()
+        && let Expression::SubscriptAccess { ty: Some(ref_ty), .. } = &*ret_val.borrow()
+    {
+        assert_eq!(*ref_ty.borrow(), Type::Int32, "Subscript should return Int32");
+    } else {
+        panic!("Expected subscript access with Int32 return type");
+    }
+}
+
+#[test]
+fn test_struct_subscript_implicit_get() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Array { subscript[index: Int32] -> Int32 { return 42 } }
+             func test(a: Array) -> Int32 { return a[0] }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Implicit get subscript should resolve, got: {:?}", errors);
+}
+
+#[test]
+fn test_class_subscript_return_type() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class MyArray { subscript[index: Int32] -> Int32 { get { return 0 } set { } } }
+             func test(a: MyArray) -> Int32 { return a[0] }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Class subscript should resolve, got: {:?}", errors);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::Return { value: Some(ret_val), .. } = &*stmts[0].borrow()
+        && let Expression::SubscriptAccess { ty: Some(ref_ty), .. } = &*ret_val.borrow()
+    {
+        assert_eq!(*ref_ty.borrow(), Type::Int32, "Class subscript should return Int32");
+    } else {
+        panic!("Expected subscript access with Int32 return type");
+    }
+}
