@@ -3482,7 +3482,11 @@ impl Parser {
                     break;
                 }
             };
-            if modifiers.iter().any(|m| m.ty == ty) {
+            if modifiers.iter().any(|m| {
+                m.ty == ty
+                    || (matches!(m.ty, ModifierType::Access(_))
+                        && matches!(ty, ModifierType::Access(_)))
+            }) {
                 self.emit_error(
                     TrussDiagnosticCode::DuplicateModifier,
                     format!("Duplicate modifier: '{}'", token.value),
