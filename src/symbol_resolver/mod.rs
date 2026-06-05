@@ -1374,6 +1374,9 @@ impl SymbolResolver {
             Statement::Return {
                 value: Some(value), ..
             } => self.resolve_expression(value.clone()),
+            Statement::Yield {
+                value: Some(value), ..
+            } => self.resolve_expression(value.clone()),
             Statement::ExtensionDecl {
                 type_name,
                 body,
@@ -1737,6 +1740,11 @@ impl SymbolResolver {
                     Self::find_shorthand_in_expr(expression, max);
                 }
                 Statement::Return {
+                    value: Some(val), ..
+                } => {
+                    Self::find_shorthand_in_expr(val, max);
+                }
+                Statement::Yield {
                     value: Some(val), ..
                 } => {
                     Self::find_shorthand_in_expr(val, max);

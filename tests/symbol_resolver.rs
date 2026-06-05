@@ -3846,3 +3846,67 @@ fn test_do_expression_scope_has_scope_field() {
     }
 }
 
+#[test]
+fn test_symbol_resolve_yield_with_variable() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { let x = 42 yield x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::Yield { value: Some(value), .. } = &*statements[1].borrow()
+        && let Expression::Variable { symbol, .. } = &*value.borrow()
+    {
+        assert_ne!(
+            *symbol, None,
+            "Variable in yield should have resolved symbol"
+        );
+    } else {
+        panic!("Expected FunctionDecl with yield using variable");
+    }
+}
+
+#[test]
+fn test_symbol_resolve_yield_in_do_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = do { let a = 10 yield a } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine,
+    );
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer: Some(init), .. } = &*statements[0].borrow()
+        && let Expression::Do { body, .. } = &*init.borrow()
+        && let Statement::Yield { value: Some(value), .. } = &*body[1].borrow()
+        && let Expression::Variable { symbol, .. } = &*value.borrow()
+    {
+        assert_ne!(
+            *symbol, None,
+            "Variable in yield inside do expression should have resolved symbol"
+        );
+    } else {
+        panic!("Expected yield inside do expression with resolved variable");
+    }
+}
+
