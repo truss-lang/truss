@@ -3703,8 +3703,65 @@ impl<'ctx> IRGenerator<'ctx> {
                 left,
                 operator,
                 right,
+                overloads,
+                selected_index,
                 ..
             } => {
+                if let Some(idx) = *selected_index
+                    && idx < overloads.len()
+                {
+                    let sym = &overloads[idx];
+                    let op_name = operator.operator_name().to_string();
+                    let is_static = sym.borrow().get_decl().ok().flatten().is_some_and(|d| {
+                        if let Statement::FunctionDecl { static_method, .. } = &*d.borrow() {
+                            *static_method
+                        } else {
+                            false
+                        }
+                    });
+
+                    let params = vec![
+                        CallParameter { label: None, expression: left.clone() },
+                        CallParameter { label: None, expression: right.clone() },
+                    ];
+                    let fn_name = if is_static {
+                        self.mangle_from_overload(&op_name, sym, &params)
+                            .unwrap_or(op_name.clone())
+                    } else {
+                        let left_ty_name = {
+                            let left_ty = left.borrow().get_ty().ok().flatten();
+                            match left_ty.and_then(|t| {
+                                let tb = t.borrow();
+                                match &*tb {
+                                    Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => Some(n.clone()),
+                                    _ => None,
+                                }
+                            }) {
+                                Some(n) => n,
+                                None => op_name.clone(),
+                            }
+                        };
+                        let base = format!("{}.{}", left_ty_name, op_name);
+                        self.mangle_from_overload(&base, sym, &params)
+                            .unwrap_or(base)
+                    };
+
+                    if let Some(f) = self.module.get_function(&fn_name) {
+                        let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                        if is_static {
+                            let left_val = self.resolve_expression(left.clone())?.unwrap();
+                            args.push(left_val.into());
+                        }
+                        let right_val = self.resolve_expression(right.clone())?.unwrap();
+                        args.push(right_val.into());
+                        let call_result = self.builder.build_call(f, &args, "")?;
+                        match call_result.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
+                            _ => return Ok(None),
+                        }
+                    }
+                }
+
                 let left_val = self.resolve_expression(left.clone())?.unwrap();
                 let right_val = self.resolve_expression(right.clone())?.unwrap();
                 let left_ty = left.borrow().get_ty().ok().flatten();
@@ -4022,8 +4079,61 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Unary {
                 expression: expr,
                 operator,
+                overloads,
+                selected_index,
                 ..
             } => {
+                if let Some(idx) = *selected_index
+                    && idx < overloads.len()
+                {
+                    let sym = &overloads[idx];
+                    let op_name = operator.operator_name().to_string();
+                    let is_static = sym.borrow().get_decl().ok().flatten().is_some_and(|d| {
+                        if let Statement::FunctionDecl { static_method, .. } = &*d.borrow() {
+                            *static_method
+                        } else {
+                            false
+                        }
+                    });
+
+                    let params = vec![CallParameter { label: None, expression: expr.clone() }];
+                    let fn_name = if is_static {
+                        self.mangle_from_overload(&op_name, sym, &params)
+                            .unwrap_or(op_name.clone())
+                    } else {
+                        let ty_name = {
+                            let e = expr.borrow();
+                            match e.get_ty_ref().ok() {
+                                Some(Some(ty)) => {
+                                    let tb = ty.borrow();
+                                    match &*tb {
+                                        Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => n.clone(),
+                                        _ => op_name.clone(),
+                                    }
+                                }
+                                _ => op_name.clone(),
+                            }
+                        };
+                        let base = format!("{}.{}", ty_name, op_name);
+                        self.mangle_from_overload(&base, sym, &params)
+                            .unwrap_or(base)
+                    };
+
+                    if let Some(f) = self.module.get_function(&fn_name) {
+                        let expr_val = self.resolve_expression(expr.clone())?.unwrap();
+                        let args = if is_static {
+                            vec![expr_val.into()]
+                        } else {
+                            vec![]
+                        };
+                        let call_result = self.builder.build_call(f, &args, "")?;
+                        match call_result.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
+                            _ => return Ok(None),
+                        }
+                    }
+                }
+
                 let expr_val = self.resolve_expression(expr.clone())?.unwrap();
                 match operator {
                     UnaryOperator::Plus => Ok(Some(expr_val)),

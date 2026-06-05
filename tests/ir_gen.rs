@@ -4839,3 +4839,71 @@ fn test_irgen_macro_expanded() {
     );
     assert!(llvm_ir.contains("test"));
 }
+
+#[test]
+fn test_irgen_static_binary_operator_method() {
+    let code = "struct MyInt { var value: Int32; static func + (left: MyInt, right: MyInt) -> MyInt { return left } } func use_op(a: MyInt, b: MyInt) -> MyInt { return a + b }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("MyInt.+"),
+        "Expected mangled operator +, got:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_member_binary_operator_method() {
+    let code = "struct MyInt { var value: Int32; func + (other: MyInt) -> MyInt { return other } } func use_op(a: MyInt, b: MyInt) -> MyInt { return a + b }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("MyInt.+"),
+        "Expected mangled operator +, got:\n{}",
+        llvm_ir
+    );
+}
