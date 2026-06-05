@@ -9019,3 +9019,92 @@ fn test_parse_asm_block_in_expression_statement_fallback() {
     assert_eq!(program.statements.len(), 1);
     assert!(matches!(&*program.statements[0].borrow(), Statement::AsmBlock { .. }));
 }
+
+#[test]
+fn test_parse_do_expression() {
+    let code = "func test() { do { let x = 1 x } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
+        && let Expression::Do { body, .. } = &*expression.borrow()
+    {
+        assert_eq!(body.len(), 2);
+    } else {
+        panic!("Expected do expression");
+    }
+}
+
+#[test]
+fn test_parse_do_empty_body() {
+    let code = "func test() { let _ = do {} }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*stmts[0].borrow()
+        && let Some(init) = initializer
+        && let Expression::Do { body, .. } = &*init.borrow()
+    {
+        assert_eq!(body.len(), 0);
+    } else {
+        panic!("Expected do expression as initializer");
+    }
+}
+
+#[test]
+fn test_parse_do_missing_brace() {
+    let code = "func test() { do }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let _program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "Expected error for 'do' without brace"
+    );
+}
+
+#[test]
+fn test_parse_do_nested() {
+    let code = "func test() { do { do { 1 } } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
+        && let Expression::Do { body, .. } = &*expression.borrow()
+    {
+        assert_eq!(body.len(), 1);
+        if let Statement::ExpressionStatement { expression } = &*body[0].borrow()
+            && let Expression::Do { .. } = &*expression.borrow()
+        {
+        } else {
+            panic!("Expected nested do");
+        }
+    } else {
+        panic!("Expected outer do expression");
+    }
+}

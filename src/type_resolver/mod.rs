@@ -3452,6 +3452,11 @@ impl TypeResolver {
                 *ty = Some(result.clone());
                 result
             }
+            Expression::Do { body, ty, .. } => {
+                let block_ty = self.get_block_type(body)?;
+                *ty = Some(block_ty.clone());
+                block_ty
+            }
         };
         Some(result)
     }

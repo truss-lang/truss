@@ -200,6 +200,12 @@ pub enum Expression {
         argument: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    Do {
+        token: Box<Token>,
+        body: Vec<Rc<RefCell<Statement>>>,
+        scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -229,6 +235,7 @@ impl Expression {
             Self::SubscriptAccess { ty, .. } => Ok(ty.clone()),
             Self::MacroInvocation { ty, .. } => Ok(ty.clone()),
             Self::SizeOf { ty, .. } => Ok(ty.clone()),
+            Self::Do { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -251,6 +258,7 @@ impl Expression {
             Self::SubscriptAccess { ty, .. } => Ok(ty),
             Self::MacroInvocation { ty, .. } => Ok(ty),
             Self::SizeOf { ty, .. } => Ok(ty),
+            Self::Do { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -273,6 +281,7 @@ impl Expression {
             Self::SubscriptAccess { ty, .. } => Ok(ty),
             Self::MacroInvocation { ty, .. } => Ok(ty),
             Self::SizeOf { ty, .. } => Ok(ty),
+            Self::Do { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -367,6 +376,7 @@ impl Expression {
             Expression::SubscriptAccess { object, .. } => object.borrow().token(),
             Expression::MacroInvocation { name, .. } => (**name).clone(),
             Expression::SizeOf { token, .. } => (**token).clone(),
+            Expression::Do { token, .. } => (**token).clone(),
         }
     }
 }

@@ -631,6 +631,7 @@ impl Parser {
                         ty: None,
                     })
                 }
+                KeywordType::Do => self.parse_do_expression(),
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
@@ -4988,6 +4989,28 @@ impl Parser {
         Ok(Statement::Fallthrough {
             token: Box::new(token),
         })
+    }
+
+    fn parse_do_expression(&mut self) -> Result<Expression, ()> {
+        let token = self.next().unwrap();
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+        {
+            let body = self.parse_block()?;
+            Ok(Expression::Do {
+                token: Box::new(token),
+                body,
+                scope: None,
+                ty: None,
+            })
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' after 'do'".to_string(),
+                &token,
+            );
+            Err(())
+        }
     }
 
     fn parse_break(&mut self) -> Result<Statement, ()> {
