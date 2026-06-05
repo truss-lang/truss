@@ -5461,3 +5461,33 @@ fn test_asm_block_full_type_check() {
     );
     assert_eq!(errors, 0, "asm block with full operands should type-check without errors");
 }
+
+#[test]
+fn test_using_single_path_resolves_type() {
+    let errors = run_type_check(r#"using MyInt = Int32; func test() { var x: MyInt = 42 }"#);
+    assert_eq!(errors, 0, "using with single path should resolve to Int32");
+}
+
+#[test]
+fn test_using_in_struct_body() {
+    let errors = run_type_check(r#"struct Wrapper { using MyInt = Int32; var x: MyInt }"#);
+    assert_eq!(errors, 0, "using in struct body should resolve type alias");
+}
+
+#[test]
+fn test_using_in_function_body() {
+    let errors = run_type_check(r#"func test() { using MyInt = Int32; var x: MyInt = 42 }"#);
+    assert_eq!(errors, 0, "using in function body should resolve type alias");
+}
+
+#[test]
+fn test_using_shorthand_resolves_type() {
+    let errors = run_type_check(r#"using MyInt = Int32; func test() -> MyInt { return 42 }"#);
+    assert_eq!(errors, 0, "using shorthand should resolve to Int32");
+}
+
+#[test]
+fn test_using_type_check_var() {
+    let ty = run_type_check_var(r#"func test() { using MyInt = Int32; var x: MyInt = 42 }"#, "x");
+    assert_eq!(ty, Type::Int32, "variable declared with using alias should have Int32 type");
+}

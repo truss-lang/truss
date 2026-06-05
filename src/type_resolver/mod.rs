@@ -871,6 +871,22 @@ impl TypeResolver {
                     }
                 }
             }
+            Statement::UsingDecl { name, path, .. } => {
+                let resolved_ty = if path.len() == 1 {
+                    self.lookup_primary_type(&path[0])
+                } else {
+                    let module_path = path[..path.len() - 1].join(".");
+                    let type_name = path.last().unwrap();
+                    self.krate.borrow().modules.get(&module_path)
+                        .and_then(|m| m.borrow().scope.clone())
+                        .and_then(|scope| scope.borrow().get_type(type_name))
+                };
+                if let Some(ty) = resolved_ty {
+                    if let Some(scope) = self.current_scope.as_ref() {
+                        scope.borrow_mut().set_type(name.value.clone(), ty);
+                    }
+                }
+            }
             Statement::SubscriptDecl {
                 parameters,
                 return_type_expression,
@@ -1340,6 +1356,22 @@ impl TypeResolver {
                     }
                 }
             }
+            Statement::UsingDecl { name, path, .. } => {
+                let resolved_ty = if path.len() == 1 {
+                    self.lookup_primary_type(&path[0])
+                } else {
+                    let module_path = path[..path.len() - 1].join(".");
+                    let type_name = path.last().unwrap();
+                    self.krate.borrow().modules.get(&module_path)
+                        .and_then(|m| m.borrow().scope.clone())
+                        .and_then(|scope| scope.borrow().get_type(type_name))
+                };
+                if let Some(ty) = resolved_ty {
+                    if let Some(scope) = self.current_scope.as_ref() {
+                        scope.borrow_mut().set_type(name.value.clone(), ty);
+                    }
+                }
+            }
             Statement::Guard {
                 condition,
                 else_body,
@@ -1583,6 +1615,32 @@ impl TypeResolver {
                 );
                 None
             }
+        }
+    }
+
+    fn lookup_primary_type(&self, name: &str) -> Option<Rc<RefCell<Type>>> {
+        match name {
+            "Int8" => Some(Rc::new(RefCell::new(Type::Int8))),
+            "Int16" => Some(Rc::new(RefCell::new(Type::Int16))),
+            "Int32" => Some(Rc::new(RefCell::new(Type::Int32))),
+            "Int64" => Some(Rc::new(RefCell::new(Type::Int64))),
+            "Int128" => Some(Rc::new(RefCell::new(Type::Int128))),
+            "UInt8" => Some(Rc::new(RefCell::new(Type::UInt8))),
+            "UInt16" => Some(Rc::new(RefCell::new(Type::UInt16))),
+            "UInt32" => Some(Rc::new(RefCell::new(Type::UInt32))),
+            "UInt64" => Some(Rc::new(RefCell::new(Type::UInt64))),
+            "UInt128" => Some(Rc::new(RefCell::new(Type::UInt128))),
+            "Float32" => Some(Rc::new(RefCell::new(Type::Float32))),
+            "Float64" => Some(Rc::new(RefCell::new(Type::Float64))),
+            "Bool" => Some(Rc::new(RefCell::new(Type::Bool))),
+            "Void" => Some(Rc::new(RefCell::new(Type::Void))),
+            "Char" => Some(Rc::new(RefCell::new(Type::Char))),
+            "Never" => Some(Rc::new(RefCell::new(Type::Never))),
+            "Pointer" => Some(Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                Type::Void,
+            )))))),
+            _ => self.current_scope.as_ref()
+                .and_then(|scope| scope.borrow().get_type(name)),
         }
     }
 
