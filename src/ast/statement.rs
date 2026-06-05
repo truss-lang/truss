@@ -190,6 +190,17 @@ pub enum Statement {
         name: Box<Token>,
         arms: Vec<MacroArm>,
     },
+    ConditionalBlock {
+        clauses: Vec<ConditionalClause>,
+    },
+    PragmaError {
+        token: Box<Token>,
+        message: String,
+    },
+    PragmaWarning {
+        token: Box<Token>,
+        message: String,
+    },
 }
 
 impl Statement {
@@ -223,6 +234,11 @@ impl Statement {
             Self::ImportDecl { token, .. } => (**token).clone(),
             Self::SubscriptDecl { token, .. } => (**token).clone(),
             Self::MacroDecl { token, .. } => (**token).clone(),
+            Self::ConditionalBlock { clauses } => {
+                clauses.first().map(|c| c.token.as_ref().clone()).unwrap()
+            }
+            Self::PragmaError { token, .. } => (**token).clone(),
+            Self::PragmaWarning { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -243,6 +259,9 @@ impl Statement {
             Self::ModuleDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::ImportDecl { .. } => Ok(vec![]),
             Self::SubscriptDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::ConditionalBlock { .. } => Ok(vec![]),
+            Self::PragmaError { .. } => Ok(vec![]),
+            Self::PragmaWarning { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
     }
@@ -451,4 +470,22 @@ pub enum MacroMetaVarType {
     Stmt,
     Block,
     Literal,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConditionalClause {
+    pub token: Box<Token>,
+    pub condition: Option<Condition>,
+    pub body: Vec<Rc<RefCell<Statement>>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Condition {
+    Platform(Token),
+    Bool(bool),
+    Defined(Token),
+    Not(Box<Condition>),
+    And(Box<Condition>, Box<Condition>),
+    Or(Box<Condition>, Box<Condition>),
+    Group(Box<Condition>),
 }

@@ -7,7 +7,7 @@ use truss::{
             UnaryOperator,
         },
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, ImportKind,
+            AccessModifier, AccessorKind, Condition, FunctionBody, ImportKind,
             MacroMetaVarType, MacroPatternFragment, Modifier, ModifierType,
             OperatorFixity, Parameter, Pattern, ProtocolMember, Statement,
             VariadicKind, WhereRequirementKind,
@@ -8300,4 +8300,259 @@ fn test_parse_member_operator_function_inside_struct() {
     } else {
         panic!("Expected StructDecl");
     }
+}
+
+#[test]
+fn test_parse_conditional_block_simple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("#if DEBUG\nfunc foo() {}\n#endif".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
+        assert_eq!(clauses.len(), 1);
+        assert!(clauses[0].condition.is_some());
+        assert_eq!(clauses[0].body.len(), 1);
+    } else {
+        panic!("Expected ConditionalBlock");
+    }
+}
+
+#[test]
+fn test_parse_conditional_block_if_else() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if DEBUG\nfunc foo() {}\n#else\nfunc bar() {}\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
+        assert_eq!(clauses.len(), 2);
+        assert!(clauses[0].condition.is_some());
+        assert_eq!(clauses[0].body.len(), 1);
+        assert!(clauses[1].condition.is_none());
+        assert_eq!(clauses[1].body.len(), 1);
+    } else {
+        panic!("Expected ConditionalBlock");
+    }
+}
+
+#[test]
+fn test_parse_conditional_block_if_elseif_else() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if DEBUG\nfunc a() {}\n#elseif RELEASE\nfunc b() {}\n#else\nfunc c() {}\n#endif"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
+        assert_eq!(clauses.len(), 3);
+        assert!(clauses[0].condition.is_some());
+        assert!(clauses[1].condition.is_some());
+        assert!(clauses[2].condition.is_none());
+    } else {
+        panic!("Expected ConditionalBlock");
+    }
+}
+
+#[test]
+fn test_parse_conditional_block_condition_types() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if true\n#endif\n#if false\n#endif\n#if A && B\n#endif\n#if A || B\n#endif\n#if !A\n#endif\n#if (A)\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert!(program.statements.len() >= 6);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
+        assert_eq!(clauses[0].condition, Some(Condition::Bool(true)));
+    }
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[1].borrow() {
+        assert_eq!(clauses[0].condition, Some(Condition::Bool(false)));
+    }
+}
+
+#[test]
+fn test_parse_ifdef_and_ifndef() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#ifdef FOO\n#endif\n#ifndef BAR\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[1].borrow() {
+        assert!(matches!(
+            &clauses[0].condition,
+            Some(Condition::Not(..))
+        ));
+    }
+}
+
+#[test]
+fn test_parse_defined_in_condition() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if defined(DEBUG)\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_parse_nested_conditional_blocks() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if A\n#if B\nfunc inner() {}\n#endif\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
+        assert_eq!(clauses.len(), 1);
+        assert_eq!(clauses[0].body.len(), 1);
+        assert!(matches!(&*clauses[0].body[0].borrow(), Statement::ConditionalBlock { .. }));
+    }
+}
+
+#[test]
+fn test_parse_pragma_error_and_warning() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#error \"Something is wrong\"\n#warning \"This is a warning\"".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    assert!(matches!(&*program.statements[0].borrow(), Statement::PragmaError { .. }));
+    assert!(matches!(&*program.statements[1].borrow(), Statement::PragmaWarning { .. }));
+}
+
+#[test]
+fn test_parse_empty_conditional_block() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("#if FOO\n#endif".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_parse_missing_endif_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("#if A\nfunc foo() {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine.borrow().format_all_plain("").contains("Expected #endif"));
+    assert_eq!(program.statements.len(), 0);
+}
+
+#[test]
+fn test_parse_else_without_if_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("#else\nfunc foo() {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().format_all_plain("").contains("without matching"));
+}
+
+#[test]
+fn test_parse_endif_without_if_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("#endif".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().format_all_plain("").contains("without matching"));
+}
+
+#[test]
+fn test_parse_multi_else_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if A\nfunc a() {}\n#else\nfunc b() {}\n#else\nfunc c() {}\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().format_all_plain("").contains("Multiple #else"));
+}
+
+#[test]
+fn test_parse_elseif_after_else_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if A\nfunc a() {}\n#else\nfunc b() {}\n#elseif C\nfunc c() {}\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().format_all_plain("").contains("#elseif after #else"));
+}
+
+#[test]
+fn test_parse_conditional_block_with_function_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if DEBUG\nfunc foo() {\nlet x = 1\nreturn x\n}\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
 }

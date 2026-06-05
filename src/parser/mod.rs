@@ -10,11 +10,11 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, Accessor, AccessorKind, EnumCase, EnumCaseParameter, FunctionBody,
-            GenericParameter, ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment,
-            MatchCase, Modifier, ModifierType, OperatorFixity, Parameter, Pattern,
-            ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind, WhereRequirement,
-            WhereRequirementKind,
+            AccessModifier, Accessor, AccessorKind, Condition, ConditionalClause, EnumCase,
+            EnumCaseParameter, FunctionBody, GenericParameter, ImportKind, MacroArm,
+            MacroMetaVarType, MacroPatternFragment, MatchCase, Modifier, ModifierType,
+            OperatorFixity, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember, Statement,
+            VariadicKind, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -99,6 +99,11 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ()> {
+        if let Some(token) = self.peek() {
+            if SeparatorType::is_separator(&token, SeparatorType::Hash) {
+                return self.parse_preprocessor_directive();
+            }
+        }
         let modifiers = self.parse_modifiers()?;
         let Some(token) = self.peek() else {
             return Err(());
@@ -5053,6 +5058,360 @@ impl Parser {
             Ok(Some(requirements))
         } else {
             Ok(None)
+        }
+    }
+
+    fn parse_preprocessor_directive(&mut self) -> Result<Statement, ()> {
+        let hash_token = self.next().unwrap();
+        let Some(directive_token) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ParserError,
+                "Expected preprocessor directive name after '#'",
+                &hash_token,
+            );
+            return Err(());
+        };
+        match directive_token.value.as_str() {
+            "if" => {
+                let condition = self.parse_condition()?;
+                self.parse_conditional_block_rest(Some(condition), directive_token)
+            }
+            "ifdef" => {
+                let Some(ident) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected identifier after '#ifdef'",
+                        &directive_token,
+                    );
+                    return Err(());
+                };
+                let condition = Condition::Defined(ident);
+                self.parse_conditional_block_rest(Some(condition), directive_token)
+            }
+            "ifndef" => {
+                let Some(ident) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected identifier after '#ifndef'",
+                        &directive_token,
+                    );
+                    return Err(());
+                };
+                let condition = Condition::Not(Box::new(Condition::Defined(ident)));
+                self.parse_conditional_block_rest(Some(condition), directive_token)
+            }
+            "else" | "elseif" | "endif" => {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    format!("#{} without matching #if", directive_token.value),
+                    &directive_token,
+                );
+                Err(())
+            }
+            "error" => self.parse_pragma_directive(true, directive_token),
+            "warning" => self.parse_pragma_directive(false, directive_token),
+            _ => {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    format!("Unknown preprocessor directive '#{}'", directive_token.value),
+                    &directive_token,
+                );
+                Err(())
+            }
+        }
+    }
+
+    fn parse_pragma_directive(
+        &mut self,
+        is_error: bool,
+        directive_token: Token,
+    ) -> Result<Statement, ()> {
+        let Some(msg_token) = self.peek() else {
+            self.emit_error(
+                TrussDiagnosticCode::ParserError,
+                format!(
+                    "Expected string literal after '#{}'",
+                    directive_token.value
+                ),
+                &directive_token,
+            );
+            return Err(());
+        };
+        let msg = match &msg_token.ty {
+            TokenType::StringLiteral { value } => value.clone(),
+            _ => {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    format!(
+                        "Expected string literal after '#{}'",
+                        directive_token.value
+                    ),
+                    &msg_token,
+                );
+                return Err(());
+            }
+        };
+        self.index += 1;
+        if is_error {
+            Ok(Statement::PragmaError {
+                token: Box::new(directive_token),
+                message: msg,
+            })
+        } else {
+            Ok(Statement::PragmaWarning {
+                token: Box::new(directive_token),
+                message: msg,
+            })
+        }
+    }
+
+    fn parse_conditional_block_rest(
+        &mut self,
+        first_condition: Option<Condition>,
+        first_token: Token,
+    ) -> Result<Statement, ()> {
+        let mut clauses: Vec<ConditionalClause> = Vec::new();
+
+        let body = self.parse_conditional_body()?;
+        let mut has_else = false;
+        clauses.push(ConditionalClause {
+            token: Box::new(first_token),
+            condition: first_condition,
+            body,
+        });
+
+        loop {
+            if self.is_empty() {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    "Expected #endif".to_string(),
+                    &clauses.last().unwrap().token,
+                );
+                return Err(());
+            }
+            if !self.check_hash_next() {
+                break;
+            }
+            let Some(next_val) = self.peek_hash_next_value() else {
+                break;
+            };
+            match next_val.as_str() {
+                "elseif" => {
+                    if has_else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserError,
+                            "#elseif after #else".to_string(),
+                            &clauses.last().unwrap().token,
+                        );
+                        return Err(());
+                    }
+                    self.index += 2;
+                    let condition = self.parse_condition()?;
+                    let body = self.parse_conditional_body()?;
+                    clauses.push(ConditionalClause {
+                        token: Box::new(self.tokens[self.index - 2].clone()),
+                        condition: Some(condition),
+                        body,
+                    });
+                }
+                "else" => {
+                    if has_else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserError,
+                            "Multiple #else clauses".to_string(),
+                            &clauses.last().unwrap().token,
+                        );
+                        return Err(());
+                    }
+                    has_else = true;
+                    self.index += 2;
+                    let body = self.parse_conditional_body()?;
+                    clauses.push(ConditionalClause {
+                        token: Box::new(self.tokens[self.index - 2].clone()),
+                        condition: None,
+                        body,
+                    });
+                }
+                "endif" => {
+                    self.index += 2;
+                    return Ok(Statement::ConditionalBlock { clauses });
+                }
+                _ => break,
+            }
+        }
+
+        self.emit_error(
+            TrussDiagnosticCode::ParserError,
+            "Expected #endif".to_string(),
+            &clauses.last().unwrap().token,
+        );
+        Err(())
+    }
+
+    fn parse_conditional_body(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>, ()> {
+        let mut statements = Vec::new();
+        loop {
+            if self.is_empty() {
+                break;
+            }
+            if self.check_hash_next() {
+                if let Some(val) = self.peek_hash_next_value() {
+                    match val.as_str() {
+                        "elseif" | "else" | "endif" => break,
+                        _ => {}
+                    }
+                }
+            }
+            let stmt = self.parse_statement()?;
+            statements.push(Rc::new(RefCell::new(stmt)));
+        }
+        Ok(statements)
+    }
+
+    fn check_hash_next(&self) -> bool {
+        if let Some(token) = self.peek() {
+            SeparatorType::is_separator(&token, SeparatorType::Hash)
+        } else {
+            false
+        }
+    }
+
+    fn peek_hash_next_value(&self) -> Option<String> {
+        if self.check_hash_next() {
+            self.peek2().map(|t| t.value.clone())
+        } else {
+            None
+        }
+    }
+
+    fn parse_condition(&mut self) -> Result<Condition, ()> {
+        self.parse_condition_or()
+    }
+
+    fn parse_condition_or(&mut self) -> Result<Condition, ()> {
+        let mut left = self.parse_condition_and()?;
+        loop {
+            if let Some(token) = self.peek() {
+                if OperatorType::is_operator(&token, OperatorType::Or) {
+                    self.index += 1;
+                    let right = self.parse_condition_and()?;
+                    left = Condition::Or(Box::new(left), Box::new(right));
+                    continue;
+                }
+            }
+            break;
+        }
+        Ok(left)
+    }
+
+    fn parse_condition_and(&mut self) -> Result<Condition, ()> {
+        let mut left = self.parse_condition_unary()?;
+        loop {
+            if let Some(token) = self.peek() {
+                if OperatorType::is_operator(&token, OperatorType::And) {
+                    self.index += 1;
+                    let right = self.parse_condition_unary()?;
+                    left = Condition::And(Box::new(left), Box::new(right));
+                    continue;
+                }
+            }
+            break;
+        }
+        Ok(left)
+    }
+
+    fn parse_condition_unary(&mut self) -> Result<Condition, ()> {
+        if let Some(token) = self.peek() {
+            if OperatorType::is_operator(&token, OperatorType::Not) {
+                self.index += 1;
+                let inner = self.parse_condition_unary()?;
+                return Ok(Condition::Not(Box::new(inner)));
+            }
+        }
+        self.parse_condition_primary()
+    }
+
+    fn parse_condition_primary(&mut self) -> Result<Condition, ()> {
+        let Some(token) = self.peek() else {
+            return Err(());
+        };
+        match &token.ty {
+            TokenType::BooleanLiteral { value } => {
+                self.index += 1;
+                Ok(Condition::Bool(*value))
+            }
+            TokenType::Identifier => {
+                let ident = self.next().unwrap();
+                if ident.value == "defined" {
+                    if let Some(paren) = self.peek() {
+                        if SeparatorType::is_separator(&paren, SeparatorType::OpenParen) {
+                            self.index += 1;
+                            let Some(inner) = self.peek() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ParserError,
+                                    "Expected identifier in 'defined()'",
+                                    &ident,
+                                );
+                                return Err(());
+                            };
+                            if !matches!(inner.ty, TokenType::Identifier) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ParserError,
+                                    "Expected identifier in 'defined()'",
+                                    &inner,
+                                );
+                                return Err(());
+                            }
+                            let inner_ident = self.next().unwrap();
+                            if let Some(close) = self.peek() {
+                                if SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
+                                    self.index += 1;
+                                    return Ok(Condition::Defined(inner_ident));
+                                }
+                            }
+                            self.emit_error(
+                                TrussDiagnosticCode::ParserError,
+                                "Expected ')' after 'defined('",
+                                &ident,
+                            );
+                            return Err(());
+                        }
+                    }
+                }
+                Ok(Condition::Platform(ident))
+            }
+            TokenType::Separator { separator }
+                if *separator == SeparatorType::OpenParen =>
+            {
+                self.index += 1;
+                let inner = self.parse_condition()?;
+                let Some(close) = self.peek() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected ')'".to_string(),
+                        &token,
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected ')'".to_string(),
+                        &close,
+                    );
+                    return Err(());
+                }
+                self.index += 1;
+                Ok(Condition::Group(Box::new(inner)))
+            }
+            _ => {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    format!("Unexpected token in condition: '{}'", token.value),
+                    &token,
+                );
+                Err(())
+            }
         }
     }
 
