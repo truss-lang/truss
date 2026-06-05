@@ -5435,3 +5435,29 @@ fn test_sizeof_expression_type_resolved() {
         panic!("Expected function decl");
     }
 }
+
+#[test]
+fn test_asm_block_no_operands_type_check() {
+    let errors = run_type_check(r#"func test() { asm { "nop" } }"#);
+    assert_eq!(errors, 0, "asm block without operands should type-check without errors");
+}
+
+#[test]
+fn test_asm_block_with_operands_type_check() {
+    let errors = run_type_check(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
+    assert_eq!(errors, 0, "asm block with input operand should type-check without errors");
+}
+
+#[test]
+fn test_asm_block_output_type_check() {
+    let errors = run_type_check(r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#);
+    assert_eq!(errors, 0, "asm block with output operand should type-check without errors");
+}
+
+#[test]
+fn test_asm_block_full_type_check() {
+    let errors = run_type_check(
+        r#"func test() { var x: Int32 = 0; asm { "add {dst}, {src}" : dst = out(reg) x : src = in(reg) 42 } }"#
+    );
+    assert_eq!(errors, 0, "asm block with full operands should type-check without errors");
+}

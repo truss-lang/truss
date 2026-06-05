@@ -1450,6 +1450,15 @@ impl TypeResolver {
                 }
             }
             Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => {}
+            Statement::AsmBlock {
+                outputs,
+                inputs,
+                ..
+            } => {
+                for operand in outputs.iter().chain(inputs.iter()) {
+                    self.infer_type(operand.expression.clone());
+                }
+            }
             _ => {}
         }
     }
