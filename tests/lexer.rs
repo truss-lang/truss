@@ -118,3 +118,15 @@ fn test_parse_hash_identifier_separated() {
     assert_eq!(tokens[0].ty, TokenType::Separator { separator: SeparatorType::Hash });
     assert_eq!(tokens[1].ty, TokenType::Keyword { keyword: KeywordType::If });
 }
+
+#[test]
+fn test_parse_sizeof_keyword() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new("sizeof".to_string(), Rc::new("".to_string())),
+        engine,
+    );
+    let tokens = lexer.parse();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].ty, TokenType::Keyword { keyword: KeywordType::SizeOf });
+}
