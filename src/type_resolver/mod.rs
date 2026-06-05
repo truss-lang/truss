@@ -259,6 +259,7 @@ impl TypeResolver {
                     is_container_class,
                     body,
                 );
+                self.validate_setter_access_conflicts(body);
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::ClassDecl {
@@ -384,6 +385,7 @@ impl TypeResolver {
                     is_container_class,
                     body,
                 );
+                self.validate_setter_access_conflicts(body);
                 self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
             }
             Statement::EnumDecl {
@@ -4380,6 +4382,45 @@ impl TypeResolver {
         }
     }
 
+    fn validate_setter_access_conflicts(&self, body: &[Rc<RefCell<Statement>>]) {
+        for member in body {
+            let member_ref = member.borrow();
+            let (decl_mod, inline_mod) = match &*member_ref {
+                Statement::VariableDecl {
+                    modifiers, accessors, ..
+                }
+                | Statement::SubscriptDecl {
+                    modifiers, accessors, ..
+                } => {
+                    let decl_mod = modifiers.iter().find_map(|m| {
+                        if let ModifierType::AccessSet(ref access) = m.ty {
+                            Some(*access)
+                        } else {
+                            None
+                        }
+                    });
+                    let inline_mod = accessors.iter().find(|a| a.kind == AccessorKind::Set).and_then(|a| a.set_access_modifier);
+                    (decl_mod, inline_mod)
+                }
+                _ => (None, None),
+            };
+            if let (Some(decl), Some(inline)) = (decl_mod, inline_mod) {
+                if decl != inline {
+                    let token = member_ref.token();
+                    let msg = format!(
+                        "Conflicting setter access: declaration specifies '{:?}', but accessor specifies '{:?}'",
+                        decl, inline
+                    );
+                    self.emit_error(
+                        TrussDiagnosticCode::ConflictingSetterAccess,
+                        msg,
+                        &token,
+                    );
+                }
+            }
+        }
+    }
+
     fn check_protocol_conformances(
         &mut self,
         type_name: &str,
@@ -4762,25 +4803,26 @@ impl TypeResolver {
                                         if let Statement::SubscriptDecl { accessors, .. } =
                                             &*decl_ref
                                         {
-                                            if let Some(set_acc) = accessors
+                                            let inline_mod = accessors
                                                 .iter()
                                                 .find(|a| a.kind == AccessorKind::Set)
-                                            {
-                                                if let Some(ref set_mod) =
-                                                    set_acc.set_access_modifier
-                                                {
-                                                    if !self.is_setter_accessible(
-                                                        set_mod,
-                                                        sub.clone(),
+                                                .and_then(|a| a.set_access_modifier);
+                                            let set_mod =
+                                                inline_mod.or_else(|| {
+                                                    Self::get_set_access_modifier(&*decl_ref)
+                                                });
+                                            if let Some(ref set_mod) = set_mod {
+                                                if !self.is_setter_accessible(
+                                                    set_mod,
+                                                    sub.clone(),
+                                                    &token,
+                                                ) {
+                                                    self.emit_error(
+                                                        TrussDiagnosticCode::InvalidMemberAccessLevel,
+                                                        "Cannot assign to subscript due to setter access level",
                                                         &token,
-                                                    ) {
-                                                        self.emit_error(
-                                                            TrussDiagnosticCode::InvalidMemberAccessLevel,
-                                                            "Cannot assign to subscript due to setter access level",
-                                                            &token,
-                                                        );
-                                                        return;
-                                                    }
+                                                    );
+                                                    return;
                                                 }
                                             }
                                         }

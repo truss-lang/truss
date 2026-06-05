@@ -58,6 +58,7 @@ pub enum TrussDiagnosticCode {
     AssignToImmutable,
     InvalidMemberAccessLevel,
     OpenOnlyOnClass,
+    ConflictingSetterAccess,
 
     IRError,
     UnsupportedFeature,
@@ -124,6 +125,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::AssignToImmutable => "E0320",
             Self::InvalidMemberAccessLevel => "E0321",
             Self::OpenOnlyOnClass => "E0322",
+            Self::ConflictingSetterAccess => "E0323",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",

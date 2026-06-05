@@ -2319,6 +2319,103 @@ fn test_subscript_inline_private_set_blocks_external_write() {
 }
 
 #[test]
+fn test_conflicting_setter_access_on_property() {
+    let code = r#"
+        struct Foo {
+            private(set) var x: Int32 {
+                get { _x }
+                public set(v) { _x = v }
+            }
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "Should emit error for conflicting setter access modifiers on property"
+    );
+}
+
+#[test]
+fn test_conflicting_setter_access_on_subscript() {
+    let code = r#"
+        struct Foo {
+            private(set) subscript(i: Int32) -> Int32 {
+                get { _v }
+                public set(v) { _v = v }
+            }
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "Should emit error for conflicting setter access modifiers on subscript"
+    );
+}
+
+#[test]
+fn test_nonconflicting_setter_access_on_property() {
+    let code = r#"
+        struct Foo {
+            private(set) var x: Int32 {
+                get { _x }
+                private set(v) { _x = v }
+            }
+        }
+        func test() -> Int32 {
+            var f: Foo
+            return f.x
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        errors.is_empty(),
+        "Should NOT emit error when both private(set) and private set match"
+    );
+}
+
+#[test]
 fn test_protocol_type_with_method() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
