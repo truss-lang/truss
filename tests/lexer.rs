@@ -130,3 +130,15 @@ fn test_parse_sizeof_keyword() {
     assert_eq!(tokens.len(), 1);
     assert_eq!(tokens[0].ty, TokenType::Keyword { keyword: KeywordType::SizeOf });
 }
+
+#[test]
+fn test_parse_asm_keyword() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new("asm".to_string(), Rc::new("".to_string())),
+        engine,
+    );
+    let tokens = lexer.parse();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].ty, TokenType::Keyword { keyword: KeywordType::Asm });
+}
