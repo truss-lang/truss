@@ -5401,3 +5401,37 @@ fn test_conditional_block_function_type_resolved() {
         errors
     );
 }
+
+#[test]
+fn test_sizeof_expression_type_resolved() {
+    let (engine, stmts) = type_check("func test() -> UInt64 { return sizeof(Int32) }");
+    let eng = engine.borrow();
+    assert!(
+        eng.get_errors().is_empty(),
+        "SizeOf type resolve failed: {:?}",
+        eng.get_errors()
+    );
+    drop(eng);
+    if let Statement::FunctionDecl { body, .. } = &*stmts[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let Statement::Return { value, .. } = &*statements[0].borrow() else {
+            panic!("Expected return statement");
+        };
+        let value = value.clone().unwrap();
+        assert!(matches!(*value.borrow(), Expression::SizeOf { .. }));
+        if let Expression::SizeOf { argument, ty, .. } = &*value.borrow() {
+            let resolved_ty = ty.clone().unwrap();
+            assert_eq!(*resolved_ty.borrow(), Type::UInt64);
+            if let Expression::Type { name, ty: arg_ty, .. } = &*argument.borrow() {
+                assert_eq!(name.value, "Int32");
+                let arg_resolved = arg_ty.clone().unwrap();
+                assert_eq!(*arg_resolved.borrow(), Type::Int32);
+            } else {
+                panic!("Expected Type expression as sizeof argument");
+            }
+        }
+    } else {
+        panic!("Expected function decl");
+    }
+}
