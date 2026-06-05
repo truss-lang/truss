@@ -169,6 +169,11 @@ pub enum Statement {
         body: Vec<Rc<RefCell<Statement>>>,
         scope: Option<Rc<RefCell<Scope>>>,
     },
+    UsingDecl {
+        token: Box<Token>,
+        name: Box<Token>,
+        path: Vec<String>,
+    },
     ImportDecl {
         token: Box<Token>,
         path: Vec<String>,
@@ -238,6 +243,7 @@ impl Statement {
             Self::Break { token, .. } => (**token).clone(),
             Self::Defer { token, .. } => (**token).clone(),
             Self::ModuleDecl { token, .. } => (**token).clone(),
+            Self::UsingDecl { token, .. } => (**token).clone(),
             Self::ImportDecl { token, .. } => (**token).clone(),
             Self::SubscriptDecl { token, .. } => (**token).clone(),
             Self::MacroDecl { token, .. } => (**token).clone(),
@@ -265,6 +271,7 @@ impl Statement {
             Self::Break { .. } => Ok(vec![]),
             Self::Defer { .. } => Ok(vec![]),
             Self::ModuleDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::UsingDecl { .. } => Ok(vec![]),
             Self::ImportDecl { .. } => Ok(vec![]),
             Self::SubscriptDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::ConditionalBlock { .. } => Ok(vec![]),

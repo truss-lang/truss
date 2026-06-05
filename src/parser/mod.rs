@@ -223,6 +223,7 @@ impl Parser {
                 KeywordType::Typealias => self.parse_typealias(modifiers),
                 KeywordType::Module => self.parse_module_decl(modifiers),
                 KeywordType::Import => self.parse_import(),
+                KeywordType::Using => self.parse_using_decl(),
                 KeywordType::Subscript => self.parse_subscript_decl(modifiers),
                 KeywordType::Macro => {
                     if !modifiers.is_empty() {
@@ -3267,6 +3268,95 @@ impl Parser {
             token: Box::new(token),
             path,
             kind,
+        })
+    }
+
+    fn parse_using_decl(&mut self) -> Result<Statement, ()> {
+        let Some(token) = self.next() else {
+            return Err(());
+        };
+        let Some(next) = self.peek() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected alias name or dotted path after 'using'",
+                &token,
+            );
+            return Err(());
+        };
+        if !matches!(next.ty, TokenType::Identifier) {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected identifier but found '{}'", next.value),
+                &next,
+            );
+            return Err(());
+        }
+        let name = if let Some(eq) = self.peek2() {
+            if OperatorType::is_operator(&eq, OperatorType::Assign) {
+                let name = self.next().unwrap();
+                self.index += 1;
+                Some(name)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let Some(start) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected identifier in dotted path",
+                &token,
+            );
+            return Err(());
+        };
+        if !matches!(start.ty, TokenType::Identifier) {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected identifier but found '{}'", start.value),
+                &start,
+            );
+            return Err(());
+        }
+        let mut path = vec![start.value.clone()];
+        loop {
+            match self.peek() {
+                Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
+                    self.index += 1;
+                    let Some(name) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            "Expected identifier after '.'",
+                            &token,
+                        );
+                        return Err(());
+                    };
+                    if !matches!(name.ty, TokenType::Identifier) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!("Expected identifier but found '{}'", name.value),
+                            &name,
+                        );
+                        return Err(());
+                    }
+                    path.push(name.value);
+                }
+                _ => break,
+            }
+        }
+        let name = name.unwrap_or_else(|| {
+            let last = path.last().unwrap();
+            Token::new(
+                last.clone(),
+                TokenType::Identifier,
+                token.position.clone(),
+                token.file.clone(),
+            )
+        });
+        Ok(Statement::UsingDecl {
+            token: Box::new(token),
+            name: Box::new(name),
+            path,
         })
     }
 

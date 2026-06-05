@@ -6876,6 +6876,126 @@ fn test_parse_multiple_imports() {
 }
 
 #[test]
+fn test_parse_using_with_alias() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using MyInt = Foo.Bar.MyInt".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "MyInt");
+        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
+fn test_parse_using_shorthand() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using Foo.Bar.MyInt".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "MyInt");
+        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
+fn test_parse_using_single_path() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using Foo".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Foo");
+        assert_eq!(path, &vec!["Foo".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
+fn test_parse_using_deep_path() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using A.B.C.D.E".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "E");
+        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string(), "E".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
+fn test_parse_using_with_alias_deep_path() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using X = A.B.C.D.E".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "X");
+        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string(), "E".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
+fn test_parse_using_multiple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using X = Foo.Bar\nusing A.B.C\nusing M".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 3);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "X");
+        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[1].borrow() {
+        assert_eq!(name.value, "C");
+        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[2].borrow() {
+        assert_eq!(name.value, "M");
+        assert_eq!(path, &vec!["M".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
 fn test_parse_generic_call_with_type_args() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
