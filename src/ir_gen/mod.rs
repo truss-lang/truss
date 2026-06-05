@@ -9,6 +9,7 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
+    basic_block::BasicBlock,
     types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
     values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue},
 };
@@ -73,6 +74,7 @@ pub struct IRGenerator<'ctx> {
     container_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
     overloaded_fn_names: Rc<RefCell<HashSet<String>>>,
     closure_counter: Rc<RefCell<u32>>,
+    yield_targets: Rc<RefCell<Vec<(PointerValue<'ctx>, BasicBlock<'ctx>)>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -103,6 +105,7 @@ impl<'ctx> IRGenerator<'ctx> {
             container_refs: Rc::new(RefCell::new(Vec::new())),
             overloaded_fn_names: Rc::new(RefCell::new(HashSet::new())),
             closure_counter: Rc::new(RefCell::new(0)),
+            yield_targets: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -3435,6 +3438,36 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 Ok(true)
             }
+            Statement::Yield { value, .. } => {
+                if self.yield_targets.borrow().is_empty() {
+                    // In function context: yield is equivalent to return
+                    match value {
+                        Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
+                            let value = self.resolve_expression(value.clone())?.unwrap();
+                            self.emit_all_deinit_calls();
+                            self.builder.build_return(Some(&value))?;
+                        }
+                        _ => {
+                            self.emit_all_deinit_calls();
+                            self.builder.build_return(None)?;
+                        }
+                    }
+                } else {
+                    // In do/if expression context: store to result alloca and branch to exit
+                    let target = self.yield_targets.borrow().last().copied().unwrap();
+                    let (result_alloca, exit_bb) = target;
+                    match value {
+                        Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
+                            let value = self.resolve_expression(value.clone())?.unwrap();
+                            self.builder.build_store(result_alloca, value)?;
+                        }
+                        _ => {}
+                    }
+                    self.emit_all_deinit_calls();
+                    self.builder.build_unconditional_branch(exit_bb)?;
+                }
+                Ok(true)
+            }
             Statement::ExpressionStatement { expression } => {
                 self.resolve_expression(expression.clone())?;
                 Ok(false)
@@ -5324,7 +5357,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     )?;
 
                     self.builder.position_at_end(then_bb);
+                    if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
+                        self.yield_targets.borrow_mut().push((*alloca, exit_bb));
+                    }
                     let (terminates, then_val) = self.resolve_block_and_get_value(then)?;
+                    if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
+                        self.yield_targets.borrow_mut().pop();
+                    }
                     if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, then_val) {
                         self.builder.build_store(*alloca, val)?;
                     }
@@ -5334,6 +5373,9 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     if let Some(else_) = else_ {
                         self.builder.position_at_end(else_bb.unwrap());
+                        if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
+                            self.yield_targets.borrow_mut().push((*alloca, exit_bb));
+                        }
                         let (terminates, else_val) = match else_ {
                             ElseBranch::Block(body) => self.resolve_block_and_get_value(body)?,
                             ElseBranch::If(if_expr) => {
@@ -5341,6 +5383,9 @@ impl<'ctx> IRGenerator<'ctx> {
                                 (false, val)
                             }
                         };
+                        if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
+                            self.yield_targets.borrow_mut().pop();
+                        }
                         if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, else_val) {
                             self.builder.build_store(*alloca, val)?;
                         }
@@ -5359,12 +5404,95 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
-            Expression::Do { body, .. } => {
-                let (terminates, value) = self.resolve_block_and_get_value(body)?;
-                if terminates {
-                    Ok(None)
+            Expression::Do { body, ty, .. } => {
+                // Create result_alloca only for non-void types that can be resolved
+                let result_alloca = ty.as_ref().and_then(|t| {
+                    if matches!(&*t.borrow(), Type::Void) {
+                        return None;
+                    }
+                    self.resolve_type(t.clone()).ok().map(|llvm_ty| {
+                        (self.builder.build_alloca(llvm_ty, "do_result"), llvm_ty)
+                    })
+                });
+
+                // Create exit block for yield support
+                let current_fn = self.builder.get_insert_block()
+                    .and_then(|bb| Some(bb.get_parent().unwrap()));
+                let exit_bb = current_fn.map(|f| self.context.append_basic_block(f, "do_exit"));
+
+                let has_yield_target = result_alloca.is_some() && exit_bb.is_some();
+                if has_yield_target {
+                    if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
+                        self.yield_targets.borrow_mut().push((*alloca, exit_bb.unwrap()));
+                    }
+                }
+
+                self.enter_scope_with_stmts(body)?;
+                let len = body.len();
+                let mut last_value = None;
+                let mut terminated_by_return = false;
+                let mut terminated_by_yield = false;
+                for (i, stmt) in body.iter().enumerate() {
+                    let is_last = i == len - 1;
+                    let terminates = match &*stmt.borrow() {
+                        Statement::ExpressionStatement { expression } => {
+                            let val = self.resolve_expression(expression.clone())?;
+                            if is_last {
+                                last_value = val;
+                            }
+                            false
+                        }
+                        _ => self.resolve_statement(stmt.clone())?,
+                    };
+                    if terminates {
+                        if matches!(&*stmt.borrow(), Statement::Yield { .. }) {
+                            terminated_by_yield = true;
+                            break;
+                        }
+                        terminated_by_return = true;
+                        break;
+                    }
+                }
+
+                if has_yield_target {
+                    self.yield_targets.borrow_mut().pop();
+                }
+
+                if !terminated_by_return && !terminated_by_yield && !has_yield_target {
+                    self.exit_scope();
+                    return Ok(None);
+                }
+
+                if has_yield_target {
+                    let (alloca_result, llvm_ty) = result_alloca.unwrap();
+                    let exit = exit_bb.unwrap();
+                    if !terminated_by_return && !terminated_by_yield {
+                        if let Some(val) = last_value {
+                            if let Ok(ref alloca_ptr) = alloca_result {
+                                self.builder.build_store(*alloca_ptr, val)?;
+                            }
+                        }
+                        self.builder.build_unconditional_branch(exit)?;
+                    }
+                    if terminated_by_return {
+                        self.exit_scope();
+                        return Ok(None);
+                    }
+                    self.builder.position_at_end(exit);
+                    match alloca_result {
+                        Ok(alloca_ptr) => {
+                            let result = self.builder.build_load(llvm_ty, alloca_ptr, "do_result")?;
+                            self.exit_scope();
+                            Ok(Some(result))
+                        }
+                        _ => {
+                            self.exit_scope();
+                            Ok(None)
+                        }
+                    }
                 } else {
-                    Ok(value)
+                    self.exit_scope();
+                    Ok(None)
                 }
             }
             Expression::Cast {

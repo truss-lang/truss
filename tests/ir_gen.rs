@@ -5102,3 +5102,48 @@ fn test_irgen_do_expression_with_variables() {
     assert_eq!(errors.len(), 0, "Expected no errors for do with variables, got: {:?}", errors);
     assert!(llvm_ir.contains("ret i32"), "Do with variables should return i32:\n{}", llvm_ir);
 }
+
+#[test]
+fn test_irgen_yield_in_function_returns() {
+    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { yield 42 }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for yield in function, got: {:?}", errors);
+    assert!(llvm_ir.contains("ret i32"), "yield in function should generate ret i32:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_yield_in_do_expression() {
+    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { yield 42 } }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for yield in do, got: {:?}", errors);
+    assert!(llvm_ir.contains("ret i32"), "yield in do should generate ret i32:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_yield_in_do_with_early_exit() {
+    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { if true { yield 42 }; 10 } }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for yield with early exit in do, got: {:?}", errors);
+    assert!(llvm_ir.contains("ret i32"), "yield with early exit should generate ret i32:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_yield_as_variable_initializer() {
+    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { let x = do { yield 42 }; return x }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for yield as variable initializer, got: {:?}", errors);
+    assert!(llvm_ir.contains("ret i32"), "yield as initializer should generate ret i32:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_yield_in_function_void() {
+    let (llvm_ir, engine) = run_ir_gen("func test() { yield }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for yield in void function, got: {:?}", errors);
+    assert!(llvm_ir.contains("ret void"), "yield in void function should generate ret void:\n{}", llvm_ir);
+}
