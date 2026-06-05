@@ -9,7 +9,7 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, ModifierType, Pattern, ProtocolMember,
+            AccessModifier, AccessorKind, FunctionBody, ModifierType, OperatorFixity, Pattern, ProtocolMember,
             Statement, VariadicKind,
         },
     },
@@ -1709,6 +1709,8 @@ impl TypeResolver {
                 left,
                 operator,
                 right,
+                overloads,
+                selected_index,
                 ..
             } => {
                 let left_ty = self.infer_type(left.clone())?;
@@ -1735,6 +1737,10 @@ impl TypeResolver {
                     self.check_binary(*operator, left_ty.clone(), right_ty.clone())
                 {
                     result
+                } else if let Some(result) =
+                    self.try_resolve_binary_operator(*operator, left.clone(), left_ty.clone(), right.clone(), right_ty.clone(), overloads, selected_index)
+                {
+                    result
                 } else {
                     let token = left.borrow().token();
                     self.emit_error(
@@ -1752,6 +1758,8 @@ impl TypeResolver {
             Expression::Unary {
                 expression,
                 operator,
+                overloads,
+                selected_index,
                 ..
             } => {
                 let operand_ty = self.infer_type(expression.clone())?;
@@ -1759,6 +1767,10 @@ impl TypeResolver {
                     if matches!(operator, UnaryOperator::Inc | UnaryOperator::Dec) {
                         self.check_writable(expression.clone());
                     }
+                    result
+                } else if let Some(result) =
+                    self.try_resolve_unary_operator(*operator, expression.clone(), operand_ty.clone(), overloads, selected_index)
+                {
                     result
                 } else {
                     let token = expression.borrow().token();
@@ -3857,6 +3869,240 @@ impl TypeResolver {
         } else {
             Some(matching)
         }
+    }
+
+    fn try_resolve_binary_operator(
+        &mut self,
+        operator: BinaryOperator,
+        left: Rc<RefCell<Expression>>,
+        left_ty: Rc<RefCell<Type>>,
+        right: Rc<RefCell<Expression>>,
+        _right_ty: Rc<RefCell<Type>>,
+        bin_overloads: &mut Vec<Rc<RefCell<Symbol>>>,
+        bin_selected: &mut Option<usize>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let type_name = match &*left_ty.borrow() {
+            Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => n.clone(),
+            _ => return None,
+        };
+        let matching = {
+            let scope = self.current_scope.as_ref().unwrap().borrow();
+            let sym = scope.get_symbol(&type_name)?;
+            let methods = match &*sym.borrow() {
+                Symbol::Struct { methods, .. }
+                | Symbol::Class { methods, .. }
+                | Symbol::Enum { methods, .. } => methods.clone(),
+                _ => return None,
+            };
+            let op_name = operator.operator_name().to_string();
+            let filtered: Vec<Rc<RefCell<Symbol>>> = methods
+                .iter()
+                .filter(|m| {
+                    let b = m.borrow();
+                    if b.name().as_ref().ok() != Some(&op_name) {
+                        return false;
+                    }
+                    if let Some(decl) = b.get_decl().ok() {
+                        if let Some(d) = decl {
+                            if let Statement::FunctionDecl { operator_fixity, .. } = &*d.borrow() {
+                                return operator_fixity.is_none();
+                            }
+                        }
+                    }
+                    false
+                })
+                .cloned()
+                .collect();
+            filtered
+        };
+        if matching.is_empty() {
+            return None;
+        }
+        let (static_matches, member_matches): (Vec<_>, Vec<_>) = matching
+            .into_iter()
+            .partition(|m| {
+                m.borrow()
+                    .get_decl()
+                    .ok()
+                    .and_then(|d| {
+                        d.and_then(|decl| {
+                            if let Statement::FunctionDecl { static_method, .. } = &*decl.borrow() {
+                                Some(*static_method)
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .unwrap_or(false)
+            });
+        if !member_matches.is_empty() {
+            let right_param = CallParameter {
+                label: None,
+                expression: right.clone(),
+            };
+            let params = vec![right_param];
+            let mut sel = None;
+            if let Some(ret_ty) = self.resolve_operator_overload(
+                &params, &member_matches, &mut sel,
+            ) {
+                if let Some(idx) = sel {
+                    *bin_overloads = member_matches;
+                    *bin_selected = Some(idx);
+                }
+                return Some(ret_ty);
+            }
+        }
+        if !static_matches.is_empty() {
+            let left_param = CallParameter {
+                label: None,
+                expression: left,
+            };
+            let right_param = CallParameter {
+                label: None,
+                expression: right,
+            };
+            let params = vec![left_param, right_param];
+            let mut sel = None;
+            if let Some(ret_ty) = self.resolve_operator_overload(
+                &params, &static_matches, &mut sel,
+            ) {
+                if let Some(_idx) = sel {
+                }
+                return Some(ret_ty);
+            }
+        }
+        None
+    }
+
+    fn try_resolve_unary_operator(
+        &mut self,
+        operator: UnaryOperator,
+        operand: Rc<RefCell<Expression>>,
+        operand_ty: Rc<RefCell<Type>>,
+        un_overloads: &mut Vec<Rc<RefCell<Symbol>>>,
+        un_selected: &mut Option<usize>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let type_name = match &*operand_ty.borrow() {
+            Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => n.clone(),
+            _ => return None,
+        };
+        let matching = {
+            let scope = self.current_scope.as_ref().unwrap().borrow();
+            let sym = scope.get_symbol(&type_name)?;
+            let methods = match &*sym.borrow() {
+                Symbol::Struct { methods, .. }
+                | Symbol::Class { methods, .. }
+                | Symbol::Enum { methods, .. } => methods.clone(),
+                _ => return None,
+            };
+            let op_name = operator.operator_name().to_string();
+            let filtered: Vec<Rc<RefCell<Symbol>>> = methods
+                .iter()
+                .filter(|m| {
+                    let b = m.borrow();
+                    if b.name().as_ref().ok() != Some(&op_name) {
+                        return false;
+                    }
+                    if let Some(decl) = b.get_decl().ok() {
+                        if let Some(d) = decl {
+                            if let Statement::FunctionDecl { operator_fixity, .. } = &*d.borrow() {
+                                return *operator_fixity == Some(OperatorFixity::Prefix);
+                            }
+                        }
+                    }
+                    false
+                })
+                .cloned()
+                .collect();
+            filtered
+        };
+        if matching.is_empty() {
+            return None;
+        }
+        let (static_matches, member_matches): (Vec<_>, Vec<_>) = matching
+            .into_iter()
+            .partition(|m| {
+                m.borrow()
+                    .get_decl()
+                    .ok()
+                    .and_then(|d| {
+                        d.and_then(|decl| {
+                            if let Statement::FunctionDecl { static_method, .. } = &*decl.borrow() {
+                                Some(*static_method)
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .unwrap_or(false)
+            });
+        if !member_matches.is_empty() {
+            let params = vec![];
+            let mut sel = None;
+            if let Some(ret_ty) = self.resolve_operator_overload(
+                &params, &member_matches, &mut sel,
+            ) {
+                if let Some(idx) = sel {
+                    *un_overloads = member_matches;
+                    *un_selected = Some(idx);
+                }
+                return Some(ret_ty);
+            }
+        }
+        if !static_matches.is_empty() {
+            let operand_param = CallParameter {
+                label: None,
+                expression: operand,
+            };
+            let params = vec![operand_param];
+            let mut sel = None;
+            if let Some(ret_ty) = self.resolve_operator_overload(
+                &params, &static_matches, &mut sel,
+            ) {
+                return Some(ret_ty);
+            }
+        }
+        None
+    }
+
+    fn resolve_operator_overload(
+        &mut self,
+        parameters: &[CallParameter],
+        overloads: &[Rc<RefCell<Symbol>>],
+        selected_index: &mut Option<usize>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        for (i, sym) in overloads.iter().enumerate() {
+            let Some((param_tys, ret_ty, is_vararg, _decl)) =
+                self.get_fn_info_from_symbol(sym.clone())
+            else {
+                continue;
+            };
+            if !is_vararg && parameters.len() != param_tys.len() {
+                continue;
+            }
+            if is_vararg && parameters.len() < param_tys.len() {
+                continue;
+            }
+            let mut all_match = true;
+            for (j, call_param) in parameters.iter().enumerate() {
+                if j >= param_tys.len() {
+                    break;
+                }
+                let Some(arg_ty) = self.infer_type(call_param.expression.clone()) else {
+                    all_match = false;
+                    break;
+                };
+                if !Self::types_are_type_compatible(&arg_ty.borrow(), &param_tys[j].borrow()) {
+                    all_match = false;
+                    break;
+                }
+            }
+            if all_match {
+                *selected_index = Some(i);
+                return Some(ret_ty);
+            }
+        }
+        None
     }
 
     fn get_fn_info_from_symbol(

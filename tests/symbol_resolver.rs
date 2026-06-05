@@ -3320,6 +3320,7 @@ fn test_address_of_variable_resolved() {
             expression: inner,
             operator,
             is_prefix,
+        ..
         } = &*expression.borrow()
     {
         assert_eq!(operator, &truss::ast::expression::UnaryOperator::AddressOf);
@@ -3358,6 +3359,7 @@ fn test_address_of_deref_resolved() {
             expression: addr_expr,
             operator,
             is_prefix,
+        ..
         } = &*expression.borrow()
     {
         assert_eq!(operator, &truss::ast::expression::UnaryOperator::AddressOf);

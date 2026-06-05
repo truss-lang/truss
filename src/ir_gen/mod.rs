@@ -3703,6 +3703,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 left,
                 operator,
                 right,
+                ..
             } => {
                 let left_val = self.resolve_expression(left.clone())?.unwrap();
                 let right_val = self.resolve_expression(right.clone())?.unwrap();

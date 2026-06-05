@@ -5193,3 +5193,146 @@ fn test_class_subscript_return_type() {
         panic!("Expected subscript access with Int32 return type");
     }
 }
+
+#[test]
+fn test_binary_operator_method_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyInt { var value: Int32; static func + (left: MyInt, right: MyInt) -> MyInt { return left } }"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Static operator method declaration should resolve without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_binary_operator_method_member_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyInt { var value: Int32; func + (other: MyInt) -> MyInt { return self } }"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Member operator method declaration should resolve without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_binary_operator_method_call_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyInt { var value: Int32; static func + (left: MyInt, right: MyInt) -> MyInt { return left } }
+             func test(a: MyInt, b: MyInt) -> MyInt { return a + b }"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Binary operator method call should resolve without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_prefix_operator_method_call_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyInt { var value: Int32; static prefix func - (value: MyInt) -> MyInt { return value } }
+             func test(a: MyInt) -> MyInt { return -a }"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Prefix operator method call should resolve without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_member_binary_operator_method_call_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyInt { var value: Int32; func + (other: MyInt) -> MyInt { return self } }
+             func test(a: MyInt, b: MyInt) -> MyInt { return a + b }"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Member binary operator method call should resolve without errors, got: {:?}",
+        errors
+    );
+}

@@ -354,6 +354,8 @@ impl Parser {
                         left: Rc::new(RefCell::new(left)),
                         operator: op,
                         right: Rc::new(RefCell::new(right)),
+                        overloads: vec![],
+                        selected_index: None,
                     }
                 } else if let TokenType::Keyword { keyword } = token.ty
                     && keyword == KeywordType::As
@@ -452,6 +454,8 @@ impl Parser {
                 expression: Rc::new(RefCell::new(expression)),
                 operator: op,
                 is_prefix: true,
+                overloads: vec![],
+                selected_index: None,
             })
         } else {
             let expression = self.parse_primary()?;
@@ -473,6 +477,8 @@ impl Parser {
                             expression: Rc::new(RefCell::new(expression)),
                             operator: op,
                             is_prefix: false,
+                            overloads: vec![],
+                            selected_index: None,
                         })
                     }
                     OperatorType::Not => {
@@ -485,6 +491,8 @@ impl Parser {
                                 expression: Rc::new(RefCell::new(expression)),
                                 operator: UnaryOperator::NotNullAssertation,
                                 is_prefix: false,
+                                overloads: vec![],
+                                selected_index: None,
                             })
                         } else {
                             self.emit_error(

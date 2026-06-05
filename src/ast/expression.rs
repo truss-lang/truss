@@ -87,11 +87,15 @@ pub enum Expression {
         left: Rc<RefCell<Expression>>,
         operator: BinaryOperator,
         right: Rc<RefCell<Expression>>,
+        overloads: Vec<Rc<RefCell<Symbol>>>,
+        selected_index: Option<usize>,
     },
     Unary {
         expression: Rc<RefCell<Expression>>,
         operator: UnaryOperator,
         is_prefix: bool,
+        overloads: Vec<Rc<RefCell<Symbol>>>,
+        selected_index: Option<usize>,
     },
     Assignment {
         left: Rc<RefCell<Expression>>,
@@ -421,6 +425,31 @@ pub enum AssignmentOperator {
     RightShiftAssign,
 }
 impl BinaryOperator {
+    pub fn operator_name(&self) -> &'static str {
+        match self {
+            BinaryOperator::Plus => "+",
+            BinaryOperator::Minus => "-",
+            BinaryOperator::Multiply => "*",
+            BinaryOperator::Divide => "/",
+            BinaryOperator::Modulus => "%",
+            BinaryOperator::Equal => "==",
+            BinaryOperator::NotEqual => "!=",
+            BinaryOperator::Less => "<",
+            BinaryOperator::LessEqual => "<=",
+            BinaryOperator::Greater => ">",
+            BinaryOperator::GreaterEqual => ">=",
+            BinaryOperator::And => "&&",
+            BinaryOperator::Or => "||",
+            BinaryOperator::BitAnd => "&",
+            BinaryOperator::BitOr => "|",
+            BinaryOperator::BitXor => "^",
+            BinaryOperator::LeftShift => "<<",
+            BinaryOperator::RightShift => ">>",
+            BinaryOperator::RangeTo => "..",
+            BinaryOperator::RangeUntil => "..<",
+        }
+    }
+
     pub fn from_operator(operator: OperatorType) -> Option<BinaryOperator> {
         match operator {
             OperatorType::Plus => Some(BinaryOperator::Plus),
@@ -447,6 +476,20 @@ impl BinaryOperator {
     }
 }
 impl UnaryOperator {
+    pub fn operator_name(&self) -> &'static str {
+        match self {
+            UnaryOperator::Plus => "+",
+            UnaryOperator::Minus => "-",
+            UnaryOperator::Inc => "++",
+            UnaryOperator::Dec => "--",
+            UnaryOperator::NotNullAssertation => "!!",
+            UnaryOperator::OpenRange => "...",
+            UnaryOperator::BitNot => "~",
+            UnaryOperator::Deref => "*",
+            UnaryOperator::AddressOf => "&",
+        }
+    }
+
     pub fn from_operator(operator: OperatorType) -> Option<UnaryOperator> {
         match operator {
             OperatorType::Plus => Some(UnaryOperator::Plus),

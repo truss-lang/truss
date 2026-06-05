@@ -710,6 +710,7 @@ fn test_parse_deref() {
             expression,
             operator,
             is_prefix,
+        ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -744,6 +745,7 @@ fn test_parse_deref_nested() {
             expression: outer_expr,
             operator,
             is_prefix,
+        ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -752,6 +754,7 @@ fn test_parse_deref_nested() {
             expression: inner_expr,
             operator: inner_op,
             is_prefix: inner_prefix,
+        ..
         } = &*outer_expr.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::Deref);
@@ -828,6 +831,7 @@ fn test_parse_address_of() {
             expression,
             operator,
             is_prefix,
+        ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::AddressOf);
@@ -862,6 +866,7 @@ fn test_parse_address_of_deref() {
             expression: outer,
             operator,
             is_prefix,
+        ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::AddressOf);
@@ -870,6 +875,7 @@ fn test_parse_address_of_deref() {
             expression: inner,
             operator: inner_op,
             is_prefix: inner_prefix,
+        ..
         } = &*outer.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::Deref);
@@ -907,6 +913,7 @@ fn test_parse_deref_address_of() {
             expression: outer,
             operator,
             is_prefix,
+        ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -915,6 +922,7 @@ fn test_parse_deref_address_of() {
             expression: inner,
             operator: inner_op,
             is_prefix: inner_prefix,
+        ..
         } = &*outer.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::AddressOf);
@@ -1011,6 +1019,7 @@ fn test_parse_deref_postfix_inc() {
             expression: outer,
             operator,
             is_prefix,
+        ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -1019,6 +1028,7 @@ fn test_parse_deref_postfix_inc() {
             expression: inner,
             operator: inner_op,
             is_prefix: inner_prefix,
+        ..
         } = &*outer.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::Inc);
@@ -1056,6 +1066,7 @@ fn test_parse_deref_prefix_inc() {
             expression: outer,
             operator,
             is_prefix,
+        ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -1064,6 +1075,7 @@ fn test_parse_deref_prefix_inc() {
             expression: inner,
             operator: inner_op,
             is_prefix: inner_prefix,
+        ..
         } = &*outer.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::Inc);
@@ -5605,6 +5617,7 @@ fn test_parse_if_case_connect_with_and() {
             left,
             operator,
             right,
+        ..
         } = &*condition.borrow()
     {
         assert_eq!(*operator, BinaryOperator::And);
