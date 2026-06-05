@@ -7,10 +7,9 @@ use truss::{
             UnaryOperator,
         },
         statement::{
-            AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
-            ImportKind, MacroMetaVarType, MacroPatternFragment, Modifier, ModifierType,
-            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement, VariadicKind,
-            WhereRequirementKind,
+            AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody, ImportKind,
+            MacroMetaVarType, MacroPatternFragment, Modifier, ModifierType, OperatorFixity,
+            Parameter, Pattern, ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -710,7 +709,7 @@ fn test_parse_deref() {
             expression,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -745,7 +744,7 @@ fn test_parse_deref_nested() {
             expression: outer_expr,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -754,7 +753,7 @@ fn test_parse_deref_nested() {
             expression: inner_expr,
             operator: inner_op,
             is_prefix: inner_prefix,
-        ..
+            ..
         } = &*outer_expr.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::Deref);
@@ -831,7 +830,7 @@ fn test_parse_address_of() {
             expression,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::AddressOf);
@@ -866,7 +865,7 @@ fn test_parse_address_of_deref() {
             expression: outer,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::AddressOf);
@@ -875,7 +874,7 @@ fn test_parse_address_of_deref() {
             expression: inner,
             operator: inner_op,
             is_prefix: inner_prefix,
-        ..
+            ..
         } = &*outer.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::Deref);
@@ -913,7 +912,7 @@ fn test_parse_deref_address_of() {
             expression: outer,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -922,7 +921,7 @@ fn test_parse_deref_address_of() {
             expression: inner,
             operator: inner_op,
             is_prefix: inner_prefix,
-        ..
+            ..
         } = &*outer.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::AddressOf);
@@ -1019,7 +1018,7 @@ fn test_parse_deref_postfix_inc() {
             expression: outer,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -1028,7 +1027,7 @@ fn test_parse_deref_postfix_inc() {
             expression: inner,
             operator: inner_op,
             is_prefix: inner_prefix,
-        ..
+            ..
         } = &*outer.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::Inc);
@@ -1066,7 +1065,7 @@ fn test_parse_deref_prefix_inc() {
             expression: outer,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*init_expr.borrow()
     {
         assert_eq!(operator, &UnaryOperator::Deref);
@@ -1075,7 +1074,7 @@ fn test_parse_deref_prefix_inc() {
             expression: inner,
             operator: inner_op,
             is_prefix: inner_prefix,
-        ..
+            ..
         } = &*outer.borrow()
         {
             assert_eq!(inner_op, &UnaryOperator::Inc);
@@ -2975,7 +2974,10 @@ fn test_parse_var_private_set_accessor() {
     if program.statements.is_empty() {
         panic!("No statements parsed");
     }
-    if let Statement::VariableDecl { name, accessors, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        name, accessors, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(name.value, "v");
         assert_eq!(accessors.len(), 2);
         assert_eq!(accessors[0].kind, AccessorKind::Get);
@@ -2986,7 +2988,10 @@ fn test_parse_var_private_set_accessor() {
             Some(AccessModifier::Private)
         );
     } else {
-        panic!("Expected VariableDecl, got {:?}", program.statements[0].borrow());
+        panic!(
+            "Expected VariableDecl, got {:?}",
+            program.statements[0].borrow()
+        );
     }
 }
 
@@ -3009,7 +3014,10 @@ fn test_parse_var_internal_set_accessor() {
     let errors = engine_ref.get_errors();
     assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
     drop(engine_ref);
-    if let Statement::VariableDecl { name, accessors, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        name, accessors, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(name.value, "v");
         assert_eq!(accessors.len(), 2);
         assert_eq!(accessors[1].kind, AccessorKind::Set);
@@ -5617,7 +5625,7 @@ fn test_parse_if_case_connect_with_and() {
             left,
             operator,
             right,
-        ..
+            ..
         } = &*condition.borrow()
     {
         assert_eq!(*operator, BinaryOperator::And);
@@ -6879,7 +6887,10 @@ fn test_parse_multiple_imports() {
 fn test_parse_using_with_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using MyInt = Foo.Bar.MyInt".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using MyInt = Foo.Bar.MyInt".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -6887,7 +6898,10 @@ fn test_parse_using_with_alias() {
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyInt");
-        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]);
+        assert_eq!(
+            path,
+            &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]
+        );
     } else {
         panic!("Expected UsingDecl");
     }
@@ -6905,7 +6919,10 @@ fn test_parse_using_shorthand() {
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyInt");
-        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]);
+        assert_eq!(
+            path,
+            &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]
+        );
     } else {
         panic!("Expected UsingDecl");
     }
@@ -6941,7 +6958,16 @@ fn test_parse_using_deep_path() {
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "E");
-        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string(), "E".to_string()]);
+        assert_eq!(
+            path,
+            &vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string(),
+                "E".to_string()
+            ]
+        );
     } else {
         panic!("Expected UsingDecl");
     }
@@ -6959,7 +6985,16 @@ fn test_parse_using_with_alias_deep_path() {
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "X");
-        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string(), "E".to_string()]);
+        assert_eq!(
+            path,
+            &vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string(),
+                "E".to_string()
+            ]
+        );
     } else {
         panic!("Expected UsingDecl");
     }
@@ -6969,7 +7004,10 @@ fn test_parse_using_with_alias_deep_path() {
 fn test_parse_using_multiple() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using X = Foo.Bar\nusing A.B.C\nusing M".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using X = Foo.Bar\nusing A.B.C\nusing M".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -6983,7 +7021,10 @@ fn test_parse_using_multiple() {
     }
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[1].borrow() {
         assert_eq!(name.value, "C");
-        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+        assert_eq!(
+            path,
+            &vec!["A".to_string(), "B".to_string(), "C".to_string()]
+        );
     } else {
         panic!("Expected UsingDecl");
     }
@@ -8008,17 +8049,20 @@ fn test_parse_macro_decl_multi_arm() {
 fn test_parse_macro_invocation_paren() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "my_macro!(1 + 2)".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("my_macro!(1 + 2)".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
-        if let Expression::MacroInvocation { name, delimiter, arguments, .. } = &*expression.borrow() {
+        if let Expression::MacroInvocation {
+            name,
+            delimiter,
+            arguments,
+            ..
+        } = &*expression.borrow()
+        {
             assert_eq!(name.value, "my_macro");
             assert_eq!(*delimiter, MacroDelimiter::Paren);
             assert!(!arguments.is_empty());
@@ -8034,17 +8078,17 @@ fn test_parse_macro_invocation_paren() {
 fn test_parse_macro_invocation_brace() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "my_macro! { 1 + 2 }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("my_macro! { 1 + 2 }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
-        if let Expression::MacroInvocation { name, delimiter, .. } = &*expression.borrow() {
+        if let Expression::MacroInvocation {
+            name, delimiter, ..
+        } = &*expression.borrow()
+        {
             assert_eq!(name.value, "my_macro");
             assert_eq!(*delimiter, MacroDelimiter::Brace);
         } else {
@@ -8059,17 +8103,17 @@ fn test_parse_macro_invocation_brace() {
 fn test_parse_macro_invocation_bracket() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "my_macro![1, 2, 3]".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("my_macro![1, 2, 3]".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
-        if let Expression::MacroInvocation { name, delimiter, .. } = &*expression.borrow() {
+        if let Expression::MacroInvocation {
+            name, delimiter, ..
+        } = &*expression.borrow()
+        {
             assert_eq!(name.value, "my_macro");
             assert_eq!(*delimiter, MacroDelimiter::Bracket);
         } else {
@@ -8141,9 +8185,15 @@ fn test_parse_macro_decl_and_invocation() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
-    assert!(matches!(&*program.statements[0].borrow(), Statement::MacroDecl { .. }));
+    assert!(matches!(
+        &*program.statements[0].borrow(),
+        Statement::MacroDecl { .. }
+    ));
     if let Statement::ExpressionStatement { expression } = &*program.statements[1].borrow() {
-        assert!(matches!(&*expression.borrow(), Expression::MacroInvocation { .. }));
+        assert!(matches!(
+            &*expression.borrow(),
+            Expression::MacroInvocation { .. }
+        ));
     } else {
         panic!("Expected ExpressionStatement");
     }
@@ -8177,7 +8227,9 @@ fn test_parse_operator_function_decl() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl {
-        name, operator_fixity, ..
+        name,
+        operator_fixity,
+        ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "+");
@@ -8201,7 +8253,9 @@ fn test_parse_prefix_operator_function_decl() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl {
-        name, operator_fixity, ..
+        name,
+        operator_fixity,
+        ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "-");
@@ -8233,7 +8287,10 @@ fn test_parse_operator_function_decl_simple() {
 fn test_parse_postfix_keyword_as_modifier() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("postfix func - (v: Int32) {}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "postfix func - (v: Int32) {}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let tokens = lexer.parse();
@@ -8242,14 +8299,27 @@ fn test_parse_postfix_keyword_as_modifier() {
     // Check that it parsed as a function decl with postfix fixity
     if program.statements.len() == 0 || engine.borrow().get_errors().len() > 0 {
         // fallback: check what we get
-        if let Statement::FunctionDecl { name, operator_fixity, .. } = &*program.statements[0].borrow() {
+        if let Statement::FunctionDecl {
+            name,
+            operator_fixity,
+            ..
+        } = &*program.statements[0].borrow()
+        {
             assert_eq!(name.value, "-");
             assert_eq!(*operator_fixity, Some(OperatorFixity::Postfix));
         } else {
-            panic!("Expected FunctionDecl, got {:?}", *program.statements[0].borrow());
+            panic!(
+                "Expected FunctionDecl, got {:?}",
+                *program.statements[0].borrow()
+            );
         }
     } else {
-        if let Statement::FunctionDecl { name, operator_fixity, .. } = &*program.statements[0].borrow() {
+        if let Statement::FunctionDecl {
+            name,
+            operator_fixity,
+            ..
+        } = &*program.statements[0].borrow()
+        {
             assert_eq!(name.value, "-");
             assert_eq!(*operator_fixity, Some(OperatorFixity::Postfix));
         } else {
@@ -8262,17 +8332,28 @@ fn test_parse_postfix_keyword_as_modifier() {
 fn test_parse_prefix_keyword_as_modifier() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("prefix func - (v: Int32) {}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "prefix func - (v: Int32) {}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let tokens = lexer.parse();
     let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
     let program = parser.parse();
-    if let Statement::FunctionDecl { name, operator_fixity, .. } = &*program.statements[0].borrow() {
+    if let Statement::FunctionDecl {
+        name,
+        operator_fixity,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(name.value, "-");
         assert_eq!(*operator_fixity, Some(OperatorFixity::Prefix));
     } else {
-        panic!("Expected FunctionDecl, got {:?}", *program.statements[0].borrow());
+        panic!(
+            "Expected FunctionDecl, got {:?}",
+            *program.statements[0].borrow()
+        );
     }
 }
 
@@ -8287,15 +8368,26 @@ fn test_parse_postfix_operator_function_decl() {
     let tokens = lexer.parse();
     let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
     let program = parser.parse();
-    assert_eq!(program.statements.len(), 1, "expected 1 stmt, got {} (errors: {})", program.statements.len(), engine.borrow().get_errors().len());
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "expected 1 stmt, got {} (errors: {})",
+        program.statements.len(),
+        engine.borrow().get_errors().len()
+    );
     if let Statement::FunctionDecl {
-        name, operator_fixity, ..
+        name,
+        operator_fixity,
+        ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "++");
         assert_eq!(*operator_fixity, Some(OperatorFixity::Postfix));
     } else {
-        panic!("Expected FunctionDecl, got {:?}", *program.statements[0].borrow());
+        panic!(
+            "Expected FunctionDecl, got {:?}",
+            *program.statements[0].borrow()
+        );
     }
 }
 
@@ -8311,7 +8403,13 @@ fn test_parse_compound_assignment_operator_function_decl() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert_eq!(program.statements.len(), 1, "expected 1 statement, got {} (errors: {})", program.statements.len(), engine.borrow().get_errors().len());
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "expected 1 statement, got {} (errors: {})",
+        program.statements.len(),
+        engine.borrow().get_errors().len()
+    );
     if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "+=");
     } else {
@@ -8333,7 +8431,9 @@ fn test_parse_static_operator_function_decl() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl {
-        name, static_method, ..
+        name,
+        static_method,
+        ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "+");
@@ -8357,7 +8457,10 @@ fn test_parse_static_prefix_operator_function_decl() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl {
-        name, static_method, operator_fixity, ..
+        name,
+        static_method,
+        operator_fixity,
+        ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "-");
@@ -8383,11 +8486,26 @@ fn test_parse_operator_function_inside_struct() {
     assert_eq!(program.statements.len(), 1);
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
         let func_decl = body.iter().find_map(|s| {
-            if let Statement::FunctionDecl { name, static_method, operator_fixity, .. } = &*s.borrow() {
-                if name.value == "+" { Some((*static_method, *operator_fixity)) } else { None }
-            } else { None }
+            if let Statement::FunctionDecl {
+                name,
+                static_method,
+                operator_fixity,
+                ..
+            } = &*s.borrow()
+            {
+                if name.value == "+" {
+                    Some((*static_method, *operator_fixity))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         });
-        assert!(func_decl.is_some(), "Expected '+' operator function in struct body");
+        assert!(
+            func_decl.is_some(),
+            "Expected '+' operator function in struct body"
+        );
         let (static_method, operator_fixity) = func_decl.unwrap();
         assert!(static_method);
         assert_eq!(operator_fixity, None);
@@ -8401,7 +8519,8 @@ fn test_parse_member_operator_function_inside_struct() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct MyInt { var value: Int32; func + (other: MyInt) -> MyInt { self } }".to_string(),
+            "struct MyInt { var value: Int32; func + (other: MyInt) -> MyInt { self } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -8411,11 +8530,25 @@ fn test_parse_member_operator_function_inside_struct() {
     assert_eq!(program.statements.len(), 1);
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
         let func_decl = body.iter().find_map(|s| {
-            if let Statement::FunctionDecl { name, static_method, .. } = &*s.borrow() {
-                if name.value == "+" { Some(*static_method) } else { None }
-            } else { None }
+            if let Statement::FunctionDecl {
+                name,
+                static_method,
+                ..
+            } = &*s.borrow()
+            {
+                if name.value == "+" {
+                    Some(*static_method)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         });
-        assert!(func_decl.is_some(), "Expected '+' operator function in struct body");
+        assert!(
+            func_decl.is_some(),
+            "Expected '+' operator function in struct body"
+        );
         assert!(!func_decl.unwrap(), "Member operator should not be static");
     } else {
         panic!("Expected StructDecl");
@@ -8426,7 +8559,10 @@ fn test_parse_member_operator_function_inside_struct() {
 fn test_parse_conditional_block_simple() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("#if DEBUG\nfunc foo() {}\n#endif".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "#if DEBUG\nfunc foo() {}\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -8524,10 +8660,7 @@ fn test_parse_ifdef_and_ifndef() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[1].borrow() {
-        assert!(matches!(
-            &clauses[0].condition,
-            Some(Condition::Not(..))
-        ));
+        assert!(matches!(&clauses[0].condition, Some(Condition::Not(..))));
     }
 }
 
@@ -8562,7 +8695,10 @@ fn test_parse_nested_conditional_blocks() {
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
         assert_eq!(clauses.len(), 1);
         assert_eq!(clauses[0].body.len(), 1);
-        assert!(matches!(&*clauses[0].body[0].borrow(), Statement::ConditionalBlock { .. }));
+        assert!(matches!(
+            &*clauses[0].body[0].borrow(),
+            Statement::ConditionalBlock { .. }
+        ));
     }
 }
 
@@ -8579,8 +8715,14 @@ fn test_parse_pragma_error_and_warning() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
-    assert!(matches!(&*program.statements[0].borrow(), Statement::PragmaError { .. }));
-    assert!(matches!(&*program.statements[1].borrow(), Statement::PragmaWarning { .. }));
+    assert!(matches!(
+        &*program.statements[0].borrow(),
+        Statement::PragmaError { .. }
+    ));
+    assert!(matches!(
+        &*program.statements[1].borrow(),
+        Statement::PragmaWarning { .. }
+    ));
 }
 
 #[test]
@@ -8604,7 +8746,12 @@ fn test_parse_missing_endif_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(engine.borrow().format_all_plain("").contains("Expected #endif"));
+    assert!(
+        engine
+            .borrow()
+            .format_all_plain("")
+            .contains("Expected #endif")
+    );
     assert_eq!(program.statements.len(), 0);
 }
 
@@ -8617,7 +8764,12 @@ fn test_parse_else_without_if_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().format_all_plain("").contains("without matching"));
+    assert!(
+        engine
+            .borrow()
+            .format_all_plain("")
+            .contains("without matching")
+    );
 }
 
 #[test]
@@ -8629,7 +8781,12 @@ fn test_parse_endif_without_if_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().format_all_plain("").contains("without matching"));
+    assert!(
+        engine
+            .borrow()
+            .format_all_plain("")
+            .contains("without matching")
+    );
 }
 
 #[test]
@@ -8644,7 +8801,12 @@ fn test_parse_multi_else_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().format_all_plain("").contains("Multiple #else"));
+    assert!(
+        engine
+            .borrow()
+            .format_all_plain("")
+            .contains("Multiple #else")
+    );
 }
 
 #[test]
@@ -8659,7 +8821,12 @@ fn test_parse_elseif_after_else_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().format_all_plain("").contains("#elseif after #else"));
+    assert!(
+        engine
+            .borrow()
+            .format_all_plain("")
+            .contains("#elseif after #else")
+    );
 }
 
 #[test]
@@ -8681,7 +8848,10 @@ fn test_parse_conditional_block_with_function_body() {
 fn test_parse_sizeof_int32() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("func test() { sizeof(Int32) }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "func test() { sizeof(Int32) }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -8735,7 +8905,10 @@ fn test_parse_sizeof_struct_type() {
 fn test_parse_sizeof_missing_parens() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("func test() { sizeof Int32 }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "func test() { sizeof Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -8915,7 +9088,8 @@ fn test_parse_asm_block_multiple_instructions() {
                 "mov {dst}, rax"
                 : dst = out(reg) result
                 : src = in(reg) 10
-            }"#.to_string(),
+            }"#
+            .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -8992,10 +9166,7 @@ fn test_parse_asm_block_multiple_outputs() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::AsmBlock {
-        outputs, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::AsmBlock { outputs, .. } = &*program.statements[0].borrow() {
         assert_eq!(outputs.len(), 2);
         assert_eq!(outputs[0].label.value, "a");
         assert_eq!(outputs[1].label.value, "b");
@@ -9008,16 +9179,16 @@ fn test_parse_asm_block_multiple_outputs() {
 fn test_parse_asm_block_in_expression_statement_fallback() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            r#"asm { "nop" }"#.to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new(r#"asm { "nop" }"#.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
-    assert!(matches!(&*program.statements[0].borrow(), Statement::AsmBlock { .. }));
+    assert!(matches!(
+        &*program.statements[0].borrow(),
+        Statement::AsmBlock { .. }
+    ));
 }
 
 #[test]
@@ -9076,10 +9247,7 @@ fn test_parse_do_missing_brace() {
     let _program = parser.parse();
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(
-        !errors.is_empty(),
-        "Expected error for 'do' without brace"
-    );
+    assert!(!errors.is_empty(), "Expected error for 'do' without brace");
 }
 
 #[test]
@@ -9137,10 +9305,7 @@ fn test_parse_yield_with_value() {
 fn test_parse_yield_without_value() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "func test() { yield }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("func test() { yield }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -9172,8 +9337,14 @@ fn test_parse_yield_in_do_expression() {
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
     {
-        assert!(matches!(&*statements[0].borrow(), Statement::VariableDecl { .. }));
-        if let Statement::VariableDecl { initializer: Some(init), .. } = &*statements[0].borrow()
+        assert!(matches!(
+            &*statements[0].borrow(),
+            Statement::VariableDecl { .. }
+        ));
+        if let Statement::VariableDecl {
+            initializer: Some(init),
+            ..
+        } = &*statements[0].borrow()
             && let Expression::Do { body, .. } = &*init.borrow()
         {
             assert!(matches!(

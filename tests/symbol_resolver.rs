@@ -3320,7 +3320,7 @@ fn test_address_of_variable_resolved() {
             expression: inner,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*expression.borrow()
     {
         assert_eq!(operator, &truss::ast::expression::UnaryOperator::AddressOf);
@@ -3359,7 +3359,7 @@ fn test_address_of_deref_resolved() {
             expression: addr_expr,
             operator,
             is_prefix,
-        ..
+            ..
         } = &*expression.borrow()
     {
         assert_eq!(operator, &truss::ast::expression::UnaryOperator::AddressOf);
@@ -3500,7 +3500,8 @@ fn test_operator_function_resolver() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "func + (left: Int32, right: Int32) -> Int32 { left }
-             func - (left: Int32, right: Int32) -> Int32 { left }".to_string(),
+             func - (left: Int32, right: Int32) -> Int32 { left }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3528,7 +3529,8 @@ fn test_operator_function_overloads() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "func + (left: Int32, right: Int32) -> Int32 { left }
-             func + (left: Float64, right: Float64) -> Float64 { left }".to_string(),
+             func + (left: Float64, right: Float64) -> Float64 { left }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3556,7 +3558,8 @@ fn test_prefix_postfix_operator_resolver() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "prefix func - (value: Int32) -> Int32 { -value }
-             postfix func ++ (value: Int32) -> Int32 { value }".to_string(),
+             postfix func ++ (value: Int32) -> Int32 { value }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3632,7 +3635,12 @@ fn test_operator_method_resolver_inside_struct() {
     );
 }
 
-fn resolve_and_check(input: &str) -> (Rc<RefCell<TrussDiagnosticEngine>>, Vec<Rc<RefCell<Statement>>>) {
+fn resolve_and_check(
+    input: &str,
+) -> (
+    Rc<RefCell<TrussDiagnosticEngine>>,
+    Vec<Rc<RefCell<Statement>>>,
+) {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(input.to_string(), Rc::new("test".to_string())),
@@ -3654,30 +3662,30 @@ fn test_conditional_block_symbol_resolved() {
     );
     assert!(engine.borrow().get_errors().is_empty());
     assert_eq!(stmts.len(), 2);
-    assert!(matches!(&*stmts[0].borrow(), Statement::ConditionalBlock { .. }));
+    assert!(matches!(
+        &*stmts[0].borrow(),
+        Statement::ConditionalBlock { .. }
+    ));
 }
 
 #[test]
 fn test_conditional_block_nested_symbol_resolved() {
-    let (engine, _stmts) = resolve_and_check(
-        "#if A\nlet x: Int32 = 1\n#if B\nlet y: Int32 = 2\n#endif\n#endif",
-    );
+    let (engine, _stmts) =
+        resolve_and_check("#if A\nlet x: Int32 = 1\n#if B\nlet y: Int32 = 2\n#endif\n#endif");
     assert!(engine.borrow().get_errors().is_empty());
 }
 
 #[test]
 fn test_conditional_block_with_else_symbol_resolved() {
-    let (engine, _stmts) = resolve_and_check(
-        "#if A\nlet x: Int32 = 1\n#else\nlet y: Int32 = 2\n#endif",
-    );
+    let (engine, _stmts) =
+        resolve_and_check("#if A\nlet x: Int32 = 1\n#else\nlet y: Int32 = 2\n#endif");
     assert!(engine.borrow().get_errors().is_empty());
 }
 
 #[test]
 fn test_pragma_directives_no_crash() {
-    let (engine, stmts) = resolve_and_check(
-        "#error \"test error\"\n#warning \"test warning\"\nlet x: Int32 = 1",
-    );
+    let (engine, stmts) =
+        resolve_and_check("#error \"test error\"\n#warning \"test warning\"\nlet x: Int32 = 1");
     assert!(engine.borrow().get_errors().is_empty());
     assert_eq!(stmts.len(), 3);
 }
@@ -3700,56 +3708,89 @@ fn test_conditional_block_function_overload_in_branches() {
 
 #[test]
 fn test_asm_block_resolves_input_variable() {
-    let (_statements, engine, _) = run_resolver(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
-    assert!(engine.borrow().get_errors().is_empty(), "asm block with valid input variable should not error");
+    let (_statements, engine, _) =
+        run_resolver(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
+    assert!(
+        engine.borrow().get_errors().is_empty(),
+        "asm block with valid input variable should not error"
+    );
 }
 
 #[test]
 fn test_asm_block_resolves_output_variable() {
-    let (_statements, engine, _) = run_resolver(r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#);
-    assert!(engine.borrow().get_errors().is_empty(), "asm block with valid output variable should not error");
+    let (_statements, engine, _) = run_resolver(
+        r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#,
+    );
+    assert!(
+        engine.borrow().get_errors().is_empty(),
+        "asm block with valid output variable should not error"
+    );
 }
 
 #[test]
 fn test_asm_block_undefined_variable_error() {
-    let (engine, _) = resolve_and_check(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) undefined_var } }"#);
-    assert!(engine.borrow().has_errors(), "undefined variable in asm operand should error");
+    let (engine, _) = resolve_and_check(
+        r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) undefined_var } }"#,
+    );
+    assert!(
+        engine.borrow().has_errors(),
+        "undefined variable in asm operand should error"
+    );
 }
 
 #[test]
 fn test_asm_block_no_operands_no_error() {
-    let (_statements, engine, _) = run_resolver(r#"func test() { var x: Int32 = 10; asm { "nop" } }"#);
-    assert!(engine.borrow().get_errors().is_empty(), "asm block without operands should not error");
+    let (_statements, engine, _) =
+        run_resolver(r#"func test() { var x: Int32 = 10; asm { "nop" } }"#);
+    assert!(
+        engine.borrow().get_errors().is_empty(),
+        "asm block without operands should not error"
+    );
 }
 
 #[test]
 fn test_using_decl_at_top_level() {
     let (_statements, engine, _) = run_resolver("using Foo.Bar.MyInt");
-    assert!(engine.borrow().get_errors().is_empty(), "top-level using should not error");
+    assert!(
+        engine.borrow().get_errors().is_empty(),
+        "top-level using should not error"
+    );
 }
 
 #[test]
 fn test_using_decl_with_alias() {
     let (_statements, engine, _) = run_resolver("using X = A.B.C");
-    assert!(engine.borrow().get_errors().is_empty(), "using with explicit alias should not error");
+    assert!(
+        engine.borrow().get_errors().is_empty(),
+        "using with explicit alias should not error"
+    );
 }
 
 #[test]
 fn test_using_decl_in_function() {
     let (_statements, engine, _) = run_resolver("func test() { using MyInt = Foo.Bar.MyInt }");
-    assert!(engine.borrow().get_errors().is_empty(), "using in function body should not error");
+    assert!(
+        engine.borrow().get_errors().is_empty(),
+        "using in function body should not error"
+    );
 }
 
 #[test]
 fn test_using_decl_single_path() {
     let (_statements, engine, _) = run_resolver("using Int32");
-    assert!(engine.borrow().get_errors().is_empty(), "using with single path should not error");
+    assert!(
+        engine.borrow().get_errors().is_empty(),
+        "using with single path should not error"
+    );
 }
 
 #[test]
 fn test_using_decl_multiple() {
     let (_statements, engine, _) = run_resolver("using A.B.C\nusing X = Y.Z");
-    assert!(engine.borrow().get_errors().is_empty(), "multiple using decls should not error");
+    assert!(
+        engine.borrow().get_errors().is_empty(),
+        "multiple using decls should not error"
+    );
 }
 
 #[test]
@@ -3771,7 +3812,12 @@ fn test_do_expression_scope() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "do scope with resolved variable should not error, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "do scope with resolved variable should not error, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -3793,7 +3839,10 @@ fn test_do_expression_scope_isolation() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "variable declared inside do should not be visible outside");
+    assert!(
+        !errors.is_empty(),
+        "variable declared inside do should not be visible outside"
+    );
 }
 
 #[test]
@@ -3815,7 +3864,12 @@ fn test_do_expression_nested_scope() {
     resolver.resolve(&program, "test".to_string());
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "nested do scopes should not error, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "nested do scopes should not error, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -3840,7 +3894,10 @@ fn test_do_expression_scope_has_scope_field() {
         && let Statement::ExpressionStatement { expression } = &*stmts[0].borrow()
         && let Expression::Do { scope, .. } = &*expression.borrow()
     {
-        assert!(scope.is_some(), "do expression should have a scope after symbol resolution");
+        assert!(
+            scope.is_some(),
+            "do expression should have a scope after symbol resolution"
+        );
     } else {
         panic!("Expected do expression with scope");
     }
@@ -3865,7 +3922,9 @@ fn test_symbol_resolve_yield_with_variable() {
     resolver.resolve(&program, "test".to_string());
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::Yield { value: Some(value), .. } = &*statements[1].borrow()
+        && let Statement::Yield {
+            value: Some(value), ..
+        } = &*statements[1].borrow()
         && let Expression::Variable { symbol, .. } = &*value.borrow()
     {
         assert_ne!(
@@ -3896,9 +3955,14 @@ fn test_symbol_resolve_yield_in_do_expression() {
     resolver.resolve(&program, "test".to_string());
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { initializer: Some(init), .. } = &*statements[0].borrow()
+        && let Statement::VariableDecl {
+            initializer: Some(init),
+            ..
+        } = &*statements[0].borrow()
         && let Expression::Do { body, .. } = &*init.borrow()
-        && let Statement::Yield { value: Some(value), .. } = &*body[1].borrow()
+        && let Statement::Yield {
+            value: Some(value), ..
+        } = &*body[1].borrow()
         && let Expression::Variable { symbol, .. } = &*value.borrow()
     {
         assert_ne!(
@@ -3909,4 +3973,3 @@ fn test_symbol_resolve_yield_in_do_expression() {
         panic!("Expected yield inside do expression with resolved variable");
     }
 }
-

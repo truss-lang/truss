@@ -129,9 +129,7 @@ impl MacroExpander {
         } = clone
         {
             if let Some(arms) = macros.get(&name.value) {
-                if let Some(expanded) =
-                    Self::try_expand_macro(&name, arms, delimiter, &arguments)
-                {
+                if let Some(expanded) = Self::try_expand_macro(&name, arms, delimiter, &arguments) {
                     let mut expr_mut = expr.borrow_mut();
                     let _ = std::mem::replace(&mut *expr_mut, expanded);
                     return;
@@ -177,7 +175,9 @@ impl MacroExpander {
             }
             Expression::MemberAccess { object, .. } => vec![object.clone()],
             Expression::Assignment { left, right, .. } => vec![left.clone(), right.clone()],
-            Expression::SubscriptAccess { object, parameters, .. } => {
+            Expression::SubscriptAccess {
+                object, parameters, ..
+            } => {
                 let mut v = vec![object.clone()];
                 for p in parameters {
                     v.push(p.expression.clone());
@@ -276,10 +276,7 @@ impl MacroExpander {
         a.ty == b.ty && a.value == b.value
     }
 
-    fn substitute(
-        expansion: &[Token],
-        captures: &HashMap<String, Vec<Token>>,
-    ) -> Vec<Token> {
+    fn substitute(expansion: &[Token], captures: &HashMap<String, Vec<Token>>) -> Vec<Token> {
         let mut result = Vec::new();
         let mut i = 0;
         while i < expansion.len() {

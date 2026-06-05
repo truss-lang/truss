@@ -98,11 +98,36 @@ fn test_parse_hash_token() {
     );
     let tokens = lexer.parse();
     assert_eq!(tokens.len(), 6);
-    assert_eq!(tokens[0].ty, TokenType::Separator { separator: SeparatorType::Hash });
-    assert_eq!(tokens[1].ty, TokenType::Keyword { keyword: KeywordType::If });
-    assert_eq!(tokens[2].ty, TokenType::Separator { separator: SeparatorType::Hash });
-    assert_eq!(tokens[3].ty, TokenType::Keyword { keyword: KeywordType::Else });
-    assert_eq!(tokens[4].ty, TokenType::Separator { separator: SeparatorType::Hash });
+    assert_eq!(
+        tokens[0].ty,
+        TokenType::Separator {
+            separator: SeparatorType::Hash
+        }
+    );
+    assert_eq!(
+        tokens[1].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::If
+        }
+    );
+    assert_eq!(
+        tokens[2].ty,
+        TokenType::Separator {
+            separator: SeparatorType::Hash
+        }
+    );
+    assert_eq!(
+        tokens[3].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::Else
+        }
+    );
+    assert_eq!(
+        tokens[4].ty,
+        TokenType::Separator {
+            separator: SeparatorType::Hash
+        }
+    );
     assert_eq!(tokens[5].value, "endif");
 }
 
@@ -115,8 +140,18 @@ fn test_parse_hash_identifier_separated() {
     );
     let tokens = lexer.parse();
     assert_eq!(tokens.len(), 2);
-    assert_eq!(tokens[0].ty, TokenType::Separator { separator: SeparatorType::Hash });
-    assert_eq!(tokens[1].ty, TokenType::Keyword { keyword: KeywordType::If });
+    assert_eq!(
+        tokens[0].ty,
+        TokenType::Separator {
+            separator: SeparatorType::Hash
+        }
+    );
+    assert_eq!(
+        tokens[1].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::If
+        }
+    );
 }
 
 #[test]
@@ -128,7 +163,12 @@ fn test_parse_sizeof_keyword() {
     );
     let tokens = lexer.parse();
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].ty, TokenType::Keyword { keyword: KeywordType::SizeOf });
+    assert_eq!(
+        tokens[0].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::SizeOf
+        }
+    );
 }
 
 #[test]
@@ -140,7 +180,12 @@ fn test_parse_asm_keyword() {
     );
     let tokens = lexer.parse();
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].ty, TokenType::Keyword { keyword: KeywordType::Asm });
+    assert_eq!(
+        tokens[0].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::Asm
+        }
+    );
 }
 
 #[test]

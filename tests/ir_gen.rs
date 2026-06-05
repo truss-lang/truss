@@ -4861,12 +4861,7 @@ fn test_irgen_static_binary_operator_method() {
     let llvm_ir = module.print_to_string().to_string();
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(
-        errors.len(),
-        0,
-        "Expected no errors, got: {:?}",
-        errors
-    );
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
     assert!(
         llvm_ir.contains("MyInt.+"),
         "Expected mangled operator +, got:\n{}",
@@ -4895,12 +4890,7 @@ fn test_irgen_member_binary_operator_method() {
     let llvm_ir = module.print_to_string().to_string();
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(
-        errors.len(),
-        0,
-        "Expected no errors, got: {:?}",
-        errors
-    );
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
     assert!(
         llvm_ir.contains("MyInt.+"),
         "Expected mangled operator +, got:\n{}",
@@ -5003,9 +4993,7 @@ func test() -> Int32 { foo() }",
 
 #[test]
 fn test_irgen_sizeof_int32() {
-    let (llvm_ir, engine) = run_ir_gen(
-        "func test() -> UInt64 { return sizeof(Int32) }",
-    );
+    let (llvm_ir, engine) = run_ir_gen("func test() -> UInt64 { return sizeof(Int32) }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
@@ -5014,9 +5002,8 @@ fn test_irgen_sizeof_int32() {
 
 #[test]
 fn test_irgen_sizeof_pointer() {
-    let (llvm_ir, engine) = run_ir_gen(
-        "struct Foo { let x: Int32 } func test() -> UInt64 { return sizeof(Foo) }",
-    );
+    let (llvm_ir, engine) =
+        run_ir_gen("struct Foo { let x: Int32 } func test() -> UInt64 { return sizeof(Foo) }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
@@ -5030,34 +5017,54 @@ fn test_irgen_asm_block_no_operands() {
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
-    assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("asm sideeffect"),
+        "Expected inline asm in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
 fn test_irgen_asm_block_with_input() {
-    let (llvm_ir, engine) = run_ir_gen(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
+    let (llvm_ir, engine) =
+        run_ir_gen(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
-    assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("asm sideeffect"),
+        "Expected inline asm in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
 fn test_irgen_asm_block_with_output() {
-    let (llvm_ir, engine) = run_ir_gen(r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#);
+    let (llvm_ir, engine) = run_ir_gen(
+        r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#,
+    );
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
-    assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("asm sideeffect"),
+        "Expected inline asm in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
 fn test_irgen_asm_block_with_clobbers() {
-    let (llvm_ir, engine) = run_ir_gen(r#"func test() { var x: Int32 = 0; asm { "nop" : : : "rax", "rbx" } }"#);
+    let (llvm_ir, engine) =
+        run_ir_gen(r#"func test() { var x: Int32 = 0; asm { "nop" : : : "rax", "rbx" } }"#);
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
-    assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
+    assert!(
+        llvm_ir.contains("asm sideeffect"),
+        "Expected inline asm in IR:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -5065,7 +5072,12 @@ fn test_irgen_do_expression_void() {
     let (_llvm_ir, engine) = run_ir_gen("func test() { do {} }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for do with empty body, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for do with empty body, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -5073,8 +5085,17 @@ fn test_irgen_do_expression_int_value() {
     let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { 1 } }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for do returning Int32, got: {:?}", errors);
-    assert!(llvm_ir.contains("ret i32"), "Expected return of i32 from do expression:\n{}", llvm_ir);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for do returning Int32, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("ret i32"),
+        "Expected return of i32 from do expression:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -5082,7 +5103,12 @@ fn test_irgen_do_expression_as_initializer() {
     let (_llvm_ir, engine) = run_ir_gen("func test() { let x = do { 42 } }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for do as initializer, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for do as initializer, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -5090,17 +5116,36 @@ fn test_irgen_nested_do_expression() {
     let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { do { 1 } } }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for nested do, got: {:?}", errors);
-    assert!(llvm_ir.contains("ret i32"), "Nested do should return i32:\n{}", llvm_ir);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for nested do, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("ret i32"),
+        "Nested do should return i32:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
 fn test_irgen_do_expression_with_variables() {
-    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { let a = 10 let b = 20 a + b } }");
+    let (llvm_ir, engine) =
+        run_ir_gen("func test() -> Int32 { do { let a = 10 let b = 20 a + b } }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for do with variables, got: {:?}", errors);
-    assert!(llvm_ir.contains("ret i32"), "Do with variables should return i32:\n{}", llvm_ir);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for do with variables, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("ret i32"),
+        "Do with variables should return i32:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -5108,8 +5153,17 @@ fn test_irgen_yield_in_function_returns() {
     let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { yield 42 }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for yield in function, got: {:?}", errors);
-    assert!(llvm_ir.contains("ret i32"), "yield in function should generate ret i32:\n{}", llvm_ir);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for yield in function, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("ret i32"),
+        "yield in function should generate ret i32:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -5117,8 +5171,17 @@ fn test_irgen_yield_in_do_expression() {
     let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { yield 42 } }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for yield in do, got: {:?}", errors);
-    assert!(llvm_ir.contains("ret i32"), "yield in do should generate ret i32:\n{}", llvm_ir);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for yield in do, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("ret i32"),
+        "yield in do should generate ret i32:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -5126,17 +5189,36 @@ fn test_irgen_yield_in_do_with_early_exit() {
     let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { if true { yield 42 }; 10 } }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for yield with early exit in do, got: {:?}", errors);
-    assert!(llvm_ir.contains("ret i32"), "yield with early exit should generate ret i32:\n{}", llvm_ir);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for yield with early exit in do, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("ret i32"),
+        "yield with early exit should generate ret i32:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
 fn test_irgen_yield_as_variable_initializer() {
-    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { let x = do { yield 42 }; return x }");
+    let (llvm_ir, engine) =
+        run_ir_gen("func test() -> Int32 { let x = do { yield 42 }; return x }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for yield as variable initializer, got: {:?}", errors);
-    assert!(llvm_ir.contains("ret i32"), "yield as initializer should generate ret i32:\n{}", llvm_ir);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for yield as variable initializer, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("ret i32"),
+        "yield as initializer should generate ret i32:\n{}",
+        llvm_ir
+    );
 }
 
 #[test]
@@ -5144,6 +5226,15 @@ fn test_irgen_yield_in_function_void() {
     let (llvm_ir, engine) = run_ir_gen("func test() { yield }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors for yield in void function, got: {:?}", errors);
-    assert!(llvm_ir.contains("ret void"), "yield in void function should generate ret void:\n{}", llvm_ir);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for yield in void function, got: {:?}",
+        errors
+    );
+    assert!(
+        llvm_ir.contains("ret void"),
+        "yield in void function should generate ret void:\n{}",
+        llvm_ir
+    );
 }

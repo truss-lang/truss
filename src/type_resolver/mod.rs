@@ -9,8 +9,8 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, ModifierType, OperatorFixity, Pattern, ProtocolMember,
-            Statement, VariadicKind,
+            AccessModifier, AccessorKind, FunctionBody, ModifierType, OperatorFixity, Pattern,
+            ProtocolMember, Statement, VariadicKind,
         },
     },
     diag::{
@@ -879,7 +879,10 @@ impl TypeResolver {
                 } else {
                     let module_path = path[..path.len() - 1].join(".");
                     let type_name = path.last().unwrap();
-                    self.krate.borrow().modules.get(&module_path)
+                    self.krate
+                        .borrow()
+                        .modules
+                        .get(&module_path)
                         .and_then(|m| m.borrow().scope.clone())
                         .and_then(|scope| scope.borrow().get_type(type_name))
                 };
@@ -1399,7 +1402,10 @@ impl TypeResolver {
                 } else {
                     let module_path = path[..path.len() - 1].join(".");
                     let type_name = path.last().unwrap();
-                    self.krate.borrow().modules.get(&module_path)
+                    self.krate
+                        .borrow()
+                        .modules
+                        .get(&module_path)
                         .and_then(|m| m.borrow().scope.clone())
                         .and_then(|scope| scope.borrow().get_type(type_name))
                 };
@@ -1520,9 +1526,7 @@ impl TypeResolver {
             }
             Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => {}
             Statement::AsmBlock {
-                outputs,
-                inputs,
-                ..
+                outputs, inputs, ..
             } => {
                 for operand in outputs.iter().chain(inputs.iter()) {
                     self.infer_type(operand.expression.clone());
@@ -1676,7 +1680,9 @@ impl TypeResolver {
             "Pointer" => Some(Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                 Type::Void,
             )))))),
-            _ => self.current_scope.as_ref()
+            _ => self
+                .current_scope
+                .as_ref()
                 .and_then(|scope| scope.borrow().get_type(name)),
         }
     }
@@ -1863,9 +1869,15 @@ impl TypeResolver {
                     self.check_binary(*operator, left_ty.clone(), right_ty.clone())
                 {
                     result
-                } else if let Some(result) =
-                    self.try_resolve_binary_operator(*operator, left.clone(), left_ty.clone(), right.clone(), right_ty.clone(), overloads, selected_index)
-                {
+                } else if let Some(result) = self.try_resolve_binary_operator(
+                    *operator,
+                    left.clone(),
+                    left_ty.clone(),
+                    right.clone(),
+                    right_ty.clone(),
+                    overloads,
+                    selected_index,
+                ) {
                     result
                 } else {
                     let token = left.borrow().token();
@@ -1894,9 +1906,13 @@ impl TypeResolver {
                         self.check_writable(expression.clone());
                     }
                     result
-                } else if let Some(result) =
-                    self.try_resolve_unary_operator(*operator, expression.clone(), operand_ty.clone(), overloads, selected_index)
-                {
+                } else if let Some(result) = self.try_resolve_unary_operator(
+                    *operator,
+                    expression.clone(),
+                    operand_ty.clone(),
+                    overloads,
+                    selected_index,
+                ) {
                     result
                 } else {
                     let token = expression.borrow().token();
@@ -3489,14 +3505,18 @@ impl TypeResolver {
                     result
                 }
             }
-            Expression::MacroInvocation { ty, .. } => ty.clone().unwrap_or_else(|| Rc::new(RefCell::new(Type::Void))),
+            Expression::MacroInvocation { ty, .. } => ty
+                .clone()
+                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void))),
             Expression::SizeOf { argument, ty, .. } => {
                 self.infer_type(argument.clone());
                 let result = Rc::new(RefCell::new(Type::UInt64));
                 *ty = Some(result.clone());
                 result
             }
-            Expression::Do { body, ty, scope, .. } => {
+            Expression::Do {
+                body, ty, scope, ..
+            } => {
                 if let Some(sc) = scope {
                     self.enter_scope(sc.clone());
                     self.yield_context_depth += 1;
@@ -4070,7 +4090,10 @@ impl TypeResolver {
                     }
                     if let Some(decl) = b.get_decl().ok() {
                         if let Some(d) = decl {
-                            if let Statement::FunctionDecl { operator_fixity, .. } = &*d.borrow() {
+                            if let Statement::FunctionDecl {
+                                operator_fixity, ..
+                            } = &*d.borrow()
+                            {
                                 return operator_fixity.is_none();
                             }
                         }
@@ -4084,9 +4107,8 @@ impl TypeResolver {
         if matching.is_empty() {
             return None;
         }
-        let (static_matches, member_matches): (Vec<_>, Vec<_>) = matching
-            .into_iter()
-            .partition(|m| {
+        let (static_matches, member_matches): (Vec<_>, Vec<_>) =
+            matching.into_iter().partition(|m| {
                 m.borrow()
                     .get_decl()
                     .ok()
@@ -4108,9 +4130,8 @@ impl TypeResolver {
             };
             let params = vec![right_param];
             let mut sel = None;
-            if let Some(ret_ty) = self.resolve_operator_overload(
-                &params, &member_matches, &mut sel,
-            ) {
+            if let Some(ret_ty) = self.resolve_operator_overload(&params, &member_matches, &mut sel)
+            {
                 if let Some(idx) = sel {
                     *bin_overloads = member_matches;
                     *bin_selected = Some(idx);
@@ -4129,9 +4150,8 @@ impl TypeResolver {
             };
             let params = vec![left_param, right_param];
             let mut sel = None;
-            if let Some(ret_ty) = self.resolve_operator_overload(
-                &params, &static_matches, &mut sel,
-            ) {
+            if let Some(ret_ty) = self.resolve_operator_overload(&params, &static_matches, &mut sel)
+            {
                 if let Some(idx) = sel {
                     *bin_overloads = static_matches;
                     *bin_selected = Some(idx);
@@ -4173,7 +4193,10 @@ impl TypeResolver {
                     }
                     if let Some(decl) = b.get_decl().ok() {
                         if let Some(d) = decl {
-                            if let Statement::FunctionDecl { operator_fixity, .. } = &*d.borrow() {
+                            if let Statement::FunctionDecl {
+                                operator_fixity, ..
+                            } = &*d.borrow()
+                            {
                                 return *operator_fixity == Some(OperatorFixity::Prefix);
                             }
                         }
@@ -4187,9 +4210,8 @@ impl TypeResolver {
         if matching.is_empty() {
             return None;
         }
-        let (static_matches, member_matches): (Vec<_>, Vec<_>) = matching
-            .into_iter()
-            .partition(|m| {
+        let (static_matches, member_matches): (Vec<_>, Vec<_>) =
+            matching.into_iter().partition(|m| {
                 m.borrow()
                     .get_decl()
                     .ok()
@@ -4207,9 +4229,8 @@ impl TypeResolver {
         if !member_matches.is_empty() {
             let params = vec![];
             let mut sel = None;
-            if let Some(ret_ty) = self.resolve_operator_overload(
-                &params, &member_matches, &mut sel,
-            ) {
+            if let Some(ret_ty) = self.resolve_operator_overload(&params, &member_matches, &mut sel)
+            {
                 if let Some(idx) = sel {
                     *un_overloads = member_matches;
                     *un_selected = Some(idx);
@@ -4224,9 +4245,8 @@ impl TypeResolver {
             };
             let params = vec![operand_param];
             let mut sel = None;
-            if let Some(ret_ty) = self.resolve_operator_overload(
-                &params, &static_matches, &mut sel,
-            ) {
+            if let Some(ret_ty) = self.resolve_operator_overload(&params, &static_matches, &mut sel)
+            {
                 return Some(ret_ty);
             }
         }
@@ -4802,10 +4822,14 @@ impl TypeResolver {
             let member_ref = member.borrow();
             let (decl_mod, inline_mod) = match &*member_ref {
                 Statement::VariableDecl {
-                    modifiers, accessors, ..
+                    modifiers,
+                    accessors,
+                    ..
                 }
                 | Statement::SubscriptDecl {
-                    modifiers, accessors, ..
+                    modifiers,
+                    accessors,
+                    ..
                 } => {
                     let decl_mod = modifiers.iter().find_map(|m| {
                         if let ModifierType::AccessSet(ref access) = m.ty {
@@ -4814,7 +4838,10 @@ impl TypeResolver {
                             None
                         }
                     });
-                    let inline_mod = accessors.iter().find(|a| a.kind == AccessorKind::Set).and_then(|a| a.set_access_modifier);
+                    let inline_mod = accessors
+                        .iter()
+                        .find(|a| a.kind == AccessorKind::Set)
+                        .and_then(|a| a.set_access_modifier);
                     (decl_mod, inline_mod)
                 }
                 _ => (None, None),
@@ -4826,11 +4853,7 @@ impl TypeResolver {
                         "Conflicting setter access: declaration specifies '{:?}', but accessor specifies '{:?}'",
                         decl, inline
                     );
-                    self.emit_error(
-                        TrussDiagnosticCode::ConflictingSetterAccess,
-                        msg,
-                        &token,
-                    );
+                    self.emit_error(TrussDiagnosticCode::ConflictingSetterAccess, msg, &token);
                 }
             }
         }
@@ -5123,7 +5146,8 @@ impl TypeResolver {
                                                     d.get_decl().ok().flatten().and_then(|decl| {
                                                         let decl_ref = decl.borrow();
                                                         if let Statement::VariableDecl {
-                                                            accessors, ..
+                                                            accessors,
+                                                            ..
                                                         } = &*decl_ref
                                                         {
                                                             if let Some(set_acc) =
@@ -5148,9 +5172,7 @@ impl TypeResolver {
                                                 };
                                                 if let Some(ref set_access) = set_access {
                                                     if !self.is_setter_accessible(
-                                                        set_access,
-                                                        prop_clone,
-                                                        &token,
+                                                        set_access, prop_clone, &token,
                                                     ) {
                                                         self.emit_error(
                                                             TrussDiagnosticCode::InvalidMemberAccessLevel,
@@ -5222,10 +5244,9 @@ impl TypeResolver {
                                                 .iter()
                                                 .find(|a| a.kind == AccessorKind::Set)
                                                 .and_then(|a| a.set_access_modifier);
-                                            let set_mod =
-                                                inline_mod.or_else(|| {
-                                                    Self::get_set_access_modifier(&*decl_ref)
-                                                });
+                                            let set_mod = inline_mod.or_else(|| {
+                                                Self::get_set_access_modifier(&*decl_ref)
+                                            });
                                             if let Some(ref set_mod) = set_mod {
                                                 if !self.is_setter_accessible(
                                                     set_mod,

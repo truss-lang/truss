@@ -1473,9 +1473,7 @@ impl SymbolResolver {
             }
             Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => {}
             Statement::AsmBlock {
-                outputs,
-                inputs,
-                ..
+                outputs, inputs, ..
             } => {
                 for operand in outputs.iter().chain(inputs.iter()) {
                     self.resolve_expression(operand.expression.clone());

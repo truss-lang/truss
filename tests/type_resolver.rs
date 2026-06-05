@@ -5228,7 +5228,7 @@ fn test_binary_operator_method_member_resolves() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct MyInt { var value: Int32; func + (other: MyInt) -> MyInt { return self } }"
-            .to_string(),
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -5315,7 +5315,7 @@ fn test_member_binary_operator_method_call_resolves() {
         CharStream::new(
             "struct MyInt { var value: Int32; func + (other: MyInt) -> MyInt { return self } }
              func test(a: MyInt, b: MyInt) -> MyInt { return a + b }"
-            .to_string(),
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -5337,7 +5337,12 @@ fn test_member_binary_operator_method_call_resolves() {
     );
 }
 
-fn type_check(input: &str) -> (Rc<RefCell<TrussDiagnosticEngine>>, Vec<Rc<RefCell<Statement>>>) {
+fn type_check(
+    input: &str,
+) -> (
+    Rc<RefCell<TrussDiagnosticEngine>>,
+    Vec<Rc<RefCell<Statement>>>,
+) {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(input.to_string(), Rc::new("test".to_string())),
@@ -5356,43 +5361,36 @@ fn type_check(input: &str) -> (Rc<RefCell<TrussDiagnosticEngine>>, Vec<Rc<RefCel
 
 #[test]
 fn test_conditional_block_type_resolved() {
-    let (engine, stmts) = type_check(
-        "#if DEBUG\nfunc foo() -> Int32 { 1 }\n#endif\nfunc bar() -> Int32 { 2 }",
-    );
+    let (engine, stmts) =
+        type_check("#if DEBUG\nfunc foo() -> Int32 { 1 }\n#endif\nfunc bar() -> Int32 { 2 }");
     assert!(engine.borrow().get_errors().is_empty());
     assert_eq!(stmts.len(), 2);
 }
 
 #[test]
 fn test_conditional_block_with_else_type_resolved() {
-    let (engine, _stmts) = type_check(
-        "#if A\nlet x: Int32 = 1\n#else\nlet y: Int32 = 1\n#endif",
-    );
+    let (engine, _stmts) = type_check("#if A\nlet x: Int32 = 1\n#else\nlet y: Int32 = 1\n#endif");
     assert!(engine.borrow().get_errors().is_empty());
 }
 
 #[test]
 fn test_conditional_block_nested_type_resolved() {
-    let (engine, _stmts) = type_check(
-        "#if A\nlet x: Int32 = 1\n#if B\nlet y: Int32 = 2\n#endif\n#endif",
-    );
+    let (engine, _stmts) =
+        type_check("#if A\nlet x: Int32 = 1\n#if B\nlet y: Int32 = 2\n#endif\n#endif");
     assert!(engine.borrow().get_errors().is_empty());
 }
 
 #[test]
 fn test_pragma_directives_type_resolved() {
-    let (engine, stmts) = type_check(
-        "#error \"test\"\n#warning \"test\"\nlet x: Int32 = 1",
-    );
+    let (engine, stmts) = type_check("#error \"test\"\n#warning \"test\"\nlet x: Int32 = 1");
     assert!(engine.borrow().get_errors().is_empty());
     assert_eq!(stmts.len(), 3);
 }
 
 #[test]
 fn test_conditional_block_function_type_resolved() {
-    let (engine, _stmts) = type_check(
-        "#if A\nfunc foo(x: Int32) -> Int32 { x }\n#endif\nlet y: Int32 = foo(x: 1)",
-    );
+    let (engine, _stmts) =
+        type_check("#if A\nfunc foo(x: Int32) -> Int32 { x }\n#endif\nlet y: Int32 = foo(x: 1)");
     let eng = engine.borrow();
     let errors = eng.get_errors();
     assert!(
@@ -5423,7 +5421,10 @@ fn test_sizeof_expression_type_resolved() {
         if let Expression::SizeOf { argument, ty, .. } = &*value.borrow() {
             let resolved_ty = ty.clone().unwrap();
             assert_eq!(*resolved_ty.borrow(), Type::UInt64);
-            if let Expression::Type { name, ty: arg_ty, .. } = &*argument.borrow() {
+            if let Expression::Type {
+                name, ty: arg_ty, ..
+            } = &*argument.borrow()
+            {
                 assert_eq!(name.value, "Int32");
                 let arg_resolved = arg_ty.clone().unwrap();
                 assert_eq!(*arg_resolved.borrow(), Type::Int32);
@@ -5439,27 +5440,42 @@ fn test_sizeof_expression_type_resolved() {
 #[test]
 fn test_asm_block_no_operands_type_check() {
     let errors = run_type_check(r#"func test() { asm { "nop" } }"#);
-    assert_eq!(errors, 0, "asm block without operands should type-check without errors");
+    assert_eq!(
+        errors, 0,
+        "asm block without operands should type-check without errors"
+    );
 }
 
 #[test]
 fn test_asm_block_with_operands_type_check() {
-    let errors = run_type_check(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
-    assert_eq!(errors, 0, "asm block with input operand should type-check without errors");
+    let errors =
+        run_type_check(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
+    assert_eq!(
+        errors, 0,
+        "asm block with input operand should type-check without errors"
+    );
 }
 
 #[test]
 fn test_asm_block_output_type_check() {
-    let errors = run_type_check(r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#);
-    assert_eq!(errors, 0, "asm block with output operand should type-check without errors");
+    let errors = run_type_check(
+        r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#,
+    );
+    assert_eq!(
+        errors, 0,
+        "asm block with output operand should type-check without errors"
+    );
 }
 
 #[test]
 fn test_asm_block_full_type_check() {
     let errors = run_type_check(
-        r#"func test() { var x: Int32 = 0; asm { "add {dst}, {src}" : dst = out(reg) x : src = in(reg) 42 } }"#
+        r#"func test() { var x: Int32 = 0; asm { "add {dst}, {src}" : dst = out(reg) x : src = in(reg) 42 } }"#,
     );
-    assert_eq!(errors, 0, "asm block with full operands should type-check without errors");
+    assert_eq!(
+        errors, 0,
+        "asm block with full operands should type-check without errors"
+    );
 }
 
 #[test]
@@ -5477,7 +5493,10 @@ fn test_using_in_struct_body() {
 #[test]
 fn test_using_in_function_body() {
     let errors = run_type_check(r#"func test() { using MyInt = Int32; var x: MyInt = 42 }"#);
-    assert_eq!(errors, 0, "using in function body should resolve type alias");
+    assert_eq!(
+        errors, 0,
+        "using in function body should resolve type alias"
+    );
 }
 
 #[test]
@@ -5488,8 +5507,15 @@ fn test_using_shorthand_resolves_type() {
 
 #[test]
 fn test_using_type_check_var() {
-    let ty = run_type_check_var(r#"func test() { using MyInt = Int32; var x: MyInt = 42 }"#, "x");
-    assert_eq!(ty, Type::Int32, "variable declared with using alias should have Int32 type");
+    let ty = run_type_check_var(
+        r#"func test() { using MyInt = Int32; var x: MyInt = 42 }"#,
+        "x",
+    );
+    assert_eq!(
+        ty,
+        Type::Int32,
+        "variable declared with using alias should have Int32 type"
+    );
 }
 
 fn run_type_check_do(code: &str) -> Type {
@@ -5544,36 +5570,55 @@ fn test_do_expression_type_int() {
 #[test]
 fn test_do_expression_variable_scope_type() {
     let ty = run_type_check_do("func test() { let x = do { let a = 1; a } }");
-    assert_eq!(ty, Type::Int32, "do expression should infer Int32 from its body's last expression");
+    assert_eq!(
+        ty,
+        Type::Int32,
+        "do expression should infer Int32 from its body's last expression"
+    );
 }
 
 #[test]
 fn test_nested_do_expression_type() {
     let ty = run_type_check_do("func test() { let x = do { do { 1 } } }");
-    assert_eq!(ty, Type::Int32, "nested do expressions should both resolve to Int32");
+    assert_eq!(
+        ty,
+        Type::Int32,
+        "nested do expressions should both resolve to Int32"
+    );
 }
 
 #[test]
 fn test_yield_in_function_type_check() {
     let errors = run_type_check("func test() -> Int32 { yield 42 }");
-    assert_eq!(errors, 0, "yield Int32 in function returning Int32 should be valid");
+    assert_eq!(
+        errors, 0,
+        "yield Int32 in function returning Int32 should be valid"
+    );
 }
 
 #[test]
 fn test_yield_in_function_type_mismatch() {
     let errors = run_type_check("func test() -> Bool { yield 42 }");
-    assert_eq!(errors, 1, "yield Int32 in function returning Bool should error");
+    assert_eq!(
+        errors, 1,
+        "yield Int32 in function returning Bool should error"
+    );
 }
 
 #[test]
 fn test_yield_in_do_expression_type() {
     let errors = run_type_check("func test() -> Int32 { let x = do { yield 42 }; return x }");
-    assert_eq!(errors, 0, "yield in do expression should produce correct type");
+    assert_eq!(
+        errors, 0,
+        "yield in do expression should produce correct type"
+    );
 }
 
 #[test]
 fn test_yield_in_if_branch_type() {
-    let errors = run_type_check("func test() -> Int32 { let x = if true { yield 42 } else { 10 }; return x }");
+    let errors = run_type_check(
+        "func test() -> Int32 { let x = if true { yield 42 } else { 10 }; return x }",
+    );
     assert_eq!(errors, 0, "yield in if branch should produce correct type");
 }
 
@@ -5581,10 +5626,7 @@ fn test_yield_in_if_branch_type() {
 fn test_yield_outside_function_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "let x = yield 42".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("let x = yield 42".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -5594,17 +5636,26 @@ fn test_yield_outside_function_error() {
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    assert!(engine.borrow().has_errors(), "yield at top level should error");
+    assert!(
+        engine.borrow().has_errors(),
+        "yield at top level should error"
+    );
 }
 
 #[test]
 fn test_yield_to_void_function_no_value() {
     let errors = run_type_check("func test() { yield }");
-    assert_eq!(errors, 0, "yield without value in void function should be valid");
+    assert_eq!(
+        errors, 0,
+        "yield without value in void function should be valid"
+    );
 }
 
 #[test]
 fn test_yield_to_nonvoid_function_no_value_error() {
     let errors = run_type_check("func test() -> Int32 { yield }");
-    assert_eq!(errors, 1, "yield without value in non-void function should error");
+    assert_eq!(
+        errors, 1,
+        "yield without value in non-void function should error"
+    );
 }

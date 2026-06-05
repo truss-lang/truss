@@ -6,12 +6,14 @@ use std::{
 
 use anyhow::Result;
 use inkwell::{
+    basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     module::Module,
-    basic_block::BasicBlock,
     types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
-    values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue},
+    values::{
+        BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
+    },
 };
 
 use crate::{
@@ -3442,7 +3444,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 if self.yield_targets.borrow().is_empty() {
                     // In function context: yield is equivalent to return
                     match value {
-                        Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
+                        Some(value)
+                            if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) =>
+                        {
                             let value = self.resolve_expression(value.clone())?.unwrap();
                             self.emit_all_deinit_calls();
                             self.builder.build_return(Some(&value))?;
@@ -3457,7 +3461,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     let target = self.yield_targets.borrow().last().copied().unwrap();
                     let (result_alloca, exit_bb) = target;
                     match value {
-                        Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
+                        Some(value)
+                            if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) =>
+                        {
                             let value = self.resolve_expression(value.clone())?.unwrap();
                             self.builder.build_store(result_alloca, value)?;
                         }
@@ -3889,7 +3895,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     .into(),
             )),
             Expression::SizeOf { argument, .. } => {
-                let arg_ty = argument.borrow().get_ty_ref()
+                let arg_ty = argument
+                    .borrow()
+                    .get_ty_ref()
                     .ok()
                     .and_then(|t| t.clone())
                     .ok_or_else(|| {
@@ -3903,11 +3911,16 @@ impl<'ctx> IRGenerator<'ctx> {
                 let llvm_type = self.resolve_type(arg_ty)?;
                 let i64_ty = self.context.i64_type();
                 let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
-                let null_ptr = self.builder
-                    .build_int_to_ptr(i64_ty.const_int(0, false), ptr_ty, "")?;
+                let null_ptr =
+                    self.builder
+                        .build_int_to_ptr(i64_ty.const_int(0, false), ptr_ty, "")?;
                 let size_val = unsafe {
-                    let gep = self.builder
-                        .build_gep(llvm_type, null_ptr, &[i64_ty.const_int(1, false)], "")?;
+                    let gep = self.builder.build_gep(
+                        llvm_type,
+                        null_ptr,
+                        &[i64_ty.const_int(1, false)],
+                        "",
+                    )?;
                     self.builder.build_ptr_to_int(gep, i64_ty, "")?
                 };
                 Ok(Some(size_val.into()))
@@ -4053,8 +4066,14 @@ impl<'ctx> IRGenerator<'ctx> {
                     });
 
                     let params = vec![
-                        CallParameter { label: None, expression: left.clone() },
-                        CallParameter { label: None, expression: right.clone() },
+                        CallParameter {
+                            label: None,
+                            expression: left.clone(),
+                        },
+                        CallParameter {
+                            label: None,
+                            expression: right.clone(),
+                        },
                     ];
                     let fn_name = if is_static {
                         self.mangle_from_overload(&op_name, sym, &params)
@@ -4065,7 +4084,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             match left_ty.and_then(|t| {
                                 let tb = t.borrow();
                                 match &*tb {
-                                    Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => Some(n.clone()),
+                                    Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => {
+                                        Some(n.clone())
+                                    }
                                     _ => None,
                                 }
                             }) {
@@ -4079,7 +4100,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     };
 
                     if let Some(f) = self.module.get_function(&fn_name) {
-                        let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                        let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                            Vec::new();
                         if is_static {
                             let left_val = self.resolve_expression(left.clone())?.unwrap();
                             args.push(left_val.into());
@@ -4428,7 +4450,10 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     });
 
-                    let params = vec![CallParameter { label: None, expression: expr.clone() }];
+                    let params = vec![CallParameter {
+                        label: None,
+                        expression: expr.clone(),
+                    }];
                     let fn_name = if is_static {
                         self.mangle_from_overload(&op_name, sym, &params)
                             .unwrap_or(op_name.clone())
@@ -4439,7 +4464,9 @@ impl<'ctx> IRGenerator<'ctx> {
                                 Some(Some(ty)) => {
                                     let tb = ty.borrow();
                                     match &*tb {
-                                        Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => n.clone(),
+                                        Type::Struct(n, _)
+                                        | Type::Class(n, _)
+                                        | Type::Enum(n, _) => n.clone(),
                                         _ => op_name.clone(),
                                     }
                                 }
@@ -5410,20 +5437,24 @@ impl<'ctx> IRGenerator<'ctx> {
                     if matches!(&*t.borrow(), Type::Void) {
                         return None;
                     }
-                    self.resolve_type(t.clone()).ok().map(|llvm_ty| {
-                        (self.builder.build_alloca(llvm_ty, "do_result"), llvm_ty)
-                    })
+                    self.resolve_type(t.clone())
+                        .ok()
+                        .map(|llvm_ty| (self.builder.build_alloca(llvm_ty, "do_result"), llvm_ty))
                 });
 
                 // Create exit block for yield support
-                let current_fn = self.builder.get_insert_block()
+                let current_fn = self
+                    .builder
+                    .get_insert_block()
                     .and_then(|bb| Some(bb.get_parent().unwrap()));
                 let exit_bb = current_fn.map(|f| self.context.append_basic_block(f, "do_exit"));
 
                 let has_yield_target = result_alloca.is_some() && exit_bb.is_some();
                 if has_yield_target {
                     if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
-                        self.yield_targets.borrow_mut().push((*alloca, exit_bb.unwrap()));
+                        self.yield_targets
+                            .borrow_mut()
+                            .push((*alloca, exit_bb.unwrap()));
                     }
                 }
 
@@ -5481,7 +5512,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.builder.position_at_end(exit);
                     match alloca_result {
                         Ok(alloca_ptr) => {
-                            let result = self.builder.build_load(llvm_ty, alloca_ptr, "do_result")?;
+                            let result =
+                                self.builder.build_load(llvm_ty, alloca_ptr, "do_result")?;
                             self.exit_scope();
                             Ok(Some(result))
                         }
@@ -7153,7 +7185,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Expression::MacroInvocation { name, .. } => {
-                anyhow::bail!("Unexpected macro invocation '{}' - macros should be expanded before IR generation", name.value)
+                anyhow::bail!(
+                    "Unexpected macro invocation '{}' - macros should be expanded before IR generation",
+                    name.value
+                )
             }
             _ => anyhow::bail!("Expression type not implemented"),
         }
@@ -7774,9 +7809,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Binary { left, right, .. } => self
                 .infer_type_from_expression(left.clone())
                 .or_else(|_| self.infer_type_from_expression(right.clone())),
-            Expression::SizeOf { .. } => {
-                self.resolve_type(Rc::new(RefCell::new(Type::UInt64)))
-            }
+            Expression::SizeOf { .. } => self.resolve_type(Rc::new(RefCell::new(Type::UInt64))),
             _ => {
                 self.emit_error(
                     TrussDiagnosticCode::TypeInferenceFailed,

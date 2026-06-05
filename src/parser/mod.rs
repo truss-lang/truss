@@ -795,7 +795,10 @@ impl Parser {
                         } else {
                             self.emit_error(
                                 TrussDiagnosticCode::UnexpectedToken,
-                                format!("Expected '(' '[' or '{{' after macro name '{}'", token.value),
+                                format!(
+                                    "Expected '(' '[' or '{{' after macro name '{}'",
+                                    token.value
+                                ),
                                 &next,
                             );
                             return Err(());
@@ -803,7 +806,10 @@ impl Parser {
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::UnexpectedToken,
-                            format!("Expected '(' '[' or '{{' after macro name '{}'", token.value),
+                            format!(
+                                "Expected '(' '[' or '{{' after macro name '{}'",
+                                token.value
+                            ),
                             &next,
                         );
                         return Err(());
@@ -2108,7 +2114,9 @@ impl Parser {
             return Err(());
         };
         if !OperatorType::is_operator(&arrow, OperatorType::Assign)
-            || !self.peek().map_or(false, |t| OperatorType::is_operator(&t, OperatorType::Greater))
+            || !self.peek().map_or(false, |t| {
+                OperatorType::is_operator(&t, OperatorType::Greater)
+            })
         {
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
@@ -2157,7 +2165,10 @@ impl Parser {
                 if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
                     self.emit_error(
                         TrussDiagnosticCode::MissingSeparator,
-                        format!("Expected ':' after metavariable name but found '{}'", colon.value),
+                        format!(
+                            "Expected ':' after metavariable name but found '{}'",
+                            colon.value
+                        ),
                         &colon,
                     );
                     return Err(());
@@ -2605,14 +2616,24 @@ impl Parser {
                         SeparatorType::OpenParen,
                     ))
         } else if let TokenType::Keyword { keyword } = &first.ty {
-            matches!(keyword,
-                KeywordType::Open | KeywordType::Public | KeywordType::Internal
-                | KeywordType::Fileprivate | KeywordType::Private | KeywordType::Package
+            matches!(
+                keyword,
+                KeywordType::Open
+                    | KeywordType::Public
+                    | KeywordType::Internal
+                    | KeywordType::Fileprivate
+                    | KeywordType::Private
+                    | KeywordType::Package
             ) && self.index + 2 < self.tokens.len()
                 && self.tokens[self.index + 1].value == "set"
                 && self.tokens[self.index + 1].ty == TokenType::Identifier
-                && (SeparatorType::is_separator(&self.tokens[self.index + 2], SeparatorType::OpenBrace)
-                    || SeparatorType::is_separator(&self.tokens[self.index + 2], SeparatorType::OpenParen))
+                && (SeparatorType::is_separator(
+                    &self.tokens[self.index + 2],
+                    SeparatorType::OpenBrace,
+                ) || SeparatorType::is_separator(
+                    &self.tokens[self.index + 2],
+                    SeparatorType::OpenParen,
+                ))
         } else {
             false
         };
@@ -2672,8 +2693,12 @@ impl Parser {
             let mut set_access_modifier = None;
             if let TokenType::Keyword { keyword } = &token.ty {
                 match keyword {
-                    KeywordType::Open | KeywordType::Public | KeywordType::Internal
-                    | KeywordType::Fileprivate | KeywordType::Private | KeywordType::Package => {
+                    KeywordType::Open
+                    | KeywordType::Public
+                    | KeywordType::Internal
+                    | KeywordType::Fileprivate
+                    | KeywordType::Private
+                    | KeywordType::Package => {
                         if let Some(next) = self.peek2()
                             && next.value == "set"
                             && next.ty == TokenType::Identifier
@@ -5118,8 +5143,9 @@ impl Parser {
         let mut instructions = Vec::new();
         loop {
             match self.peek() {
-                Some(t) if SeparatorType::is_separator(&t, SeparatorType::Colon)
-                    || SeparatorType::is_separator(&t, SeparatorType::CloseBrace) =>
+                Some(t)
+                    if SeparatorType::is_separator(&t, SeparatorType::Colon)
+                        || SeparatorType::is_separator(&t, SeparatorType::CloseBrace) =>
                 {
                     break;
                 }
@@ -5257,7 +5283,10 @@ impl Parser {
             if dir != direction {
                 self.emit_error(
                     TrussDiagnosticCode::ParserAsmBlockError,
-                    &format!("Expected '{:?}' operand direction, got '{:?}'", direction, dir),
+                    &format!(
+                        "Expected '{:?}' operand direction, got '{:?}'",
+                        direction, dir
+                    ),
                     &dir_token,
                 );
                 return Err(());
@@ -5320,9 +5349,7 @@ impl Parser {
     fn parse_asm_clobbers(&mut self, clobbers: &mut Vec<Token>) -> Result<(), ()> {
         loop {
             match self.peek() {
-                Some(t)
-                    if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) =>
-                {
+                Some(t) if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) => {
                     break;
                 }
                 None => break,
@@ -5556,7 +5583,10 @@ impl Parser {
             _ => {
                 self.emit_error(
                     TrussDiagnosticCode::ParserError,
-                    format!("Unknown preprocessor directive '#{}'", directive_token.value),
+                    format!(
+                        "Unknown preprocessor directive '#{}'",
+                        directive_token.value
+                    ),
                     &directive_token,
                 );
                 Err(())
@@ -5572,10 +5602,7 @@ impl Parser {
         let Some(msg_token) = self.peek() else {
             self.emit_error(
                 TrussDiagnosticCode::ParserError,
-                format!(
-                    "Expected string literal after '#{}'",
-                    directive_token.value
-                ),
+                format!("Expected string literal after '#{}'", directive_token.value),
                 &directive_token,
             );
             return Err(());
@@ -5585,10 +5612,7 @@ impl Parser {
             _ => {
                 self.emit_error(
                     TrussDiagnosticCode::ParserError,
-                    format!(
-                        "Expected string literal after '#{}'",
-                        directive_token.value
-                    ),
+                    format!("Expected string literal after '#{}'", directive_token.value),
                     &msg_token,
                 );
                 return Err(());
@@ -5823,9 +5847,7 @@ impl Parser {
                 }
                 Ok(Condition::Platform(ident))
             }
-            TokenType::Separator { separator }
-                if *separator == SeparatorType::OpenParen =>
-            {
+            TokenType::Separator { separator } if *separator == SeparatorType::OpenParen => {
                 self.index += 1;
                 let inner = self.parse_condition()?;
                 let Some(close) = self.peek() else {
