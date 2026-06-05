@@ -292,6 +292,7 @@ pub struct Accessor {
     pub kind: AccessorKind,
     pub parameter: Option<Box<Token>>,
     pub body: Vec<Rc<RefCell<Statement>>>,
+    pub set_access_modifier: Option<AccessModifier>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

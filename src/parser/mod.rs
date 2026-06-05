@@ -2177,6 +2177,15 @@ impl Parser {
                         &self.peek2().unwrap(),
                         SeparatorType::OpenParen,
                     ))
+        } else if let TokenType::Keyword { keyword } = &first.ty {
+            matches!(keyword,
+                KeywordType::Open | KeywordType::Public | KeywordType::Internal
+                | KeywordType::Fileprivate | KeywordType::Private | KeywordType::Package
+            ) && self.index + 2 < self.tokens.len()
+                && self.tokens[self.index + 1].value == "set"
+                && self.tokens[self.index + 1].ty == TokenType::Identifier
+                && (SeparatorType::is_separator(&self.tokens[self.index + 2], SeparatorType::OpenBrace)
+                    || SeparatorType::is_separator(&self.tokens[self.index + 2], SeparatorType::OpenParen))
         } else {
             false
         };
@@ -2214,6 +2223,7 @@ impl Parser {
                 kind: AccessorKind::Get,
                 parameter: None,
                 body,
+                set_access_modifier: None,
             }])
         }
     }
@@ -2232,6 +2242,40 @@ impl Parser {
             if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
                 break;
             }
+            // Check for setter access modifier before 'set' (e.g., "private set {}")
+            let mut set_access_modifier = None;
+            if let TokenType::Keyword { keyword } = &token.ty {
+                match keyword {
+                    KeywordType::Open | KeywordType::Public | KeywordType::Internal
+                    | KeywordType::Fileprivate | KeywordType::Private | KeywordType::Package => {
+                        if let Some(next) = self.peek2()
+                            && next.value == "set"
+                            && next.ty == TokenType::Identifier
+                        {
+                            let modifier = match keyword {
+                                KeywordType::Open => AccessModifier::Open,
+                                KeywordType::Public => AccessModifier::Public,
+                                KeywordType::Internal => AccessModifier::Internal,
+                                KeywordType::Fileprivate => AccessModifier::Fileprivate,
+                                KeywordType::Private => AccessModifier::Private,
+                                KeywordType::Package => AccessModifier::Package,
+                                _ => unreachable!(),
+                            };
+                            self.index += 1;
+                            set_access_modifier = Some(modifier);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let Some(token) = self.peek() else {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    "Expected accessor or '}'".to_string(),
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
             if let TokenType::Identifier = token.ty {
             } else {
                 self.emit_error(
@@ -2347,6 +2391,7 @@ impl Parser {
                 kind,
                 parameter,
                 body,
+                set_access_modifier,
             });
         }
         let has_computed = accessors

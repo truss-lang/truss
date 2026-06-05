@@ -2939,6 +2939,115 @@ fn test_parse_internal_set_modifier() {
 }
 
 #[test]
+fn test_parse_var_private_set_accessor() {
+    let engine = create_engine();
+    let lexer_result = {
+        let mut lexer = Lexer::new(
+            CharStream::new(
+                "var v: Int32 { get { 1 } private set {} }".to_string(),
+                Rc::new("".to_string()),
+            ),
+            engine.clone(),
+        );
+        lexer.parse()
+    };
+    let mut parser = Parser::new(Rc::new("".to_string()), lexer_result, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    drop(engine_ref);
+    if program.statements.is_empty() {
+        panic!("No statements parsed");
+    }
+    if let Statement::VariableDecl { name, accessors, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 2);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert!(accessors[0].set_access_modifier.is_none());
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+        assert_eq!(
+            accessors[1].set_access_modifier,
+            Some(AccessModifier::Private)
+        );
+    } else {
+        panic!("Expected VariableDecl, got {:?}", program.statements[0].borrow());
+    }
+}
+
+#[test]
+fn test_parse_var_internal_set_accessor() {
+    let engine = create_engine();
+    let lexer_result = {
+        let mut lexer = Lexer::new(
+            CharStream::new(
+                "var v: Int32 { get { 1 } internal set(newValue) { _v = newValue } }".to_string(),
+                Rc::new("".to_string()),
+            ),
+            engine.clone(),
+        );
+        lexer.parse()
+    };
+    let mut parser = Parser::new(Rc::new("".to_string()), lexer_result, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    drop(engine_ref);
+    if let Statement::VariableDecl { name, accessors, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "v");
+        assert_eq!(accessors.len(), 2);
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+        assert_eq!(
+            accessors[1].set_access_modifier,
+            Some(AccessModifier::Internal)
+        );
+        assert!(accessors[1].parameter.is_some());
+        assert_eq!(accessors[1].parameter.as_ref().unwrap().value, "newValue");
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_subscript_private_set_accessor() {
+    let engine = create_engine();
+    let lexer_result = {
+        let mut lexer = Lexer::new(
+            CharStream::new(
+                "struct Foo { subscript(i: Int32) -> Int32 { get { _v } private set(v) { _v = v } } }"
+                    .to_string(),
+                Rc::new("".to_string()),
+            ),
+            engine.clone(),
+        );
+        lexer.parse()
+    };
+    let mut parser = Parser::new(Rc::new("".to_string()), lexer_result, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    drop(engine_ref);
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        let member = &body[0];
+        if let Statement::SubscriptDecl { accessors, .. } = &*member.borrow() {
+            assert_eq!(accessors.len(), 2);
+            assert_eq!(accessors[0].kind, AccessorKind::Get);
+            assert_eq!(accessors[1].kind, AccessorKind::Set);
+            assert_eq!(
+                accessors[1].set_access_modifier,
+                Some(AccessModifier::Private)
+            );
+        } else {
+            panic!("Expected SubscriptDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
 fn test_modifier_on_return() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
