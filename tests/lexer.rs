@@ -142,3 +142,21 @@ fn test_parse_asm_keyword() {
     assert_eq!(tokens.len(), 1);
     assert_eq!(tokens[0].ty, TokenType::Keyword { keyword: KeywordType::Asm });
 }
+
+#[test]
+fn test_parse_yield_keyword() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new("yield".to_string(), Rc::new("".to_string())),
+        engine,
+    );
+    let tokens = lexer.parse();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(
+        tokens[0].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::Yield
+        }
+    );
+    assert_eq!(tokens[0].value, "yield");
+}
