@@ -3722,3 +3722,33 @@ fn test_asm_block_no_operands_no_error() {
     assert!(engine.borrow().get_errors().is_empty(), "asm block without operands should not error");
 }
 
+#[test]
+fn test_using_decl_at_top_level() {
+    let (_statements, engine, _) = run_resolver("using Foo.Bar.MyInt");
+    assert!(engine.borrow().get_errors().is_empty(), "top-level using should not error");
+}
+
+#[test]
+fn test_using_decl_with_alias() {
+    let (_statements, engine, _) = run_resolver("using X = A.B.C");
+    assert!(engine.borrow().get_errors().is_empty(), "using with explicit alias should not error");
+}
+
+#[test]
+fn test_using_decl_in_function() {
+    let (_statements, engine, _) = run_resolver("func test() { using MyInt = Foo.Bar.MyInt }");
+    assert!(engine.borrow().get_errors().is_empty(), "using in function body should not error");
+}
+
+#[test]
+fn test_using_decl_single_path() {
+    let (_statements, engine, _) = run_resolver("using Int32");
+    assert!(engine.borrow().get_errors().is_empty(), "using with single path should not error");
+}
+
+#[test]
+fn test_using_decl_multiple() {
+    let (_statements, engine, _) = run_resolver("using A.B.C\nusing X = Y.Z");
+    assert!(engine.borrow().get_errors().is_empty(), "multiple using decls should not error");
+}
+
