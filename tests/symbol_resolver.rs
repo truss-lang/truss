@@ -3698,3 +3698,27 @@ fn test_conditional_block_function_overload_in_branches() {
     assert!(engine.borrow().get_errors().is_empty());
 }
 
+#[test]
+fn test_asm_block_resolves_input_variable() {
+    let (_statements, engine, _) = run_resolver(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
+    assert!(engine.borrow().get_errors().is_empty(), "asm block with valid input variable should not error");
+}
+
+#[test]
+fn test_asm_block_resolves_output_variable() {
+    let (_statements, engine, _) = run_resolver(r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#);
+    assert!(engine.borrow().get_errors().is_empty(), "asm block with valid output variable should not error");
+}
+
+#[test]
+fn test_asm_block_undefined_variable_error() {
+    let (engine, _) = resolve_and_check(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) undefined_var } }"#);
+    assert!(engine.borrow().has_errors(), "undefined variable in asm operand should error");
+}
+
+#[test]
+fn test_asm_block_no_operands_no_error() {
+    let (_statements, engine, _) = run_resolver(r#"func test() { var x: Int32 = 10; asm { "nop" } }"#);
+    assert!(engine.borrow().get_errors().is_empty(), "asm block without operands should not error");
+}
+
