@@ -8556,3 +8556,69 @@ fn test_parse_conditional_block_with_function_body() {
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
 }
+
+#[test]
+fn test_parse_sizeof_int32() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test() { sizeof(Int32) }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let Statement::ExpressionStatement { expression } = &*statements[0].borrow() else {
+            panic!();
+        };
+        assert!(matches!(*expression.borrow(), Expression::SizeOf { .. }));
+        if let Expression::SizeOf { argument, .. } = &*expression.borrow() {
+            if let Expression::Type { name, .. } = &*argument.borrow() {
+                assert_eq!(name.value, "Int32");
+            } else {
+                panic!("Expected Type expression");
+            }
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_sizeof_struct_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { let x: Int32 } func test() { sizeof(Foo) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let Statement::ExpressionStatement { expression } = &*statements[0].borrow() else {
+            panic!();
+        };
+        assert!(matches!(*expression.borrow(), Expression::SizeOf { .. }));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_sizeof_missing_parens() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test() { sizeof Int32 }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().has_errors());
+}

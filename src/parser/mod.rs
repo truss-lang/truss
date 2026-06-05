@@ -587,6 +587,39 @@ impl Parser {
                         ty: None,
                     })
                 }
+                KeywordType::SizeOf => {
+                    self.index += 1;
+                    if let Some(t) = self.peek()
+                        && SeparatorType::is_separator(&t, SeparatorType::OpenParen)
+                    {
+                        self.index += 1;
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::MissingSeparator,
+                            "Expected '(' after 'sizeof'".to_string(),
+                            &token,
+                        );
+                        return Err(());
+                    }
+                    let argument = Rc::new(RefCell::new(self.parse_type_expression()?));
+                    if let Some(t) = self.peek()
+                        && SeparatorType::is_separator(&t, SeparatorType::CloseParen)
+                    {
+                        self.index += 1;
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::MissingSeparator,
+                            "Expected ')' after sizeof type".to_string(),
+                            &token,
+                        );
+                        return Err(());
+                    }
+                    Ok(Expression::SizeOf {
+                        token: Box::new(token),
+                        argument,
+                        ty: None,
+                    })
+                }
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
