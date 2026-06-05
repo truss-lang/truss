@@ -6,6 +6,7 @@ use truss::{
     ir_gen::IRGenerator,
     krate::Crate,
     lexer::{CharStream, Lexer},
+    macro_expander::MacroExpander,
     parser::Parser as TrussParser,
     symbol_resolver::SymbolResolver,
     type_resolver::TypeResolver,
@@ -68,7 +69,7 @@ fn main() {
 
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut parser = TrussParser::new(file_rc.clone(), tokens, engine.clone());
-    let program = parser.parse();
+    let mut program = parser.parse();
 
     if emit_diagnostics(&engine.borrow(), &content) {
         return;
@@ -76,6 +77,18 @@ fn main() {
 
     if cli.inspect || cli.ast {
         println!("=== AST (after parse) ===");
+        println!("{:#?}", program);
+    }
+
+    let mut expander = MacroExpander::new(engine.clone());
+    expander.expand(&mut program);
+
+    if emit_diagnostics(&engine.borrow(), &content) {
+        return;
+    }
+
+    if cli.inspect || cli.ast {
+        println!("=== AST (after macro expansion) ===");
         println!("{:#?}", program);
     }
 

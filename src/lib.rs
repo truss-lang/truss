@@ -3,6 +3,7 @@ pub mod diag;
 pub mod ir_gen;
 pub mod krate;
 pub mod lexer;
+pub mod macro_expander;
 pub mod parser;
 pub mod scope;
 pub mod symbol;

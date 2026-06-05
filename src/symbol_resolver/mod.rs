@@ -1053,6 +1053,13 @@ impl SymbolResolver {
                     }
                 }
             },
+            Statement::MacroDecl { name, .. } => {
+                let symbol = Rc::new(RefCell::new(Symbol::Macro {
+                    name: name.value.clone(),
+                    decl: stmt.clone(),
+                }));
+                self.enter(symbol, name);
+            }
             _ => {}
         }
     }

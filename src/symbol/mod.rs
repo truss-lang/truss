@@ -113,6 +113,10 @@ pub enum Symbol {
         decl: Rc<RefCell<Statement>>,
         module: Option<Rc<RefCell<KrateModule>>>,
     },
+    Macro {
+        name: String,
+        decl: Rc<RefCell<Statement>>,
+    },
 }
 
 impl Symbol {
@@ -135,6 +139,7 @@ impl Symbol {
             Self::ProtocolProperty { name, .. } => Ok(name.clone()),
             Self::ProtocolSubscript { name, .. } => Ok(name.clone()),
             Self::Module { name, .. } => Ok(name.clone()),
+            Self::Macro { name, .. } => Ok(name.clone()),
         }
     }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
@@ -156,6 +161,7 @@ impl Symbol {
             Self::ProtocolProperty { decl, .. } => Ok(decl.clone()),
             Self::ProtocolSubscript { decl, .. } => Ok(decl.clone()),
             Self::Module { decl, .. } => Ok(Some(decl.clone())),
+            Self::Macro { decl, .. } => Ok(Some(decl.clone())),
         }
     }
     pub fn parent(&self) -> Option<Rc<RefCell<Symbol>>> {
