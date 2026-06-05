@@ -45,162 +45,113 @@ impl MacroExpander {
         stmts: &mut Vec<Rc<RefCell<Statement>>>,
         macros: &HashMap<String, Vec<crate::ast::statement::MacroArm>>,
     ) {
-        let expansions: Vec<(usize, Vec<Rc<RefCell<Statement>>>)> = (0..stmts.len())
-            .filter_map(|i| {
-                let expanded = self.try_expand_statement(stmts[i].clone(), macros);
-                expanded.map(|new_stmts| (i, new_stmts))
-            })
-            .collect();
-
-        for (idx, new_stmts) in expansions.into_iter().rev() {
-            stmts.splice(idx..=idx, new_stmts);
-        }
-
-        let mut i = 0;
-        while i < stmts.len() {
-            self.expand_nested_statement(stmts[i].clone(), macros);
-            i += 1;
+        for stmt in stmts.iter_mut() {
+            self.expand_statement(stmt, macros);
         }
     }
 
-    fn try_expand_statement(
+    fn expand_statement(
         &mut self,
-        stmt: Rc<RefCell<Statement>>,
-        macros: &HashMap<String, Vec<crate::ast::statement::MacroArm>>,
-    ) -> Option<Vec<Rc<RefCell<Statement>>>> {
-        let s = stmt.borrow();
-        match &*s {
-            Statement::ExpressionStatement { expression } => {
-                let expr = expression.clone();
-                drop(s);
-                let expanded = self.try_expand_expr(expr, macros);
-                expanded.map(|new_expr| {
-                    vec![Rc::new(RefCell::new(Statement::ExpressionStatement {
-                        expression: Rc::new(RefCell::new(new_expr)),
-                    }))]
-                })
-            }
-            _ => None,
-        }
-    }
-
-    fn expand_nested_statement(
-        &mut self,
-        stmt: Rc<RefCell<Statement>>,
+        stmt: &mut Rc<RefCell<Statement>>,
         macros: &HashMap<String, Vec<crate::ast::statement::MacroArm>>,
     ) {
+        let is_func_or_container = {
+            let s = stmt.borrow();
+            matches!(
+                &*s,
+                Statement::FunctionDecl { .. }
+                    | Statement::StructDecl { .. }
+                    | Statement::ClassDecl { .. }
+                    | Statement::EnumDecl { .. }
+                    | Statement::ExtensionDecl { .. }
+                    | Statement::ModuleDecl { .. }
+            )
+        };
+        if is_func_or_container {
+            let mut stmt_mut = stmt.borrow_mut();
+            match &mut *stmt_mut {
+                Statement::FunctionDecl { body, .. } => {
+                    let body_rc = body.clone();
+                    drop(stmt_mut);
+                    let mut body_mut = body_rc.borrow_mut();
+                    match &mut *body_mut {
+                        crate::ast::statement::FunctionBody::Statements(inner) => {
+                            self.expand_stmts(inner, macros);
+                        }
+                        crate::ast::statement::FunctionBody::Expression(expr) => {
+                            self.expand_in_expr(expr, macros);
+                        }
+                        crate::ast::statement::FunctionBody::None => {}
+                    }
+                }
+                Statement::StructDecl { body, .. }
+                | Statement::ClassDecl { body, .. }
+                | Statement::EnumDecl { body, .. }
+                | Statement::ExtensionDecl { body, .. }
+                | Statement::ModuleDecl { body, .. } => {
+                    self.expand_stmts(body, macros);
+                }
+                _ => unreachable!(),
+            }
+            return;
+        }
+
         let mut stmt_mut = stmt.borrow_mut();
         match &mut *stmt_mut {
-            Statement::FunctionDecl { body, .. } => {
-                let body_mut = &mut *body.borrow_mut();
-                match body_mut {
-                    crate::ast::statement::FunctionBody::Statements(inner) => {
-                        self.expand_stmts(inner, macros);
-                    }
-                    crate::ast::statement::FunctionBody::Expression(expr) => {
-                        let expanded = self.try_expand_expr_owned(expr, macros);
-                        if let Some(new_expr) = expanded {
-                            *expr = Rc::new(RefCell::new(new_expr));
-                        }
-                    }
-                    crate::ast::statement::FunctionBody::None => {}
+            Statement::ExpressionStatement { expression } => {
+                self.expand_in_expr(expression, macros);
+            }
+            Statement::Return { value, .. } => {
+                if let Some(val) = value {
+                    self.expand_in_expr(val, macros);
                 }
             }
-            Statement::StructDecl { body, .. }
-            | Statement::ClassDecl { body, .. }
-            | Statement::EnumDecl { body, .. }
-            | Statement::ExtensionDecl { body, .. }
-            | Statement::ModuleDecl { body, .. } => {
-                self.expand_stmts(body, macros);
+            Statement::VariableDecl { initializer, .. } => {
+                if let Some(init) = initializer {
+                    self.expand_in_expr(init, macros);
+                }
             }
             _ => {}
         }
     }
 
-    fn try_expand_expr(
-        &self,
-        expr: Rc<RefCell<Expression>>,
-        macros: &HashMap<String, Vec<crate::ast::statement::MacroArm>>,
-    ) -> Option<Expression> {
-        let clone = expr.borrow().clone();
-        if let Expression::MacroInvocation {
-            name,
-            delimiter,
-            arguments,
-            ..
-        } = &clone
-        {
-            if let Some(arms) = macros.get(&name.value) {
-                return Self::try_expand_macro(name, arms, *delimiter, arguments);
-            }
-        }
-        Self::expand_expr_children_raw(expr, macros);
-        None
-    }
-
-    fn try_expand_expr_owned(
-        &self,
+    fn expand_in_expr(
+        &mut self,
         expr: &mut Rc<RefCell<Expression>>,
         macros: &HashMap<String, Vec<crate::ast::statement::MacroArm>>,
-    ) -> Option<Expression> {
+    ) {
         let clone = expr.borrow().clone();
         if let Expression::MacroInvocation {
-            name,
-            delimiter,
-            arguments,
+            ref name,
+            ref delimiter,
+            ref arguments,
             ..
-        } = &clone
+        } = clone
         {
             if let Some(arms) = macros.get(&name.value) {
-                return Self::try_expand_macro(name, arms, *delimiter, arguments);
+                if let Some(expanded) =
+                    Self::try_expand_macro(&name, arms, delimiter, &arguments)
+                {
+                    let mut expr_mut = expr.borrow_mut();
+                    let _ = std::mem::replace(&mut *expr_mut, expanded);
+                    return;
+                }
             }
         }
-        Self::expand_expr_children_raw(expr.clone(), macros);
-        None
-    }
 
-    fn expand_expr_children_raw(
-        expr: Rc<RefCell<Expression>>,
-        macros: &HashMap<String, Vec<crate::ast::statement::MacroArm>>,
-    ) {
-        let children: Vec<Rc<RefCell<Expression>>> = {
-            let e = expr.borrow();
-            match &*e {
-                Expression::Binary { left, right, .. } => vec![left.clone(), right.clone()],
-                Expression::Unary { expression, .. } => vec![expression.clone()],
-                Expression::Call {
-                    callee, parameters, ..
-                } => {
-                    let mut v = vec![callee.clone()];
-                    for p in parameters {
-                        v.push(p.expression.clone());
-                    }
-                    v
-                }
-                Expression::MemberAccess { object, .. } => vec![object.clone()],
-                Expression::Assignment { left, right, .. } => vec![left.clone(), right.clone()],
-                Expression::SubscriptAccess { object, parameters, .. } => {
-                    let mut v = vec![object.clone()];
-                    for p in parameters {
-                        v.push(p.expression.clone());
-                    }
-                    v
-                }
-                _ => vec![],
-            }
-        };
+        let children = Self::collect_expr_children(expr.clone());
         for child in children {
-            let clone = child.borrow().clone();
+            let child_clone = child.borrow().clone();
             if let Expression::MacroInvocation {
-                name,
-                delimiter,
-                arguments,
+                ref name,
+                ref delimiter,
+                ref arguments,
                 ..
-            } = &clone
+            } = child_clone
             {
                 if let Some(arms) = macros.get(&name.value) {
                     if let Some(expanded) =
-                        Self::try_expand_macro(name, arms, *delimiter, arguments)
+                        Self::try_expand_macro(name, arms, delimiter, &arguments)
                     {
                         let mut child_mut = child.borrow_mut();
                         let _ = std::mem::replace(&mut *child_mut, expanded);
@@ -210,10 +161,37 @@ impl MacroExpander {
         }
     }
 
+    fn collect_expr_children(expr: Rc<RefCell<Expression>>) -> Vec<Rc<RefCell<Expression>>> {
+        let e = expr.borrow();
+        match &*e {
+            Expression::Binary { left, right, .. } => vec![left.clone(), right.clone()],
+            Expression::Unary { expression, .. } => vec![expression.clone()],
+            Expression::Call {
+                callee, parameters, ..
+            } => {
+                let mut v = vec![callee.clone()];
+                for p in parameters {
+                    v.push(p.expression.clone());
+                }
+                v
+            }
+            Expression::MemberAccess { object, .. } => vec![object.clone()],
+            Expression::Assignment { left, right, .. } => vec![left.clone(), right.clone()],
+            Expression::SubscriptAccess { object, parameters, .. } => {
+                let mut v = vec![object.clone()];
+                for p in parameters {
+                    v.push(p.expression.clone());
+                }
+                v
+            }
+            _ => vec![],
+        }
+    }
+
     fn try_expand_macro(
         name_token: &Token,
         arms: &[crate::ast::statement::MacroArm],
-        _delimiter: MacroDelimiter,
+        _delimiter: &MacroDelimiter,
         arguments: &[Token],
     ) -> Option<Expression> {
         for arm in arms {

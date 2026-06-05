@@ -6,6 +6,7 @@ use truss::{
     ir_gen::IRGenerator,
     krate::Crate,
     lexer::{CharStream, Lexer},
+    macro_expander::MacroExpander,
     parser::Parser,
     symbol_resolver::SymbolResolver,
     type_resolver::TypeResolver,
@@ -4777,4 +4778,64 @@ fn test_irgen_address_of_deref() {
         "Expected function test in IR:\n{}",
         llvm_ir
     );
+}
+
+#[test]
+fn test_irgen_macro_declaration() {
+    let code = "macro id { ($x:expr) => { $x } }\nfunc test() -> Int32 { return 42 }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let mut program = parser.parse();
+    let mut expander = MacroExpander::new(engine.clone());
+    expander.expand(&mut program);
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(llvm_ir.contains("test"));
+}
+
+#[test]
+fn test_irgen_macro_expanded() {
+    let code = "macro id { ($x:expr) => { $x } }\nfunc test() -> Int32 { return id!(42) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let mut program = parser.parse();
+    let mut expander = MacroExpander::new(engine.clone());
+    expander.expand(&mut program);
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(llvm_ir.contains("test"));
 }

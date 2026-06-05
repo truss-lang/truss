@@ -3530,6 +3530,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 Ok(false)
             }
+            Statement::MacroDecl { .. } => Ok(false),
             _ => Ok(false),
         }
     }
@@ -6604,6 +6605,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     );
                     anyhow::bail!("Undefined shorthand argument: ${}", index)
                 }
+            }
+            Expression::MacroInvocation { name, .. } => {
+                anyhow::bail!("Unexpected macro invocation '{}' - macros should be expanded before IR generation", name.value)
             }
             _ => anyhow::bail!("Expression type not implemented"),
         }
