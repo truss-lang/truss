@@ -97,6 +97,10 @@ pub enum Statement {
         token: Box<Token>,
         value: Option<Rc<RefCell<Expression>>>,
     },
+    Yield {
+        token: Box<Token>,
+        value: Option<Rc<RefCell<Expression>>>,
+    },
     Loop {
         token: Box<Token>,
         body: Vec<Rc<RefCell<Statement>>>,
@@ -227,6 +231,7 @@ impl Statement {
             Self::DeinitDecl { token, .. } => (**token).clone(),
             Self::ExpressionStatement { expression } => expression.borrow().token(),
             Self::Return { token, .. } => (**token).clone(),
+            Self::Yield { token, .. } => (**token).clone(),
             Self::Loop { token, .. } => (**token).clone(),
             Self::While { token, .. } => (**token).clone(),
             Self::RepeatWhile { token, .. } => (**token).clone(),

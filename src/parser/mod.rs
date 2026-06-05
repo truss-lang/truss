@@ -129,6 +129,16 @@ impl Parser {
                     }
                     self.parse_return()
                 }
+                KeywordType::Yield => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_yield()
+                }
                 KeywordType::Loop => {
                     if !modifiers.is_empty() {
                         self.emit_error(
@@ -2260,6 +2270,28 @@ impl Parser {
         };
         Ok(Statement::Return {
             token: Box::new(return_token),
+            value: value.map(RefCell::new).map(Rc::new),
+        })
+    }
+
+    fn parse_yield(&mut self) -> Result<Statement, ()> {
+        let Some(token) = self.peek() else {
+            return Err(());
+        };
+        let current_line = token.position.line;
+        self.index += 1;
+        let yield_token = token;
+        let value = if let Some(token) = self.peek()
+            && current_line == token.position.line
+            && !SeparatorType::is_separator(&token, SeparatorType::CloseBrace)
+            && !SeparatorType::is_separator(&token, SeparatorType::SemiColon)
+        {
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+        Ok(Statement::Yield {
+            token: Box::new(yield_token),
             value: value.map(RefCell::new).map(Rc::new),
         })
     }
@@ -5056,6 +5088,7 @@ impl Parser {
         matches!(
             stmt,
             Statement::Return { .. }
+                | Statement::Yield { .. }
                 | Statement::Throw { .. }
                 | Statement::Break { .. }
                 | Statement::Fallthrough { .. }

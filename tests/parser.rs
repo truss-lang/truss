@@ -9108,3 +9108,104 @@ fn test_parse_do_nested() {
         panic!("Expected outer do expression");
     }
 }
+
+#[test]
+fn test_parse_yield_with_value() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { yield 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        assert!(matches!(
+            &*statements[0].borrow(),
+            Statement::Yield { value, .. } if value.is_some()
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_yield_without_value() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { yield }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        assert!(matches!(
+            &*statements[0].borrow(),
+            Statement::Yield { value: None, .. }
+        ));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_yield_in_do_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x = do { yield 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        assert!(matches!(&*statements[0].borrow(), Statement::VariableDecl { .. }));
+        if let Statement::VariableDecl { initializer: Some(init), .. } = &*statements[0].borrow()
+            && let Expression::Do { body, .. } = &*init.borrow()
+        {
+            assert!(matches!(
+                &*body[0].borrow(),
+                Statement::Yield { value, .. } if value.is_some()
+            ));
+        } else {
+            panic!("Expected VariableDecl with do expression initializer");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_yield_in_defer_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { defer { yield 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        assert!(matches!(&*statements[0].borrow(), Statement::Defer { .. }));
+    } else {
+        panic!("Expected FunctionDecl with defer");
+    }
+    assert!(engine.borrow().has_errors());
+}
