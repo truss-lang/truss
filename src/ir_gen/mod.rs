@@ -3442,7 +3442,6 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Statement::Yield { value, .. } => {
                 if self.yield_targets.borrow().is_empty() {
-                    // In function context: yield is equivalent to return
                     match value {
                         Some(value)
                             if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) =>
@@ -3457,7 +3456,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                 } else {
-                    // In do/if expression context: store to result alloca and branch to exit
                     let target = self.yield_targets.borrow().last().copied().unwrap();
                     let (result_alloca, exit_bb) = target;
                     match value {
@@ -5432,7 +5430,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Expression::Do { body, ty, .. } => {
-                // Create result_alloca only for non-void types that can be resolved
                 let result_alloca = ty.as_ref().and_then(|t| {
                     if matches!(&*t.borrow(), Type::Void) {
                         return None;
@@ -5442,7 +5439,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         .map(|llvm_ty| (self.builder.build_alloca(llvm_ty, "do_result"), llvm_ty))
                 });
 
-                // Create exit block for yield support
                 let current_fn = self
                     .builder
                     .get_insert_block()

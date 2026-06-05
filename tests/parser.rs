@@ -8296,9 +8296,7 @@ fn test_parse_postfix_keyword_as_modifier() {
     let tokens = lexer.parse();
     let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
     let program = parser.parse();
-    // Check that it parsed as a function decl with postfix fixity
     if program.statements.len() == 0 || engine.borrow().get_errors().len() > 0 {
-        // fallback: check what we get
         if let Statement::FunctionDecl {
             name,
             operator_fixity,
