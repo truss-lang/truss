@@ -5000,3 +5000,26 @@ func test() -> Int32 { foo() }",
     assert!(llvm_ir.contains("foo"));
     assert!(llvm_ir.contains("test"));
 }
+
+#[test]
+fn test_irgen_sizeof_int32() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "func test() -> UInt64 { return sizeof(Int32) }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("test"));
+}
+
+#[test]
+fn test_irgen_sizeof_pointer() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "struct Foo { let x: Int32 } func test() -> UInt64 { return sizeof(Foo) }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("test"));
+    assert!(llvm_ir.contains("Foo"));
+}

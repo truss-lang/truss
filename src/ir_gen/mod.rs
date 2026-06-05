@@ -3670,6 +3670,30 @@ impl<'ctx> IRGenerator<'ctx> {
                     .const_null()
                     .into(),
             )),
+            Expression::SizeOf { argument, .. } => {
+                let arg_ty = argument.borrow().get_ty_ref()
+                    .ok()
+                    .and_then(|t| t.clone())
+                    .ok_or_else(|| {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeInferenceFailed,
+                            "Cannot determine type for sizeof".to_string(),
+                            None,
+                        );
+                        anyhow::anyhow!("Cannot determine type for sizeof")
+                    })?;
+                let llvm_type = self.resolve_type(arg_ty)?;
+                let i64_ty = self.context.i64_type();
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                let null_ptr = self.builder
+                    .build_int_to_ptr(i64_ty.const_int(0, false), ptr_ty, "")?;
+                let size_val = unsafe {
+                    let gep = self.builder
+                        .build_gep(llvm_type, null_ptr, &[i64_ty.const_int(1, false)], "")?;
+                    self.builder.build_ptr_to_int(gep, i64_ty, "")?
+                };
+                Ok(Some(size_val.into()))
+            }
             Expression::Variable { name, ty, .. } => {
                 let getter_name = format!("{}.getter", name.value);
                 if let Some(getter_fn) = self.module.get_function(&getter_name) {
@@ -6851,6 +6875,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.find_shorthand_in_expr(&param.expression, max);
                 }
             }
+            Expression::SizeOf { argument, .. } => {
+                self.find_shorthand_in_expr(argument, max);
+            }
             _ => {}
         }
     }
@@ -7426,6 +7453,9 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Binary { left, right, .. } => self
                 .infer_type_from_expression(left.clone())
                 .or_else(|_| self.infer_type_from_expression(right.clone())),
+            Expression::SizeOf { .. } => {
+                self.resolve_type(Rc::new(RefCell::new(Type::UInt64)))
+            }
             _ => {
                 self.emit_error(
                     TrussDiagnosticCode::TypeInferenceFailed,
