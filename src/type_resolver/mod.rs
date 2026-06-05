@@ -906,6 +906,13 @@ impl TypeResolver {
                     self.leave_scope();
                 }
             }
+            Statement::ConditionalBlock { clauses } => {
+                for clause in clauses {
+                    for stmt in &clause.body {
+                        self.process_decl(stmt.clone());
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -1435,6 +1442,14 @@ impl TypeResolver {
                     self.leave_scope();
                 }
             }
+            Statement::ConditionalBlock { clauses } => {
+                for clause in clauses {
+                    for stmt in &clause.body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                }
+            }
+            Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => {}
             _ => {}
         }
     }
@@ -3966,7 +3981,9 @@ impl TypeResolver {
             if let Some(ret_ty) = self.resolve_operator_overload(
                 &params, &static_matches, &mut sel,
             ) {
-                if let Some(_idx) = sel {
+                if let Some(idx) = sel {
+                    *bin_overloads = static_matches;
+                    *bin_selected = Some(idx);
                 }
                 return Some(ret_ty);
             }

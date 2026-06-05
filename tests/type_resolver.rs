@@ -5336,3 +5336,68 @@ fn test_member_binary_operator_method_call_resolves() {
         errors
     );
 }
+
+fn type_check(input: &str) -> (Rc<RefCell<TrussDiagnosticEngine>>, Vec<Rc<RefCell<Statement>>>) {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(input.to_string(), Rc::new("test".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    (engine, program.statements)
+}
+
+#[test]
+fn test_conditional_block_type_resolved() {
+    let (engine, stmts) = type_check(
+        "#if DEBUG\nfunc foo() -> Int32 { 1 }\n#endif\nfunc bar() -> Int32 { 2 }",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+    assert_eq!(stmts.len(), 2);
+}
+
+#[test]
+fn test_conditional_block_with_else_type_resolved() {
+    let (engine, _stmts) = type_check(
+        "#if A\nlet x: Int32 = 1\n#else\nlet y: Int32 = 1\n#endif",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+}
+
+#[test]
+fn test_conditional_block_nested_type_resolved() {
+    let (engine, _stmts) = type_check(
+        "#if A\nlet x: Int32 = 1\n#if B\nlet y: Int32 = 2\n#endif\n#endif",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+}
+
+#[test]
+fn test_pragma_directives_type_resolved() {
+    let (engine, stmts) = type_check(
+        "#error \"test\"\n#warning \"test\"\nlet x: Int32 = 1",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+    assert_eq!(stmts.len(), 3);
+}
+
+#[test]
+fn test_conditional_block_function_type_resolved() {
+    let (engine, _stmts) = type_check(
+        "#if A\nfunc foo(x: Int32) -> Int32 { x }\n#endif\nlet y: Int32 = foo(x: 1)",
+    );
+    let eng = engine.borrow();
+    let errors = eng.get_errors();
+    assert!(
+        errors.is_empty(),
+        "Conditional block function type resolve failed: {:?}",
+        errors
+    );
+}
