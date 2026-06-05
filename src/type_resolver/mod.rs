@@ -3379,6 +3379,12 @@ impl TypeResolver {
                 }
             }
             Expression::MacroInvocation { ty, .. } => ty.clone().unwrap_or_else(|| Rc::new(RefCell::new(Type::Void))),
+            Expression::SizeOf { argument, ty, .. } => {
+                self.infer_type(argument.clone());
+                let result = Rc::new(RefCell::new(Type::UInt64));
+                *ty = Some(result.clone());
+                result
+            }
         };
         Some(result)
     }
