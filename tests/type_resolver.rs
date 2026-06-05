@@ -5491,3 +5491,64 @@ fn test_using_type_check_var() {
     let ty = run_type_check_var(r#"func test() { using MyInt = Int32; var x: MyInt = 42 }"#, "x");
     assert_eq!(ty, Type::Int32, "variable declared with using alias should have Int32 type");
 }
+
+fn run_type_check_do(code: &str) -> Type {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine);
+    type_resolver.resolve(&program, module_id);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        for stmt in statements.iter().rev() {
+            if let Statement::Return {
+                value: Some(value), ..
+            } = &*stmt.borrow()
+            {
+                if let Expression::Do { ty, .. } = &*value.borrow() {
+                    return ty.as_ref().unwrap().borrow().clone();
+                }
+            }
+            if let Statement::VariableDecl { initializer, .. } = &*stmt.borrow()
+                && let Some(init) = initializer
+                && let Expression::Do { ty, .. } = &*init.borrow()
+            {
+                return ty.as_ref().unwrap().borrow().clone();
+            }
+        }
+    }
+    panic!("No do expression type found");
+}
+
+#[test]
+fn test_do_expression_type_void() {
+    let errors = run_type_check("func test() { do {} }");
+    assert_eq!(errors, 0, "do with empty body should type-check");
+}
+
+#[test]
+fn test_do_expression_type_int() {
+    let errors = run_type_check("func test() { let x = do { 1 } }");
+    assert_eq!(errors, 0, "do with int literal should type-check");
+}
+
+#[test]
+fn test_do_expression_variable_scope_type() {
+    let ty = run_type_check_do("func test() { let x = do { let a = 1; a } }");
+    assert_eq!(ty, Type::Int32, "do expression should infer Int32 from its body's last expression");
+}
+
+#[test]
+fn test_nested_do_expression_type() {
+    let ty = run_type_check_do("func test() { let x = do { do { 1 } } }");
+    assert_eq!(ty, Type::Int32, "nested do expressions should both resolve to Int32");
+}
