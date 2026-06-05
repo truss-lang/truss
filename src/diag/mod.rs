@@ -28,6 +28,7 @@ pub enum TrussDiagnosticCode {
     IncompatibleAccessors,
     ExpectedBlockAfterDefer,
     ControlFlowNotAllowedInDefer,
+    ParserAsmBlockError,
 
     SymbolError,
     UndefinedVariable,
@@ -94,6 +95,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::IncompatibleAccessors => "E0112",
             Self::ExpectedBlockAfterDefer => "E0113",
             Self::ControlFlowNotAllowedInDefer => "E0114",
+            Self::ParserAsmBlockError => "E0115",
 
             Self::SymbolError => "E0201",
             Self::UndefinedVariable => "E0202",

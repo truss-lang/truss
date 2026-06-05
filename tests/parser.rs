@@ -7,10 +7,10 @@ use truss::{
             UnaryOperator,
         },
         statement::{
-            AccessModifier, AccessorKind, Condition, FunctionBody, ImportKind,
-            MacroMetaVarType, MacroPatternFragment, Modifier, ModifierType,
-            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement,
-            VariadicKind, WhereRequirementKind,
+            AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
+            ImportKind, MacroMetaVarType, MacroPatternFragment, Modifier, ModifierType,
+            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement, VariadicKind,
+            WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -8621,4 +8621,281 @@ fn test_parse_sizeof_missing_parens() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
     assert!(engine.borrow().has_errors());
+}
+
+#[test]
+fn test_parse_asm_block_empty() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("asm {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::AsmBlock {
+        instructions,
+        outputs,
+        inputs,
+        clobbers,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert!(instructions.is_empty());
+        assert!(outputs.is_empty());
+        assert!(inputs.is_empty());
+        assert!(clobbers.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_instructions_only() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "nop" "mov rax, 42" }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::AsmBlock {
+        instructions,
+        outputs,
+        inputs,
+        clobbers,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 2);
+        assert_eq!(instructions[0].value, "\"nop\"");
+        assert_eq!(instructions[1].value, "\"mov rax, 42\"");
+        assert!(outputs.is_empty());
+        assert!(inputs.is_empty());
+        assert!(clobbers.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_with_outputs() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "mov {dst}, 42" : dst = out(reg) result }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        instructions,
+        outputs,
+        inputs,
+        clobbers,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].label.value, "dst");
+        assert_eq!(outputs[0].direction, AsmDirection::Out);
+        assert_eq!(outputs[0].constraint.value, "reg");
+        assert!(inputs.is_empty());
+        assert!(clobbers.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_with_inputs() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "mov rax, {src}" : : src = in(reg) 42 }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        instructions,
+        outputs,
+        inputs,
+        clobbers,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 1);
+        assert!(outputs.is_empty());
+        assert_eq!(inputs.len(), 1);
+        assert_eq!(inputs[0].label.value, "src");
+        assert_eq!(inputs[0].direction, AsmDirection::In);
+        assert_eq!(inputs[0].constraint.value, "reg");
+        assert!(clobbers.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_full() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "add {dst}, {src}" : dst = out(reg) result : src = in(reg) 42 : "rax", "rbx" }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        instructions,
+        outputs,
+        inputs,
+        clobbers,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].value, "\"add {dst}, {src}\"");
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].label.value, "dst");
+        assert_eq!(outputs[0].direction, AsmDirection::Out);
+        assert_eq!(outputs[0].constraint.value, "reg");
+        assert_eq!(inputs.len(), 1);
+        assert_eq!(inputs[0].label.value, "src");
+        assert_eq!(inputs[0].direction, AsmDirection::In);
+        assert_eq!(inputs[0].constraint.value, "reg");
+        assert_eq!(clobbers.len(), 2);
+        assert_eq!(clobbers[0].value, "\"rax\"");
+        assert_eq!(clobbers[1].value, "\"rbx\"");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_multiple_instructions() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm {
+                "mov rax, {src}"
+                "add rax, 1"
+                "mov {dst}, rax"
+                : dst = out(reg) result
+                : src = in(reg) 10
+            }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        instructions,
+        outputs,
+        inputs,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 3);
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(inputs.len(), 1);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_clobbers_only() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "nop" : : : "cc", "memory" }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        instructions,
+        outputs,
+        inputs,
+        clobbers,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 1);
+        assert!(outputs.is_empty());
+        assert!(inputs.is_empty());
+        assert_eq!(clobbers.len(), 2);
+        assert_eq!(clobbers[0].value, "\"cc\"");
+        assert_eq!(clobbers[1].value, "\"memory\"");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_missing_brace() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("asm".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().has_errors());
+}
+
+#[test]
+fn test_parse_asm_block_multiple_outputs() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "inst" : a = out(reg) x, b = out(reg) y }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        outputs, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs[0].label.value, "a");
+        assert_eq!(outputs[1].label.value, "b");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_in_expression_statement_fallback() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "nop" }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    assert!(matches!(&*program.statements[0].borrow(), Statement::AsmBlock { .. }));
 }

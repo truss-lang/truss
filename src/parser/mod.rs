@@ -10,11 +10,11 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, Accessor, AccessorKind, Condition, ConditionalClause, EnumCase,
-            EnumCaseParameter, FunctionBody, GenericParameter, ImportKind, MacroArm,
-            MacroMetaVarType, MacroPatternFragment, MatchCase, Modifier, ModifierType,
-            OperatorFixity, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember, Statement,
-            VariadicKind, WhereRequirement, WhereRequirementKind,
+            AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Condition,
+            ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody, GenericParameter,
+            ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment, MatchCase, Modifier,
+            ModifierType, OperatorFixity, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember,
+            Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -233,6 +233,16 @@ impl Parser {
                         );
                     }
                     self.parse_macro_decl()
+                }
+                KeywordType::Asm => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_asm_block()
                 }
                 _ => {
                     if !modifiers.is_empty() {
@@ -4937,6 +4947,260 @@ impl Parser {
                 | Statement::Break { .. }
                 | Statement::Fallthrough { .. }
         )
+    }
+
+    fn parse_asm_block(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        let Some(open_brace) = self.peek() else {
+            self.emit_error(
+                TrussDiagnosticCode::ParserAsmBlockError,
+                "Expected '{' after 'asm'",
+                &token,
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&open_brace, SeparatorType::OpenBrace) {
+            self.emit_error(
+                TrussDiagnosticCode::ParserAsmBlockError,
+                "Expected '{' after 'asm'",
+                &open_brace,
+            );
+            return Err(());
+        }
+        self.index += 1;
+
+        let mut instructions = Vec::new();
+        loop {
+            match self.peek() {
+                Some(t) if SeparatorType::is_separator(&t, SeparatorType::Colon)
+                    || SeparatorType::is_separator(&t, SeparatorType::CloseBrace) =>
+                {
+                    break;
+                }
+                Some(t) => {
+                    if let TokenType::StringLiteral { .. } = &t.ty {
+                        instructions.push(self.next().unwrap());
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserAsmBlockError,
+                            "Expected string literal for assembly instruction",
+                            &t,
+                        );
+                        return Err(());
+                    }
+                }
+                None => {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserAsmBlockError,
+                        "Expected '}' after assembly block",
+                        &token,
+                    );
+                    return Err(());
+                }
+            }
+        }
+
+        let mut outputs = Vec::new();
+        let mut inputs = Vec::new();
+        let mut clobbers = Vec::new();
+
+        if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::Colon)
+        {
+            self.index += 1;
+            self.parse_asm_operands(&mut outputs, AsmDirection::Out)?;
+
+            if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Colon)
+            {
+                self.index += 1;
+                self.parse_asm_operands(&mut inputs, AsmDirection::In)?;
+
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::Colon)
+                {
+                    self.index += 1;
+                    self.parse_asm_clobbers(&mut clobbers)?;
+                }
+            }
+        }
+
+        let Some(close_brace) = self.peek() else {
+            self.emit_error(
+                TrussDiagnosticCode::ParserAsmBlockError,
+                "Expected '}' at end of inline assembly block",
+                &token,
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&close_brace, SeparatorType::CloseBrace) {
+            self.emit_error(
+                TrussDiagnosticCode::ParserAsmBlockError,
+                "Expected '}' at end of inline assembly block",
+                &close_brace,
+            );
+            return Err(());
+        }
+        self.index += 1;
+
+        Ok(Statement::AsmBlock {
+            token: Box::new(token),
+            instructions,
+            outputs,
+            inputs,
+            clobbers,
+        })
+    }
+
+    fn parse_asm_operands(
+        &mut self,
+        operands: &mut Vec<AsmOperand>,
+        direction: AsmDirection,
+    ) -> Result<(), ()> {
+        loop {
+            match self.peek() {
+                Some(t)
+                    if SeparatorType::is_separator(&t, SeparatorType::Colon)
+                        || SeparatorType::is_separator(&t, SeparatorType::CloseBrace) =>
+                {
+                    break;
+                }
+                None => break,
+                _ => {}
+            }
+
+            let label = self.next().unwrap();
+
+            let Some(eq_token) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserAsmBlockError,
+                    "Expected '=' after operand label",
+                    &self.tokens[self.index],
+                );
+                return Err(());
+            };
+            if !OperatorType::is_operator(&eq_token, OperatorType::Assign) {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserAsmBlockError,
+                    "Expected '=' after operand label",
+                    &eq_token,
+                );
+                return Err(());
+            }
+
+            let Some(dir_token) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserAsmBlockError,
+                    "Expected 'in' or 'out' as operand direction",
+                    &self.tokens[self.index],
+                );
+                return Err(());
+            };
+            let dir = match &dir_token.ty {
+                TokenType::Keyword { keyword } if *keyword == KeywordType::In => AsmDirection::In,
+                TokenType::Identifier if dir_token.value == "out" => AsmDirection::Out,
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserAsmBlockError,
+                        "Expected 'in' or 'out' as operand direction",
+                        &dir_token,
+                    );
+                    return Err(());
+                }
+            };
+            if dir != direction {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserAsmBlockError,
+                    &format!("Expected '{:?}' operand direction, got '{:?}'", direction, dir),
+                    &dir_token,
+                );
+                return Err(());
+            }
+
+            let Some(open_paren) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserAsmBlockError,
+                    "Expected '(' after operand direction",
+                    &self.tokens[self.index],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&open_paren, SeparatorType::OpenParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserAsmBlockError,
+                    "Expected '(' after operand direction",
+                    &open_paren,
+                );
+                return Err(());
+            }
+
+            let constraint = self.next().unwrap();
+
+            let Some(close_paren) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserAsmBlockError,
+                    "Expected ')' after constraint",
+                    &self.tokens[self.index],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close_paren, SeparatorType::CloseParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserAsmBlockError,
+                    "Expected ')' after constraint",
+                    &close_paren,
+                );
+                return Err(());
+            }
+
+            let expression = self.parse_expression()?;
+
+            operands.push(AsmOperand {
+                label: Box::new(label),
+                direction: dir,
+                constraint: Box::new(constraint),
+                expression: Rc::new(RefCell::new(expression)),
+            });
+
+            if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Comma)
+            {
+                self.index += 1;
+            }
+        }
+        Ok(())
+    }
+
+    fn parse_asm_clobbers(&mut self, clobbers: &mut Vec<Token>) -> Result<(), ()> {
+        loop {
+            match self.peek() {
+                Some(t)
+                    if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) =>
+                {
+                    break;
+                }
+                None => break,
+                Some(t) => {
+                    if let TokenType::StringLiteral { .. } = &t.ty {
+                        clobbers.push(self.next().unwrap());
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserAsmBlockError,
+                            "Expected string literal for clobber register",
+                            &t,
+                        );
+                        return Err(());
+                    }
+                }
+            }
+
+            if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Comma)
+            {
+                self.index += 1;
+            }
+        }
+        Ok(())
     }
 
     fn parse_maybe_named_expr(&mut self) -> Result<(Option<String>, Expression), ()> {

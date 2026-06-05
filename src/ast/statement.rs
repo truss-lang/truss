@@ -201,6 +201,13 @@ pub enum Statement {
         token: Box<Token>,
         message: String,
     },
+    AsmBlock {
+        token: Box<Token>,
+        instructions: Vec<Token>,
+        outputs: Vec<AsmOperand>,
+        inputs: Vec<AsmOperand>,
+        clobbers: Vec<Token>,
+    },
 }
 
 impl Statement {
@@ -239,6 +246,7 @@ impl Statement {
             }
             Self::PragmaError { token, .. } => (**token).clone(),
             Self::PragmaWarning { token, .. } => (**token).clone(),
+            Self::AsmBlock { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -262,6 +270,7 @@ impl Statement {
             Self::ConditionalBlock { .. } => Ok(vec![]),
             Self::PragmaError { .. } => Ok(vec![]),
             Self::PragmaWarning { .. } => Ok(vec![]),
+            Self::AsmBlock { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
     }
@@ -488,4 +497,18 @@ pub enum Condition {
     And(Box<Condition>, Box<Condition>),
     Or(Box<Condition>, Box<Condition>),
     Group(Box<Condition>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AsmDirection {
+    In,
+    Out,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AsmOperand {
+    pub label: Box<Token>,
+    pub direction: AsmDirection,
+    pub constraint: Box<Token>,
+    pub expression: Rc<RefCell<Expression>>,
 }
