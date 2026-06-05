@@ -78,6 +78,7 @@ pub enum KeywordType {
     SizeOf,
     Asm,
     Using,
+    Do,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -192,6 +193,7 @@ impl KeywordType {
             KeywordType::SizeOf => "sizeof",
             KeywordType::Asm => "asm",
             KeywordType::Using => "using",
+            KeywordType::Do => "do",
         }
         .to_string()
     }
