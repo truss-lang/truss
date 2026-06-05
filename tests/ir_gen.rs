@@ -5059,3 +5059,46 @@ fn test_irgen_asm_block_with_clobbers() {
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
     assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
 }
+
+#[test]
+fn test_irgen_do_expression_void() {
+    let (_llvm_ir, engine) = run_ir_gen("func test() { do {} }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for do with empty body, got: {:?}", errors);
+}
+
+#[test]
+fn test_irgen_do_expression_int_value() {
+    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { 1 } }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for do returning Int32, got: {:?}", errors);
+    assert!(llvm_ir.contains("ret i32"), "Expected return of i32 from do expression:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_do_expression_as_initializer() {
+    let (_llvm_ir, engine) = run_ir_gen("func test() { let x = do { 42 } }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for do as initializer, got: {:?}", errors);
+}
+
+#[test]
+fn test_irgen_nested_do_expression() {
+    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { do { 1 } } }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for nested do, got: {:?}", errors);
+    assert!(llvm_ir.contains("ret i32"), "Nested do should return i32:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_do_expression_with_variables() {
+    let (llvm_ir, engine) = run_ir_gen("func test() -> Int32 { do { let a = 10 let b = 20 a + b } }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for do with variables, got: {:?}", errors);
+    assert!(llvm_ir.contains("ret i32"), "Do with variables should return i32:\n{}", llvm_ir);
+}

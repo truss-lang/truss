@@ -3714,7 +3714,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::MacroInvocation { ty, .. }
                 | Expression::SizeOf { ty, .. }
                 | Expression::PointerType { ty, .. }
-                | Expression::Type { ty, .. } => ty.clone(),
+                | Expression::Type { ty, .. }
+                | Expression::Do { ty, .. } => ty.clone(),
                 _ => None,
             };
             let ty = self.resolve_type(
@@ -3773,7 +3774,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::MacroInvocation { ty, .. }
                 | Expression::SizeOf { ty, .. }
                 | Expression::PointerType { ty, .. }
-                | Expression::Type { ty, .. } => ty.clone(),
+                | Expression::Type { ty, .. }
+                | Expression::Do { ty, .. } => ty.clone(),
                 _ => None,
             };
             let out_ty = self.resolve_type(
@@ -5355,6 +5357,14 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                         _ => Ok(None),
                     }
+                }
+            }
+            Expression::Do { body, .. } => {
+                let (terminates, value) = self.resolve_block_and_get_value(body)?;
+                if terminates {
+                    Ok(None)
+                } else {
+                    Ok(value)
                 }
             }
             Expression::Cast {
