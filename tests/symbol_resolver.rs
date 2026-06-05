@@ -3632,3 +3632,69 @@ fn test_operator_method_resolver_inside_struct() {
     );
 }
 
+fn resolve_and_check(input: &str) -> (Rc<RefCell<TrussDiagnosticEngine>>, Vec<Rc<RefCell<Statement>>>) {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(input.to_string(), Rc::new("test".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    (engine, program.statements)
+}
+
+#[test]
+fn test_conditional_block_symbol_resolved() {
+    let (engine, stmts) = resolve_and_check(
+        "#if DEBUG\nfunc foo() -> Int32 { 1 }\n#endif\nfunc bar() -> Int32 { 2 }",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+    assert_eq!(stmts.len(), 2);
+    assert!(matches!(&*stmts[0].borrow(), Statement::ConditionalBlock { .. }));
+}
+
+#[test]
+fn test_conditional_block_nested_symbol_resolved() {
+    let (engine, _stmts) = resolve_and_check(
+        "#if A\nlet x: Int32 = 1\n#if B\nlet y: Int32 = 2\n#endif\n#endif",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+}
+
+#[test]
+fn test_conditional_block_with_else_symbol_resolved() {
+    let (engine, _stmts) = resolve_and_check(
+        "#if A\nlet x: Int32 = 1\n#else\nlet y: Int32 = 2\n#endif",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+}
+
+#[test]
+fn test_pragma_directives_no_crash() {
+    let (engine, stmts) = resolve_and_check(
+        "#error \"test error\"\n#warning \"test warning\"\nlet x: Int32 = 1",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+    assert_eq!(stmts.len(), 3);
+}
+
+#[test]
+fn test_conditional_block_function_call_resolved() {
+    let (engine, _stmts) = resolve_and_check(
+        "#if A\nfunc foo() -> Int32 { 1 }\n#else\nfunc foo() -> Int32 { 2 }\n#endif\nlet x: Int32 = foo()",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+}
+
+#[test]
+fn test_conditional_block_function_overload_in_branches() {
+    let (engine, _stmts) = resolve_and_check(
+        "#if A\nfunc foo(x: Int32) -> Int32 { x }\n#else\nfunc foo(y: Int32) -> Int32 { y }\n#endif",
+    );
+    assert!(engine.borrow().get_errors().is_empty());
+}
+

@@ -1060,6 +1060,14 @@ impl SymbolResolver {
                 }));
                 self.enter(symbol, name);
             }
+            Statement::ConditionalBlock { clauses } => {
+                for clause in clauses {
+                    for s in &clause.body {
+                        self.register_symbols(s.clone());
+                    }
+                }
+            }
+            Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => {}
             _ => {}
         }
     }
@@ -1452,6 +1460,14 @@ impl SymbolResolver {
                 }
                 self.leave_scope();
             }
+            Statement::ConditionalBlock { clauses } => {
+                for clause in clauses {
+                    for stmt in &clause.body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                }
+            }
+            Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => {}
             _ => {}
         }
     }
