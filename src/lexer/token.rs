@@ -77,6 +77,7 @@ pub enum KeywordType {
     Postfix,
     SizeOf,
     Asm,
+    Using,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -190,6 +191,7 @@ impl KeywordType {
             KeywordType::Postfix => "postfix",
             KeywordType::SizeOf => "sizeof",
             KeywordType::Asm => "asm",
+            KeywordType::Using => "using",
         }
         .to_string()
     }
