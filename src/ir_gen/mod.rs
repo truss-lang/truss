@@ -9,8 +9,8 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
-    types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum},
-    values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue},
+    types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
+    values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue},
 };
 
 use crate::{
@@ -21,8 +21,8 @@ use crate::{
         },
         node::Program,
         statement::{
-            Accessor, AccessorKind, FunctionBody, Parameter, Pattern, ProtocolMember, Statement,
-            VariadicKind,
+            Accessor, AccessorKind, AsmOperand, FunctionBody, Parameter, Pattern, ProtocolMember,
+            Statement, VariadicKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -3621,8 +3621,191 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(false)
             }
             Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => Ok(false),
+            Statement::AsmBlock {
+                instructions,
+                outputs,
+                inputs,
+                clobbers,
+                ..
+            } => self.resolve_asm_block(instructions, outputs, inputs, clobbers),
             _ => Ok(false),
         }
+    }
+
+    fn resolve_asm_block(
+        &self,
+        instructions: &[Token],
+        outputs: &[AsmOperand],
+        inputs: &[AsmOperand],
+        clobbers: &[Token],
+    ) -> Result<bool> {
+        let asm_body: Vec<String> = instructions
+            .iter()
+            .map(|t| t.value.trim_matches('"').to_string())
+            .collect();
+        let asm_str = asm_body.join("\n");
+        let mut label_to_idx: HashMap<&str, u32> = HashMap::new();
+        for (i, op) in outputs.iter().enumerate() {
+            label_to_idx.insert(&op.label.value, i as u32);
+        }
+        for (i, op) in inputs.iter().enumerate() {
+            label_to_idx.insert(&op.label.value, (outputs.len() + i) as u32);
+        }
+        let mut final_asm = String::new();
+        let mut chars = asm_str.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '{' {
+                let mut label = String::new();
+                while let Some(&next) = chars.peek() {
+                    if next == '}' {
+                        chars.next();
+                        break;
+                    }
+                    label.push(next);
+                    chars.next();
+                }
+                if let Some(idx) = label_to_idx.get(label.as_str()) {
+                    final_asm.push_str(&format!("${}", idx));
+                } else {
+                    final_asm.push('{');
+                    final_asm.push_str(&label);
+                    final_asm.push('}');
+                }
+            } else {
+                final_asm.push(c);
+            }
+        }
+        let mut constraints = String::new();
+        let mut param_types: Vec<BasicMetadataTypeEnum<'ctx>> = Vec::new();
+        let mut param_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
+        for op in outputs {
+            if !constraints.is_empty() {
+                constraints.push(',');
+            }
+            let prefix = "=";
+            match op.constraint.value.as_str() {
+                "reg" => constraints.push_str(&format!("{}r", prefix)),
+                "imm" => constraints.push_str(&format!("{}i", prefix)),
+                "mem" => constraints.push_str(&format!("{}m", prefix)),
+                other => constraints.push_str(&format!("{}{}", prefix, other)),
+            }
+            let expr_type = match &*op.expression.borrow() {
+                Expression::Variable { ty, .. }
+                | Expression::IntegerLiteral { ty, .. }
+                | Expression::DecimalLiteral { ty, .. }
+                | Expression::NullptrLiteral { ty, .. }
+                | Expression::MemberAccess { ty, .. }
+                | Expression::AssociatedTypeAccess { ty, .. }
+                | Expression::If { ty, .. }
+                | Expression::Case { ty, .. }
+                | Expression::Match { ty, .. }
+                | Expression::ShorthandArgument { ty, .. }
+                | Expression::Cast { ty, .. }
+                | Expression::TupleLiteral { ty, .. }
+                | Expression::TupleIndexAccess { ty, .. }
+                | Expression::SelfKeyword { ty, .. }
+                | Expression::SuperKeyword { ty, .. }
+                | Expression::SelfType { ty, .. }
+                | Expression::AnyType { ty, .. }
+                | Expression::CompoundType { ty, .. }
+                | Expression::Closure { ty, .. }
+                | Expression::FunctionType { ty, .. }
+                | Expression::SubscriptAccess { ty, .. }
+                | Expression::MacroInvocation { ty, .. }
+                | Expression::SizeOf { ty, .. }
+                | Expression::PointerType { ty, .. }
+                | Expression::Type { ty, .. } => ty.clone(),
+                _ => None,
+            };
+            let ty = self.resolve_type(
+                expr_type.ok_or_else(|| anyhow::anyhow!("Missing type on asm output operand"))?,
+            )?;
+            param_types.push(ty.as_basic_type_enum().into());
+        }
+        for op in inputs {
+            if !constraints.is_empty() {
+                constraints.push(',');
+            }
+            match op.constraint.value.as_str() {
+                "reg" => constraints.push('r'),
+                "imm" => constraints.push('i'),
+                "mem" => constraints.push('m'),
+                other => constraints.push_str(other),
+            }
+            if let Some(val) = self.resolve_expression(op.expression.clone())? {
+                param_types.push(val.get_type().into());
+                param_values.push(val.into());
+            }
+        }
+        for clobber in clobbers {
+            let name = clobber.value.trim_matches('"');
+            if !constraints.is_empty() {
+                constraints.push(',');
+            }
+            constraints.push_str(&format!("~{{{}}}", name));
+        }
+        let fn_type: FunctionType<'ctx> = if outputs.is_empty() {
+            self.context.void_type().fn_type(&param_types, false)
+        } else {
+            let out_expr = &*outputs[0].expression.borrow();
+            let out_expr_type = match out_expr {
+                Expression::Variable { ty, .. }
+                | Expression::IntegerLiteral { ty, .. }
+                | Expression::DecimalLiteral { ty, .. }
+                | Expression::NullptrLiteral { ty, .. }
+                | Expression::MemberAccess { ty, .. }
+                | Expression::AssociatedTypeAccess { ty, .. }
+                | Expression::If { ty, .. }
+                | Expression::Case { ty, .. }
+                | Expression::Match { ty, .. }
+                | Expression::ShorthandArgument { ty, .. }
+                | Expression::Cast { ty, .. }
+                | Expression::TupleLiteral { ty, .. }
+                | Expression::TupleIndexAccess { ty, .. }
+                | Expression::SelfKeyword { ty, .. }
+                | Expression::SuperKeyword { ty, .. }
+                | Expression::SelfType { ty, .. }
+                | Expression::AnyType { ty, .. }
+                | Expression::CompoundType { ty, .. }
+                | Expression::Closure { ty, .. }
+                | Expression::FunctionType { ty, .. }
+                | Expression::SubscriptAccess { ty, .. }
+                | Expression::MacroInvocation { ty, .. }
+                | Expression::SizeOf { ty, .. }
+                | Expression::PointerType { ty, .. }
+                | Expression::Type { ty, .. } => ty.clone(),
+                _ => None,
+            };
+            let out_ty = self.resolve_type(
+                out_expr_type
+                    .ok_or_else(|| anyhow::anyhow!("Missing type on asm output operand"))?,
+            )?;
+            out_ty.fn_type(&param_types, false)
+        };
+        let asm_ptr = self.context.create_inline_asm(
+            fn_type,
+            final_asm,
+            constraints,
+            true,
+            false,
+            None,
+            false,
+        );
+        let result = self
+            .builder
+            .build_indirect_call(fn_type, asm_ptr, &param_values, "asm")?;
+        if !outputs.is_empty() {
+            let result_val = match result.try_as_basic_value() {
+                inkwell::values::ValueKind::Basic(val) => val,
+                _ => anyhow::bail!("Inline asm did not return a value"),
+            };
+            if let Expression::Variable { name, .. } = &*outputs[0].expression.borrow() {
+                if let Some(ptr) = self.lookup_variable(&name.value) {
+                    self.builder.build_store(ptr, result_val)?;
+                }
+            }
+        }
+        Ok(false)
     }
 
     fn resolve_expression(

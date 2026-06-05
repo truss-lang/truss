@@ -5023,3 +5023,39 @@ fn test_irgen_sizeof_pointer() {
     assert!(llvm_ir.contains("test"));
     assert!(llvm_ir.contains("Foo"));
 }
+
+#[test]
+fn test_irgen_asm_block_no_operands() {
+    let (llvm_ir, engine) = run_ir_gen("func test() { asm { \"nop\" } }");
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_asm_block_with_input() {
+    let (llvm_ir, engine) = run_ir_gen(r#"func test() { var x: Int32 = 10; asm { "nop" : : val = in(reg) x } }"#);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_asm_block_with_output() {
+    let (llvm_ir, engine) = run_ir_gen(r#"func test() { var x: Int32 = 0; asm { "mov {dst}, 42" : dst = out(reg) x } }"#);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
+}
+
+#[test]
+fn test_irgen_asm_block_with_clobbers() {
+    let (llvm_ir, engine) = run_ir_gen(r#"func test() { var x: Int32 = 0; asm { "nop" : : : "rax", "rbx" } }"#);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("asm sideeffect"), "Expected inline asm in IR:\n{}", llvm_ir);
+}
