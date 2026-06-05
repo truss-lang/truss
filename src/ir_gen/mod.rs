@@ -348,6 +348,12 @@ impl<'ctx> IRGenerator<'ctx> {
             for stmt in body {
                 self.declare_struct_types(stmt.clone());
             }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.declare_struct_types(stmt.clone());
+                }
+            }
         }
     }
 
@@ -388,6 +394,12 @@ impl<'ctx> IRGenerator<'ctx> {
             for stmt in body {
                 self.create_struct_type_bodies(stmt.clone());
             }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_struct_type_bodies(stmt.clone());
+                }
+            }
         }
     }
 
@@ -405,6 +417,12 @@ impl<'ctx> IRGenerator<'ctx> {
         } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
             for stmt in body {
                 self.declare_class_types(stmt.clone());
+            }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.declare_class_types(stmt.clone());
+                }
             }
         }
     }
@@ -425,6 +443,12 @@ impl<'ctx> IRGenerator<'ctx> {
         } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
             for stmt in body {
                 self.create_class_type_bodies(stmt.clone());
+            }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_class_type_bodies(stmt.clone());
+                }
             }
         }
     }
@@ -642,6 +666,12 @@ impl<'ctx> IRGenerator<'ctx> {
             for stmt in body {
                 self.declare_enum_types(stmt.clone());
             }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.declare_enum_types(stmt.clone());
+                }
+            }
         }
     }
 
@@ -692,6 +722,12 @@ impl<'ctx> IRGenerator<'ctx> {
         } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
             for stmt in body {
                 self.create_enum_type_bodies(stmt.clone());
+            }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_enum_type_bodies(stmt.clone());
+                }
             }
         }
     }
@@ -912,6 +948,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         *counts.entry(key).or_insert(0) += 1;
                     }
                     Self::count_fn_name_frequencies(s, counts);
+                }
+            }
+            Statement::ConditionalBlock { clauses } => {
+                for clause in clauses {
+                    for stmt in &clause.body {
+                        Self::count_fn_name_frequencies(stmt, counts);
+                    }
                 }
             }
             _ => {}
@@ -1552,6 +1595,13 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.create_function_declarations(stmt.clone());
             }
         }
+        if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_function_declarations(stmt.clone());
+                }
+            }
+        }
     }
 
     fn create_extern_declaration(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
@@ -1788,6 +1838,12 @@ impl<'ctx> IRGenerator<'ctx> {
             for stmt in body {
                 self.create_vtable_types(stmt.clone());
             }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_vtable_types(stmt.clone());
+                }
+            }
         }
     }
 
@@ -1840,6 +1896,12 @@ impl<'ctx> IRGenerator<'ctx> {
         } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
             for stmt in body {
                 self.create_vtable_instances(stmt.clone());
+            }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_vtable_instances(stmt.clone());
+                }
             }
         }
     }
@@ -2017,6 +2079,12 @@ impl<'ctx> IRGenerator<'ctx> {
             for stmt in body {
                 self.create_protocol_witness_table_types(stmt.clone());
             }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_protocol_witness_table_types(stmt.clone());
+                }
+            }
         }
     }
 
@@ -2041,6 +2109,12 @@ impl<'ctx> IRGenerator<'ctx> {
         } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
             for stmt in body {
                 self.create_existential_container_types(stmt.clone());
+            }
+        } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_existential_container_types(stmt.clone());
+                }
             }
         }
     }
@@ -2190,6 +2264,13 @@ impl<'ctx> IRGenerator<'ctx> {
         if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
             for stmt in body {
                 self.create_protocol_witness_tables(stmt.clone());
+            }
+        }
+        if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
+            for clause in clauses {
+                for stmt in &clause.body {
+                    self.create_protocol_witness_tables(stmt.clone());
+                }
             }
         }
     }
@@ -3531,6 +3612,15 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(false)
             }
             Statement::MacroDecl { .. } => Ok(false),
+            Statement::ConditionalBlock { clauses } => {
+                for clause in clauses {
+                    for stmt in &clause.body {
+                        self.resolve_statement(stmt.clone())?;
+                    }
+                }
+                Ok(false)
+            }
+            Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => Ok(false),
             _ => Ok(false),
         }
     }

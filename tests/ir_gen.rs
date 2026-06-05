@@ -4907,3 +4907,96 @@ fn test_irgen_member_binary_operator_method() {
         llvm_ir
     );
 }
+
+#[test]
+fn test_irgen_conditional_block_basic() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "#if A
+func foo() -> Int32 { 1 }
+#endif
+func bar() -> Int32 { 2 }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("foo"), "Expected foo function in IR");
+    assert!(llvm_ir.contains("bar"), "Expected bar function in IR");
+}
+
+#[test]
+fn test_irgen_conditional_block_with_else() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "#if A
+func foo() -> Int32 { 1 }
+#else
+func bar() -> Int32 { 2 }
+#endif",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("foo"), "Expected foo function in IR");
+    assert!(llvm_ir.contains("bar"), "Expected bar function in IR");
+}
+
+#[test]
+fn test_irgen_conditional_block_nested() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "#if A
+#if B
+func inner() -> Int32 { 1 }
+#endif
+#endif
+func outer() -> Int32 { 2 }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("inner"));
+    assert!(llvm_ir.contains("outer"));
+}
+
+#[test]
+fn test_irgen_conditional_block_in_function_body() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "func test() -> Int32 {
+    var x: Int32 = 1
+#if A
+    x = x + 1
+#endif
+    return x
+}",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("test"));
+}
+
+#[test]
+fn test_irgen_pragma_directives_noop() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "#error \"test error\"
+#warning \"test warning\"
+func foo() -> Int32 { 1 }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("foo"));
+}
+
+#[test]
+fn test_irgen_conditional_block_function_call() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "#if A
+func foo() -> Int32 { 42 }
+#endif
+func test() -> Int32 { foo() }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    assert!(llvm_ir.contains("foo"));
+    assert!(llvm_ir.contains("test"));
+}
