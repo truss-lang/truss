@@ -4662,17 +4662,37 @@ impl TypeResolver {
                                         if name == &member.value {
                                             if *is_var {
                                                 let prop_clone = prop.clone();
-                                                let set_check = {
+                                                let set_access = {
                                                     let d = prop_clone.borrow();
                                                     d.get_decl().ok().flatten().and_then(|decl| {
+                                                        let decl_ref = decl.borrow();
+                                                        if let Statement::VariableDecl {
+                                                            accessors, ..
+                                                        } = &*decl_ref
+                                                        {
+                                                            if let Some(set_acc) =
+                                                                accessors.iter().find(|a| {
+                                                                    a.kind == AccessorKind::Set
+                                                                })
+                                                            {
+                                                                if set_acc
+                                                                    .set_access_modifier
+                                                                    .is_some()
+                                                                {
+                                                                    return set_acc
+                                                                        .set_access_modifier;
+                                                                }
+                                                            }
+                                                        }
+                                                        drop(decl_ref);
                                                         Self::get_set_access_modifier(
                                                             &*decl.borrow(),
                                                         )
                                                     })
                                                 };
-                                                if let Some(set_access) = set_check {
+                                                if let Some(ref set_access) = set_access {
                                                     if !self.is_setter_accessible(
-                                                        &set_access,
+                                                        set_access,
                                                         prop_clone,
                                                         &token,
                                                     ) {
@@ -4710,6 +4730,62 @@ impl TypeResolver {
                                             return;
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Expression::SubscriptAccess { object, .. } => {
+                let object_ty = self.infer_type(object.clone());
+                if let Some(object_ty) = object_ty {
+                    let type_name = match &*object_ty.borrow() {
+                        Type::Struct(n, _) | Type::Class(n, _) => Some(n.clone()),
+                        _ => None,
+                    };
+                    if let Some(type_name) = type_name {
+                        if let Some(scope) = &self.current_scope {
+                            let scope_ref = scope.borrow();
+                            if let Some(symbol) = scope_ref.get_symbol(&type_name) {
+                                let binding = symbol.borrow();
+                                let subscripts = match &*binding {
+                                    Symbol::Struct { subscripts, .. }
+                                    | Symbol::Class { subscripts, .. } => subscripts.clone(),
+                                    _ => vec![],
+                                };
+                                drop(binding);
+                                drop(scope_ref);
+                                for sub in &subscripts {
+                                    let sub_binding = sub.borrow();
+                                    if let Some(decl) = sub_binding.get_decl().ok().flatten() {
+                                        let decl_ref = decl.borrow();
+                                        if let Statement::SubscriptDecl { accessors, .. } =
+                                            &*decl_ref
+                                        {
+                                            if let Some(set_acc) = accessors
+                                                .iter()
+                                                .find(|a| a.kind == AccessorKind::Set)
+                                            {
+                                                if let Some(ref set_mod) =
+                                                    set_acc.set_access_modifier
+                                                {
+                                                    if !self.is_setter_accessible(
+                                                        set_mod,
+                                                        sub.clone(),
+                                                        &token,
+                                                    ) {
+                                                        self.emit_error(
+                                                            TrussDiagnosticCode::InvalidMemberAccessLevel,
+                                                            "Cannot assign to subscript due to setter access level",
+                                                            &token,
+                                                        );
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    drop(sub_binding);
                                 }
                             }
                         }

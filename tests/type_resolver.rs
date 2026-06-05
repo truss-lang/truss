@@ -2207,6 +2207,118 @@ fn test_private_set_blocks_external_write() {
 }
 
 #[test]
+fn test_inline_private_set_blocks_external_write() {
+    let code = r#"
+        struct Foo {
+            var x: Int32 {
+                get { _x }
+                private set(v) { _x = v }
+            }
+        }
+        func test() -> Int32 {
+            var f: Foo
+            f.x = 10
+            return f.x
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "Should emit error for writing to property with inline private set from outside"
+    );
+}
+
+#[test]
+fn test_inline_private_set_allows_internal_write() {
+    let code = r#"
+        struct Foo {
+            var x: Int32 {
+                get { _x }
+                private set(v) { _x = v }
+            }
+            func setX(_ v: Int32) {
+                x = v
+            }
+        }
+        func test() -> Int32 {
+            var f: Foo
+            f.setX(10)
+            return f.x
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        errors.is_empty(),
+        "Should allow writing to property with inline private set from within struct, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_subscript_inline_private_set_blocks_external_write() {
+    let code = r#"
+        struct Vec {
+            subscript(i: Int32) -> Int32 {
+                get { _v }
+                private set(v) { _v = v }
+            }
+        }
+        func test() -> Int32 {
+            var v: Vec
+            v[0] = 10
+            return v[0]
+        }
+    "#;
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        !errors.is_empty(),
+        "Should emit error for subscript assignment with inline private set from outside"
+    );
+}
+
+#[test]
 fn test_protocol_type_with_method() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
