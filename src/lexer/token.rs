@@ -91,6 +91,7 @@ pub enum SeparatorType {
     At,           // @
     Backtick,     // `
     DoubleColon,  // ::
+    Hash,         // #
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OperatorType {

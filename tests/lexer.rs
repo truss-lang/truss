@@ -4,7 +4,7 @@ use truss::{
     diag::TrussDiagnosticEngine,
     lexer::{
         CharStream, Lexer,
-        token::{KeywordType, TokenType},
+        token::{KeywordType, SeparatorType, TokenType},
     },
 };
 
@@ -87,4 +87,34 @@ fn test_parse_super_keyword() {
             keyword: KeywordType::SuperKw
         }
     );
+}
+
+#[test]
+fn test_parse_hash_token() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new("#if #else #endif".to_string(), Rc::new("".to_string())),
+        engine,
+    );
+    let tokens = lexer.parse();
+    assert_eq!(tokens.len(), 6);
+    assert_eq!(tokens[0].ty, TokenType::Separator { separator: SeparatorType::Hash });
+    assert_eq!(tokens[1].ty, TokenType::Keyword { keyword: KeywordType::If });
+    assert_eq!(tokens[2].ty, TokenType::Separator { separator: SeparatorType::Hash });
+    assert_eq!(tokens[3].ty, TokenType::Keyword { keyword: KeywordType::Else });
+    assert_eq!(tokens[4].ty, TokenType::Separator { separator: SeparatorType::Hash });
+    assert_eq!(tokens[5].value, "endif");
+}
+
+#[test]
+fn test_parse_hash_identifier_separated() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new("# if".to_string(), Rc::new("".to_string())),
+        engine,
+    );
+    let tokens = lexer.parse();
+    assert_eq!(tokens.len(), 2);
+    assert_eq!(tokens[0].ty, TokenType::Separator { separator: SeparatorType::Hash });
+    assert_eq!(tokens[1].ty, TokenType::Keyword { keyword: KeywordType::If });
 }

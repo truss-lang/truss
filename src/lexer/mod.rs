@@ -258,6 +258,17 @@ impl Lexer {
                 position,
                 self.input.file.clone(),
             ))
+        } else if c == '#' {
+            let position = self.input.get_current_position();
+            self.input.inc_pos();
+            Some(Token::new(
+                '#'.to_string(),
+                TokenType::Separator {
+                    separator: SeparatorType::Hash,
+                },
+                position,
+                self.input.file.clone(),
+            ))
         } else if c == '`' {
             let pos = self.input.get_current_position();
             self.input.inc_pos();
@@ -1138,6 +1149,7 @@ impl Lexer {
             && ch != ','
             && ch != '?'
             && ch != '@'
+            && ch != '#'
             && ch != '+'
             && ch != '-'
             && ch != '*'
