@@ -73,6 +73,8 @@ pub enum KeywordType {
     Static,
     Subscript,
     Macro,
+    Prefix,
+    Postfix,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -181,6 +183,8 @@ impl KeywordType {
             KeywordType::Static => "static",
             KeywordType::Subscript => "subscript",
             KeywordType::Macro => "macro",
+            KeywordType::Prefix => "prefix",
+            KeywordType::Postfix => "postfix",
         }
         .to_string()
     }

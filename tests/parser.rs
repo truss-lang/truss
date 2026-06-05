@@ -9,7 +9,8 @@ use truss::{
         statement::{
             AccessModifier, AccessorKind, FunctionBody, ImportKind,
             MacroMetaVarType, MacroPatternFragment, Modifier, ModifierType,
-            Parameter, Pattern, ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
+            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement,
+            VariadicKind, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -8026,5 +8027,264 @@ fn collect_shorthand_args(expr: &Rc<RefCell<Expression>>, count: &mut u32) {
             collect_shorthand_args(expression, count);
         }
         _ => {}
+    }
+}
+
+#[test]
+fn test_parse_operator_function_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func + (left: Int32, right: Int32) -> Int32 { left + right }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::FunctionDecl {
+        name, operator_fixity, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "+");
+        assert_eq!(*operator_fixity, None);
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_prefix_operator_function_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "prefix func - (value: Int32) -> Int32 { -value }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::FunctionDecl {
+        name, operator_fixity, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "-");
+        assert_eq!(*operator_fixity, Some(OperatorFixity::Prefix));
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_operator_function_decl_simple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func + (a: Int32) {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "+");
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_postfix_keyword_as_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("postfix func - (v: Int32) {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    // Check that it parsed as a function decl with postfix fixity
+    if program.statements.len() == 0 || engine.borrow().get_errors().len() > 0 {
+        // fallback: check what we get
+        if let Statement::FunctionDecl { name, operator_fixity, .. } = &*program.statements[0].borrow() {
+            assert_eq!(name.value, "-");
+            assert_eq!(*operator_fixity, Some(OperatorFixity::Postfix));
+        } else {
+            panic!("Expected FunctionDecl, got {:?}", *program.statements[0].borrow());
+        }
+    } else {
+        if let Statement::FunctionDecl { name, operator_fixity, .. } = &*program.statements[0].borrow() {
+            assert_eq!(name.value, "-");
+            assert_eq!(*operator_fixity, Some(OperatorFixity::Postfix));
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+    }
+}
+
+#[test]
+fn test_parse_prefix_keyword_as_modifier() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("prefix func - (v: Int32) {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { name, operator_fixity, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "-");
+        assert_eq!(*operator_fixity, Some(OperatorFixity::Prefix));
+    } else {
+        panic!("Expected FunctionDecl, got {:?}", *program.statements[0].borrow());
+    }
+}
+
+#[test]
+fn test_parse_postfix_operator_function_decl() {
+    let engine = create_engine();
+    let code = "postfix func ++ (value: Int32) -> Int32 { value }";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1, "expected 1 stmt, got {} (errors: {})", program.statements.len(), engine.borrow().get_errors().len());
+    if let Statement::FunctionDecl {
+        name, operator_fixity, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "++");
+        assert_eq!(*operator_fixity, Some(OperatorFixity::Postfix));
+    } else {
+        panic!("Expected FunctionDecl, got {:?}", *program.statements[0].borrow());
+    }
+}
+
+#[test]
+fn test_parse_compound_assignment_operator_function_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func += (left: Int32, right: Int32) { left = left + right }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1, "expected 1 statement, got {} (errors: {})", program.statements.len(), engine.borrow().get_errors().len());
+    if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "+=");
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_static_operator_function_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "static func + (left: Int32, right: Int32) -> Int32 { left + right }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::FunctionDecl {
+        name, static_method, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "+");
+        assert!(*static_method);
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_static_prefix_operator_function_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "static prefix func - (value: Int32) -> Int32 { -value }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::FunctionDecl {
+        name, static_method, operator_fixity, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "-");
+        assert!(*static_method);
+        assert_eq!(*operator_fixity, Some(OperatorFixity::Prefix));
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_operator_function_inside_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyInt { var value: Int32; static func + (left: MyInt, right: MyInt) -> MyInt { left } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        let func_decl = body.iter().find_map(|s| {
+            if let Statement::FunctionDecl { name, static_method, operator_fixity, .. } = &*s.borrow() {
+                if name.value == "+" { Some((*static_method, *operator_fixity)) } else { None }
+            } else { None }
+        });
+        assert!(func_decl.is_some(), "Expected '+' operator function in struct body");
+        let (static_method, operator_fixity) = func_decl.unwrap();
+        assert!(static_method);
+        assert_eq!(operator_fixity, None);
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_member_operator_function_inside_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyInt { var value: Int32; func + (other: MyInt) -> MyInt { self } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        let func_decl = body.iter().find_map(|s| {
+            if let Statement::FunctionDecl { name, static_method, .. } = &*s.borrow() {
+                if name.value == "+" { Some(*static_method) } else { None }
+            } else { None }
+        });
+        assert!(func_decl.is_some(), "Expected '+' operator function in struct body");
+        assert!(!func_decl.unwrap(), "Member operator should not be static");
+    } else {
+        panic!("Expected StructDecl");
     }
 }

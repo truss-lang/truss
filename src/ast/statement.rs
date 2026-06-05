@@ -19,6 +19,7 @@ pub enum Statement {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
         static_method: bool,
+        operator_fixity: Option<OperatorFixity>,
     },
     VariableDecl {
         modifiers: Vec<Modifier>,
@@ -261,11 +262,18 @@ pub struct Modifier {
     pub ty: ModifierType,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OperatorFixity {
+    Prefix,
+    Postfix,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ModifierType {
     Access(AccessModifier),
     AccessSet(AccessModifier),
     Static,
+    OperatorFixity(OperatorFixity),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

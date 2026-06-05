@@ -12,7 +12,7 @@ use crate::{
         statement::{
             AccessModifier, Accessor, AccessorKind, EnumCase, EnumCaseParameter, FunctionBody,
             GenericParameter, ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment,
-            MatchCase, Modifier, ModifierType, Parameter, Pattern,
+            MatchCase, Modifier, ModifierType, OperatorFixity, Parameter, Pattern,
             ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind, WhereRequirement,
             WhereRequirementKind,
         },
@@ -1310,7 +1310,7 @@ impl Parser {
                 );
                 return Err(());
             };
-            if TokenType::Identifier != name.ty {
+            if !matches!(name.ty, TokenType::Identifier | TokenType::Operator { .. }) {
                 self.emit_error(
                     TrussDiagnosticCode::InvalidFunctionName,
                     format!("Expected function name but found '{}'", name.value),
@@ -1616,6 +1616,13 @@ impl Parser {
             })
         } else {
             let static_method = modifiers.iter().any(|m| m.ty == ModifierType::Static);
+            let operator_fixity = modifiers.iter().find_map(|m| {
+                if let ModifierType::OperatorFixity(fixity) = &m.ty {
+                    Some(*fixity)
+                } else {
+                    None
+                }
+            });
             Ok(Statement::FunctionDecl {
                 modifiers,
                 token: Box::new(token),
@@ -1628,6 +1635,7 @@ impl Parser {
                 scope: None,
                 ty: None,
                 static_method,
+                operator_fixity,
             })
         }
     }
@@ -4367,6 +4375,8 @@ impl Parser {
                     KeywordType::Private => ModifierType::Access(AccessModifier::Private),
                     KeywordType::Package => ModifierType::Access(AccessModifier::Package),
                     KeywordType::Static => ModifierType::Static,
+                    KeywordType::Prefix => ModifierType::OperatorFixity(OperatorFixity::Prefix),
+                    KeywordType::Postfix => ModifierType::OperatorFixity(OperatorFixity::Postfix),
                     _ => {
                         break;
                     }
