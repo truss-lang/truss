@@ -3,10 +3,12 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression, UnaryOperator,
+            AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression, MacroDelimiter,
+            UnaryOperator,
         },
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, ImportKind, Modifier, ModifierType,
+            AccessModifier, AccessorKind, FunctionBody, ImportKind,
+            MacroMetaVarType, MacroPatternFragment, Modifier, ModifierType,
             Parameter, Pattern, ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
         },
     },
@@ -7809,6 +7811,207 @@ fn test_parse_subscript_in_class() {
         );
     } else {
         panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_parse_macro_decl_simple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "macro id { ($x:expr) => { $x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::MacroDecl { name, arms, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "id");
+        assert_eq!(arms.len(), 1);
+        assert_eq!(arms[0].pattern.len(), 1);
+        if let MacroPatternFragment::MetaVar { name: n, var_type } = &arms[0].pattern[0] {
+            assert_eq!(n, "x");
+            assert_eq!(*var_type, MacroMetaVarType::Expr);
+        } else {
+            panic!("Expected MetaVar pattern fragment");
+        }
+    } else {
+        panic!("Expected MacroDecl");
+    }
+}
+
+#[test]
+fn test_parse_macro_decl_multi_arm() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "macro test { ($x:expr) => { $x } ($x:expr, $y:expr) => { $x + $y } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::MacroDecl { name, arms, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "test");
+        assert_eq!(arms.len(), 2);
+        assert_eq!(arms[0].pattern.len(), 1);
+        assert_eq!(arms[1].pattern.len(), 3);
+        if let MacroPatternFragment::Lit(ref t) = arms[1].pattern[1] {
+            assert_eq!(t.value, ",");
+        } else {
+            panic!("Expected comma literal in pattern");
+        }
+    } else {
+        panic!("Expected MacroDecl");
+    }
+}
+
+#[test]
+fn test_parse_macro_invocation_paren() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "my_macro!(1 + 2)".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::MacroInvocation { name, delimiter, arguments, .. } = &*expression.borrow() {
+            assert_eq!(name.value, "my_macro");
+            assert_eq!(*delimiter, MacroDelimiter::Paren);
+            assert!(!arguments.is_empty());
+        } else {
+            panic!("Expected MacroInvocation expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_macro_invocation_brace() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "my_macro! { 1 + 2 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::MacroInvocation { name, delimiter, .. } = &*expression.borrow() {
+            assert_eq!(name.value, "my_macro");
+            assert_eq!(*delimiter, MacroDelimiter::Brace);
+        } else {
+            panic!("Expected MacroInvocation expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_macro_invocation_bracket() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "my_macro![1, 2, 3]".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::MacroInvocation { name, delimiter, .. } = &*expression.borrow() {
+            assert_eq!(name.value, "my_macro");
+            assert_eq!(*delimiter, MacroDelimiter::Bracket);
+        } else {
+            panic!("Expected MacroInvocation expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_macro_decl_var_types() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "macro types { ($e:expr, $t:ty, $i:ident, $l:literal) => { $e } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::MacroDecl { arms, .. } = &*program.statements[0].borrow() {
+        assert_eq!(arms[0].pattern.len(), 7);
+        assert_eq!(
+            arms[0].pattern[0],
+            MacroPatternFragment::MetaVar {
+                name: "e".to_string(),
+                var_type: MacroMetaVarType::Expr,
+            }
+        );
+        assert_eq!(
+            arms[0].pattern[2],
+            MacroPatternFragment::MetaVar {
+                name: "t".to_string(),
+                var_type: MacroMetaVarType::Ty,
+            }
+        );
+        assert_eq!(
+            arms[0].pattern[4],
+            MacroPatternFragment::MetaVar {
+                name: "i".to_string(),
+                var_type: MacroMetaVarType::Ident,
+            }
+        );
+        assert_eq!(
+            arms[0].pattern[6],
+            MacroPatternFragment::MetaVar {
+                name: "l".to_string(),
+                var_type: MacroMetaVarType::Literal,
+            }
+        );
+    } else {
+        panic!("Expected MacroDecl");
+    }
+}
+
+#[test]
+fn test_parse_macro_decl_and_invocation() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "macro id { ($x:expr) => { $x } }\nid!(42)".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 2);
+    assert!(matches!(&*program.statements[0].borrow(), Statement::MacroDecl { .. }));
+    if let Statement::ExpressionStatement { expression } = &*program.statements[1].borrow() {
+        assert!(matches!(&*expression.borrow(), Expression::MacroInvocation { .. }));
+    } else {
+        panic!("Expected ExpressionStatement");
     }
 }
 

@@ -184,6 +184,11 @@ pub enum Statement {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    MacroDecl {
+        token: Box<Token>,
+        name: Box<Token>,
+        arms: Vec<MacroArm>,
+    },
 }
 
 impl Statement {
@@ -216,6 +221,7 @@ impl Statement {
             Self::ModuleDecl { token, .. } => (**token).clone(),
             Self::ImportDecl { token, .. } => (**token).clone(),
             Self::SubscriptDecl { token, .. } => (**token).clone(),
+            Self::MacroDecl { token, .. } => (**token).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -412,4 +418,29 @@ pub enum ImportKind {
     Module,
     Member,
     Wildcard,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MacroArm {
+    pub pattern: Vec<MacroPatternFragment>,
+    pub expansion: Vec<Token>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MacroPatternFragment {
+    Lit(Token),
+    MetaVar {
+        name: String,
+        var_type: MacroMetaVarType,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MacroMetaVarType {
+    Expr,
+    Ty,
+    Ident,
+    Stmt,
+    Block,
+    Literal,
 }

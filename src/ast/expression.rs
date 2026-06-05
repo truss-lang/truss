@@ -185,6 +185,19 @@ pub enum Expression {
         parameters: Vec<CallParameter>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    MacroInvocation {
+        name: Box<Token>,
+        delimiter: MacroDelimiter,
+        arguments: Vec<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MacroDelimiter {
+    Paren,
+    Bracket,
+    Brace,
 }
 
 impl Expression {
@@ -205,6 +218,7 @@ impl Expression {
             Self::ShorthandArgument { ty, .. } => Ok(ty.clone()),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty.clone()),
             Self::SubscriptAccess { ty, .. } => Ok(ty.clone()),
+            Self::MacroInvocation { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -225,6 +239,7 @@ impl Expression {
             Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
             Self::SubscriptAccess { ty, .. } => Ok(ty),
+            Self::MacroInvocation { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -245,6 +260,7 @@ impl Expression {
             Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
             Self::SubscriptAccess { ty, .. } => Ok(ty),
+            Self::MacroInvocation { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -337,6 +353,7 @@ impl Expression {
                 Rc::new("".to_string()),
             ),
             Expression::SubscriptAccess { object, .. } => object.borrow().token(),
+            Expression::MacroInvocation { name, .. } => (**name).clone(),
         }
     }
 }

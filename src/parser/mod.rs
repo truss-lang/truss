@@ -6,12 +6,13 @@ use crate::{
     ast::{
         expression::{
             AssignmentOperator, BinaryOperator, CallParameter, CastKind, ClosureParameter,
-            ElseBranch, Expression, UnaryOperator,
+            ElseBranch, Expression, MacroDelimiter, UnaryOperator,
         },
         node::Program,
         statement::{
             AccessModifier, Accessor, AccessorKind, EnumCase, EnumCaseParameter, FunctionBody,
-            GenericParameter, ImportKind, MatchCase, Modifier, ModifierType, Parameter, Pattern,
+            GenericParameter, ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment,
+            MatchCase, Modifier, ModifierType, Parameter, Pattern,
             ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind, WhereRequirement,
             WhereRequirementKind,
         },
@@ -218,6 +219,16 @@ impl Parser {
                 KeywordType::Module => self.parse_module_decl(modifiers),
                 KeywordType::Import => self.parse_import(),
                 KeywordType::Subscript => self.parse_subscript_decl(modifiers),
+                KeywordType::Macro => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_macro_decl()
+                }
                 _ => {
                     if !modifiers.is_empty() {
                         self.emit_error(
@@ -702,11 +713,77 @@ impl Parser {
             },
             TokenType::Identifier => {
                 self.index += 1;
-                Ok(Expression::Variable {
-                    name: Box::new(token),
-                    ty: None,
-                    symbol: None,
-                })
+                if let Some(next) = self.peek()
+                    && OperatorType::is_operator(&next, OperatorType::Not)
+                {
+                    self.index += 1;
+                    let delimiter = if let Some(d) = self.peek() {
+                        if SeparatorType::is_separator(&d, SeparatorType::OpenParen) {
+                            MacroDelimiter::Paren
+                        } else if SeparatorType::is_separator(&d, SeparatorType::OpenBracket) {
+                            MacroDelimiter::Bracket
+                        } else if SeparatorType::is_separator(&d, SeparatorType::OpenBrace) {
+                            MacroDelimiter::Brace
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnexpectedToken,
+                                format!("Expected '(' '[' or '{{' after macro name '{}'", token.value),
+                                &next,
+                            );
+                            return Err(());
+                        }
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            format!("Expected '(' '[' or '{{' after macro name '{}'", token.value),
+                            &next,
+                        );
+                        return Err(());
+                    };
+                    let close_delim = match delimiter {
+                        MacroDelimiter::Paren => SeparatorType::CloseParen,
+                        MacroDelimiter::Bracket => SeparatorType::CloseBracket,
+                        MacroDelimiter::Brace => SeparatorType::CloseBrace,
+                    };
+                    self.next().unwrap();
+                    let mut depth = 1u32;
+                    let mut arguments = Vec::new();
+                    while let Some(ref t) = self.peek() {
+                        if SeparatorType::is_separator(t, close_delim) && depth == 1 {
+                            self.index += 1;
+                            break;
+                        }
+                        if SeparatorType::is_separator(t, SeparatorType::OpenParen)
+                            || SeparatorType::is_separator(t, SeparatorType::OpenBracket)
+                            || SeparatorType::is_separator(t, SeparatorType::OpenBrace)
+                        {
+                            depth += 1;
+                        } else if SeparatorType::is_separator(t, SeparatorType::CloseParen)
+                            || SeparatorType::is_separator(t, SeparatorType::CloseBracket)
+                            || SeparatorType::is_separator(t, SeparatorType::CloseBrace)
+                        {
+                            depth -= 1;
+                            if depth == 0 {
+                                self.index += 1;
+                                break;
+                            }
+                        }
+                        arguments.push(t.clone());
+                        self.index += 1;
+                    }
+                    Ok(Expression::MacroInvocation {
+                        name: Box::new(token),
+                        delimiter,
+                        arguments,
+                        ty: None,
+                    })
+                } else {
+                    Ok(Expression::Variable {
+                        name: Box::new(token),
+                        ty: None,
+                        symbol: None,
+                    })
+                }
             }
             _ => {
                 self.emit_error(
@@ -1847,6 +1924,258 @@ impl Parser {
         })
     }
 
+    fn parse_macro_decl(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        let Some(name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected macro name after 'macro'",
+                &token,
+            );
+            return Err(());
+        };
+        if !matches!(name.ty, TokenType::Identifier) {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected macro name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
+        let Some(open_brace) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' after macro name",
+                &name,
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&open_brace, SeparatorType::OpenBrace) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '{{' but found '{}'", open_brace.value),
+                &open_brace,
+            );
+            return Err(());
+        }
+        let mut arms = Vec::new();
+        while let Some(t) = self.peek() {
+            if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
+                break;
+            }
+            let arm = self.parse_macro_arm()?;
+            arms.push(arm);
+        }
+        let Some(close_brace) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '}' to close macro body",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&close_brace, SeparatorType::CloseBrace) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '}}' but found '{}'", close_brace.value),
+                &close_brace,
+            );
+            return Err(());
+        }
+        Ok(Statement::MacroDecl {
+            token: Box::new(token),
+            name: Box::new(name),
+            arms,
+        })
+    }
+
+    fn parse_macro_arm(&mut self) -> Result<MacroArm, ()> {
+        let Some(open) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '(' to start macro pattern",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '(' but found '{}'", open.value),
+                &open,
+            );
+            return Err(());
+        }
+        let pattern = self.parse_macro_pattern()?;
+        let Some(close) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected ')' to close macro pattern",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected ')' but found '{}'", close.value),
+                &close,
+            );
+            return Err(());
+        }
+        let Some(arrow) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '=>' after macro pattern",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        if !OperatorType::is_operator(&arrow, OperatorType::Assign)
+            || !self.peek().map_or(false, |t| OperatorType::is_operator(&t, OperatorType::Greater))
+        {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '=>' but found '{}'", arrow.value),
+                &arrow,
+            );
+            return Err(());
+        }
+        self.index += 1;
+        let expansion = self.parse_macro_expansion()?;
+        Ok(MacroArm { pattern, expansion })
+    }
+
+    fn parse_macro_pattern(&mut self) -> Result<Vec<MacroPatternFragment>, ()> {
+        let mut fragments = Vec::new();
+        while let Some(t) = self.peek() {
+            if SeparatorType::is_separator(&t, SeparatorType::CloseParen) {
+                break;
+            }
+            if OperatorType::is_operator(&t, OperatorType::Dollar) {
+                self.index += 1;
+                let Some(name) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        "Expected metavariable name after '$'",
+                        &t,
+                    );
+                    return Err(());
+                };
+                if !matches!(name.ty, TokenType::Identifier) {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!("Expected identifier but found '{}'", name.value),
+                        &name,
+                    );
+                    return Err(());
+                }
+                let Some(colon) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        "Expected ':' after metavariable name",
+                        &name,
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        format!("Expected ':' after metavariable name but found '{}'", colon.value),
+                        &colon,
+                    );
+                    return Err(());
+                }
+                let Some(type_tok) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedType,
+                        "Expected metavariable type after ':'",
+                        &colon,
+                    );
+                    return Err(());
+                };
+                let var_type = match type_tok.value.as_str() {
+                    "expr" => MacroMetaVarType::Expr,
+                    "ty" => MacroMetaVarType::Ty,
+                    "ident" => MacroMetaVarType::Ident,
+                    "stmt" => MacroMetaVarType::Stmt,
+                    "block" => MacroMetaVarType::Block,
+                    "literal" => MacroMetaVarType::Literal,
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedType,
+                            format!("Unknown metavariable type '{}'. Expected one of: expr, ty, ident, stmt, block, literal", type_tok.value),
+                            &type_tok,
+                        );
+                        return Err(());
+                    }
+                };
+                fragments.push(MacroPatternFragment::MetaVar {
+                    name: name.value.clone(),
+                    var_type,
+                });
+            } else if SeparatorType::is_separator(&t, SeparatorType::Comma) {
+                fragments.push(MacroPatternFragment::Lit(t.clone()));
+                self.index += 1;
+            } else {
+                fragments.push(MacroPatternFragment::Lit(t.clone()));
+                self.index += 1;
+            }
+        }
+        Ok(fragments)
+    }
+
+    fn parse_macro_expansion(&mut self) -> Result<Vec<Token>, ()> {
+        let Some(open) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected delimiter for macro expansion",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+            return Err(());
+        };
+        let close_delim = if SeparatorType::is_separator(&open, SeparatorType::OpenBrace) {
+            SeparatorType::CloseBrace
+        } else if SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
+            SeparatorType::CloseParen
+        } else if SeparatorType::is_separator(&open, SeparatorType::OpenBracket) {
+            SeparatorType::CloseBracket
+        } else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '(' '[' or '{{' but found '{}'", open.value),
+                &open,
+            );
+            return Err(());
+        };
+        let mut depth = 1u32;
+        let mut tokens = Vec::new();
+        while let Some(ref t) = self.peek() {
+            if SeparatorType::is_separator(t, close_delim) && depth == 1 {
+                self.index += 1;
+                break;
+            }
+            if SeparatorType::is_separator(t, SeparatorType::OpenBrace)
+                || SeparatorType::is_separator(t, SeparatorType::OpenParen)
+                || SeparatorType::is_separator(t, SeparatorType::OpenBracket)
+            {
+                depth += 1;
+            } else if SeparatorType::is_separator(t, SeparatorType::CloseBrace)
+                || SeparatorType::is_separator(t, SeparatorType::CloseParen)
+                || SeparatorType::is_separator(t, SeparatorType::CloseBracket)
+            {
+                depth -= 1;
+                if depth == 0 {
+                    self.index += 1;
+                    break;
+                }
+            }
+            tokens.push(t.clone());
+            self.index += 1;
+        }
+        Ok(tokens)
+    }
+
     fn parse_return(&mut self) -> Result<Statement, ()> {
         let Some(token) = self.peek() else {
             return Err(());
@@ -2242,7 +2571,6 @@ impl Parser {
             if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
                 break;
             }
-            // Check for setter access modifier before 'set' (e.g., "private set {}")
             let mut set_access_modifier = None;
             if let TokenType::Keyword { keyword } = &token.ty {
                 match keyword {

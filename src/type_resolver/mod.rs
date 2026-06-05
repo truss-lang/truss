@@ -3351,6 +3351,7 @@ impl TypeResolver {
                     result
                 }
             }
+            Expression::MacroInvocation { ty, .. } => ty.clone().unwrap_or_else(|| Rc::new(RefCell::new(Type::Void))),
         };
         Some(result)
     }
