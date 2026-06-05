@@ -1629,6 +1629,13 @@ impl SymbolResolver {
             Expression::Case { expression, .. } => {
                 self.resolve_expression(expression.clone());
             }
+            Expression::Do { body, scope, .. } => {
+                *scope = Some(self.enter_scope(None));
+                for stmt in body.iter() {
+                    self.resolve_statement(stmt.clone());
+                }
+                self.leave_scope();
+            }
             Expression::Match { value, cases, .. } => {
                 self.resolve_expression(value.clone());
                 for case in cases {
