@@ -5552,3 +5552,59 @@ fn test_nested_do_expression_type() {
     let ty = run_type_check_do("func test() { let x = do { do { 1 } } }");
     assert_eq!(ty, Type::Int32, "nested do expressions should both resolve to Int32");
 }
+
+#[test]
+fn test_yield_in_function_type_check() {
+    let errors = run_type_check("func test() -> Int32 { yield 42 }");
+    assert_eq!(errors, 0, "yield Int32 in function returning Int32 should be valid");
+}
+
+#[test]
+fn test_yield_in_function_type_mismatch() {
+    let errors = run_type_check("func test() -> Bool { yield 42 }");
+    assert_eq!(errors, 1, "yield Int32 in function returning Bool should error");
+}
+
+#[test]
+fn test_yield_in_do_expression_type() {
+    let errors = run_type_check("func test() -> Int32 { let x = do { yield 42 }; return x }");
+    assert_eq!(errors, 0, "yield in do expression should produce correct type");
+}
+
+#[test]
+fn test_yield_in_if_branch_type() {
+    let errors = run_type_check("func test() -> Int32 { let x = if true { yield 42 } else { 10 }; return x }");
+    assert_eq!(errors, 0, "yield in if branch should produce correct type");
+}
+
+#[test]
+fn test_yield_outside_function_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let x = yield 42".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    assert!(engine.borrow().has_errors(), "yield at top level should error");
+}
+
+#[test]
+fn test_yield_to_void_function_no_value() {
+    let errors = run_type_check("func test() { yield }");
+    assert_eq!(errors, 0, "yield without value in void function should be valid");
+}
+
+#[test]
+fn test_yield_to_nonvoid_function_no_value_error() {
+    let errors = run_type_check("func test() -> Int32 { yield }");
+    assert_eq!(errors, 1, "yield without value in non-void function should error");
+}

@@ -38,6 +38,7 @@ pub struct TypeResolver {
     initialized_lets: Vec<HashSet<String>>,
     initialized_properties: HashSet<String>,
     is_in_init: bool,
+    yield_context_depth: usize,
     superclass_map: HashMap<String, Rc<RefCell<Type>>>,
 }
 
@@ -54,6 +55,7 @@ impl TypeResolver {
             initialized_lets: Vec::new(),
             initialized_properties: HashSet::new(),
             is_in_init: false,
+            yield_context_depth: 0,
             superclass_map: HashMap::new(),
         }
     }
@@ -1140,6 +1142,41 @@ impl TypeResolver {
                     );
                 }
             }
+            Statement::Yield {
+                value: Some(value), ..
+            } => {
+                let token = value.borrow().token();
+                if let Some(expected) = self.current_return_type.clone() {
+                    self.check_type_with_expected(value.clone(), expected, &token);
+                } else if self.yield_context_depth == 0 {
+                    self.emit_error(
+                        TrussDiagnosticCode::YieldNotAllowedHere,
+                        "Yield statement outside function or expression context",
+                        &token,
+                    );
+                }
+                self.infer_type(value.clone());
+            }
+            Statement::Yield { value: None, token } => {
+                if let Some(expected) = self.current_return_type.clone() {
+                    if !matches!(&*expected.borrow(), Type::Void) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ReturnTypeMismatch,
+                            format!(
+                                "Expected return value of type {}, found `yield` without value",
+                                expected.borrow()
+                            ),
+                            token.as_ref(),
+                        );
+                    }
+                } else if self.yield_context_depth == 0 {
+                    self.emit_error(
+                        TrussDiagnosticCode::YieldNotAllowedHere,
+                        "Yield statement outside function or expression context",
+                        token.as_ref(),
+                    );
+                }
+            }
             Statement::ExpressionStatement { expression } => {
                 self.infer_type(expression.clone());
             }
@@ -1709,10 +1746,17 @@ impl TypeResolver {
             );
         }
 
+        self.yield_context_depth += 1;
         let then_ty = self.get_block_type(&then)?;
+        self.yield_context_depth -= 1;
         if let Some(else_branch) = else_ {
             let else_ty = match else_branch {
-                ElseBranch::Block(body) => self.get_block_type(&body)?,
+                ElseBranch::Block(body) => {
+                    self.yield_context_depth += 1;
+                    let ty = self.get_block_type(&body)?;
+                    self.yield_context_depth -= 1;
+                    ty
+                }
                 ElseBranch::If(if_expr) => self.infer_if_type(if_expr)?,
             };
             if then_ty.borrow().clone() != else_ty.borrow().clone() {
@@ -3455,14 +3499,18 @@ impl TypeResolver {
             Expression::Do { body, ty, scope, .. } => {
                 if let Some(sc) = scope {
                     self.enter_scope(sc.clone());
+                    self.yield_context_depth += 1;
                     self.resolve_block_expression(body);
                     let block_ty = self.get_block_type(body)?;
                     *ty = Some(block_ty.clone());
+                    self.yield_context_depth -= 1;
                     self.leave_scope();
                     block_ty
                 } else {
+                    self.yield_context_depth += 1;
                     let block_ty = self.get_block_type(body)?;
                     *ty = Some(block_ty.clone());
+                    self.yield_context_depth -= 1;
                     block_ty
                 }
             }
@@ -3480,6 +3528,22 @@ impl TypeResolver {
                 value: Some(value), ..
             } => self.infer_type(value.clone()),
             Statement::Return { value: None, .. } => Some(Rc::new(RefCell::new(Type::Void))),
+            Statement::Yield {
+                value: Some(value), ..
+            } => {
+                let token = value.borrow().token();
+                if let Some(expected) = self.current_return_type.clone() {
+                    self.check_type_with_expected(value.clone(), expected, &token);
+                } else if self.yield_context_depth == 0 {
+                    self.emit_error(
+                        TrussDiagnosticCode::YieldNotAllowedHere,
+                        "Yield statement outside function or expression context",
+                        &token,
+                    );
+                }
+                self.infer_type(value.clone())
+            }
+            Statement::Yield { value: None, .. } => Some(Rc::new(RefCell::new(Type::Void))),
             Statement::VariableDecl { ty, .. } => {
                 Some(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Void))))
             }

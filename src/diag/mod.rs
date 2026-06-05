@@ -60,6 +60,7 @@ pub enum TrussDiagnosticCode {
     InvalidMemberAccessLevel,
     OpenOnlyOnClass,
     ConflictingSetterAccess,
+    YieldNotAllowedHere,
 
     IRError,
     UnsupportedFeature,
@@ -128,6 +129,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::InvalidMemberAccessLevel => "E0321",
             Self::OpenOnlyOnClass => "E0322",
             Self::ConflictingSetterAccess => "E0323",
+            Self::YieldNotAllowedHere => "E0324",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",
