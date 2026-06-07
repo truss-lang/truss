@@ -4143,6 +4143,142 @@ fn test_parse_nested_tuple_literal() {
 }
 
 #[test]
+fn test_parse_non_null_pointer_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: Int32*! }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression: Some(type_expr),
+            ..
+        } = &*statements[0].borrow()
+        && let Expression::PointerType { base, non_null, .. } = &*type_expr.borrow()
+        && let Expression::Type { name, .. } = &*base.borrow()
+    {
+        assert_eq!(name.value, "Int32");
+        assert!(non_null);
+    } else {
+        panic!("Expected non-null pointer type");
+    }
+}
+
+#[test]
+fn test_parse_non_null_pointer_in_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(p: Int32*!) {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow()
+        && let Some(param) = parameters.first()
+        && let Expression::PointerType { base, non_null, .. } = &*param.borrow().type_expression.borrow()
+        && let Expression::Type { name, .. } = &*base.borrow()
+    {
+        assert_eq!(name.value, "Int32");
+        assert!(non_null);
+    } else {
+        panic!("Expected non-null pointer parameter");
+    }
+}
+
+#[test]
+fn test_parse_non_null_ptr_star_bang() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: Int32**! }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression: Some(type_expr),
+            ..
+        } = &*statements[0].borrow()
+        && let Expression::PointerType { base, non_null, .. } = &*type_expr.borrow()
+        && *non_null
+        && let Expression::PointerType { base: inner_base, non_null: inner_non_null, .. } = &*base.borrow()
+        && !*inner_non_null
+        && let Expression::Type { name, .. } = &*inner_base.borrow()
+    {
+        assert_eq!(name.value, "Int32");
+    } else {
+        panic!("Expected Int32**! (non-null outer, nullable inner)");
+    }
+}
+
+#[test]
+fn test_parse_regular_pointer_still_has_non_null_false() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: Int32* }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression: Some(type_expr),
+            ..
+        } = &*statements[0].borrow()
+        && let Expression::PointerType { non_null, .. } = &*type_expr.borrow()
+    {
+        assert!(!non_null);
+    } else {
+        panic!("Expected regular pointer type");
+    }
+}
+
+#[test]
+fn test_parse_tuple_non_null_pointer_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a: (Int32, Bool)*! }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression: Some(type_expr),
+            ..
+        } = &*statements[0].borrow()
+        && let Expression::PointerType { base, non_null, .. } = &*type_expr.borrow()
+        && *non_null
+        && let Expression::TupleType { elements, .. } = &*base.borrow()
+    {
+        assert_eq!(elements.len(), 2);
+    } else {
+        panic!("Expected non-null tuple pointer type");
+    }
+}
+
+#[test]
 fn test_parse_tuple_index_access_dot() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

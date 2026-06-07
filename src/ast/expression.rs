@@ -64,6 +64,7 @@ pub enum Expression {
     },
     PointerType {
         base: Box<Rc<RefCell<Expression>>>,
+        non_null: bool,
         ty: Option<Rc<RefCell<Type>>>,
     },
     Call {

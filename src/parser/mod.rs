@@ -1219,8 +1219,16 @@ impl Parser {
                     && OperatorType::is_operator(&token, OperatorType::Multiply)
                 {
                     self.index += 1;
+                    let mut non_null = false;
+                    if let Some(next) = self.peek()
+                        && OperatorType::is_operator(&next, OperatorType::Not)
+                    {
+                        self.index += 1;
+                        non_null = true;
+                    }
                     tuple_type_expr = Expression::PointerType {
                         base: Box::new(Rc::new(RefCell::new(tuple_type_expr))),
+                        non_null,
                         ty: None,
                     };
                 }
@@ -1293,8 +1301,16 @@ impl Parser {
                 && OperatorType::is_operator(&token, OperatorType::Multiply)
             {
                 self.index += 1;
+                let mut non_null = false;
+                if let Some(next) = self.peek()
+                    && OperatorType::is_operator(&next, OperatorType::Not)
+                {
+                    self.index += 1;
+                    non_null = true;
+                }
                 type_expr = Expression::PointerType {
                     base: Box::new(Rc::new(RefCell::new(type_expr))),
+                    non_null,
                     ty: None,
                 };
             }
@@ -1382,8 +1398,16 @@ impl Parser {
             && OperatorType::is_operator(&token, OperatorType::Multiply)
         {
             self.index += 1;
+            let mut non_null = false;
+            if let Some(next) = self.peek()
+                && OperatorType::is_operator(&next, OperatorType::Not)
+            {
+                self.index += 1;
+                non_null = true;
+            }
             type_expr = Expression::PointerType {
                 base: Box::new(Rc::new(RefCell::new(type_expr))),
+                non_null,
                 ty: None,
             };
         }

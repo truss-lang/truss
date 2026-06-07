@@ -2335,7 +2335,7 @@ impl TypeResolver {
                 }
             }
             Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
-            Expression::PointerType { base, ty } => {
+            Expression::PointerType { base, ty, .. } => {
                 if let Some(existing_ty) = ty.as_ref() {
                     return Some(existing_ty.clone());
                 }
