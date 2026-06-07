@@ -2494,6 +2494,36 @@ impl TypeResolver {
                 *ty = Some(inner_ty.clone());
                 inner_ty
             }
+            Expression::SomeType { inner, ty } => {
+                let inner_ty = self.infer_type(inner.clone())?;
+                match &*inner_ty.borrow() {
+                    Type::Protocol(..) => {}
+                    Type::Compound(types) => {
+                        for t in types {
+                            if !matches!(&*t.borrow(), Type::Protocol(..)) {
+                                let token = inner.borrow().token();
+                                self.emit_error(
+                                    TrussDiagnosticCode::TypeError,
+                                    format!("'some' must be used with a protocol type, but '{}' is not a protocol", inner_ty.borrow()),
+                                    &token,
+                                );
+                                return None;
+                            }
+                        }
+                    }
+                    _ => {
+                        let token = inner.borrow().token();
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeError,
+                            format!("'some' must be used with a protocol type, but '{}' is not a protocol", inner_ty.borrow()),
+                            &token,
+                        );
+                        return None;
+                    }
+                }
+                *ty = Some(inner_ty.clone());
+                inner_ty
+            }
             Expression::CompoundType { types, ty } => {
                 let mut resolved = Vec::new();
                 for t in types {

@@ -2683,6 +2683,73 @@ fn test_protocol_any_type_resolved() {
 }
 
 #[test]
+fn test_protocol_some_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol MyProtocol {} let x: some MyProtocol".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have errors with 'some' type, got: {:?}",
+        errors
+    );
+
+    if let Statement::VariableDecl { ty, .. } = &*program.statements[1].borrow() {
+        assert!(ty.is_some(), "Variable should have a type annotation");
+        let resolved = ty.as_ref().unwrap().borrow();
+        assert!(
+            matches!(&*resolved, Type::Protocol(name, _) if name == "MyProtocol"),
+            "Expected Protocol type, got {:?}",
+            resolved
+        );
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_some_type_non_protocol_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct S {} let x: some S".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(
+        errors.len() >= 1,
+        "Should have at least one error when 'some' is used with a non-protocol type, got: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn test_protocol_compound_type_resolved() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
