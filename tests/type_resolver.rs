@@ -937,7 +937,10 @@ fn test_function_call_parameter_order_must_match() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(errors.is_empty(), "Labeled parameters in any order should succeed");
+    assert!(
+        errors.is_empty(),
+        "Labeled parameters in any order should succeed"
+    );
 }
 
 #[test]
@@ -5800,13 +5803,15 @@ fn test_inline_type_class() {
 
 #[test]
 fn test_inline_type_class_with_size() {
-    let errors = run_type_check("class Dog {} func test() -> Int32 { let _: inline<256> Dog return 1 }");
+    let errors =
+        run_type_check("class Dog {} func test() -> Int32 { let _: inline<256> Dog return 1 }");
     assert_eq!(errors, 0, "inline<256> with class type should succeed");
 }
 
 #[test]
 fn test_inline_type_empty_brackets() {
-    let errors = run_type_check("class Dog {} func test() -> Int32 { let _: inline<> Dog return 1 }");
+    let errors =
+        run_type_check("class Dog {} func test() -> Int32 { let _: inline<> Dog return 1 }");
     assert_eq!(errors, 0, "inline<> with class type should succeed");
 }
 
@@ -5818,9 +5823,7 @@ fn test_inline_type_not_class_error() {
 
 #[test]
 fn test_const_generic_function_decl_resolves() {
-    let errors = run_type_check(
-        "func foo<let N: Int32>(x: Int32) -> Int32 { return x }",
-    );
+    let errors = run_type_check("func foo<let N: Int32>(x: Int32) -> Int32 { return x }");
     assert_eq!(errors, 0, "const generic function decl should resolve");
 }
 
@@ -5893,10 +5896,7 @@ fn test_missing_required_param_error() {
         "func foo(a: Int32, b: Int32 = 0) -> Int32 { return a }
          func bar() -> Int32 { return foo() }",
     );
-    assert!(
-        errors > 0,
-        "missing required param should produce error"
-    );
+    assert!(errors > 0, "missing required param should produce error");
 }
 
 #[test]
@@ -5925,11 +5925,6 @@ fn test_default_param_with_unlabeled() {
 
 #[test]
 fn test_function_call_missing_label_still_errors() {
-    let errors = run_type_check(
-        "func f(a a: Int64) -> Int64 { return a } func f2() { f(1) }",
-    );
-    assert!(
-        errors > 0,
-        "missing label for required param should error"
-    );
+    let errors = run_type_check("func f(a a: Int64) -> Int64 { return a } func f2() { f(1) }");
+    assert!(errors > 0, "missing label for required param should error");
 }

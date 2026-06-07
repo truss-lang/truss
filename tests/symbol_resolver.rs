@@ -2653,7 +2653,9 @@ fn test_generic_function_with_constrained_param_resolves() {
         assert_eq!(name.value, "compare");
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "T");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { constraints } if constraints.len() == 1));
+        assert!(
+            matches!(&generic_parameters[0].kind, GenericParameterKind::Type { constraints } if constraints.len() == 1)
+        );
         assert!(scope.is_some());
         let scope_ref = scope.as_ref().unwrap().borrow();
         let t_type = scope_ref.get_type("T");
@@ -2850,7 +2852,10 @@ fn test_const_generic_function_resolves() {
         assert_eq!(name.value, "foo");
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "N");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[0].kind,
+            GenericParameterKind::Const { .. }
+        ));
         assert!(scope.is_some());
         let scope_ref = scope.as_ref().unwrap().borrow();
         let n_type = scope_ref.get_type("N");
@@ -2898,8 +2903,14 @@ fn test_const_generic_struct_resolves() {
     {
         assert_eq!(name.value, "Buffer");
         assert_eq!(generic_parameters.len(), 2);
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { .. }));
-        assert!(matches!(&generic_parameters[1].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[0].kind,
+            GenericParameterKind::Type { .. }
+        ));
+        assert!(matches!(
+            &generic_parameters[1].kind,
+            GenericParameterKind::Const { .. }
+        ));
         assert!(scope.is_some());
         let scope_ref = scope.as_ref().unwrap().borrow();
         let t_type = scope_ref.get_type("T");

@@ -5,8 +5,8 @@ use crate::{
         expression::{ElseBranch, Expression},
         node::Program,
         statement::{
-            AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Pattern, ProtocolMember, Statement,
-            WhereRequirement, WhereRequirementKind,
+            AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Pattern, ProtocolMember,
+            Statement, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},

@@ -104,7 +104,8 @@ impl TypeResolver {
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
-                            let resolved = self.infer_type(const_type.clone())
+                            let resolved = self
+                                .infer_type(const_type.clone())
                                 .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
                             Rc::new(RefCell::new(Type::ConstGeneric(
                                 gp.name.value.clone(),
@@ -213,7 +214,8 @@ impl TypeResolver {
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
-                            let resolved = self.infer_type(const_type.clone())
+                            let resolved = self
+                                .infer_type(const_type.clone())
                                 .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
                             Rc::new(RefCell::new(Type::ConstGeneric(
                                 gp.name.value.clone(),
@@ -354,7 +356,8 @@ impl TypeResolver {
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
-                            let resolved = self.infer_type(const_type.clone())
+                            let resolved = self
+                                .infer_type(const_type.clone())
                                 .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
                             Rc::new(RefCell::new(Type::ConstGeneric(
                                 gp.name.value.clone(),
@@ -472,7 +475,8 @@ impl TypeResolver {
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
-                            let resolved = self.infer_type(const_type.clone())
+                            let resolved = self
+                                .infer_type(const_type.clone())
                                 .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
                             Rc::new(RefCell::new(Type::ConstGeneric(
                                 gp.name.value.clone(),
@@ -706,7 +710,8 @@ impl TypeResolver {
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
-                            let resolved = self.infer_type(const_type.clone())
+                            let resolved = self
+                                .infer_type(const_type.clone())
                                 .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
                             Rc::new(RefCell::new(Type::ConstGeneric(
                                 gp.name.value.clone(),
@@ -2064,22 +2069,29 @@ impl TypeResolver {
 
                 match &*callee_type.borrow() {
                     Type::Function(param_tys, ret_ty, is_vararg) => {
-                        if let Some(decl) = self.get_function_decl_from_callee(callee.clone()).or_else(|| {
-                            if let Expression::Variable { name, .. } = &*callee.borrow() {
-                                let scope_ref = self.current_scope.as_ref()?.borrow();
-                                let sym = scope_ref.get_symbol(&name.value)?;
-                                sym.borrow().get_decl().ok().flatten()
-                            } else {
-                                None
-                            }
-                        }) {
+                        if let Some(decl) = self
+                            .get_function_decl_from_callee(callee.clone())
+                            .or_else(|| {
+                                if let Expression::Variable { name, .. } = &*callee.borrow() {
+                                    let scope_ref = self.current_scope.as_ref()?.borrow();
+                                    let sym = scope_ref.get_symbol(&name.value)?;
+                                    sym.borrow().get_decl().ok().flatten()
+                                } else {
+                                    None
+                                }
+                            })
+                        {
                             let callee_token = callee.borrow().token();
                             let decl_params = match &*decl.borrow() {
                                 Statement::FunctionDecl { parameters, .. } => parameters.clone(),
                                 _ => vec![],
                             };
                             if !decl_params.is_empty() {
-                                self.reorder_call_parameters(parameters, &decl_params, &callee_token);
+                                self.reorder_call_parameters(
+                                    parameters,
+                                    &decl_params,
+                                    &callee_token,
+                                );
                             }
                         }
 
@@ -2226,7 +2238,11 @@ impl TypeResolver {
                                 _ => vec![],
                             };
                             if !decl_params.is_empty() {
-                                self.reorder_call_parameters(parameters, &decl_params, &callee_token);
+                                self.reorder_call_parameters(
+                                    parameters,
+                                    &decl_params,
+                                    &callee_token,
+                                );
                             }
                             if !is_vararg && parameters.len() != param_tys.len() {
                                 self.emit_error(
@@ -2295,7 +2311,11 @@ impl TypeResolver {
                                 _ => vec![],
                             };
                             if !decl_params.is_empty() {
-                                self.reorder_call_parameters(parameters, &decl_params, &callee_token);
+                                self.reorder_call_parameters(
+                                    parameters,
+                                    &decl_params,
+                                    &callee_token,
+                                );
                             }
                             if !is_vararg && parameters.len() != param_tys.len() {
                                 self.emit_error(
@@ -3201,21 +3221,35 @@ impl TypeResolver {
                                 if let Some(symbol) = scope.get_symbol(class_name) {
                                     let binding = symbol.borrow();
                                     let (properties, methods) = match &*binding {
-                                        Symbol::Struct { properties, methods, .. }
-                                        | Symbol::Class { properties, methods, .. } => (properties, methods),
+                                        Symbol::Struct {
+                                            properties,
+                                            methods,
+                                            ..
+                                        }
+                                        | Symbol::Class {
+                                            properties,
+                                            methods,
+                                            ..
+                                        } => (properties, methods),
                                         _ => {
                                             self.emit_error(
                                                 TrussDiagnosticCode::FieldNotFound,
-                                                format!("Class symbol '{}' has unexpected type", class_name),
+                                                format!(
+                                                    "Class symbol '{}' has unexpected type",
+                                                    class_name
+                                                ),
                                                 member,
                                             );
                                             return None;
                                         }
                                     };
                                     for field in properties {
-                                        if field.borrow().name().as_ref().ok() == Some(&member.value)
-                                            && let Some(decl) = field.borrow().get_decl().ok().flatten()
-                                            && let Statement::VariableDecl { ty: field_ty, .. } = &*decl.borrow()
+                                        if field.borrow().name().as_ref().ok()
+                                            == Some(&member.value)
+                                            && let Some(decl) =
+                                                field.borrow().get_decl().ok().flatten()
+                                            && let Statement::VariableDecl { ty: field_ty, .. } =
+                                                &*decl.borrow()
                                             && let Some(t) = field_ty
                                         {
                                             *ty = Some(t.clone());
@@ -3223,15 +3257,28 @@ impl TypeResolver {
                                         }
                                     }
                                     for method in methods {
-                                        if method.borrow().name().as_ref().ok() == Some(&member.value)
-                                            && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                        if method.borrow().name().as_ref().ok()
+                                            == Some(&member.value)
+                                            && let Some(decl) =
+                                                method.borrow().get_decl().ok().flatten()
                                         {
                                             let method_ty = {
                                                 let decl_ref = decl.borrow();
-                                                if let Statement::FunctionDecl { ty, .. } = &*decl_ref { ty.clone() }
-                                                else if let Statement::InitDecl { ty, .. } = &*decl_ref { ty.clone() }
-                                                else if let Statement::DeinitDecl { ty, .. } = &*decl_ref { ty.clone() }
-                                                else { continue; }
+                                                if let Statement::FunctionDecl { ty, .. } =
+                                                    &*decl_ref
+                                                {
+                                                    ty.clone()
+                                                } else if let Statement::InitDecl { ty, .. } =
+                                                    &*decl_ref
+                                                {
+                                                    ty.clone()
+                                                } else if let Statement::DeinitDecl { ty, .. } =
+                                                    &*decl_ref
+                                                {
+                                                    ty.clone()
+                                                } else {
+                                                    continue;
+                                                }
                                             };
                                             if let Some(t) = method_ty {
                                                 *ty = Some(t.clone());
@@ -3241,7 +3288,10 @@ impl TypeResolver {
                                     }
                                     self.emit_error(
                                         TrussDiagnosticCode::FieldNotFound,
-                                        format!("Member '{}' not found on inline class '{}'", member.value, class_name),
+                                        format!(
+                                            "Member '{}' not found on inline class '{}'",
+                                            member.value, class_name
+                                        ),
                                         member,
                                     );
                                     return None;
@@ -3760,7 +3810,9 @@ impl TypeResolver {
                     block_ty
                 }
             }
-            Expression::InlineType { base, ty, token, .. } => {
+            Expression::InlineType {
+                base, ty, token, ..
+            } => {
                 let base_ty = self.infer_type(base.clone())?;
                 match &*base_ty.borrow() {
                     Type::Class(_, _) => {}
@@ -4728,12 +4780,8 @@ impl TypeResolver {
             (Type::Inline(a_inner, _), Type::Inline(b_inner, _)) => {
                 Self::types_are_type_compatible(&a_inner.borrow(), &b_inner.borrow())
             }
-            (Type::Inline(a_inner, _), b) => {
-                Self::types_are_type_compatible(&a_inner.borrow(), b)
-            }
-            (a, Type::Inline(b_inner, _)) => {
-                Self::types_are_type_compatible(a, &b_inner.borrow())
-            }
+            (Type::Inline(a_inner, _), b) => Self::types_are_type_compatible(&a_inner.borrow(), b),
+            (a, Type::Inline(b_inner, _)) => Self::types_are_type_compatible(a, &b_inner.borrow()),
             _ => false,
         }
     }
@@ -4810,14 +4858,18 @@ impl TypeResolver {
                     }
                 } else {
                     has_errors = true;
-                    let decl_names: Vec<String> = decl_params.iter().map(|dp| {
-                        let b = dp.borrow();
-                        match &b.label {
-                            Some(l) if l.value != "_" => l.value.clone(),
-                            None => b.name.value.clone(),
-                            _ => String::new(),
-                        }
-                    }).filter(|n| !n.is_empty()).collect();
+                    let decl_names: Vec<String> = decl_params
+                        .iter()
+                        .map(|dp| {
+                            let b = dp.borrow();
+                            match &b.label {
+                                Some(l) if l.value != "_" => l.value.clone(),
+                                None => b.name.value.clone(),
+                                _ => String::new(),
+                            }
+                        })
+                        .filter(|n| !n.is_empty())
+                        .collect();
                     self.emit_error(
                         TrussDiagnosticCode::ArgumentLabelMismatch,
                         format!(

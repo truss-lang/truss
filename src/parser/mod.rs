@@ -12,9 +12,10 @@ use crate::{
         statement::{
             AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Condition,
             ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody, GenericParameter,
-            GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment, MatchCase, Modifier,
-            ModifierType, OperatorFixity, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember,
-            Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
+            GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment,
+            MatchCase, Modifier, ModifierType, OperatorFixity, Parameter, Pattern,
+            ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind, WhereRequirement,
+            WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -4796,18 +4797,21 @@ impl Parser {
                 if OperatorType::is_operator(&token, OperatorType::Greater) {
                     break;
                 }
-                type_parameters.push(Rc::new(RefCell::new(if matches!(token.ty,
-                    TokenType::IntegerLiteral { .. } |
-                    TokenType::BooleanLiteral { .. } |
-                    TokenType::CharLiteral { .. } |
-                    TokenType::StringLiteral { .. } |
-                    TokenType::NullLiteral |
-                    TokenType::NullptrLiteral
-                ) {
-                    self.parse_primary()?
-                } else {
-                    self.parse_type_expression()?
-                })));
+                type_parameters.push(Rc::new(RefCell::new(
+                    if matches!(
+                        token.ty,
+                        TokenType::IntegerLiteral { .. }
+                            | TokenType::BooleanLiteral { .. }
+                            | TokenType::CharLiteral { .. }
+                            | TokenType::StringLiteral { .. }
+                            | TokenType::NullLiteral
+                            | TokenType::NullptrLiteral
+                    ) {
+                        self.parse_primary()?
+                    } else {
+                        self.parse_type_expression()?
+                    },
+                )));
                 let Some(t) = self.peek() else { break };
                 if SeparatorType::is_separator(&t, SeparatorType::Comma) {
                     self.index += 1;
@@ -5547,7 +5551,10 @@ impl Parser {
                     if TokenType::Identifier != name.ty {
                         self.emit_error(
                             TrussDiagnosticCode::ExpectedIdentifier,
-                            format!("Expected constant generic parameter name but found '{}'", name.value),
+                            format!(
+                                "Expected constant generic parameter name but found '{}'",
+                                name.value
+                            ),
                             &name,
                         );
                         return Err(());

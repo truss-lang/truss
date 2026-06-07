@@ -7,10 +7,10 @@ use truss::{
             UnaryOperator,
         },
         statement::{
-            AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody, GenericParameterKind,
-            ImportKind,
-            MacroMetaVarType, MacroPatternFragment, Modifier, ModifierType, OperatorFixity,
-            Parameter, Pattern, ProtocolMember, Statement, VariadicKind, WhereRequirementKind,
+            AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
+            GenericParameterKind, ImportKind, MacroMetaVarType, MacroPatternFragment, Modifier,
+            ModifierType, OperatorFixity, Parameter, Pattern, ProtocolMember, Statement,
+            VariadicKind, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -4185,7 +4185,8 @@ fn test_parse_non_null_pointer_in_param() {
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow()
         && let Some(param) = parameters.first()
-        && let Expression::PointerType { base, non_null, .. } = &*param.borrow().type_expression.borrow()
+        && let Expression::PointerType { base, non_null, .. } =
+            &*param.borrow().type_expression.borrow()
         && let Expression::Type { name, .. } = &*base.borrow()
     {
         assert_eq!(name.value, "Int32");
@@ -4215,7 +4216,11 @@ fn test_parse_non_null_ptr_star_bang() {
         } = &*statements[0].borrow()
         && let Expression::PointerType { base, non_null, .. } = &*type_expr.borrow()
         && *non_null
-        && let Expression::PointerType { base: inner_base, non_null: inner_non_null, .. } = &*base.borrow()
+        && let Expression::PointerType {
+            base: inner_base,
+            non_null: inner_non_null,
+            ..
+        } = &*base.borrow()
         && !*inner_non_null
         && let Expression::Type { name, .. } = &*inner_base.borrow()
     {
@@ -5040,7 +5045,10 @@ fn test_parse_any_type() {
 fn test_parse_some_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("let x: some MyProtocol".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "let x: some MyProtocol".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -5208,7 +5216,10 @@ fn test_parse_inline_type_auto() {
     {
         assert_eq!(name.value, "x");
         assert!(
-            matches!(&*ty_expr.borrow(), Expression::InlineType { size: None, .. }),
+            matches!(
+                &*ty_expr.borrow(),
+                Expression::InlineType { size: None, .. }
+            ),
             "Expected InlineType with no size, got {:?}",
             &*ty_expr.borrow()
         );
@@ -5228,7 +5239,10 @@ fn test_parse_inline_type_auto() {
 fn test_parse_inline_type_explicit_size() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("let x: inline<256> Dog".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "let x: inline<256> Dog".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -5241,7 +5255,10 @@ fn test_parse_inline_type_explicit_size() {
     {
         assert_eq!(name.value, "x");
         assert!(
-            matches!(&*ty_expr.borrow(), Expression::InlineType { size: Some(_), .. }),
+            matches!(
+                &*ty_expr.borrow(),
+                Expression::InlineType { size: Some(_), .. }
+            ),
             "Expected InlineType with size, got {:?}",
             &*ty_expr.borrow()
         );
@@ -5275,7 +5292,10 @@ fn test_parse_inline_type_empty_brackets() {
     {
         assert_eq!(name.value, "x");
         assert!(
-            matches!(&*ty_expr.borrow(), Expression::InlineType { size: None, .. }),
+            matches!(
+                &*ty_expr.borrow(),
+                Expression::InlineType { size: None, .. }
+            ),
             "Expected InlineType with None (empty brackets), got {:?}",
             &*ty_expr.borrow()
         );
@@ -5314,7 +5334,9 @@ fn test_parse_generic_function() {
         assert_eq!(name.value, "identity");
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "T");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { constraints } if constraints.is_empty()));
+        assert!(
+            matches!(&generic_parameters[0].kind, GenericParameterKind::Type { constraints } if constraints.is_empty())
+        );
         assert_eq!(parameters.len(), 1);
         assert_eq!(parameters[0].borrow().name.value, "x");
         assert!(return_type.is_some());
@@ -5403,9 +5425,7 @@ fn test_parse_generic_function_with_combined_constraint() {
             _ => panic!("expected Type constraint"),
         };
         assert_eq!(constraints.len(), 1);
-        if let Expression::CompoundType { types, .. } =
-            &*constraints[0].borrow()
-        {
+        if let Expression::CompoundType { types, .. } = &*constraints[0].borrow() {
             assert_eq!(types.len(), 2);
             assert!(
                 matches!(&*types[0].borrow(), Expression::Type { name, .. } if name.value == "Equatable")
@@ -5468,7 +5488,9 @@ fn test_parse_generic_class() {
         assert_eq!(name.value, "Box");
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "T");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { constraints } if constraints.len() == 1));
+        assert!(
+            matches!(&generic_parameters[0].kind, GenericParameterKind::Type { constraints } if constraints.len() == 1)
+        );
     } else {
         panic!();
     }
@@ -5694,13 +5716,15 @@ fn test_parse_const_generic_function() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     if let Statement::FunctionDecl {
-        generic_parameters,
-        ..
+        generic_parameters, ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "N");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[0].kind,
+            GenericParameterKind::Const { .. }
+        ));
     } else {
         panic!();
     }
@@ -5727,9 +5751,15 @@ fn test_parse_const_generic_struct() {
         assert_eq!(name.value, "Buffer");
         assert_eq!(generic_parameters.len(), 2);
         assert_eq!(generic_parameters[0].name.value, "T");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { .. }));
+        assert!(matches!(
+            &generic_parameters[0].kind,
+            GenericParameterKind::Type { .. }
+        ));
         assert_eq!(generic_parameters[1].name.value, "N");
-        assert!(matches!(&generic_parameters[1].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[1].kind,
+            GenericParameterKind::Const { .. }
+        ));
     } else {
         panic!();
     }
@@ -5756,7 +5786,10 @@ fn test_parse_const_generic_class() {
         assert_eq!(name.value, "Wrapper");
         assert_eq!(generic_parameters.len(), 2);
         assert_eq!(generic_parameters[1].name.value, "N");
-        assert!(matches!(&generic_parameters[1].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[1].kind,
+            GenericParameterKind::Const { .. }
+        ));
     } else {
         panic!();
     }
@@ -5783,7 +5816,10 @@ fn test_parse_const_generic_enum() {
         assert_eq!(name.value, "MyEnum");
         assert_eq!(generic_parameters.len(), 2);
         assert_eq!(generic_parameters[1].name.value, "N");
-        assert!(matches!(&generic_parameters[1].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[1].kind,
+            GenericParameterKind::Const { .. }
+        ));
     } else {
         panic!();
     }
@@ -5802,15 +5838,20 @@ fn test_parse_const_generic_multi_params() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     if let Statement::FunctionDecl {
-        generic_parameters,
-        ..
+        generic_parameters, ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(generic_parameters.len(), 2);
         assert_eq!(generic_parameters[0].name.value, "Width");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[0].kind,
+            GenericParameterKind::Const { .. }
+        ));
         assert_eq!(generic_parameters[1].name.value, "Height");
-        assert!(matches!(&generic_parameters[1].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[1].kind,
+            GenericParameterKind::Const { .. }
+        ));
     } else {
         panic!();
     }
@@ -5882,9 +5923,18 @@ fn test_parse_protocol_with_const_generic() {
     {
         assert_eq!(name.value, "Container");
         assert_eq!(generic_parameters.len(), 2);
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { .. }));
-        assert!(matches!(&generic_parameters[1].kind, GenericParameterKind::Const { .. }));
-        let associated_count = members.iter().filter(|m| matches!(m, ProtocolMember::AssociatedType { .. })).count();
+        assert!(matches!(
+            &generic_parameters[0].kind,
+            GenericParameterKind::Type { .. }
+        ));
+        assert!(matches!(
+            &generic_parameters[1].kind,
+            GenericParameterKind::Const { .. }
+        ));
+        let associated_count = members
+            .iter()
+            .filter(|m| matches!(m, ProtocolMember::AssociatedType { .. }))
+            .count();
         assert_eq!(associated_count, 1);
     } else {
         panic!();
@@ -10026,7 +10076,10 @@ fn test_parse_generic_function_with_default_type() {
     {
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "T");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { .. }));
+        assert!(matches!(
+            &generic_parameters[0].kind,
+            GenericParameterKind::Type { .. }
+        ));
         assert!(generic_parameters[0].default_value.is_some());
     } else {
         panic!();
@@ -10105,7 +10158,10 @@ fn test_parse_const_generic_with_default_value() {
     {
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "N");
-        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Const { .. }));
+        assert!(matches!(
+            &generic_parameters[0].kind,
+            GenericParameterKind::Const { .. }
+        ));
         assert!(generic_parameters[0].default_value.is_some());
     } else {
         panic!();
