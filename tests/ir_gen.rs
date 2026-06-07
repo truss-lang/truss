@@ -5359,3 +5359,53 @@ fn test_irgen_const_generic_function_decl() {
         engine.borrow().get_diagnostics()
     );
 }
+
+fn run_ir_gen_defaults(code: &str) -> (String, Rc<RefCell<TrussDiagnosticEngine>>) {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    (llvm_ir, engine)
+}
+
+#[test]
+fn test_irgen_default_param_value() {
+    let (llvm_ir, engine) = run_ir_gen_defaults(
+        "func foo(a: Int32 = 5) -> Int32 { return a }
+         func bar() -> Int32 { return foo() }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+    assert!(llvm_ir.contains("call i32 @foo(i32 5)"));
+}
+
+#[test]
+fn test_irgen_labeled_param_reorder() {
+    let (llvm_ir, engine) = run_ir_gen_defaults(
+        "func foo(from a: Int32 = 0, to b: Int32, by c: Int32 = 1) -> Int32 { return a + b + c }
+         func bar() -> Int32 { return foo(by: 3, to: 2) }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+    assert!(llvm_ir.contains("call i32 @foo(i32 0, i32 2, i32 3)"));
+}
+
+#[test]
+fn test_irgen_default_with_label() {
+    let (llvm_ir, engine) = run_ir_gen_defaults(
+        "func foo(from a: Int32 = 0, to b: Int32) -> Int32 { return a + b }
+         func bar() -> Int32 { return foo(to: 10) }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+    assert!(llvm_ir.contains("call i32 @foo(i32 0, i32 10)"));
+}
