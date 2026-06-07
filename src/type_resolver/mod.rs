@@ -3534,6 +3534,11 @@ impl TypeResolver {
                     block_ty
                 }
             }
+            Expression::InlineType { base, ty, .. } => {
+                let base_ty = self.infer_type(base.clone())?;
+                *ty = Some(Rc::new(RefCell::new(Type::Inline(base_ty, None))));
+                ty.clone().unwrap()
+            }
         };
         Some(result)
     }

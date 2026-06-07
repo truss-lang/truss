@@ -994,6 +994,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::AssociatedType(_, name) => name.clone(),
             Type::Compound(_) => "C".into(),
             Type::Function(_, _, _) => "F".into(),
+            Type::Inline(inner, _) => format!("inline{}", Self::type_to_abbreviation(&inner.borrow())),
         }
     }
 
@@ -7692,6 +7693,11 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::GenericParam(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
             Type::AssociatedType(_, _) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+            }
+            Type::Inline(inner, size) => {
+                let _ = inner;
+                let buf_size = size.unwrap_or(8);
+                self.context.i8_type().array_type(buf_size as u32).into()
             }
         };
         Ok(resolved)

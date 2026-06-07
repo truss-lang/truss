@@ -4972,6 +4972,106 @@ fn test_parse_compound_type_three() {
 }
 
 #[test]
+fn test_parse_inline_type_auto() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: inline Dog".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name,
+        type_expression: Some(ty_expr),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "x");
+        assert!(
+            matches!(&*ty_expr.borrow(), Expression::InlineType { size: None, .. }),
+            "Expected InlineType with no size, got {:?}",
+            &*ty_expr.borrow()
+        );
+        if let Expression::InlineType { base, .. } = &*ty_expr.borrow() {
+            assert!(
+                matches!(&*base.borrow(), Expression::Type { name, .. } if name.value == "Dog"),
+                "Expected Type(Dog), got {:?}",
+                &*base.borrow()
+            );
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_inline_type_explicit_size() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: inline<256> Dog".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name,
+        type_expression: Some(ty_expr),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "x");
+        assert!(
+            matches!(&*ty_expr.borrow(), Expression::InlineType { size: Some(_), .. }),
+            "Expected InlineType with size, got {:?}",
+            &*ty_expr.borrow()
+        );
+        if let Expression::InlineType { size, base, .. } = &*ty_expr.borrow() {
+            assert!(size.is_some());
+            assert!(
+                matches!(&*base.borrow(), Expression::Type { name, .. } if name.value == "Dog"),
+                "Expected Type(Dog), got {:?}",
+                &*base.borrow()
+            );
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_inline_type_empty_brackets() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: inline<> Dog".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name,
+        type_expression: Some(ty_expr),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "x");
+        assert!(
+            matches!(&*ty_expr.borrow(), Expression::InlineType { size: None, .. }),
+            "Expected InlineType with None (empty brackets), got {:?}",
+            &*ty_expr.borrow()
+        );
+        if let Expression::InlineType { base, .. } = &*ty_expr.borrow() {
+            assert!(
+                matches!(&*base.borrow(), Expression::Type { name, .. } if name.value == "Dog"),
+                "Expected Type(Dog), got {:?}",
+                &*base.borrow()
+            );
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_generic_function() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

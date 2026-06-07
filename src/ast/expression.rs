@@ -206,6 +206,12 @@ pub enum Expression {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    InlineType {
+        token: Box<Token>,
+        size: Option<Rc<RefCell<Expression>>>,
+        base: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -236,6 +242,7 @@ impl Expression {
             Self::MacroInvocation { ty, .. } => Ok(ty.clone()),
             Self::SizeOf { ty, .. } => Ok(ty.clone()),
             Self::Do { ty, .. } => Ok(ty.clone()),
+            Self::InlineType { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -259,6 +266,7 @@ impl Expression {
             Self::MacroInvocation { ty, .. } => Ok(ty),
             Self::SizeOf { ty, .. } => Ok(ty),
             Self::Do { ty, .. } => Ok(ty),
+            Self::InlineType { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -282,6 +290,7 @@ impl Expression {
             Self::MacroInvocation { ty, .. } => Ok(ty),
             Self::SizeOf { ty, .. } => Ok(ty),
             Self::Do { ty, .. } => Ok(ty),
+            Self::InlineType { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -377,6 +386,7 @@ impl Expression {
             Expression::MacroInvocation { name, .. } => (**name).clone(),
             Expression::SizeOf { token, .. } => (**token).clone(),
             Expression::Do { token, .. } => (**token).clone(),
+            Expression::InlineType { base, .. } => base.borrow().token(),
         }
     }
 }

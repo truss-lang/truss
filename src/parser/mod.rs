@@ -1066,6 +1066,54 @@ impl Parser {
             });
         }
 
+        if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::Inline)
+        {
+            self.index += 1;
+            let inline_token = token;
+
+            let size = if let Some(t) = self.peek()
+                && OperatorType::is_operator(&t, OperatorType::Less)
+            {
+                self.index += 1;
+                if let Some(t) = self.peek()
+                    && OperatorType::is_operator(&t, OperatorType::Greater)
+                {
+                    self.index += 1;
+                    None
+                } else {
+                    let size_expr = Rc::new(RefCell::new(self.parse_primary()?));
+                    let Some(next) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::MissingSeparator,
+                            "Expected '>' to close inline size".to_string(),
+                            &self.tokens[self.index.saturating_sub(1)],
+                        );
+                        return Err(());
+                    };
+                    if !OperatorType::is_operator(&next, OperatorType::Greater) {
+                        self.emit_error(
+                            TrussDiagnosticCode::MissingSeparator,
+                            format!("Expected '>' but found '{}'", next.value),
+                            &next,
+                        );
+                        return Err(());
+                    }
+                    Some(size_expr)
+                }
+            } else {
+                None
+            };
+
+            let base = Rc::new(RefCell::new(self.parse_type_expression()?));
+            return Ok(Expression::InlineType {
+                token: Box::new(inline_token),
+                size,
+                base,
+                ty: None,
+            });
+        }
+
         let Some(token) = self.peek() else {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedType,

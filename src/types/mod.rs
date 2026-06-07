@@ -28,6 +28,7 @@ pub enum Type {
     Enum(String, WeakSymbol),
     Protocol(String, WeakSymbol),
     Compound(Vec<Rc<RefCell<Type>>>),
+    Inline(Rc<RefCell<Type>>, Option<u64>),
     GenericParam(String),
     AssociatedType(Rc<RefCell<Type>>, String),
 }
@@ -90,6 +91,13 @@ impl fmt::Display for Type {
                     write!(f, "{}", t.borrow())?;
                 }
                 Ok(())
+            }
+            Type::Inline(inner, size) => {
+                if let Some(size) = size {
+                    write!(f, "Inline({}, {})", inner.borrow(), size)
+                } else {
+                    write!(f, "Inline({}, auto)", inner.borrow())
+                }
             }
             Type::GenericParam(name) => write!(f, "GenericParam({})", name),
             Type::AssociatedType(base, name) => write!(f, "{}.{}", base.borrow(), name),

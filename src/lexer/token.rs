@@ -80,6 +80,7 @@ pub enum KeywordType {
     Asm,
     Using,
     Do,
+    Inline,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -196,6 +197,7 @@ impl KeywordType {
             KeywordType::Asm => "asm",
             KeywordType::Using => "using",
             KeywordType::Do => "do",
+            KeywordType::Inline => "inline",
         }
         .to_string()
     }
