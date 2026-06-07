@@ -5238,3 +5238,71 @@ fn test_irgen_yield_in_function_void() {
         llvm_ir
     );
 }
+
+#[test]
+fn test_irgen_inline_class_init() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "class Point { let x: Int32 }
+         func test() -> Int32 { let p: inline Point = Point(1) return p.x }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for inline class init, got: {:?}",
+        errors
+    );
+    assert!(
+        !llvm_ir.contains("malloc"),
+        "Inline class should not use malloc:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("class.Point"),
+        "Expected class.Point struct in IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_inline_class_no_size() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "class Point { let x: Int32 }
+         func test() -> Int32 { let p: inline Point = Point(1) return p.x }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for inline class without size, got: {:?}",
+        errors
+    );
+    assert!(
+        !llvm_ir.contains("malloc"),
+        "Inline class should not use malloc:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_inline_class_explicit_size() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "class Point { let x: Int32 }
+         func test() -> Int32 { let p: inline<256> Point = Point(1) return p.x }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no errors for inline<256> class, got: {:?}",
+        errors
+    );
+    assert!(
+        !llvm_ir.contains("malloc"),
+        "Inline class should not use malloc:\n{}",
+        llvm_ir
+    );
+}

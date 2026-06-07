@@ -170,6 +170,23 @@ impl<'ctx> IRGenerator<'ctx> {
                             .unwrap()
                             .deferred_vars
                             .push((ptr, type_name));
+                    } else if let Type::Inline(inner, _) = &*ty_borrow {
+                        let class_name = {
+                            let inner_borrow = inner.borrow();
+                            match &*inner_borrow {
+                                Type::Class(name, _) => Some(name.clone()),
+                                _ => None,
+                            }
+                        };
+                        if let Some(class_name) = class_name {
+                            drop(ty_borrow);
+                            let mut stack = self.scope_stack.borrow_mut();
+                            stack
+                                .last_mut()
+                                .unwrap()
+                                .deferred_vars
+                                .push((ptr, class_name));
+                        }
                     }
                 }
             }
@@ -1057,6 +1074,15 @@ impl<'ctx> IRGenerator<'ctx> {
             (Type::GenericParam(n1), Type::GenericParam(n2)) => n1 == n2,
             (Type::AssociatedType(t1, n1), Type::AssociatedType(t2, n2)) => {
                 n1 == n2 && Self::types_compatible(&t1.borrow(), &t2.borrow())
+            }
+            (Type::Inline(a_inner, _), Type::Inline(b_inner, _)) => {
+                Self::types_compatible(&a_inner.borrow(), &b_inner.borrow())
+            }
+            (Type::Inline(a_inner, _), b) => {
+                Self::types_compatible(&a_inner.borrow(), b)
+            }
+            (a, Type::Inline(b_inner, _)) => {
+                Self::types_compatible(a, &b_inner.borrow())
             }
             _ => false,
         }
@@ -2885,17 +2911,23 @@ impl<'ctx> IRGenerator<'ctx> {
                         let type_name = &callee_name.value;
                         let fn_name = format!("{}.init", type_name);
                         if let Some(function) = self.module.get_function(&fn_name) {
+                            let is_inline = ty.as_ref().map_or(false, |t| {
+                                matches!(&*t.borrow(), Type::Inline(_, _))
+                            });
                             if let Some(class_type) =
                                 self.class_types.borrow().get(type_name).cloned()
                             {
-                                let class_ptr =
-                                    self.heap_allocate(class_type.as_basic_type_enum())?;
+                                let obj_ptr = if is_inline {
+                                    ptr
+                                } else {
+                                    self.heap_allocate(class_type.as_basic_type_enum())?
+                                };
                                 let vtable_global =
                                     self.vtable_globals.borrow().get(type_name).copied();
                                 if let Some(vt_global) = vtable_global {
                                     let vtable_ptr_gep = self
                                         .builder
-                                        .build_struct_gep(class_type, class_ptr, 0, "")?;
+                                        .build_struct_gep(class_type, obj_ptr, 0, "")?;
                                     self.builder.build_store(
                                         vtable_ptr_gep,
                                         vt_global.as_pointer_value(),
@@ -2904,19 +2936,22 @@ impl<'ctx> IRGenerator<'ctx> {
                                 let i64_ty = self.context.i64_type();
                                 let rc_ptr = self
                                     .builder
-                                    .build_struct_gep(class_type, class_ptr, 1, "")?;
+                                    .build_struct_gep(class_type, obj_ptr, 1, "")?;
+                                let rc_val = if is_inline { 0 } else { 1 };
                                 self.builder
-                                    .build_store(rc_ptr, i64_ty.const_int(1, false))?;
+                                    .build_store(rc_ptr, i64_ty.const_int(rc_val, false))?;
                                 let mut args = Vec::new();
-                                args.push(class_ptr.into());
+                                args.push(obj_ptr.into());
                                 for param in parameters {
                                     let arg_val =
                                         self.resolve_expression(param.expression.clone())?.unwrap();
                                     args.push(arg_val.into());
                                 }
                                 self.builder.build_call(function, &args, "")?;
-                                self.builder.build_store(ptr, class_ptr)?;
-                                self.class_refs.borrow_mut().push(ptr);
+                                if !is_inline {
+                                    self.builder.build_store(ptr, obj_ptr)?;
+                                    self.class_refs.borrow_mut().push(ptr);
+                                }
                             } else {
                                 let mut args = Vec::new();
                                 args.push(ptr.into());
@@ -6003,6 +6038,42 @@ impl<'ctx> IRGenerator<'ctx> {
                     return Ok(Some(val));
                 }
 
+                if let Some(ty) = &object_ty
+                    && let Type::Inline(inner, _) = &*ty.borrow()
+                    && let Type::Class(class_name, _) = &*inner.borrow()
+                {
+                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+                    let class_type = self.class_types.borrow().get(class_name).copied();
+                    if let Some(class_type) = class_type {
+                        let struct_ptr = match object_val {
+                            BasicValueEnum::PointerValue(p) => p,
+                            val => {
+                                let p = self.builder.build_alloca(val.get_type(), "")?;
+                                self.builder.build_store(p, val)?;
+                                p
+                            }
+                        };
+                        let field_index = self.get_stored_class_field_index(class_name, &member.value);
+                        if let Ok(field_index) = field_index {
+                            let field_llvm_ptr = self
+                                .builder
+                                .build_struct_gep(class_type, struct_ptr, field_index as u32, "")?;
+                            let field_llvm_type = self
+                                .get_struct_field_type(class_name, &member.value)?;
+                            let val = self
+                                .builder
+                                .build_load(field_llvm_type, field_llvm_ptr, "")?;
+                            return Ok(Some(val));
+                        }
+                    }
+                    self.emit_error(
+                        TrussDiagnosticCode::FieldNotFound,
+                        format!("Field '{}' not found on inline class '{}'", member.value, class_name),
+                        Some(member.as_ref()),
+                    );
+                    anyhow::bail!("Field '{}' not found on inline class '{}'", member.value, class_name);
+                }
+
                 self.emit_error(
                     TrussDiagnosticCode::UnsupportedFeature,
                     "Member access on non-struct type",
@@ -7694,10 +7765,18 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::AssociatedType(_, _) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
-            Type::Inline(inner, size) => {
-                let _ = inner;
-                let buf_size = size.unwrap_or(8);
-                self.context.i8_type().array_type(buf_size as u32).into()
+            Type::Inline(inner, _) => {
+                let inner_borrow = inner.borrow();
+                match &*inner_borrow {
+                    Type::Class(name, _) => {
+                        if let Some(class_type) = self.class_types.borrow().get(name).cloned() {
+                            class_type.into()
+                        } else {
+                            self.context.i8_type().array_type(8).into()
+                        }
+                    }
+                    _ => self.context.i8_type().array_type(8).into(),
+                }
             }
         };
         Ok(resolved)
