@@ -255,9 +255,9 @@ fn test_if_case_symbol_resolved() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) {
-                    if case Option.some(val) = x {
+                    if case Option.Some(val) = x {
                         let _ = val
                     }
                 }
@@ -286,9 +286,9 @@ fn test_if_case_binding_available_in_then_block() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) {
-                    if case Option.some(val) = x {
+                    if case Option.Some(val) = x {
                         val
                     }
                 }
@@ -322,9 +322,9 @@ fn test_if_case_binding_not_available_outside() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) {
-                    if case Option.some(val) = x {
+                    if case Option.Some(val) = x {
                     }
                     val
                 }
@@ -357,9 +357,9 @@ fn test_if_case_no_bindings() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) {
-                    if case Option.none = x {
+                    if case Option.None = x {
                     }
                 }
             "#
@@ -392,9 +392,9 @@ fn test_if_case_underscore_binding() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) {
-                    if case Option.some(_) = x {
+                    if case Option.Some(_) = x {
                     }
                 }
             "#
@@ -1390,7 +1390,7 @@ fn test_generic_enum_resolves_type_param() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "enum Option<T> { case none case some(T) }".to_string(),
+            "enum Option<T> { case None case Some(T) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -1620,9 +1620,9 @@ fn test_guard_case_binding_available_after_guard() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) {
-                    guard case .some(val) = x else { return }
+                    guard case .Some(val) = x else { return }
                     let _ = val
                 }
             "#
@@ -1655,9 +1655,9 @@ fn test_guard_case_binding_not_available_in_else_block() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) {
-                    guard case .some(val) = x else {
+                    guard case .Some(val) = x else {
                         val
                     }
                 }
@@ -1690,12 +1690,12 @@ fn test_match_case_binding_available_in_body() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) -> Int32 {
                     match x {
-                        case .some(let val):
+                        case .Some(let val):
                             val
-                        case .none:
+                        case .None:
                             0
                         default:
                             -1
@@ -1731,10 +1731,10 @@ fn test_match_case_binding_not_available_outside() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) -> Int32 {
                     match x {
-                        case .some(let val):
+                        case .Some(let val):
                             val
                         default:
                             0
@@ -1770,9 +1770,9 @@ fn test_if_case_dot_shorthand_binding_available() {
     let mut lexer = Lexer::new(
         CharStream::new(
             r#"
-                enum Option { case none case some(Int32) }
+                enum Option { case None case Some(Int32) }
                 func test(x: Option) {
-                    if case .some(val) = x {
+                    if case .Some(val) = x {
                         val
                     }
                 }

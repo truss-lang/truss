@@ -1771,9 +1771,9 @@ fn test_type_instantiation_with_func_call() {
 #[test]
 fn test_if_case_type_resolved() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.some(val) = x {
+            if case Option.Some(val) = x {
                 let _: Int32 = val
             }
         }
@@ -1799,9 +1799,9 @@ fn test_if_case_type_resolved() {
 #[test]
 fn test_if_case_binding_type_inference() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.some(val) = x {
+            if case Option.Some(val) = x {
                 val
             }
         }
@@ -1827,9 +1827,9 @@ fn test_if_case_binding_type_inference() {
 #[test]
 fn test_if_case_no_bindings_type() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.none = x {
+            if case Option.None = x {
             }
         }
     "#;
@@ -1855,7 +1855,7 @@ fn test_if_case_no_bindings_type() {
 fn test_if_case_enum_type_not_found() {
     let code = r#"
         func test(x: Int32) {
-            if case Option.some(val) = x {
+            if case Option.Some(val) = x {
             }
         }
     "#;
@@ -1884,7 +1884,7 @@ fn test_if_case_enum_type_not_found() {
 #[test]
 fn test_if_case_case_not_found() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
             if case Option.unknown(val) = x {
             }
@@ -1915,9 +1915,9 @@ fn test_if_case_case_not_found() {
 #[test]
 fn test_if_case_else_branch() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.some(val) = x {
+            if case Option.Some(val) = x {
                 let _ = val
             } else {
                 let _ = 42
@@ -3317,7 +3317,7 @@ fn test_generic_enum_type_param_resolves() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "enum Option<T> { case none case some(T) }".to_string(),
+            "enum Option<T> { case None case Some(T) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3389,9 +3389,9 @@ fn test_protocol_with_associatedtype_type_resolves() {
 #[test]
 fn test_if_case_dot_shorthand_type_resolved() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case .some(val) = x {
+            if case .Some(val) = x {
                 let _: Int32 = val
             }
         }
@@ -3422,9 +3422,9 @@ fn test_if_case_dot_shorthand_type_resolved() {
 #[test]
 fn test_guard_case_type_check() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) -> Int32 {
-            guard case .some(val) = x else { return 0 }
+            guard case .Some(val) = x else { return 0 }
             return val
         }
     "#;
@@ -3454,12 +3454,12 @@ fn test_guard_case_type_check() {
 #[test]
 fn test_match_type_check() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) -> Int32 {
             match x {
-                case .some(let val):
+                case .Some(let val):
                     val
-                case .none:
+                case .None:
                     0
                 default:
                     -1

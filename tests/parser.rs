@@ -3408,9 +3408,9 @@ fn test_parse_enum_case_constructor() {
 #[test]
 fn test_parse_if_case_no_bindings() {
     let code = r#"
-        enum Option { case none case some }
+        enum Option { case None case Some }
         func test(x: Option) {
-            if case Option.none = x {}
+            if case Option.None = x {}
         }
     "#;
     let engine = create_engine();
@@ -3434,7 +3434,7 @@ fn test_parse_if_case_no_bindings() {
         } = &*condition.borrow()
     {
         assert_eq!(enum_type.as_ref().unwrap().value, "Option");
-        assert_eq!(case_name.value, "none");
+        assert_eq!(case_name.value, "None");
         assert!(bindings.is_empty());
         assert!(then.is_empty());
     } else {
@@ -3448,9 +3448,9 @@ fn test_parse_if_case_no_bindings() {
 #[test]
 fn test_parse_if_case_with_bindings() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.some(val) = x {}
+            if case Option.Some(val) = x {}
         }
     "#;
     let engine = create_engine();
@@ -3472,7 +3472,7 @@ fn test_parse_if_case_with_bindings() {
         } = &*condition.borrow()
     {
         assert_eq!(enum_type.as_ref().unwrap().value, "Option");
-        assert_eq!(case_name.value, "some");
+        assert_eq!(case_name.value, "Some");
         assert_eq!(bindings.len(), 1);
         if let Pattern::Identifier(token) = &bindings[0] {
             assert_eq!(token.value, "val");
@@ -3490,9 +3490,9 @@ fn test_parse_if_case_with_bindings() {
 #[test]
 fn test_parse_if_case_with_else() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.some(val) = x {
+            if case Option.Some(val) = x {
                 let _ = val
             } else {
                 let _ = 0
@@ -3520,7 +3520,7 @@ fn test_parse_if_case_with_else() {
         } = &*condition.borrow()
     {
         assert_eq!(enum_type.as_ref().unwrap().value, "Option");
-        assert_eq!(case_name.value, "some");
+        assert_eq!(case_name.value, "Some");
         assert_eq!(bindings.len(), 1);
         assert!(else_.is_some());
     } else {
@@ -3650,9 +3650,9 @@ fn test_parse_if_case_normal_if_still_works() {
 #[test]
 fn test_parse_case_alone() {
     let code = r#"
-        enum Option { case none case some }
+        enum Option { case None case Some }
         func test(x: Option) -> Bool {
-            return case Option.none = x
+            return case Option.None = x
         }
     "#;
     let engine = create_engine();
@@ -5501,7 +5501,7 @@ fn test_parse_generic_enum() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "enum Option<T> { case none case some(T) }".to_string(),
+            "enum Option<T> { case None case Some(T) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -5868,7 +5868,7 @@ fn test_parse_const_generic_missing_colon_error() {
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
-    let program = parser.parse();
+    let _ = parser.parse();
     assert!(engine.borrow().get_errors().len() > 0);
 }
 
@@ -6160,9 +6160,9 @@ fn test_parse_type_instantiation_inside_generic_context() {
 #[test]
 fn test_parse_if_case_dot_shorthand() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case .some(val) = x {}
+            if case .Some(val) = x {}
         }
     "#;
     let engine = create_engine();
@@ -6184,7 +6184,7 @@ fn test_parse_if_case_dot_shorthand() {
         } = &*condition.borrow()
     {
         assert!(enum_type.is_none());
-        assert_eq!(case_name.value, "some");
+        assert_eq!(case_name.value, "Some");
         assert_eq!(bindings.len(), 1);
     } else {
         panic!("Expected If with Case (shorthand) condition");
@@ -6228,12 +6228,12 @@ fn test_parse_if_case_connect_with_and() {
 #[test]
 fn test_parse_match_simple() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) -> Int32 {
             match x {
-                case .some(let val):
+                case .Some(let val):
                     val
-                case .none:
+                case .None:
                     0
                 default:
                     -1
@@ -6255,13 +6255,13 @@ fn test_parse_match_simple() {
         assert_eq!(cases.len(), 3, "expected 3 cases (some, none, default)");
         assert!(matches!(&*value.borrow(), Expression::Variable { name, .. } if name.value == "x"));
         assert!(matches!(cases[0].patterns[0].as_ref(),
-            Pattern::EnumCase { case_name, .. } if case_name.value == "some"));
+            Pattern::EnumCase { case_name, .. } if case_name.value == "Some"));
         if let Pattern::EnumCase { bindings, .. } = cases[0].patterns[0].as_ref() {
             assert_eq!(bindings.len(), 1);
             assert!(matches!(&bindings[0], Pattern::ValueBinding(_)));
         }
         assert!(
-            matches!(cases[1].patterns[0].as_ref(), Pattern::EnumCase { case_name, .. } if case_name.value == "none")
+            matches!(cases[1].patterns[0].as_ref(), Pattern::EnumCase { case_name, .. } if case_name.value == "None")
         );
         assert!(matches!(cases[2].patterns[0].as_ref(), Pattern::Ignore));
     } else {
@@ -6305,9 +6305,9 @@ fn test_parse_match_with_guard() {
 #[test]
 fn test_parse_guard_statement() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            guard case .some(val) = x else {
+            guard case .Some(val) = x else {
                 return
             }
         }
@@ -6337,12 +6337,12 @@ fn test_parse_guard_statement() {
 #[test]
 fn test_parse_fallthrough_and_break() {
     let code = r#"
-        enum Option { case none case some }
+        enum Option { case None case Some }
         func test(x: Option) {
             match x {
-                case .none:
+                case .None:
                     fallthrough
-                case .some:
+                case .Some:
                     break
             }
         }
@@ -6376,9 +6376,9 @@ fn test_parse_fallthrough_and_break() {
 #[test]
 fn test_parse_pattern_value_binding() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case .some(let val) = x {}
+            if case .Some(let val) = x {}
         }
     "#;
     let engine = create_engine();
@@ -6398,7 +6398,7 @@ fn test_parse_pattern_value_binding() {
             ..
         } = &*condition.borrow()
     {
-        assert_eq!(case_name.value, "some");
+        assert_eq!(case_name.value, "Some");
         assert_eq!(bindings.len(), 1);
         assert!(
             matches!(&bindings[0], Pattern::ValueBinding(inner) if matches!(inner.as_ref(), Pattern::Identifier(_)))
@@ -7860,7 +7860,7 @@ fn test_parse_generic_enum_with_where_clause() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "enum Option<T> where T: Hashable { case none case some(T) }".to_string(),
+            "enum Option<T> where T: Hashable { case None case Some(T) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),

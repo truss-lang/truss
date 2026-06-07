@@ -763,8 +763,8 @@ fn test_irgen_struct_get_set_read_write() {
 fn test_irgen_enum_decl_simple_cases() {
     let code = r#"
         enum Option {
-            case none
-            case some
+            case None
+            case Some
         }
         func test(e: Option) -> Option {
             return e
@@ -796,11 +796,11 @@ fn test_irgen_enum_decl_simple_cases() {
 fn test_irgen_enum_case_construction_no_payload() {
     let code = r#"
         enum Option {
-            case none
-            case some
+            case None
+            case Some
         }
         func test() -> Option {
-            return Option.none
+            return Option.None
         }
     "#;
     let engine = create_engine();
@@ -829,11 +829,11 @@ fn test_irgen_enum_case_construction_no_payload() {
 fn test_irgen_enum_case_construction_with_payload() {
     let code = r#"
         enum Option {
-            case none
-            case some(Int32)
+            case None
+            case Some(Int32)
         }
         func test() -> Option {
-            return Option.some(42)
+            return Option.Some(42)
         }
     "#;
     let engine = create_engine();
@@ -932,8 +932,8 @@ fn test_irgen_enum_multiple_cases() {
 fn test_irgen_enum_method() {
     let code = r#"
         enum Option {
-            case none
-            case some(Int32)
+            case None
+            case Some(Int32)
             func is_some() -> Bool {
                 return true
             }
@@ -968,11 +968,11 @@ fn test_irgen_enum_method() {
 fn test_irgen_enum_variable() {
     let code = r#"
         enum Option {
-            case none
-            case some(Int32)
+            case None
+            case Some(Int32)
         }
         func test() -> Int32 {
-            var x: Option = Option.some(99)
+            var x: Option = Option.Some(99)
             return 0
         }
     "#;
@@ -1001,9 +1001,9 @@ fn test_irgen_enum_variable() {
 #[test]
 fn test_irgen_if_case_no_bindings() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.none = x {}
+            if case Option.None = x {}
         }
     "#;
     let engine = create_engine();
@@ -1032,9 +1032,9 @@ fn test_irgen_if_case_no_bindings() {
 #[test]
 fn test_irgen_if_case_with_bindings() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.some(val) = x {
+            if case Option.Some(val) = x {
                 let _ = val
             }
         }
@@ -1073,9 +1073,9 @@ fn test_irgen_if_case_with_bindings() {
 #[test]
 fn test_irgen_if_case_with_else() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.some(val) = x {
+            if case Option.Some(val) = x {
                 let _ = val
             } else {
                 let _ = 42
@@ -1109,11 +1109,11 @@ fn test_irgen_if_case_with_else() {
 #[test]
 fn test_irgen_if_case_else_if() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) {
-            if case Option.none = x {
+            if case Option.None = x {
                 let _ = 1
-            } else if case Option.some(val) = x {
+            } else if case Option.Some(val) = x {
                 let _ = val
             }
         }
@@ -2580,11 +2580,11 @@ fn test_irgen_struct_auto_deinit() {
 fn test_irgen_enum_auto_deinit() {
     let code = r#"
         enum Option {
-            case none
-            case some(Int32)
+            case None
+            case Some(Int32)
         }
         func test() -> Int32 {
-            var e = Option.some(42)
+            var e = Option.Some(42)
             return 0
         }
     "#;
@@ -2702,11 +2702,11 @@ fn test_irgen_user_defined_struct_deinit() {
 fn test_irgen_enum_deinit_called_on_scope_exit() {
     let code = r#"
         enum Option {
-            case none
-            case some(Int32)
+            case None
+            case Some(Int32)
         }
         func test() -> Int32 {
-            var e = Option.some(42)
+            var e = Option.Some(42)
             return 0
         }
     "#;
@@ -3021,9 +3021,9 @@ fn test_irgen_extension_static_method_with_params() {
 #[test]
 fn test_irgen_guard_case_success() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) -> Int32 {
-            guard case .some(val) = x else { return 0 }
+            guard case .Some(val) = x else { return 0 }
             return val
         }
     "#;
@@ -3054,12 +3054,12 @@ fn test_irgen_guard_case_success() {
 #[test]
 fn test_irgen_match_simple() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) -> Int32 {
             match x {
-                case .some(let val):
+                case .Some(let val):
                     val
-                case .none:
+                case .None:
                     0
                 default:
                     -1
@@ -3105,9 +3105,9 @@ fn test_irgen_match_simple() {
 #[test]
 fn test_irgen_guard_dot_shorthand() {
     let code = r#"
-        enum Option { case none case some(Int32) }
+        enum Option { case None case Some(Int32) }
         func test(x: Option) -> Int32 {
-            guard case .some(val) = x else { return 0 }
+            guard case .Some(val) = x else { return 0 }
             return val
         }
     "#;
