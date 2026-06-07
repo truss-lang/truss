@@ -5606,6 +5606,77 @@ fn test_yield_in_function_type_mismatch() {
 }
 
 #[test]
+fn test_non_null_pointer_type_annotation() {
+    let code = "func test() { let p: Int32*! }";
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
+        && let Some(ty) = ty
+    {
+        assert!(
+            matches!(ty.borrow().clone(), Type::NonNullPointer(inner) if matches!(*inner.borrow(), Type::Int32))
+        );
+    } else {
+        panic!("Expected variable declaration with non-null pointer type");
+    }
+}
+
+#[test]
+fn test_non_null_pointer_deref() {
+    let errors = run_type_check("func test(p: Int32*!) -> Int32 { return *p }");
+    assert_eq!(errors, 0, "dereference of non-null pointer should work");
+}
+
+#[test]
+fn test_nullptr_rejected_for_non_null_pointer() {
+    let errors = run_type_check("func test() { let p: Int32*! = nullptr }");
+    assert_eq!(
+        errors, 2,
+        "assigning nullptr to non-null pointer should error"
+    );
+}
+
+#[test]
+fn test_non_null_ptr_to_ptr_conversion() {
+    let errors = run_type_check("func foo(p: Int32*) {} func bar(q: Int32*!) { foo(p: q) }");
+    assert_eq!(
+        errors, 0,
+        "passing non-null pointer to nullable pointer parameter should be allowed"
+    );
+}
+
+#[test]
+fn test_nullptr_in_return_type_non_null_error() {
+    let errors = run_type_check("func test() -> Int32*! { return nullptr }");
+    assert_eq!(
+        errors, 1,
+        "returning nullptr for non-null return type should error"
+    );
+}
+
+#[test]
+fn test_non_null_pointer_nullptr_init_regular_ptr() {
+    let errors = run_type_check("func test() { let p: Int32* = nullptr }");
+    assert_eq!(
+        errors, 0,
+        "assigning nullptr to regular pointer should be allowed"
+    );
+}
+
+#[test]
 fn test_yield_in_do_expression_type() {
     let errors = run_type_check("func test() -> Int32 { let x = do { yield 42 }; return x }");
     assert_eq!(

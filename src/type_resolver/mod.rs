@@ -2335,12 +2335,16 @@ impl TypeResolver {
                 }
             }
             Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
-            Expression::PointerType { base, ty, .. } => {
+            Expression::PointerType { base, ty, non_null } => {
                 if let Some(existing_ty) = ty.as_ref() {
                     return Some(existing_ty.clone());
                 }
                 let base_ty = self.infer_type(*base.clone())?;
-                let pointer_ty = Rc::new(RefCell::new(Type::Pointer(base_ty)));
+                let pointer_ty = if *non_null {
+                    Rc::new(RefCell::new(Type::NonNullPointer(base_ty)))
+                } else {
+                    Rc::new(RefCell::new(Type::Pointer(base_ty)))
+                };
                 *ty = Some(pointer_ty.clone());
                 pointer_ty
             }
@@ -3708,6 +3712,14 @@ impl TypeResolver {
                 );
             }
         } else if is_nullptr {
+            if matches!(&*expected.borrow(), Type::NonNullPointer(_)) {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    "Cannot assign nullptr to non-nullable pointer type",
+                    token,
+                );
+                return;
+            }
             let mut expr_mut = expression.borrow_mut();
             if let Expression::NullptrLiteral { ty, .. } = &mut *expr_mut {
                 *ty = Some(expected.clone());
@@ -3811,6 +3823,11 @@ impl TypeResolver {
                 let new_base = Self::substitute_generic_params(base.clone(), mapping);
                 Rc::new(RefCell::new(Type::Pointer(new_base)))
             }
+            Type::NonNullPointer(base) => {
+                drop(borrowed);
+                let new_base = Self::substitute_generic_params(base.clone(), mapping);
+                Rc::new(RefCell::new(Type::NonNullPointer(new_base)))
+            }
             Type::Tuple(elements) => {
                 drop(borrowed);
                 let new_elements: Vec<(Option<String>, Rc<RefCell<Type>>)> = elements
@@ -3908,6 +3925,9 @@ impl TypeResolver {
                 Self::collect_generic_mappings(r1.clone(), r2.clone(), mapping);
             }
             (Type::Pointer(b1), Type::Pointer(b2)) => {
+                Self::collect_generic_mappings(b1.clone(), b2.clone(), mapping);
+            }
+            (Type::NonNullPointer(b1), Type::NonNullPointer(b2)) => {
                 Self::collect_generic_mappings(b1.clone(), b2.clone(), mapping);
             }
             (Type::Tuple(e1), Type::Tuple(e2)) => {
@@ -4043,6 +4063,8 @@ impl TypeResolver {
         match (source, target) {
             (Type::Never, _) => true,
             (Type::Pointer(_), Type::Pointer(_)) => true,
+            (Type::NonNullPointer(_), Type::Pointer(_)) => true,
+            (Type::NonNullPointer(_), Type::NonNullPointer(_)) => true,
             (s, t) if Self::is_numeric_type(s) && Self::is_numeric_type(t) => true,
             (Type::Bool, t) if Self::is_integer_type(t) => true,
             (s, Type::Bool) if Self::is_integer_type(s) => true,
@@ -4063,6 +4085,7 @@ impl TypeResolver {
             Type::Int128 | Type::UInt128 => Some(128),
             Type::Bool | Type::Char => Some(8),
             Type::Pointer(_) => Some(64),
+            Type::NonNullPointer(_) => Some(64),
             _ => None,
         }
     }
@@ -4112,6 +4135,8 @@ impl TypeResolver {
             UnaryOperator::Deref => {
                 let op_ty = operand.borrow().clone();
                 if let Type::Pointer(inner_ty) = op_ty {
+                    Some(inner_ty)
+                } else if let Type::NonNullPointer(inner_ty) = operand.borrow().clone() {
                     Some(inner_ty)
                 } else {
                     None
@@ -4523,6 +4548,9 @@ impl TypeResolver {
             | (Type::Enum(n1, _), Type::Enum(n2, _))
             | (Type::Protocol(n1, _), Type::Protocol(n2, _)) => n1 == n2,
             (Type::Pointer(t1), Type::Pointer(t2)) => {
+                Self::types_are_type_compatible(&t1.borrow(), &t2.borrow())
+            }
+            (Type::NonNullPointer(t1), Type::NonNullPointer(t2)) => {
                 Self::types_are_type_compatible(&t1.borrow(), &t2.borrow())
             }
             (Type::Tuple(e1), Type::Tuple(e2)) => {

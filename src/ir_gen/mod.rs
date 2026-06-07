@@ -1006,6 +1006,7 @@ impl<'ctx> IRGenerator<'ctx> {
             | Type::Enum(name, _)
             | Type::Protocol(name, _) => name.clone(),
             Type::Pointer(_) => "P".into(),
+            Type::NonNullPointer(_) => "NP".into(),
             Type::Tuple(_) => "T".into(),
             Type::GenericParam(name) => name.clone(),
             Type::AssociatedType(_, name) => name.clone(),
@@ -1063,6 +1064,13 @@ impl<'ctx> IRGenerator<'ctx> {
             | (Type::Enum(n1, _), Type::Enum(n2, _))
             | (Type::Protocol(n1, _), Type::Protocol(n2, _)) => n1 == n2,
             (Type::Pointer(t1), Type::Pointer(t2)) => {
+                Self::types_compatible(&t1.borrow(), &t2.borrow())
+            }
+            (Type::NonNullPointer(t1), Type::NonNullPointer(t2)) => {
+                Self::types_compatible(&t1.borrow(), &t2.borrow())
+            }
+            (Type::NonNullPointer(t1), Type::Pointer(t2))
+            | (Type::Pointer(t1), Type::NonNullPointer(t2)) => {
                 Self::types_compatible(&t1.borrow(), &t2.borrow())
             }
             (Type::Tuple(e1), Type::Tuple(e2)) => {
@@ -7681,7 +7689,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("Void type is handled specially as void return type");
             }
             Type::Function(_, _, _) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
-            Type::Pointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
+            Type::Pointer(_) | Type::NonNullPointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
             Type::Struct(name, _) => {
                 if let Some(struct_type) = self.struct_types.borrow().get(name) {
                     struct_type.as_basic_type_enum()
