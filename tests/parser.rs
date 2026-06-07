@@ -9834,3 +9834,220 @@ fn test_parse_yield_in_defer_error() {
     }
     assert!(engine.borrow().has_errors());
 }
+
+#[test]
+fn test_parse_function_decl_with_default_value() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(a: Int32 = 5) -> Int32 { a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters.len(), 1);
+        let param = parameters[0].borrow();
+        assert_eq!(param.name.value, "a");
+        assert!(param.default_value.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_decl_with_label_and_default_value() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(from a: Int32 = 0, to b: Int32) { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters.len(), 2);
+        assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "from");
+        assert_eq!(parameters[0].borrow().name.value, "a");
+        assert!(parameters[0].borrow().default_value.is_some());
+        assert_eq!(parameters[1].borrow().label.as_ref().unwrap().value, "to");
+        assert_eq!(parameters[1].borrow().name.value, "b");
+        assert!(parameters[1].borrow().default_value.is_none());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_decl_with_expression_default_value() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(a: Int32 = 5 + 3) -> Int32 { a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters.len(), 1);
+        let param = parameters[0].borrow();
+        assert_eq!(param.name.value, "a");
+        assert!(param.default_value.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_function_decl_no_label_with_default_value() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(a: Int32 = 10) -> Int32 { a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters.len(), 1);
+        assert!(parameters[0].borrow().label.is_none());
+        assert!(parameters[0].borrow().default_value.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_function_with_default_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func identity<T = Int32>(x: T) -> T { x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { .. }));
+        assert!(generic_parameters[0].default_value.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_function_with_constraint_and_default_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func compare<T: Equatable = String>(a: T, b: T) -> Bool { a == b }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        match &generic_parameters[0].kind {
+            GenericParameterKind::Type { constraints } => {
+                assert_eq!(constraints.len(), 1);
+            }
+            _ => panic!("expected Type"),
+        }
+        assert!(generic_parameters[0].default_value.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_struct_with_default_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Container<T = Int32> { var items: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "T");
+        assert!(generic_parameters[0].default_value.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_const_generic_with_default_value() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo<let N: Int32 = 42>() -> Int32 { N }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "N");
+        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Const { .. }));
+        assert!(generic_parameters[0].default_value.is_some());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_generic_function_no_default_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func identity<T>(x: T) -> T { x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        generic_parameters, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(generic_parameters.len(), 1);
+        assert!(generic_parameters[0].default_value.is_none());
+    } else {
+        panic!();
+    }
+}

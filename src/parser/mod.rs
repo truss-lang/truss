@@ -1532,6 +1532,7 @@ impl Parser {
                     })),
                     ty: None,
                     variadic_kind: VariadicKind::BareVariadic,
+                    default_value: None,
                 })));
                 if has_variadic {
                     self.emit_error(
@@ -1646,12 +1647,23 @@ impl Parser {
             } else {
                 VariadicKind::NotVariadic
             };
+            let default_value = if variadic_kind == VariadicKind::NotVariadic
+                && let Some(t) = self.peek()
+                && let TokenType::Operator { .. } = t.ty
+                && OperatorType::is_operator(&t, OperatorType::Assign)
+            {
+                self.index += 1;
+                Some(Rc::new(RefCell::new(self.parse_expression()?)))
+            } else {
+                None
+            };
             parameters.push(Rc::new(RefCell::new(Parameter {
                 label: label_token.map(Box::new),
                 name: Box::new(name_token),
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
                 variadic_kind,
+                default_value,
             })));
             let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {
@@ -1891,6 +1903,7 @@ impl Parser {
                     })),
                     ty: None,
                     variadic_kind: VariadicKind::BareVariadic,
+                    default_value: None,
                 })));
                 if has_variadic {
                     self.emit_error(
@@ -1997,12 +2010,23 @@ impl Parser {
             } else {
                 VariadicKind::NotVariadic
             };
+            let default_value = if variadic_kind == VariadicKind::NotVariadic
+                && let Some(t) = self.peek()
+                && let TokenType::Operator { .. } = t.ty
+                && OperatorType::is_operator(&t, OperatorType::Assign)
+            {
+                self.index += 1;
+                Some(Rc::new(RefCell::new(self.parse_expression()?)))
+            } else {
+                None
+            };
             parameters.push(Rc::new(RefCell::new(Parameter {
                 label: label_token.map(Box::new),
                 name: Box::new(name_token),
                 type_expression: Rc::new(RefCell::new(type_expression)),
                 ty: None,
                 variadic_kind,
+                default_value,
             })));
             let Some(t) = self.peek() else { break };
             if SeparatorType::is_separator(&t, SeparatorType::Comma) {
@@ -2971,6 +2995,7 @@ impl Parser {
                     type_expression: type_expr.clone(),
                     ty: None,
                     variadic_kind: VariadicKind::NotVariadic,
+                    default_value: None,
                 }));
                 parameters.push(param);
             }
@@ -4008,6 +4033,7 @@ impl Parser {
                                 type_expression: Rc::new(RefCell::new(type_expression)),
                                 ty: None,
                                 variadic_kind: VariadicKind::NotVariadic,
+                                default_value: None,
                             })));
                             let Some(t) = self.peek() else { break };
                             if SeparatorType::is_separator(&t, SeparatorType::Comma) {
@@ -5531,9 +5557,19 @@ impl Parser {
                         return Err(());
                     }
                     let const_type = Rc::new(RefCell::new(self.parse_type_expression()?));
+                    let default_value = if let Some(t) = self.peek()
+                        && let TokenType::Operator { .. } = t.ty
+                        && OperatorType::is_operator(&t, OperatorType::Assign)
+                    {
+                        self.index += 1;
+                        Some(Rc::new(RefCell::new(self.parse_binary(Precedence::Range)?)))
+                    } else {
+                        None
+                    };
                     params.push(GenericParameter {
                         name: Box::new(name),
                         kind: GenericParameterKind::Const { const_type },
+                        default_value,
                     });
                 } else {
                     let Some(name) = self.next() else { break };
@@ -5552,9 +5588,19 @@ impl Parser {
                         self.index += 1;
                         constraints.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
                     }
+                    let default_value = if let Some(t) = self.peek()
+                        && let TokenType::Operator { .. } = t.ty
+                        && OperatorType::is_operator(&t, OperatorType::Assign)
+                    {
+                        self.index += 1;
+                        Some(Rc::new(RefCell::new(self.parse_type_expression()?)))
+                    } else {
+                        None
+                    };
                     params.push(GenericParameter {
                         name: Box::new(name),
                         kind: GenericParameterKind::Type { constraints },
+                        default_value,
                     });
                 }
                 let Some(t) = self.peek() else { break };

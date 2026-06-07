@@ -363,6 +363,7 @@ pub enum GenericParameterKind {
 pub struct GenericParameter {
     pub name: Box<Token>,
     pub kind: GenericParameterKind,
+    pub default_value: Option<Rc<RefCell<Expression>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -396,6 +397,7 @@ pub struct Parameter {
     pub type_expression: Rc<RefCell<Expression>>,
     pub ty: Option<Rc<RefCell<Type>>>,
     pub variadic_kind: VariadicKind,
+    pub default_value: Option<Rc<RefCell<Expression>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
