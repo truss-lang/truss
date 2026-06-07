@@ -1013,7 +1013,9 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::AssociatedType(_, name) => name.clone(),
             Type::Compound(_) => "C".into(),
             Type::Function(_, _, _) => "F".into(),
-            Type::Inline(inner, _) => format!("inline{}", Self::type_to_abbreviation(&inner.borrow())),
+            Type::Inline(inner, _) => {
+                format!("inline{}", Self::type_to_abbreviation(&inner.borrow()))
+            }
         }
     }
 
@@ -1087,12 +1089,8 @@ impl<'ctx> IRGenerator<'ctx> {
             (Type::Inline(a_inner, _), Type::Inline(b_inner, _)) => {
                 Self::types_compatible(&a_inner.borrow(), &b_inner.borrow())
             }
-            (Type::Inline(a_inner, _), b) => {
-                Self::types_compatible(&a_inner.borrow(), b)
-            }
-            (a, Type::Inline(b_inner, _)) => {
-                Self::types_compatible(a, &b_inner.borrow())
-            }
+            (Type::Inline(a_inner, _), b) => Self::types_compatible(&a_inner.borrow(), b),
+            (a, Type::Inline(b_inner, _)) => Self::types_compatible(a, &b_inner.borrow()),
             _ => false,
         }
     }
@@ -2920,9 +2918,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         let type_name = &callee_name.value;
                         let fn_name = format!("{}.init", type_name);
                         if let Some(function) = self.module.get_function(&fn_name) {
-                            let is_inline = ty.as_ref().map_or(false, |t| {
-                                matches!(&*t.borrow(), Type::Inline(_, _))
-                            });
+                            let is_inline = ty
+                                .as_ref()
+                                .map_or(false, |t| matches!(&*t.borrow(), Type::Inline(_, _)));
                             if let Some(class_type) =
                                 self.class_types.borrow().get(type_name).cloned()
                             {
@@ -2943,9 +2941,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                     )?;
                                 }
                                 let i64_ty = self.context.i64_type();
-                                let rc_ptr = self
-                                    .builder
-                                    .build_struct_gep(class_type, obj_ptr, 1, "")?;
+                                let rc_ptr =
+                                    self.builder.build_struct_gep(class_type, obj_ptr, 1, "")?;
                                 let rc_val = if is_inline { 0 } else { 1 };
                                 self.builder
                                     .build_store(rc_ptr, i64_ty.const_int(rc_val, false))?;
@@ -3789,6 +3786,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::SuperKeyword { ty, .. }
                 | Expression::SelfType { ty, .. }
                 | Expression::AnyType { ty, .. }
+                | Expression::SomeType { ty, .. }
                 | Expression::CompoundType { ty, .. }
                 | Expression::Closure { ty, .. }
                 | Expression::FunctionType { ty, .. }
@@ -3849,6 +3847,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::SuperKeyword { ty, .. }
                 | Expression::SelfType { ty, .. }
                 | Expression::AnyType { ty, .. }
+                | Expression::SomeType { ty, .. }
                 | Expression::CompoundType { ty, .. }
                 | Expression::Closure { ty, .. }
                 | Expression::FunctionType { ty, .. }
@@ -5431,7 +5430,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.yield_targets.borrow_mut().push((*alloca, exit_bb));
                     }
                     let (terminates, then_val) = self.resolve_block_and_get_value(then)?;
-                    if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
+                    if let Some((Ok(_alloca), _)) = result_alloca.as_ref() {
                         self.yield_targets.borrow_mut().pop();
                     }
                     if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, then_val) {
@@ -5453,7 +5452,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 (false, val)
                             }
                         };
-                        if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
+                        if let Some((Ok(_alloca), _)) = result_alloca.as_ref() {
                             self.yield_targets.borrow_mut().pop();
                         }
                         if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, else_val) {
@@ -6062,25 +6061,36 @@ impl<'ctx> IRGenerator<'ctx> {
                                 p
                             }
                         };
-                        let field_index = self.get_stored_class_field_index(class_name, &member.value);
+                        let field_index =
+                            self.get_stored_class_field_index(class_name, &member.value);
                         if let Ok(field_index) = field_index {
-                            let field_llvm_ptr = self
-                                .builder
-                                .build_struct_gep(class_type, struct_ptr, field_index as u32, "")?;
-                            let field_llvm_type = self
-                                .get_struct_field_type(class_name, &member.value)?;
-                            let val = self
-                                .builder
-                                .build_load(field_llvm_type, field_llvm_ptr, "")?;
+                            let field_llvm_ptr = self.builder.build_struct_gep(
+                                class_type,
+                                struct_ptr,
+                                field_index as u32,
+                                "",
+                            )?;
+                            let field_llvm_type =
+                                self.get_struct_field_type(class_name, &member.value)?;
+                            let val =
+                                self.builder
+                                    .build_load(field_llvm_type, field_llvm_ptr, "")?;
                             return Ok(Some(val));
                         }
                     }
                     self.emit_error(
                         TrussDiagnosticCode::FieldNotFound,
-                        format!("Field '{}' not found on inline class '{}'", member.value, class_name),
+                        format!(
+                            "Field '{}' not found on inline class '{}'",
+                            member.value, class_name
+                        ),
                         Some(member.as_ref()),
                     );
-                    anyhow::bail!("Field '{}' not found on inline class '{}'", member.value, class_name);
+                    anyhow::bail!(
+                        "Field '{}' not found on inline class '{}'",
+                        member.value,
+                        class_name
+                    );
                 }
 
                 self.emit_error(
@@ -7690,7 +7700,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("Void type is handled specially as void return type");
             }
             Type::Function(_, _, _) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
-            Type::Pointer(_) | Type::NonNullPointer(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
+            Type::Pointer(_) | Type::NonNullPointer(_) => {
+                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+            }
             Type::Struct(name, _) => {
                 if let Some(struct_type) = self.struct_types.borrow().get(name) {
                     struct_type.as_basic_type_enum()
