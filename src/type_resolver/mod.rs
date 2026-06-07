@@ -9,8 +9,8 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, ModifierType, OperatorFixity, Pattern,
-            ProtocolMember, Statement, VariadicKind,
+            AccessModifier, AccessorKind, FunctionBody, GenericParameterKind, ModifierType,
+            OperatorFixity, Pattern, ProtocolMember, Statement, VariadicKind,
         },
     },
     diag::{
@@ -99,7 +99,19 @@ impl TypeResolver {
             } => {
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
-                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { const_type } => {
+                            let resolved = self.infer_type(const_type.clone())
+                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                resolved,
+                            )))
+                        }
+                    };
                     self.current_scope
                         .as_ref()
                         .unwrap()
@@ -190,7 +202,19 @@ impl TypeResolver {
                 let prev_owner = self.current_owner.replace(symbol.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
-                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { const_type } => {
+                            let resolved = self.infer_type(const_type.clone())
+                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                resolved,
+                            )))
+                        }
+                    };
                     self.current_scope
                         .as_ref()
                         .unwrap()
@@ -316,7 +340,19 @@ impl TypeResolver {
                 let prev_owner = self.current_owner.replace(symbol.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
-                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { const_type } => {
+                            let resolved = self.infer_type(const_type.clone())
+                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                resolved,
+                            )))
+                        }
+                    };
                     self.current_scope
                         .as_ref()
                         .unwrap()
@@ -419,7 +455,19 @@ impl TypeResolver {
                 let prev_owner = self.current_owner.replace(symbol.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
-                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { const_type } => {
+                            let resolved = self.infer_type(const_type.clone())
+                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                resolved,
+                            )))
+                        }
+                    };
                     self.current_scope
                         .as_ref()
                         .unwrap()
@@ -635,7 +683,19 @@ impl TypeResolver {
 
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
-                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { const_type } => {
+                            let resolved = self.infer_type(const_type.clone())
+                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                resolved,
+                            )))
+                        }
+                    };
                     self.current_scope
                         .as_ref()
                         .unwrap()

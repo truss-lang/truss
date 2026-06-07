@@ -5754,3 +5754,35 @@ fn test_inline_type_not_class_error() {
     let errors = run_type_check("func test() -> Int32 { let _: inline Int32 return 1 }");
     assert!(errors > 0, "inline with non-class type should error");
 }
+
+#[test]
+fn test_const_generic_function_decl_resolves() {
+    let errors = run_type_check(
+        "func foo<let N: Int32>(x: Int32) -> Int32 { return x }",
+    );
+    assert_eq!(errors, 0, "const generic function decl should resolve");
+}
+
+#[test]
+fn test_const_generic_struct_decl_resolves() {
+    let errors = run_type_check(
+        "struct Buffer<let N: Int32> { var data: Int32 }
+         func test() -> Int32 { return 0 }",
+    );
+    assert_eq!(errors, 0, "const generic struct decl should resolve");
+}
+
+#[test]
+fn test_const_generic_mixed_type_param_resolves() {
+    let errors = run_type_check(
+        "struct Pair<T, let N: Int32> { var first: T; var second: T }
+         func test() -> Int32 { return 0 }",
+    );
+    assert_eq!(errors, 0, "mixed generic params should resolve");
+}
+
+#[test]
+fn test_const_generic_missing_type_error() {
+    let errors = run_type_check("func foo<let N>(x: Int32) -> Int32 { return x }");
+    assert!(errors > 0, "missing const type should error");
+}
