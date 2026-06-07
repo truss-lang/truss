@@ -5037,6 +5037,89 @@ fn test_parse_any_type() {
 }
 
 #[test]
+fn test_parse_some_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: some MyProtocol".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::VariableDecl {
+        name,
+        type_expression: Some(ty_expr),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "x");
+        assert!(
+            matches!(&*ty_expr.borrow(), Expression::SomeType { .. }),
+            "Expected SomeType, got {:?}",
+            &*ty_expr.borrow()
+        );
+        if let Expression::SomeType { inner, .. } = &*ty_expr.borrow() {
+            assert!(
+                matches!(&*inner.borrow(), Expression::Type { name, .. } if name.value == "MyProtocol"),
+                "Expected Type(MyProtocol), got {:?}",
+                &*inner.borrow()
+            );
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_some_type_in_function_return() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo() -> some MyProtocol { return makeMyProtocol() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl {
+        name,
+        return_type: Some(ret_ty),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "foo");
+        assert!(
+            matches!(&*ret_ty.borrow(), Expression::SomeType { .. }),
+            "Expected SomeType return type, got {:?}",
+            &*ret_ty.borrow()
+        );
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_some_type_no_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let x: some MyProtocol".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let _program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not have errors with 'some' type, got: {:?}",
+        errors
+    );
+}
+#[test]
 fn test_parse_compound_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

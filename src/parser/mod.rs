@@ -1057,6 +1057,18 @@ impl Parser {
         }
 
         if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::Some)
+        {
+            self.index += 1;
+            let inner = self.parse_type_expression()?;
+
+            return Ok(Expression::SomeType {
+                inner: Rc::new(RefCell::new(inner)),
+                ty: None,
+            });
+        }
+
+        if let Some(token) = self.peek()
             && KeywordType::is_keyword(&token, KeywordType::SelfType)
         {
             self.index += 1;

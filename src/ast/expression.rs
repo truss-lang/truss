@@ -169,6 +169,10 @@ pub enum Expression {
         inner: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    SomeType {
+        inner: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     CompoundType {
         types: Vec<Rc<RefCell<Expression>>>,
         ty: Option<Rc<RefCell<Type>>>,
@@ -234,6 +238,7 @@ impl Expression {
             Self::SuperKeyword { ty, .. } => Ok(ty.clone()),
             Self::SelfType { ty, .. } => Ok(ty.clone()),
             Self::AnyType { ty, .. } => Ok(ty.clone()),
+            Self::SomeType { ty, .. } => Ok(ty.clone()),
             Self::CompoundType { ty, .. } => Ok(ty.clone()),
             Self::Closure { ty, .. } => Ok(ty.clone()),
             Self::FunctionType { ty, .. } => Ok(ty.clone()),
@@ -258,6 +263,7 @@ impl Expression {
             Self::SuperKeyword { ty, .. } => Ok(ty),
             Self::SelfType { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
+            Self::SomeType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
             Self::Closure { ty, .. } => Ok(ty),
             Self::FunctionType { ty, .. } => Ok(ty),
@@ -282,6 +288,7 @@ impl Expression {
             Self::SuperKeyword { ty, .. } => Ok(ty),
             Self::SelfType { ty, .. } => Ok(ty),
             Self::AnyType { ty, .. } => Ok(ty),
+            Self::SomeType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
             Self::Closure { ty, .. } => Ok(ty),
             Self::FunctionType { ty, .. } => Ok(ty),
@@ -337,6 +344,7 @@ impl Expression {
             Expression::SuperKeyword { token, .. } => (**token).clone(),
             Expression::SelfType { token, .. } => (**token).clone(),
             Expression::AnyType { inner, .. } => inner.borrow().token(),
+            Expression::SomeType { inner, .. } => inner.borrow().token(),
             Expression::CompoundType { types, .. } => types[0].borrow().token(),
             Expression::AssociatedTypeAccess { object, .. } => object.borrow().token(),
             Expression::Closure { body, .. } => {
