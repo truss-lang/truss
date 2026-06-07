@@ -937,13 +937,7 @@ fn test_function_call_parameter_order_must_match() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty());
-    assert_eq!(errors[0].code, TrussDiagnosticCode::ArgumentLabelMismatch);
-    assert!(
-        errors[0]
-            .message
-            .contains("Expected argument label 'a' but found 'b'")
-    );
+    assert!(errors.is_empty(), "Labeled parameters in any order should succeed");
 }
 
 #[test]
@@ -5785,4 +5779,90 @@ fn test_const_generic_mixed_type_param_resolves() {
 fn test_const_generic_missing_type_error() {
     let errors = run_type_check("func foo<let N>(x: Int32) -> Int32 { return x }");
     assert!(errors > 0, "missing const type should error");
+}
+
+#[test]
+fn test_labeled_param_reorder_success() {
+    let errors = run_type_check(
+        "func f(a a: Int64, b b: Int64) -> Int64 { return a + b }
+         func f2() { let r = f(b: 2, a: 1) }",
+    );
+    assert_eq!(errors, 0, "labeled params in any order should succeed");
+}
+
+#[test]
+fn test_default_param_value_used() {
+    let errors = run_type_check(
+        "func foo(a: Int32 = 5) -> Int32 { return a }
+         func bar() -> Int32 { return foo() }",
+    );
+    assert_eq!(errors, 0, "default param value should be used");
+}
+
+#[test]
+fn test_default_param_with_label() {
+    let errors = run_type_check(
+        "func foo(from a: Int32 = 0, to b: Int32) -> Int32 { return a + b }
+         func bar() -> Int32 { return foo(to: 1) }",
+    );
+    assert_eq!(errors, 0, "default param with label should work");
+}
+
+#[test]
+fn test_default_param_out_of_order() {
+    let errors = run_type_check(
+        "func foo(from a: Int32 = 0, to b: Int32, by c: Int32 = 1) -> Int32 { return a + b + c }
+         func bar() -> Int32 { return foo(by: 3, to: 2) }",
+    );
+    assert_eq!(
+        errors, 0,
+        "default params with out-of-order labels should work"
+    );
+}
+
+#[test]
+fn test_missing_required_param_error() {
+    let errors = run_type_check(
+        "func foo(a: Int32, b: Int32 = 0) -> Int32 { return a }
+         func bar() -> Int32 { return foo() }",
+    );
+    assert!(
+        errors > 0,
+        "missing required param should produce error"
+    );
+}
+
+#[test]
+fn test_default_value_wrong_type_error() {
+    let errors = run_type_check(
+        "func foo(a: Bool = 42) -> Bool { return a }
+         func bar() -> Bool { return foo() }",
+    );
+    assert!(
+        errors > 0,
+        "default value with wrong type should produce error"
+    );
+}
+
+#[test]
+fn test_default_param_with_unlabeled() {
+    let errors = run_type_check(
+        "func foo(_ a: Int32 = 0, b: Int32) -> Int32 { return a + b }
+         func bar() -> Int32 { return foo(b: 1) }",
+    );
+    assert_eq!(
+        errors, 0,
+        "unlabeled default param with labeled param should work"
+    );
+}
+
+#[test]
+fn test_function_call_missing_label_still_errors() {
+    let errors = run_type_check(
+        "func f(a a: Int64) -> Int64 { return a } func f2() { f(1) }",
+    );
+    assert!(
+        errors > 0,
+        "missing label for required param should error"
+    );
 }

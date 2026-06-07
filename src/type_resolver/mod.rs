@@ -10,7 +10,7 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, AccessorKind, FunctionBody, GenericParameterKind, ModifierType,
-            OperatorFixity, Pattern, ProtocolMember, Statement, VariadicKind,
+            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement, VariadicKind,
         },
     },
     diag::{
@@ -117,6 +117,9 @@ impl TypeResolver {
                         .unwrap()
                         .borrow_mut()
                         .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.infer_type(default_value.clone());
+                    }
                 }
 
                 let ret_type = if let Some(return_type_expr) = return_type {
@@ -137,6 +140,9 @@ impl TypeResolver {
                     if let Some(ref param_type) = param_type {
                         param.borrow_mut().ty = Some(param_type.clone());
                         parameter_types.push(param_type.clone());
+                        if let Some(default_value) = &param.borrow().default_value {
+                            self.infer_expression_type(default_value.clone(), param_type.clone());
+                        }
                     }
                     if param.borrow().variadic_kind != VariadicKind::NotVariadic {
                         is_vararg = true;
@@ -220,6 +226,9 @@ impl TypeResolver {
                         .unwrap()
                         .borrow_mut()
                         .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.infer_type(default_value.clone());
+                    }
                 }
                 self.current_scope
                     .as_ref()
@@ -358,6 +367,9 @@ impl TypeResolver {
                         .unwrap()
                         .borrow_mut()
                         .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.infer_type(default_value.clone());
+                    }
                 }
                 self.current_scope
                     .as_ref()
@@ -473,6 +485,9 @@ impl TypeResolver {
                         .unwrap()
                         .borrow_mut()
                         .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.infer_type(default_value.clone());
+                    }
                 }
                 if let Symbol::Enum { cases, .. } = &mut *symbol.borrow_mut() {
                     for (case_symbol, ast_case) in cases.iter().zip(ast_cases.iter()) {
@@ -562,6 +577,9 @@ impl TypeResolver {
                     if let Some(ref param_type) = param_type {
                         param.borrow_mut().ty = Some(param_type.clone());
                         parameter_types.push(param_type.clone());
+                        if let Some(default_value) = &param.borrow().default_value {
+                            self.infer_expression_type(default_value.clone(), param_type.clone());
+                        }
                     }
                 }
                 let fn_type = Rc::new(RefCell::new(Type::Function(
@@ -701,6 +719,9 @@ impl TypeResolver {
                         .unwrap()
                         .borrow_mut()
                         .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.infer_type(default_value.clone());
+                    }
                 }
                 for member in members {
                     match member {
@@ -2043,6 +2064,25 @@ impl TypeResolver {
 
                 match &*callee_type.borrow() {
                     Type::Function(param_tys, ret_ty, is_vararg) => {
+                        if let Some(decl) = self.get_function_decl_from_callee(callee.clone()).or_else(|| {
+                            if let Expression::Variable { name, .. } = &*callee.borrow() {
+                                let scope_ref = self.current_scope.as_ref()?.borrow();
+                                let sym = scope_ref.get_symbol(&name.value)?;
+                                sym.borrow().get_decl().ok().flatten()
+                            } else {
+                                None
+                            }
+                        }) {
+                            let callee_token = callee.borrow().token();
+                            let decl_params = match &*decl.borrow() {
+                                Statement::FunctionDecl { parameters, .. } => parameters.clone(),
+                                _ => vec![],
+                            };
+                            if !decl_params.is_empty() {
+                                self.reorder_call_parameters(parameters, &decl_params, &callee_token);
+                            }
+                        }
+
                         if !*is_vararg && parameters.len() != param_tys.len() {
                             let token = &callee.borrow().token();
                             self.emit_error(
@@ -2180,6 +2220,14 @@ impl TypeResolver {
                             }
                         };
                         if let Some((decl, param_tys, is_vararg)) = init_params_info {
+                            let callee_token = callee.borrow().token();
+                            let decl_params = match &*decl.borrow() {
+                                Statement::InitDecl { parameters, .. } => parameters.clone(),
+                                _ => vec![],
+                            };
+                            if !decl_params.is_empty() {
+                                self.reorder_call_parameters(parameters, &decl_params, &callee_token);
+                            }
                             if !is_vararg && parameters.len() != param_tys.len() {
                                 self.emit_error(
                                     TrussDiagnosticCode::ArgumentCountMismatch,
@@ -2241,6 +2289,14 @@ impl TypeResolver {
                             }
                         };
                         if let Some((decl, param_tys, is_vararg)) = init_params_info {
+                            let callee_token = callee.borrow().token();
+                            let decl_params = match &*decl.borrow() {
+                                Statement::InitDecl { parameters, .. } => parameters.clone(),
+                                _ => vec![],
+                            };
+                            if !decl_params.is_empty() {
+                                self.reorder_call_parameters(parameters, &decl_params, &callee_token);
+                            }
                             if !is_vararg && parameters.len() != param_tys.len() {
                                 self.emit_error(
                                     TrussDiagnosticCode::ArgumentCountMismatch,
@@ -4666,6 +4722,128 @@ impl TypeResolver {
         }
     }
 
+    fn get_effective_label(param: &Parameter) -> Option<String> {
+        match &param.label {
+            Some(label_token) if label_token.value == "_" => None,
+            Some(label_token) => Some(label_token.value.clone()),
+            None => Some(param.name.value.clone()),
+        }
+    }
+
+    fn reorder_call_parameters(
+        &self,
+        parameters: &mut Vec<CallParameter>,
+        decl_params: &[Rc<RefCell<Parameter>>],
+        callee_token: &Token,
+    ) {
+        let mut label_to_idx: HashMap<String, usize> = HashMap::new();
+        let mut unlabeled_indices: Vec<usize> = Vec::new();
+
+        for (i, dp) in decl_params.iter().enumerate() {
+            match Self::get_effective_label(&dp.borrow()) {
+                Some(label) => {
+                    label_to_idx.entry(label).or_insert(i);
+                }
+                None => {
+                    unlabeled_indices.push(i);
+                }
+            }
+        }
+
+        let old_params = std::mem::take(parameters);
+        let mut new_params: Vec<Option<CallParameter>> = vec![None; decl_params.len()];
+        let mut matched = vec![false; decl_params.len()];
+        let mut next_pos = 0;
+
+        let mut has_errors = false;
+
+        for cp in old_params {
+            // Treat '_' label as unlabeled
+            let is_underscore_label = cp.label.as_ref().is_some_and(|l| l.value == "_");
+            if let Some(label_token) = &cp.label
+                && !is_underscore_label
+            {
+                if let Some(&idx) = label_to_idx.get(&label_token.value) {
+                    if matched[idx] {
+                        has_errors = true;
+                        self.emit_error(
+                            TrussDiagnosticCode::ArgumentLabelMismatch,
+                            format!(
+                                "Duplicate argument for parameter '{}'",
+                                decl_params[idx].borrow().name.value
+                            ),
+                            label_token,
+                        );
+                    } else {
+                        matched[idx] = true;
+                        new_params[idx] = Some(cp);
+                    }
+                } else {
+                    has_errors = true;
+                    let decl_names: Vec<String> = decl_params.iter().map(|dp| {
+                        let b = dp.borrow();
+                        match &b.label {
+                            Some(l) if l.value != "_" => l.value.clone(),
+                            None => b.name.value.clone(),
+                            _ => String::new(),
+                        }
+                    }).filter(|n| !n.is_empty()).collect();
+                    self.emit_error(
+                        TrussDiagnosticCode::ArgumentLabelMismatch,
+                        format!(
+                            "Expected argument label '{}' but found '{}'",
+                            decl_names.first().map_or("", |s| s),
+                            label_token.value
+                        ),
+                        label_token,
+                    );
+                }
+            } else {
+                // Unlabeled param: first by position, skip already matched
+                while next_pos < decl_params.len() && matched[next_pos] {
+                    next_pos += 1;
+                }
+                if next_pos < decl_params.len() {
+                    let pos = next_pos;
+                    matched[pos] = true;
+                    new_params[pos] = Some(cp);
+                    next_pos += 1;
+                } else {
+                    has_errors = true;
+                    self.emit_error(
+                        TrussDiagnosticCode::ArgumentCountMismatch,
+                        "Too many arguments".to_string(),
+                        callee_token,
+                    );
+                }
+            }
+        }
+
+        for (i, dp) in decl_params.iter().enumerate() {
+            if !matched[i] {
+                if let Some(default_value) = &dp.borrow().default_value {
+                    new_params[i] = Some(CallParameter {
+                        label: None,
+                        expression: default_value.clone(),
+                    });
+                } else if !has_errors {
+                    let label_info = match &dp.borrow().label {
+                        Some(l) if l.value != "_" => format!(" '{}'", l.value),
+                        None => format!(" '{}'", dp.borrow().name.value),
+                        _ => String::new(),
+                    };
+                    self.emit_error(
+                        TrussDiagnosticCode::ArgumentCountMismatch,
+                        format!("Missing required argument{}", label_info),
+                        callee_token,
+                    );
+                }
+            }
+        }
+
+        *parameters = new_params.into_iter().flatten().collect();
+    }
+
     fn check_parameter_label(
         &self,
         call_param: &CallParameter,
@@ -4713,12 +4891,15 @@ impl TypeResolver {
                 }
             }
             (Some(expected), None) => {
-                let token = call_param.expression.borrow().token();
-                self.emit_error(
-                    TrussDiagnosticCode::MissingArgumentLabel,
-                    format!("Missing argument label '{}' in call", expected.value),
-                    &token,
-                );
+                // Skip missing label error if param has a default value (omitted param)
+                if decl_param.borrow().default_value.is_none() {
+                    let token = call_param.expression.borrow().token();
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingArgumentLabel,
+                        format!("Missing argument label '{}' in call", expected.value),
+                        &token,
+                    );
+                }
             }
             (None, Some(provided)) => {
                 if provided.value != "_" {
