@@ -126,6 +126,9 @@ impl SymbolResolver {
                             .unwrap()
                             .borrow_mut()
                             .set_type(gp.name.value.clone(), gp_type);
+                        if let Some(default_value) = &gp.default_value {
+                            self.resolve_expression(default_value.clone());
+                        }
                     }
                 }
                 {
@@ -349,6 +352,9 @@ impl SymbolResolver {
                             .unwrap()
                             .borrow_mut()
                             .set_type(gp.name.value.clone(), gp_type);
+                        if let Some(default_value) = &gp.default_value {
+                            self.resolve_expression(default_value.clone());
+                        }
                     }
                 }
                 {
@@ -560,6 +566,9 @@ impl SymbolResolver {
                         .unwrap()
                         .borrow_mut()
                         .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.resolve_expression(default_value.clone());
+                    }
                 }
                 for case in ast_cases {
                     let case_symbol = Rc::new(RefCell::new(Symbol::EnumCase {
@@ -661,6 +670,9 @@ impl SymbolResolver {
                         .unwrap()
                         .borrow_mut()
                         .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.resolve_expression(default_value.clone());
+                    }
                 }
                 for member in members {
                     match member {
@@ -1152,6 +1164,9 @@ impl SymbolResolver {
                         .unwrap()
                         .borrow_mut()
                         .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.resolve_expression(default_value.clone());
+                    }
                 }
                 for parameter in parameters {
                     let name = parameter.borrow().name.value.clone();
@@ -1163,6 +1178,9 @@ impl SymbolResolver {
                             is_var: true,
                         }));
                         self.enter(symbol, &parameter.borrow().name);
+                    }
+                    if let Some(default_value) = &parameter.borrow().default_value {
+                        self.resolve_expression(default_value.clone());
                     }
                 }
                 if let Some(return_type) = return_type {
@@ -1331,6 +1349,9 @@ impl SymbolResolver {
                             is_var: true,
                         }));
                         self.enter(symbol, &parameter.borrow().name);
+                    }
+                    if let Some(default_value) = &parameter.borrow().default_value {
+                        self.resolve_expression(default_value.clone());
                     }
                 }
                 self.resolve_function_body(body.clone());

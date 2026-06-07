@@ -4183,3 +4183,103 @@ fn test_inline_type_empty_brackets_resolves_base_type() {
     resolver.resolve(&program, "test".to_string());
     assert!(!engine.borrow().has_errors());
 }
+
+#[test]
+fn test_function_param_default_value_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(a: Int32 = 5) -> Int32 { a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors());
+}
+
+#[test]
+fn test_generic_param_default_type_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func identity<T = Int32>(x: T) -> T { x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors());
+}
+
+#[test]
+fn test_labeled_param_default_value_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(from a: Int32 = 0, to b: Int32) { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors());
+}
+
+#[test]
+fn test_struct_generic_default_type_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Container<T = Int32> { var items: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors());
+}
+
+#[test]
+fn test_const_generic_default_value_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo<let N: Int32 = 42>(x: Int32) -> Int32 { return x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors());
+}
