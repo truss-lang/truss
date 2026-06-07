@@ -5659,3 +5659,27 @@ fn test_yield_to_nonvoid_function_no_value_error() {
         "yield without value in non-void function should error"
     );
 }
+
+#[test]
+fn test_inline_type_class() {
+    let errors = run_type_check("class Dog {} func test() -> Int32 { let _: inline Dog return 1 }");
+    assert_eq!(errors, 0, "inline with class type should succeed");
+}
+
+#[test]
+fn test_inline_type_class_with_size() {
+    let errors = run_type_check("class Dog {} func test() -> Int32 { let _: inline<256> Dog return 1 }");
+    assert_eq!(errors, 0, "inline<256> with class type should succeed");
+}
+
+#[test]
+fn test_inline_type_empty_brackets() {
+    let errors = run_type_check("class Dog {} func test() -> Int32 { let _: inline<> Dog return 1 }");
+    assert_eq!(errors, 0, "inline<> with class type should succeed");
+}
+
+#[test]
+fn test_inline_type_not_class_error() {
+    let errors = run_type_check("func test() -> Int32 { let _: inline Int32 return 1 }");
+    assert!(errors > 0, "inline with non-class type should error");
+}

@@ -3534,8 +3534,19 @@ impl TypeResolver {
                     block_ty
                 }
             }
-            Expression::InlineType { base, ty, .. } => {
+            Expression::InlineType { base, ty, token, .. } => {
                 let base_ty = self.infer_type(base.clone())?;
+                match &*base_ty.borrow() {
+                    Type::Class(_, _) => {}
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeError,
+                            format!("'inline' requires a class type, got '{}'", base_ty.borrow()),
+                            token.as_ref(),
+                        );
+                        return None;
+                    }
+                }
                 *ty = Some(Rc::new(RefCell::new(Type::Inline(base_ty, None))));
                 ty.clone().unwrap()
             }
@@ -4460,6 +4471,15 @@ impl TypeResolver {
                         .iter()
                         .zip(t2.iter())
                         .all(|(t1, t2)| Self::types_are_type_compatible(&t1.borrow(), &t2.borrow()))
+            }
+            (Type::Inline(a_inner, _), Type::Inline(b_inner, _)) => {
+                Self::types_are_type_compatible(&a_inner.borrow(), &b_inner.borrow())
+            }
+            (Type::Inline(a_inner, _), b) => {
+                Self::types_are_type_compatible(&a_inner.borrow(), b)
+            }
+            (a, Type::Inline(b_inner, _)) => {
+                Self::types_are_type_compatible(a, &b_inner.borrow())
             }
             _ => false,
         }
