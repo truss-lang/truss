@@ -3043,6 +3043,82 @@ impl TypeResolver {
                         );
                         return None;
                     }
+                    Type::Inline(inner, _) => {
+                        let inner_borrow = inner.borrow();
+                        match &*inner_borrow {
+                            Type::Class(class_name, _) => {
+                                let scope = self.current_scope.as_ref().unwrap().borrow();
+                                if let Some(symbol) = scope.get_symbol(class_name) {
+                                    let binding = symbol.borrow();
+                                    let (properties, methods) = match &*binding {
+                                        Symbol::Struct { properties, methods, .. }
+                                        | Symbol::Class { properties, methods, .. } => (properties, methods),
+                                        _ => {
+                                            self.emit_error(
+                                                TrussDiagnosticCode::FieldNotFound,
+                                                format!("Class symbol '{}' has unexpected type", class_name),
+                                                member,
+                                            );
+                                            return None;
+                                        }
+                                    };
+                                    for field in properties {
+                                        if field.borrow().name().as_ref().ok() == Some(&member.value)
+                                            && let Some(decl) = field.borrow().get_decl().ok().flatten()
+                                            && let Statement::VariableDecl { ty: field_ty, .. } = &*decl.borrow()
+                                            && let Some(t) = field_ty
+                                        {
+                                            *ty = Some(t.clone());
+                                            return Some(t.clone());
+                                        }
+                                    }
+                                    for method in methods {
+                                        if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                            && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                        {
+                                            let method_ty = {
+                                                let decl_ref = decl.borrow();
+                                                if let Statement::FunctionDecl { ty, .. } = &*decl_ref { ty.clone() }
+                                                else if let Statement::InitDecl { ty, .. } = &*decl_ref { ty.clone() }
+                                                else if let Statement::DeinitDecl { ty, .. } = &*decl_ref { ty.clone() }
+                                                else { continue; }
+                                            };
+                                            if let Some(t) = method_ty {
+                                                *ty = Some(t.clone());
+                                                return Some(t.clone());
+                                            }
+                                        }
+                                    }
+                                    self.emit_error(
+                                        TrussDiagnosticCode::FieldNotFound,
+                                        format!("Member '{}' not found on inline class '{}'", member.value, class_name),
+                                        member,
+                                    );
+                                    return None;
+                                } else {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::FieldNotFound,
+                                        format!("Class symbol '{}' not found", class_name),
+                                        member,
+                                    );
+                                    return None;
+                                }
+                            }
+                            _ => {
+                                let token = &*member;
+                                self.emit_error(
+                                    TrussDiagnosticCode::FieldNotFound,
+                                    format!(
+                                        "Cannot access member '{}' of inline non-class type '{}'",
+                                        member.value,
+                                        object_ty.borrow()
+                                    ),
+                                    token,
+                                );
+                                return None;
+                            }
+                        }
+                    }
                     _ => {
                         let token = &*member;
                         self.emit_error(
@@ -3646,7 +3722,10 @@ impl TypeResolver {
                 let expected_clone = expected.borrow().clone();
                 let is_protocol_compat =
                     matches!(&expected_clone, Type::Protocol(..) | Type::Compound(..));
-                if !is_protocol_compat && inferred_clone != expected_clone {
+                if !is_protocol_compat
+                    && inferred_clone != expected_clone
+                    && !Self::types_are_type_compatible(&inferred_clone, &expected_clone)
+                {
                     self.emit_error(
                         TrussDiagnosticCode::TypeMismatch,
                         format!(
