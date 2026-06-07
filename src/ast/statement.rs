@@ -350,9 +350,19 @@ pub struct Accessor {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum GenericParameterKind {
+    Type {
+        constraints: Vec<Rc<RefCell<Expression>>>,
+    },
+    Const {
+        const_type: Rc<RefCell<Expression>>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct GenericParameter {
     pub name: Box<Token>,
-    pub constraints: Vec<Rc<RefCell<Expression>>>,
+    pub kind: GenericParameterKind,
 }
 
 #[derive(Debug, Clone, PartialEq)]

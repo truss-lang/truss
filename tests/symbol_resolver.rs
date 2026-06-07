@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{ElseBranch, Expression},
-        statement::{FunctionBody, Statement},
+        statement::{FunctionBody, GenericParameterKind, Statement},
     },
     diag::TrussDiagnosticEngine,
     krate::Crate,
@@ -2625,7 +2625,7 @@ fn test_generic_function_with_constrained_param_resolves() {
         assert_eq!(name.value, "compare");
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "T");
-        assert_eq!(generic_parameters[0].constraints.len(), 1);
+        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { constraints } if constraints.len() == 1));
         assert!(scope.is_some());
         let scope_ref = scope.as_ref().unwrap().borrow();
         let t_type = scope_ref.get_type("T");

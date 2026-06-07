@@ -31,6 +31,7 @@ pub enum Type {
     Compound(Vec<Rc<RefCell<Type>>>),
     Inline(Rc<RefCell<Type>>, Option<u64>),
     GenericParam(String),
+    ConstGeneric(String, Rc<RefCell<Type>>),
     AssociatedType(Rc<RefCell<Type>>, String),
 }
 
@@ -102,6 +103,7 @@ impl fmt::Display for Type {
                 }
             }
             Type::GenericParam(name) => write!(f, "GenericParam({})", name),
+            Type::ConstGeneric(name, ty) => write!(f, "ConstGeneric({}, {})", name, ty.borrow()),
             Type::AssociatedType(base, name) => write!(f, "{}.{}", base.borrow(), name),
         }
     }

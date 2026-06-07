@@ -1009,6 +1009,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::NonNullPointer(_) => "NP".into(),
             Type::Tuple(_) => "T".into(),
             Type::GenericParam(name) => name.clone(),
+            Type::ConstGeneric(name, _) => format!("cg{}", name),
             Type::AssociatedType(_, name) => name.clone(),
             Type::Compound(_) => "C".into(),
             Type::Function(_, _, _) => "F".into(),
@@ -7770,6 +7771,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Type::GenericParam(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
+            Type::ConstGeneric(_, ct) => self.resolve_type(ct.clone())?,
             Type::AssociatedType(_, _) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
