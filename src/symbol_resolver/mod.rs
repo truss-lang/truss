@@ -1725,6 +1725,9 @@ impl SymbolResolver {
             Expression::AnyType { inner, .. } => {
                 self.resolve_expression(inner.clone());
             }
+            Expression::SomeType { inner, .. } => {
+                self.resolve_expression(inner.clone());
+            }
             Expression::InlineType { size, base, .. } => {
                 if let Some(size) = size {
                     self.resolve_expression(size.clone());
