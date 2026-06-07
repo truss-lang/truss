@@ -5,7 +5,7 @@ use crate::{
         expression::{ElseBranch, Expression},
         node::Program,
         statement::{
-            AccessorKind, FunctionBody, ImportKind, Pattern, ProtocolMember, Statement,
+            AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Pattern, ProtocolMember, Statement,
             WhereRequirement, WhereRequirementKind,
         },
     },
@@ -110,8 +110,17 @@ impl SymbolResolver {
                 *scope = Some(self.enter_scope(None));
                 {
                     for gp in generic_parameters {
-                        let gp_type =
-                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                        let gp_type = match &gp.kind {
+                            GenericParameterKind::Type { .. } => {
+                                Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                            }
+                            GenericParameterKind::Const { .. } => {
+                                Rc::new(RefCell::new(Type::ConstGeneric(
+                                    gp.name.value.clone(),
+                                    Rc::new(RefCell::new(Type::Never)),
+                                )))
+                            }
+                        };
                         scope
                             .as_ref()
                             .unwrap()
@@ -324,8 +333,17 @@ impl SymbolResolver {
                 *scope = Some(self.enter_scope(None));
                 {
                     for gp in generic_parameters {
-                        let gp_type =
-                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                        let gp_type = match &gp.kind {
+                            GenericParameterKind::Type { .. } => {
+                                Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                            }
+                            GenericParameterKind::Const { .. } => {
+                                Rc::new(RefCell::new(Type::ConstGeneric(
+                                    gp.name.value.clone(),
+                                    Rc::new(RefCell::new(Type::Never)),
+                                )))
+                            }
+                        };
                         scope
                             .as_ref()
                             .unwrap()
@@ -526,7 +544,17 @@ impl SymbolResolver {
 
                 *scope = Some(self.enter_scope(None));
                 for gp in generic_parameters {
-                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { .. } => {
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                Rc::new(RefCell::new(Type::Never)),
+                            )))
+                        }
+                    };
                     scope
                         .as_ref()
                         .unwrap()
@@ -617,7 +645,17 @@ impl SymbolResolver {
 
                 *scope = Some(self.enter_scope(None));
                 for gp in generic_parameters {
-                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { .. } => {
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                Rc::new(RefCell::new(Type::Never)),
+                            )))
+                        }
+                    };
                     scope
                         .as_ref()
                         .unwrap()
@@ -1098,7 +1136,17 @@ impl SymbolResolver {
             } => {
                 *scope = Some(self.enter_scope(None));
                 for gp in generic_parameters {
-                    let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { .. } => {
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                Rc::new(RefCell::new(Type::Never)),
+                            )))
+                        }
+                    };
                     scope
                         .as_ref()
                         .unwrap()

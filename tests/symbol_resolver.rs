@@ -2787,6 +2787,156 @@ fn test_generic_function_multi_param_resolves() {
 }
 
 #[test]
+fn test_const_generic_function_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo<let N: Int32>(x: Int32) -> Int32 { return x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Const generic function should resolve without errors, got: {:?}",
+        errors
+    );
+    drop(engine_ref);
+    if let Statement::FunctionDecl {
+        name,
+        generic_parameters,
+        scope,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "foo");
+        assert_eq!(generic_parameters.len(), 1);
+        assert_eq!(generic_parameters[0].name.value, "N");
+        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Const { .. }));
+        assert!(scope.is_some());
+        let scope_ref = scope.as_ref().unwrap().borrow();
+        let n_type = scope_ref.get_type("N");
+        assert!(n_type.is_some(), "Const generic N should be in type_env");
+        if let Some(t) = n_type {
+            assert!(matches!(&*t.borrow(), truss::types::Type::ConstGeneric(..)));
+        }
+    } else {
+        panic!("Expected FunctionDecl with const generic parameter");
+    }
+}
+
+#[test]
+fn test_const_generic_struct_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Buffer<T, let N: Int32> { var data: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Const generic struct should resolve without errors, got: {:?}",
+        errors
+    );
+    drop(engine_ref);
+    if let Statement::StructDecl {
+        name,
+        generic_parameters,
+        scope,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Buffer");
+        assert_eq!(generic_parameters.len(), 2);
+        assert!(matches!(&generic_parameters[0].kind, GenericParameterKind::Type { .. }));
+        assert!(matches!(&generic_parameters[1].kind, GenericParameterKind::Const { .. }));
+        assert!(scope.is_some());
+        let scope_ref = scope.as_ref().unwrap().borrow();
+        let t_type = scope_ref.get_type("T");
+        assert!(t_type.is_some(), "Generic param T should be in type_env");
+        if let Some(t) = t_type {
+            assert!(matches!(&*t.borrow(), truss::types::Type::GenericParam(..)));
+        }
+        let n_type = scope_ref.get_type("N");
+        assert!(n_type.is_some(), "Const generic N should be in type_env");
+        if let Some(t) = n_type {
+            assert!(matches!(&*t.borrow(), truss::types::Type::ConstGeneric(..)));
+        }
+    } else {
+        panic!("Expected StructDecl with const generic parameter");
+    }
+}
+
+#[test]
+fn test_const_generic_class_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Wrapper<T, let N: Int32> { var item: T }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Const generic class should resolve without errors, got: {:?}",
+        errors
+    );
+    drop(engine_ref);
+    if let Statement::ClassDecl {
+        name,
+        generic_parameters,
+        scope,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Wrapper");
+        assert_eq!(generic_parameters.len(), 2);
+        assert!(scope.is_some());
+        let scope_ref = scope.as_ref().unwrap().borrow();
+        let n_type = scope_ref.get_type("N");
+        assert!(n_type.is_some(), "Const generic N should be in type_env");
+        if let Some(t) = n_type {
+            assert!(matches!(&*t.borrow(), truss::types::Type::ConstGeneric(..)));
+        }
+    } else {
+        panic!("Expected ClassDecl with const generic parameter");
+    }
+}
+
+#[test]
 fn test_generic_protocol_with_assoc_types_resolves() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
