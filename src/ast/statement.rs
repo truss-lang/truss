@@ -6,6 +6,11 @@ use super::expression::Expression;
 use crate::{lexer::token::Token, scope::Scope, types::Type};
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Attribute {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     FunctionDecl {
         modifiers: Vec<Modifier>,
@@ -31,6 +36,7 @@ pub enum Statement {
         ty: Option<Rc<RefCell<Type>>>,
     },
     StructDecl {
+        attributes: Vec<Attribute>,
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,

@@ -10,12 +10,12 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Condition,
-            ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody, GenericParameter,
-            GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment,
-            MatchCase, Modifier, ModifierType, OperatorFixity, Parameter, Pattern,
-            ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind, WhereRequirement,
-            WhereRequirementKind,
+            AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Attribute,
+            Condition, ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody,
+            GenericParameter, GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType,
+            MacroPatternFragment, MatchCase, Modifier, ModifierType, OperatorFixity, Parameter,
+            Pattern, ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind,
+            WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -100,6 +100,7 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ()> {
+        let attributes = self.parse_attributes()?;
         if let Some(token) = self.peek() {
             if SeparatorType::is_separator(&token, SeparatorType::Hash) {
                 return self.parse_preprocessor_directive();
@@ -113,7 +114,7 @@ impl Parser {
             TokenType::Keyword { keyword } => match keyword {
                 KeywordType::Func => self.parse_function_decl(false, modifiers),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false, modifiers),
-                KeywordType::Struct => self.parse_struct_decl(modifiers),
+                KeywordType::Struct => self.parse_struct_decl(attributes, modifiers),
                 KeywordType::Class => self.parse_class_decl(modifiers),
                 KeywordType::Protocol => self.parse_protocol_decl(modifiers),
                 KeywordType::Enum => self.parse_enum_decl(modifiers),
@@ -3032,7 +3033,11 @@ impl Parser {
         body.push(Rc::new(RefCell::new(init_decl)));
     }
 
-    fn parse_struct_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+    fn parse_struct_decl(
+        &mut self,
+        attributes: Vec<Attribute>,
+        modifiers: Vec<Modifier>,
+    ) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -3073,6 +3078,7 @@ impl Parser {
         let mut body = self.parse_brace_body()?;
         self.ensure_memberwise_init(&mut body, &name);
         Ok(Statement::StructDecl {
+            attributes,
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
@@ -4655,6 +4661,60 @@ impl Parser {
             expression: Rc::new(RefCell::new(expression)),
             ty: None,
         })
+    }
+
+    fn parse_attributes(&mut self) -> Result<Vec<Attribute>, ()> {
+        let mut attributes: Vec<Attribute> = Vec::new();
+        loop {
+            let Some(tok) = self.peek() else {
+                break;
+            };
+            if !SeparatorType::is_separator(&tok, SeparatorType::Hash) {
+                break;
+            }
+            let Some(next) = self.peek2() else {
+                break;
+            };
+            if !SeparatorType::is_separator(&next, SeparatorType::OpenBracket) {
+                break;
+            }
+            self.next().unwrap();
+            self.next().unwrap();
+            let Some(name_tok) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    "Expected attribute name after '#['",
+                    &tok,
+                );
+                return Err(());
+            };
+            if !matches!(name_tok.ty, TokenType::Identifier) {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    format!("Expected attribute name but found '{}'", name_tok.value),
+                    &name_tok,
+                );
+                return Err(());
+            }
+            let Some(close) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    "Expected ']' to close attribute",
+                    &tok,
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close, SeparatorType::CloseBracket) {
+                self.emit_error(
+                    TrussDiagnosticCode::ParserError,
+                    format!("Expected ']' but found '{}'", close.value),
+                    &close,
+                );
+                return Err(());
+            }
+            attributes.push(Attribute { name: name_tok.value });
+        }
+        Ok(attributes)
     }
 
     fn parse_modifiers(&mut self) -> Result<Vec<Modifier>, ()> {

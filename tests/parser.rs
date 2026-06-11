@@ -6066,6 +6066,94 @@ fn test_parse_struct_with_where_clause() {
 }
 
 #[test]
+fn test_parse_builtintype_attribute() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#[builtintype] public struct Int32: SignedInteger {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::StructDecl {
+        attributes,
+        name,
+        modifiers,
+        conformances,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Int32");
+        assert_eq!(attributes.len(), 1);
+        assert_eq!(attributes[0].name, "builtintype");
+        assert_eq!(modifiers.len(), 1);
+        assert!(matches!(
+            modifiers[0].ty,
+            ModifierType::Access(AccessModifier::Public)
+        ));
+        assert_eq!(conformances.len(), 1);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_builtintype_attribute_on_empty_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#[builtintype] public struct Bool {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::StructDecl {
+        attributes,
+        name,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Bool");
+        assert_eq!(attributes.len(), 1);
+        assert_eq!(attributes[0].name, "builtintype");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_struct_without_attribute_still_works() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public struct Point { let x: Int32 let y: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::StructDecl {
+        attributes,
+        name,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "Point");
+        assert!(attributes.is_empty());
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_extension_where_clause() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
