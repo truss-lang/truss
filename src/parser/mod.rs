@@ -30,6 +30,7 @@ pub struct Parser {
     index: usize,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
     pending_greater_count: u32,
+    scope_nesting: usize,
 }
 
 impl Parser {
@@ -44,6 +45,7 @@ impl Parser {
             index: 0,
             engine,
             pending_greater_count: 0,
+            scope_nesting: 0,
         }
     }
 
@@ -1740,6 +1742,7 @@ impl Parser {
             {
                 self.index += 1;
                 let mut statements = Vec::new();
+                self.scope_nesting += 1;
                 while let Some(t) = self.peek() {
                     if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
                         break;
@@ -1751,6 +1754,7 @@ impl Parser {
                     }
                 }
                 let Some(next) = self.next() else {
+                    self.scope_nesting -= 1;
                     self.emit_error(
                         TrussDiagnosticCode::MissingSeparator,
                         "Expected '}' to close function body",
@@ -1759,6 +1763,7 @@ impl Parser {
                     return Err(());
                 };
                 if !SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
+                    self.scope_nesting -= 1;
                     self.emit_error(
                         TrussDiagnosticCode::MissingSeparator,
                         format!("Expected '}}' but found '{}'", next.value),
@@ -1766,6 +1771,7 @@ impl Parser {
                     );
                     return Err(());
                 }
+                self.scope_nesting -= 1;
                 FunctionBody::Statements(statements)
             } else if let Some(token) = self.peek()
                 && OperatorType::is_operator(&token, OperatorType::Assign)
@@ -1824,6 +1830,7 @@ impl Parser {
         {
             self.index += 1;
             let mut statements = Vec::new();
+            self.scope_nesting += 1;
             while let Some(t) = self.peek() {
                 if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
                     break;
@@ -1835,6 +1842,7 @@ impl Parser {
                 }
             }
             let Some(next) = self.next() else {
+                self.scope_nesting -= 1;
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
                     "Expected '}' to close deinit body",
@@ -1843,6 +1851,7 @@ impl Parser {
                 return Err(());
             };
             if !SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
+                self.scope_nesting -= 1;
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
                     format!("Expected '}}' but found '{}'", next.value),
@@ -1850,6 +1859,7 @@ impl Parser {
                 );
                 return Err(());
             }
+            self.scope_nesting -= 1;
             FunctionBody::Statements(statements)
         } else {
             self.emit_error(
@@ -2753,6 +2763,7 @@ impl Parser {
             self.parse_accessors()
         } else {
             let mut body = Vec::new();
+            self.scope_nesting += 1;
             while let Some(t) = self.peek() {
                 if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
                     break;
@@ -2764,6 +2775,7 @@ impl Parser {
                 }
             }
             let Some(close) = self.next() else {
+                self.scope_nesting -= 1;
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
                     "Expected '}' to close getter body".to_string(),
@@ -2772,6 +2784,7 @@ impl Parser {
                 return Err(());
             };
             if !SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
+                self.scope_nesting -= 1;
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
                     format!("Expected '}}' but found '{}'", close.value),
@@ -2779,6 +2792,7 @@ impl Parser {
                 );
                 return Err(());
             }
+            self.scope_nesting -= 1;
             Ok(vec![Accessor {
                 kind: AccessorKind::Get,
                 parameter: None,
@@ -2924,6 +2938,7 @@ impl Parser {
             }
             self.index += 1;
             let mut body = Vec::new();
+            self.scope_nesting += 1;
             while let Some(t) = self.peek() {
                 if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
                     break;
@@ -2935,6 +2950,7 @@ impl Parser {
                 }
             }
             let Some(close) = self.next() else {
+                self.scope_nesting -= 1;
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
                     "Expected '}' to close accessor body".to_string(),
@@ -2943,6 +2959,7 @@ impl Parser {
                 return Err(());
             };
             if !SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
+                self.scope_nesting -= 1;
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
                     format!("Expected '}}' but found '{}'", close.value),
@@ -2950,6 +2967,7 @@ impl Parser {
                 );
                 return Err(());
             }
+            self.scope_nesting -= 1;
             accessors.push(Accessor {
                 kind,
                 parameter,
@@ -3077,7 +3095,9 @@ impl Parser {
             }
         }
         let where_clause = self.parse_where_clause()?;
+        self.scope_nesting += 1;
         let mut body = self.parse_brace_body()?;
+        self.scope_nesting -= 1;
         self.ensure_memberwise_init(&mut body, &name);
         Ok(Statement::StructDecl {
             attributes,
@@ -3129,7 +3149,9 @@ impl Parser {
             }
         }
         let where_clause = self.parse_where_clause()?;
+        self.scope_nesting += 1;
         let body = self.parse_brace_body()?;
+        self.scope_nesting -= 1;
         Ok(Statement::ClassDecl {
             modifiers,
             token: Box::new(token),
@@ -3241,7 +3263,9 @@ impl Parser {
             }
         }
         let where_clause = self.parse_where_clause()?;
+        self.scope_nesting += 1;
         let body = self.parse_brace_body()?;
+        self.scope_nesting -= 1;
         Ok(Statement::ExtensionDecl {
             token: Box::new(token),
             type_name: Box::new(type_name),
@@ -3380,6 +3404,14 @@ impl Parser {
 
     fn parse_import(&mut self) -> Result<Statement, ()> {
         let token = self.next().unwrap();
+        if self.scope_nesting > 0 {
+            self.emit_error(
+                TrussDiagnosticCode::ParserError,
+                "'import' declarations are only allowed at file scope",
+                &token,
+            );
+            return Err(());
+        }
         let Some(first) = self.next() else {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedIdentifier,
@@ -3636,6 +3668,7 @@ impl Parser {
             && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
             self.index += 1;
+            self.scope_nesting += 1;
             while let Some(t) = self.peek() {
                 if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
                     break;
@@ -3738,6 +3771,7 @@ impl Parser {
                     }
                 }
             }
+            self.scope_nesting -= 1;
             let Some(next) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::MissingSeparator,
@@ -4291,6 +4325,7 @@ impl Parser {
     fn parse_block(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>, ()> {
         self.index += 1;
         let mut statements = Vec::new();
+        self.scope_nesting += 1;
         while let Some(token) = self.peek() {
             if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
                 break;
@@ -4302,6 +4337,7 @@ impl Parser {
             }
         }
         let Some(next) = self.next() else {
+            self.scope_nesting -= 1;
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
                 "Expected '}' to close block",
@@ -4309,6 +4345,7 @@ impl Parser {
             );
             return Err(());
         };
+        self.scope_nesting -= 1;
         if SeparatorType::is_separator(&next, SeparatorType::CloseBrace) {
             Ok(statements)
         } else {
@@ -4454,6 +4491,7 @@ impl Parser {
         }
 
         let mut body = Vec::new();
+        self.scope_nesting += 1;
         while let Some(token) = self.peek() {
             if SeparatorType::is_separator(&token, SeparatorType::CloseBrace) {
                 break;
@@ -4466,6 +4504,7 @@ impl Parser {
         }
 
         let Some(close) = self.next() else {
+            self.scope_nesting -= 1;
             self.emit_error(
                 TrussDiagnosticCode::MissingSeparator,
                 "Expected '}' to close closure",
@@ -4473,6 +4512,7 @@ impl Parser {
             );
             return Err(());
         };
+        self.scope_nesting -= 1;
         if SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
             Ok(Expression::Closure {
                 parameters,
@@ -6046,6 +6086,7 @@ impl Parser {
 
     fn parse_conditional_body(&mut self) -> Result<Vec<Rc<RefCell<Statement>>>, ()> {
         let mut statements = Vec::new();
+        self.scope_nesting += 1;
         loop {
             if self.is_empty() {
                 break;
@@ -6061,6 +6102,7 @@ impl Parser {
             let stmt = self.parse_statement()?;
             statements.push(Rc::new(RefCell::new(stmt)));
         }
+        self.scope_nesting -= 1;
         Ok(statements)
     }
 

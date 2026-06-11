@@ -7988,6 +7988,51 @@ fn test_parse_import_regular_ident_still_works() {
 }
 
 #[test]
+fn test_parse_import_inside_function_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test() { import Foo }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(
+        engine.borrow().get_errors().len() > 0,
+        "Expected error for import inside function body"
+    );
+}
+
+#[test]
+fn test_parse_import_inside_struct_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("struct Foo { import Bar }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(
+        engine.borrow().get_errors().len() > 0,
+        "Expected error for import inside struct body"
+    );
+}
+
+#[test]
+fn test_parse_import_at_file_level_ok() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import Foo\nimport Bar".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert_eq!(
+        engine.borrow().get_errors().len(), 0,
+        "Expected no errors for import at file level"
+    );
+}
+
+#[test]
 fn test_parse_generic_call_with_type_args() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
