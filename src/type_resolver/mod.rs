@@ -3574,6 +3574,102 @@ impl TypeResolver {
                         object_ty.clone(),
                         member.value.clone(),
                     ))),
+                    Type::Struct(struct_name, _) => {
+                        let scope = self.current_scope.as_ref().unwrap().borrow();
+                        if let Some(symbol) = scope.get_symbol(struct_name) {
+                            if let Ok(Some(decl)) = symbol.borrow().get_decl() {
+                                if let Statement::StructDecl { scope: struct_scope, .. } = &*decl.borrow() {
+                                    if let Some(s) = struct_scope {
+                                        if self.is_member_accessible(symbol.clone(), member) {
+                                            if let Some(found) = s.borrow().get_type(&member.value) {
+                                                found
+                                            } else {
+                                                self.emit_error(
+                                                    TrussDiagnosticCode::UnknownType,
+                                                    format!("Type '{}' not found in struct '{}'", member.value, struct_name),
+                                                    member,
+                                                );
+                                                return None;
+                                            }
+                                        } else {
+                                            self.emit_error(
+                                                TrussDiagnosticCode::InaccessibleMember,
+                                                format!("'{}' is inaccessible due to access level", member.value),
+                                                member,
+                                            );
+                                            return None;
+                                        }
+                                    } else {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::UnknownType,
+                                            format!("Struct '{}' has no scope", struct_name),
+                                            member,
+                                        );
+                                        return None;
+                                    }
+                                } else {
+                                    return None;
+                                }
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnknownType,
+                                format!("Struct '{}' not found in current scope", struct_name),
+                                member,
+                            );
+                            return None;
+                        }
+                    }
+                    Type::Class(class_name, _) => {
+                        let scope = self.current_scope.as_ref().unwrap().borrow();
+                        if let Some(symbol) = scope.get_symbol(class_name) {
+                            if let Ok(Some(decl)) = symbol.borrow().get_decl() {
+                                if let Statement::ClassDecl { scope: class_scope, .. } = &*decl.borrow() {
+                                    if let Some(s) = class_scope {
+                                        if self.is_member_accessible(symbol.clone(), member) {
+                                            if let Some(found) = s.borrow().get_type(&member.value) {
+                                                found
+                                            } else {
+                                                self.emit_error(
+                                                    TrussDiagnosticCode::UnknownType,
+                                                    format!("Type '{}' not found in class '{}'", member.value, class_name),
+                                                    member,
+                                                );
+                                                return None;
+                                            }
+                                        } else {
+                                            self.emit_error(
+                                                TrussDiagnosticCode::InaccessibleMember,
+                                                format!("'{}' is inaccessible due to access level", member.value),
+                                                member,
+                                            );
+                                            return None;
+                                        }
+                                    } else {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::UnknownType,
+                                            format!("Class '{}' has no scope", class_name),
+                                            member,
+                                        );
+                                        return None;
+                                    }
+                                } else {
+                                    return None;
+                                }
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnknownType,
+                                format!("Class '{}' not found in current scope", class_name),
+                                member,
+                            );
+                            return None;
+                        }
+                    }
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::UnknownType,

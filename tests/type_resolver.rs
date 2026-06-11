@@ -3686,6 +3686,45 @@ fn test_associated_type_access_typealias_resolves() {
 }
 
 #[test]
+fn test_struct_typealias_access_resolves() {
+    let errors = run_type_check(
+        "struct Wrapper { typealias MyInt = Int32 }
+         func test(x: Wrapper.MyInt) -> Int32 { return x }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for struct typealias access, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_struct_typealias_access_in_variable() {
+    let errors = run_type_check(
+        "struct Wrapper { typealias MyInt = Int32 }
+         func test() -> Wrapper.MyInt { return 42 }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for struct typealias access in return type, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_class_typealias_access_resolves() {
+    let errors = run_type_check(
+        "class Wrapper { typealias MyInt = Int32 }
+         func test(x: Wrapper.MyInt) -> Int32 { return x }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for class typealias access, got: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn test_associated_type_access_missing_member_errors() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
