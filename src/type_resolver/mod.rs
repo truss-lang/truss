@@ -1970,7 +1970,30 @@ impl TypeResolver {
                 ty.clone().unwrap()
             }
             Expression::BooleanLiteral { .. } => Rc::new(RefCell::new(Type::Bool)),
-            Expression::StringLiteral { .. } => return None,
+            Expression::StringLiteral { ty, .. } => {
+                if let Some(t) = ty.as_ref() {
+                    t.clone()
+                } else if let Some(current_scope) = &self.current_scope {
+                    if let Some(t) = current_scope.borrow().get_type("String") {
+                        *ty = Some(t.clone());
+                        t
+                    } else {
+                        let t = Rc::new(RefCell::new(Type::Struct(
+                            "String".to_string(),
+                            WeakSymbol(std::rc::Weak::new()),
+                        )));
+                        *ty = Some(t.clone());
+                        t
+                    }
+                } else {
+                    let t = Rc::new(RefCell::new(Type::Struct(
+                        "String".to_string(),
+                        WeakSymbol(std::rc::Weak::new()),
+                    )));
+                    *ty = Some(t.clone());
+                    t
+                }
+            }
             Expression::Variable { name, ty, .. } => {
                 let t = self
                     .current_scope
@@ -4084,6 +4107,7 @@ impl TypeResolver {
         let is_int_literal = matches!(&*expression.borrow(), Expression::IntegerLiteral { .. });
         let is_float_literal = matches!(&*expression.borrow(), Expression::DecimalLiteral { .. });
         let is_nullptr = matches!(&*expression.borrow(), Expression::NullptrLiteral { .. });
+        let is_null = matches!(&*expression.borrow(), Expression::NullLiteral { .. });
 
         if is_int_literal {
             if Self::is_integer_type(&expected.borrow()) {
@@ -4133,6 +4157,21 @@ impl TypeResolver {
                 *ty = Some(expected.clone());
             }
             drop(expr_mut);
+        } else if is_null {
+            let is_expected_optional = match &*expected.borrow() {
+                Type::Enum(name, _) | Type::Struct(name, _) | Type::Class(name, _) => {
+                    name == "Optional"
+                }
+                _ => false,
+            };
+            if is_expected_optional {
+            } else if !matches!(&*expected.borrow(), Type::Void) {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!("Type mismatch: expected {}, found null", expected.borrow()),
+                    token,
+                );
+            }
         } else {
             self.closure_expected_type = Some(expected.clone());
             let inferred = self.infer_type(expression);

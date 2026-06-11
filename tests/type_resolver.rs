@@ -6522,3 +6522,21 @@ fn test_auto_import_protocol_type() {
     );
     assert_eq!(errors, 0, "auto-imported protocol should resolve");
 }
+
+#[test]
+fn test_string_literal_type() {
+    let errors = run_type_check("func test() { let s = \"hello\" }");
+    assert_eq!(errors, 0, "string literal should type-check");
+}
+
+#[test]
+fn test_null_with_optional_type() {
+    let errors = run_type_check_with_stdlib(
+        "func test() -> Optional<Box> { return null }",
+        &[
+            "public struct Box {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert_eq!(errors, 0, "null should work as Optional.None");
+}
