@@ -9910,6 +9910,87 @@ fn test_parse_asm_block_in_expression_statement_fallback() {
 }
 
 #[test]
+fn test_parse_asm_block_comma_separated_instructions() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "mov rax, {src}", "add rax, 1", "mov {dst}, rax" : dst = out(reg) result : src = in(reg) 10 }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        instructions,
+        outputs,
+        inputs,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 3);
+        assert_eq!(instructions[0].value, "\"mov rax, {src}\"");
+        assert_eq!(instructions[1].value, "\"add rax, 1\"");
+        assert_eq!(instructions[2].value, "\"mov {dst}, rax\"");
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(inputs.len(), 1);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_comma_separated_no_operands() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm { "nop", "bar", "baz" }"#.to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        instructions, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 3);
+        assert_eq!(instructions[0].value, "\"nop\"");
+        assert_eq!(instructions[1].value, "\"bar\"");
+        assert_eq!(instructions[2].value, "\"baz\"");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_asm_block_mixed_separators() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            r#"asm {
+                "inst1", "inst2"
+                "inst3"
+            }"#
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::AsmBlock {
+        instructions, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(instructions.len(), 3);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_do_expression() {
     let code = "func test() { do { let x = 1 x } }";
     let engine = create_engine();

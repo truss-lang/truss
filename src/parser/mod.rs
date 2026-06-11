@@ -5342,6 +5342,10 @@ impl Parser {
                     break;
                 }
                 Some(t) => {
+                    if SeparatorType::is_separator(&t, SeparatorType::Comma) {
+                        self.index += 1;
+                        continue;
+                    }
                     if let TokenType::StringLiteral { .. } = &t.ty {
                         instructions.push(self.next().unwrap());
                     } else {
