@@ -13,6 +13,7 @@ pub struct Attribute {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     FunctionDecl {
+        attributes: Vec<Attribute>,
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,

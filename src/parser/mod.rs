@@ -112,14 +112,14 @@ impl Parser {
         };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
-                KeywordType::Func => self.parse_function_decl(false, modifiers),
+                KeywordType::Func => self.parse_function_decl(false, attributes, modifiers),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false, modifiers),
                 KeywordType::Struct => self.parse_struct_decl(attributes, modifiers),
                 KeywordType::Class => self.parse_class_decl(modifiers),
                 KeywordType::Protocol => self.parse_protocol_decl(modifiers),
                 KeywordType::Enum => self.parse_enum_decl(modifiers),
                 KeywordType::Extern => self.parse_extern(modifiers),
-                KeywordType::Init => self.parse_function_decl(false, modifiers),
+                KeywordType::Init => self.parse_function_decl(false, attributes, modifiers),
                 KeywordType::Deinit => self.parse_deinit_decl(modifiers),
                 KeywordType::Return => {
                     if !modifiers.is_empty() {
@@ -1455,6 +1455,7 @@ impl Parser {
     fn parse_function_decl(
         &mut self,
         is_extern: bool,
+        attributes: Vec<Attribute>,
         modifiers: Vec<Modifier>,
     ) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
@@ -1796,6 +1797,7 @@ impl Parser {
                 }
             });
             Ok(Statement::FunctionDecl {
+                attributes,
                 modifiers,
                 token: Box::new(token),
                 name: Box::new(name.unwrap()),
@@ -2617,7 +2619,7 @@ impl Parser {
         };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
-                KeywordType::Func => self.parse_function_decl(true, modifiers),
+                KeywordType::Func => self.parse_function_decl(true, vec![], modifiers),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(true, modifiers),
                 _ => {
                     self.emit_error(
@@ -3763,7 +3765,7 @@ impl Parser {
                 let Some(peek_token) = self.peek() else { break };
                 match peek_token.ty {
                     TokenType::Keyword { keyword } if keyword == KeywordType::Func => {
-                        let func_decl = self.parse_function_decl(false, member_modifiers)?;
+                        let func_decl = self.parse_function_decl(false, member_attributes.clone(), member_modifiers)?;
                         if let Statement::FunctionDecl { .. } = &func_decl {
                             members.push(ProtocolMember::Method {
                                 attributes: member_attributes,

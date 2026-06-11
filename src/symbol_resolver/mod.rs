@@ -1336,6 +1336,7 @@ impl SymbolResolver {
                             value: Some(Rc::new(RefCell::new(self_var_expr))),
                         };
                         let copy_func = Statement::FunctionDecl {
+                            attributes: vec![],
                             modifiers: vec![],
                             token: Box::new(func_name_tok.clone()),
                             name: Box::new(func_name_tok),
