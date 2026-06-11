@@ -41,6 +41,11 @@ pub enum Expression {
     NullLiteral {
         token: Box<Token>,
     },
+    StringLiteral {
+        token: Box<Token>,
+        value: String,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     NullptrLiteral {
         token: Box<Token>,
         ty: Option<Rc<RefCell<Type>>>,
@@ -249,6 +254,7 @@ impl Expression {
             Self::SizeOf { ty, .. } => Ok(ty.clone()),
             Self::Do { ty, .. } => Ok(ty.clone()),
             Self::InlineType { ty, .. } => Ok(ty.clone()),
+            Self::StringLiteral { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -274,6 +280,7 @@ impl Expression {
             Self::SizeOf { ty, .. } => Ok(ty),
             Self::Do { ty, .. } => Ok(ty),
             Self::InlineType { ty, .. } => Ok(ty),
+            Self::StringLiteral { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -299,6 +306,7 @@ impl Expression {
             Self::SizeOf { ty, .. } => Ok(ty),
             Self::Do { ty, .. } => Ok(ty),
             Self::InlineType { ty, .. } => Ok(ty),
+            Self::StringLiteral { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -308,6 +316,7 @@ impl Expression {
             Expression::DecimalLiteral { token, .. } => (**token).clone(),
             Expression::BooleanLiteral { token } => (**token).clone(),
             Expression::NullLiteral { token } => (**token).clone(),
+            Expression::StringLiteral { token, .. } => (**token).clone(),
             Expression::NullptrLiteral { token, .. } => (**token).clone(),
             Expression::CharLiteral { token } => (**token).clone(),
             Expression::VoidLiteral { left, .. } => (**left).clone(),

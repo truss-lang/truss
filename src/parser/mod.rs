@@ -580,6 +580,18 @@ impl Parser {
                     token: Box::new(token),
                 })
             }
+            TokenType::StringLiteral { .. } => {
+                self.index += 1;
+                let value = match &token.ty {
+                    TokenType::StringLiteral { value } => value.clone(),
+                    _ => unreachable!(),
+                };
+                Ok(Expression::StringLiteral {
+                    token: Box::new(token),
+                    value,
+                    ty: None,
+                })
+            }
             TokenType::NullptrLiteral => {
                 self.index += 1;
                 Ok(Expression::NullptrLiteral {
@@ -1049,6 +1061,39 @@ impl Parser {
 
     fn parse_type_expression(&mut self) -> Result<Expression, ()> {
         if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBracket)
+        {
+            self.index += 1;
+            let element = self.parse_type_expression()?;
+            let Some(close) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    "Expected ']' in array type",
+                    &token,
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close, SeparatorType::CloseBracket) {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    format!("Expected ']' but found '{}'", close.value),
+                    &close,
+                );
+                return Err(());
+            }
+            return Ok(Expression::Type {
+                name: Box::new(Token::new(
+                    "Array".to_string(),
+                    TokenType::Identifier,
+                    token.position.clone(),
+                    token.file.clone(),
+                )),
+                type_parameters: Some(vec![Rc::new(RefCell::new(element))]),
+                ty: None,
+            });
+        }
+
+        if let Some(token) = self.peek()
             && KeywordType::is_keyword(&token, KeywordType::Any)
         {
             self.index += 1;
@@ -1249,6 +1294,22 @@ impl Parser {
                     };
                 }
 
+                if let Some(token) = self.peek()
+                    && OperatorType::is_operator(&token, OperatorType::QuestionMark)
+                {
+                    self.index += 1;
+                    tuple_type_expr = Expression::Type {
+                        name: Box::new(Token::new(
+                            "Optional".to_string(),
+                            TokenType::Identifier,
+                            token.position.clone(),
+                            token.file.clone(),
+                        )),
+                        type_parameters: Some(vec![Rc::new(RefCell::new(tuple_type_expr))]),
+                        ty: None,
+                    };
+                }
+
                 return Ok(tuple_type_expr);
             }
 
@@ -1327,6 +1388,22 @@ impl Parser {
                 type_expr = Expression::PointerType {
                     base: Box::new(Rc::new(RefCell::new(type_expr))),
                     non_null,
+                    ty: None,
+                };
+            }
+
+            if let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::QuestionMark)
+            {
+                self.index += 1;
+                type_expr = Expression::Type {
+                    name: Box::new(Token::new(
+                        "Optional".to_string(),
+                        TokenType::Identifier,
+                        token.position.clone(),
+                        token.file.clone(),
+                    )),
+                    type_parameters: Some(vec![Rc::new(RefCell::new(type_expr))]),
                     ty: None,
                 };
             }
@@ -1424,6 +1501,22 @@ impl Parser {
             type_expr = Expression::PointerType {
                 base: Box::new(Rc::new(RefCell::new(type_expr))),
                 non_null,
+                ty: None,
+            };
+        }
+
+        if let Some(token) = self.peek()
+            && OperatorType::is_operator(&token, OperatorType::QuestionMark)
+        {
+            self.index += 1;
+            type_expr = Expression::Type {
+                name: Box::new(Token::new(
+                    "Optional".to_string(),
+                    TokenType::Identifier,
+                    token.position.clone(),
+                    token.file.clone(),
+                )),
+                type_parameters: Some(vec![Rc::new(RefCell::new(type_expr))]),
                 ty: None,
             };
         }

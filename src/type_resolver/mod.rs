@@ -1970,6 +1970,7 @@ impl TypeResolver {
                 ty.clone().unwrap()
             }
             Expression::BooleanLiteral { .. } => Rc::new(RefCell::new(Type::Bool)),
+            Expression::StringLiteral { .. } => return None,
             Expression::Variable { name, ty, .. } => {
                 let t = self
                     .current_scope

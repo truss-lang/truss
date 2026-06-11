@@ -11433,3 +11433,272 @@ fn test_parse_using_regular_shorthand_still_works() {
         panic!("Expected UsingDecl");
     }
 }
+
+#[test]
+fn test_parse_optional_type_sugar() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: Int32? = 10".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl {
+        type_expression: Some(ty),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        let ty = ty.borrow();
+        if let Expression::Type {
+            name,
+            type_parameters,
+            ..
+        } = &*ty
+        {
+            assert_eq!(name.value, "Optional");
+            assert!(type_parameters.is_some());
+            let params = type_parameters.as_ref().unwrap();
+            assert_eq!(params.len(), 1);
+            if let Expression::Type { name, .. } = &*params[0].borrow() {
+                assert_eq!(name.value, "Int32");
+            } else {
+                panic!("Expected Type for Optional parameter");
+            }
+        } else {
+            panic!("Expected Type expression for Optional");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_optional_type_on_tuple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let x: (Int32, Bool)? = nil".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl {
+        type_expression: Some(ty),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        let ty = ty.borrow();
+        if let Expression::Type { name, .. } = &*ty {
+            assert_eq!(name.value, "Optional");
+        } else {
+            panic!("Expected Type expression for Optional");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_optional_with_pointer() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: Int32*? = nil".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl {
+        type_expression: Some(ty),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        let ty = ty.borrow();
+        if let Expression::Type {
+            name,
+            type_parameters,
+            ..
+        } = &*ty
+        {
+            assert_eq!(name.value, "Optional");
+            let params = type_parameters.as_ref().unwrap();
+            if let Expression::PointerType { non_null, .. } = &*params[0].borrow() {
+                assert!(!non_null);
+            } else {
+                panic!("Expected PointerType inside Optional");
+            }
+        } else {
+            panic!("Expected Type for Optional");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_array_type_sugar() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: [Int32] = {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl {
+        type_expression: Some(ty),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        let ty = ty.borrow();
+        if let Expression::Type {
+            name,
+            type_parameters,
+            ..
+        } = &*ty
+        {
+            assert_eq!(name.value, "Array");
+            assert!(type_parameters.is_some());
+            let params = type_parameters.as_ref().unwrap();
+            assert_eq!(params.len(), 1);
+            if let Expression::Type { name, .. } = &*params[0].borrow() {
+                assert_eq!(name.value, "Int32");
+            } else {
+                panic!("Expected Type for Array parameter");
+            }
+        } else {
+            panic!("Expected Type expression for Array");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_array_type_nested() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: [[Int32]] = {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl {
+        type_expression: Some(ty),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        let ty = ty.borrow();
+        if let Expression::Type {
+            name,
+            type_parameters,
+            ..
+        } = &*ty
+        {
+            assert_eq!(name.value, "Array");
+            let params = type_parameters.as_ref().unwrap();
+            if let Expression::Type {
+                name: iname,
+                type_parameters: iparams,
+                ..
+            } = &*params[0].borrow()
+            {
+                assert_eq!(iname.value, "Array");
+                assert!(iparams.is_some());
+            } else {
+                panic!("Expected nested Array");
+            }
+        } else {
+            panic!("Expected Type for outer Array");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_string_literal_expression() {
+    let engine = create_engine();
+    let src = "let s = \"hello\"";
+    let mut lexer = Lexer::new(
+        CharStream::new(src.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        if let Expression::StringLiteral { value, .. } = &*init.borrow() {
+            assert_eq!(value, "hello");
+        } else {
+            panic!("Expected StringLiteral expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_string_literal_empty() {
+    let engine = create_engine();
+    let src = "let s = \"\"";
+    let mut lexer = Lexer::new(
+        CharStream::new(src.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        if let Expression::StringLiteral { value, .. } = &*init.borrow() {
+            assert_eq!(value, "");
+        } else {
+            panic!("Expected StringLiteral expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_optional_type_in_func_return() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32? { return nil }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+}
+
+#[test]
+fn test_parse_array_type_in_func_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test(x: [Int32]) {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+}
