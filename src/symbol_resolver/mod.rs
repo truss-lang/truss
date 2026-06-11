@@ -83,11 +83,14 @@ impl SymbolResolver {
                 body,
                 scope,
                 generic_parameters,
+                attributes,
                 ..
             } => {
+                let is_builtin = attributes.iter().any(|a| a.name == "builtintype");
                 let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
                     name: name.value.clone(),
                     decl: stmt.clone(),
+                    is_builtin_type: is_builtin,
                     properties: vec![],
                     methods: vec![],
                     constructors: vec![],

@@ -26,6 +26,7 @@ pub enum Symbol {
     Struct {
         name: String,
         decl: Rc<RefCell<Statement>>,
+        is_builtin_type: bool,
         properties: Vec<Rc<RefCell<Symbol>>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
         constructors: Vec<Rc<RefCell<Symbol>>>,

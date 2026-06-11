@@ -172,6 +172,62 @@ fn test_struct_field_symbol() {
 }
 
 #[test]
+fn test_builtintype_struct_symbol_is_marked() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#[builtintype] public struct Int32 {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let root_module = resolver.resolve(&program, "test".to_string());
+    {
+        let engine_ref = engine.borrow();
+        let errors = engine_ref.get_errors();
+        assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    }
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let sym = root_scope.borrow().get_symbol("Int32");
+    assert!(sym.is_some(), "Int32 should be registered");
+    let binding = sym.unwrap();
+    let symbol = binding.borrow();
+    assert!(matches!(&*symbol, Symbol::Struct { is_builtin_type: true, .. }));
+}
+
+#[test]
+fn test_non_builtintype_struct_symbol_not_marked() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "public struct Point { let x: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let root_module = resolver.resolve(&program, "test".to_string());
+    {
+        let engine_ref = engine.borrow();
+        let errors = engine_ref.get_errors();
+        assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    }
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let sym = root_scope.borrow().get_symbol("Point");
+    assert!(sym.is_some(), "Point should be registered");
+    let binding = sym.unwrap();
+    let symbol = binding.borrow();
+    assert!(matches!(&*symbol, Symbol::Struct { is_builtin_type: false, .. }));
+}
+
+#[test]
 fn test_struct_method_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
