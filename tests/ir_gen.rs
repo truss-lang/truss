@@ -5738,3 +5738,121 @@ fn test_irgen_non_builtintype_struct_creates_llvm_struct() {
         "Non-built-in struct should create LLVM struct type"
     );
 }
+
+fn run_ir_gen_with_stdlib(
+    code: &str,
+    stdlib_decls: &[&str],
+) -> (String, Rc<RefCell<TrussDiagnosticEngine>>) {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+
+    let mut packages: std::collections::HashMap<String, Rc<RefCell<Package>>> =
+        std::collections::HashMap::new();
+    let test_pkg = Rc::new(RefCell::new(Package::new("test".to_string())));
+    packages.insert("test".to_string(), test_pkg.clone());
+    let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+    packages.insert("Truss".to_string(), truss_pkg.clone());
+
+    let combined_src = stdlib_decls.join("\n");
+    if !combined_src.is_empty() {
+        let mut std_lexer = Lexer::new(
+            CharStream::new(combined_src, Rc::new("".to_string())),
+            engine.clone(),
+        );
+        let std_tokens = std_lexer.parse();
+        let mut std_parser = Parser::new(std_lexer.get_file(), std_tokens, engine.clone());
+        let std_program = std_parser.parse();
+        let mut std_resolver =
+            SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+        std_resolver.resolve(&std_program, "Truss".to_string());
+        let truss_module = truss_pkg.borrow().modules.get("Truss").cloned().unwrap();
+        let mut std_type_resolver =
+            TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+        std_type_resolver.resolve(&std_program, truss_module);
+    }
+
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+    (llvm_ir, engine)
+}
+
+#[test]
+fn test_irgen_auto_import_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test(x: MyStruct) -> MyStruct { return x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+
+    let mut packages: std::collections::HashMap<String, Rc<RefCell<Package>>> =
+        std::collections::HashMap::new();
+    let test_pkg = Rc::new(RefCell::new(Package::new("test".to_string())));
+    packages.insert("test".to_string(), test_pkg.clone());
+    let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+    packages.insert("Truss".to_string(), truss_pkg.clone());
+
+    let std_src = "public struct MyStruct {}";
+    let mut std_lexer = Lexer::new(
+        CharStream::new(std_src.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let std_tokens = std_lexer.parse();
+    let mut std_parser = Parser::new(std_lexer.get_file(), std_tokens, engine.clone());
+    let std_program = std_parser.parse();
+    let mut std_resolver =
+        SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+    std_resolver.resolve(&std_program, "Truss".to_string());
+    let truss_module = truss_pkg.borrow().modules.get("Truss").cloned().unwrap();
+    let mut std_type_resolver =
+        TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+    std_type_resolver.resolve(&std_program, truss_module);
+
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+}
+
+#[test]
+fn test_irgen_auto_import_builtin_type() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "func test() -> Bool { return true }",
+        &["#[builtintype] public struct Bool {}"],
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+    assert!(llvm_ir.contains("i1") || llvm_ir.contains("bool"));
+}
+
+#[test]
+fn test_irgen_auto_import_enum() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "func test() -> Int32 { return 42 }",
+        &["#[builtintype] public struct Int32 {}"],
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+}

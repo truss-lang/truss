@@ -139,6 +139,17 @@ fn main() {
                     std_resolver.register_symbols(stmt.clone());
                 }
             }
+
+            let truss_module_ref = truss_pkg.borrow().modules.get("Truss").cloned();
+            if let Some(truss_module) = truss_module_ref {
+                let mut std_type_resolver =
+                    TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+                let empty_prog = truss::ast::node::Program {
+                    file: Rc::new("".to_string()),
+                    statements: vec![],
+                };
+                std_type_resolver.resolve(&empty_prog, truss_module);
+            }
         }
     }
 

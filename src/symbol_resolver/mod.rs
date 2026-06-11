@@ -54,21 +54,27 @@ impl SymbolResolver {
         let scope = self.enter_scope(None);
         self.current_module.as_ref().unwrap().borrow_mut().scope = Some(scope.clone());
 
-        let entries: Vec<(String, Rc<RefCell<Symbol>>)> = {
+        let mut entries: Vec<(String, Rc<RefCell<Symbol>>)> = Vec::new();
+        let mut type_entries: Vec<(String, Rc<RefCell<Type>>)> = Vec::new();
+        {
             let truss_pkg = self.packages.get("Truss");
             let truss_module = truss_pkg.and_then(|p| p.borrow().modules.get("Truss").cloned());
-            truss_module
-                .and_then(|m| {
-                    m.borrow().scope.clone().map(|s| {
-                        s.borrow()
-                            .name_table
-                            .iter()
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect()
-                    })
-                })
-                .unwrap_or_default()
-        };
+            if let Some(m) = truss_module {
+                if let Some(s) = m.borrow().scope.clone() {
+                    let sb = s.borrow();
+                    entries = sb
+                        .name_table
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    type_entries = sb
+                        .type_env
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                }
+            }
+        }
         let file: Rc<String> = Rc::new(
             self.packages
                 .get(&self.current_package)
@@ -90,6 +96,13 @@ impl SymbolResolver {
                 file.clone(),
             );
             self.enter(symbol, &name_token);
+        }
+        for (name, ty) in type_entries {
+            if let Some(current_scope) = self.current_scope.as_ref() {
+                if !current_scope.borrow().type_env.contains_key(&name) {
+                    current_scope.borrow_mut().type_env.insert(name, ty);
+                }
+            }
         }
 
         for stmt in &program.statements {
