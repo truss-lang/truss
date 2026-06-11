@@ -40,6 +40,7 @@ pub enum Expression {
     },
     NullLiteral {
         token: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     StringLiteral {
         token: Box<Token>,
@@ -315,7 +316,7 @@ impl Expression {
             Expression::IntegerLiteral { token, .. } => (**token).clone(),
             Expression::DecimalLiteral { token, .. } => (**token).clone(),
             Expression::BooleanLiteral { token } => (**token).clone(),
-            Expression::NullLiteral { token } => (**token).clone(),
+            Expression::NullLiteral { token, .. } => (**token).clone(),
             Expression::StringLiteral { token, .. } => (**token).clone(),
             Expression::NullptrLiteral { token, .. } => (**token).clone(),
             Expression::CharLiteral { token } => (**token).clone(),

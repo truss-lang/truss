@@ -2574,7 +2574,13 @@ impl TypeResolver {
                 case_ty
             }
             Expression::VoidLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
-            Expression::NullLiteral { .. } => Rc::new(RefCell::new(Type::Void)),
+            Expression::NullLiteral { ty, .. } => {
+                if let Some(t) = ty.as_ref() {
+                    t.clone()
+                } else {
+                    Rc::new(RefCell::new(Type::Void))
+                }
+            }
             Expression::NullptrLiteral { ty, .. } => {
                 if let Some(existing_ty) = ty {
                     existing_ty.clone()
@@ -4165,6 +4171,11 @@ impl TypeResolver {
                 _ => false,
             };
             if is_expected_optional {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::NullLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
             } else if !matches!(&*expected.borrow(), Type::Void) {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,

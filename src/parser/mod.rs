@@ -578,6 +578,7 @@ impl Parser {
                 self.index += 1;
                 Ok(Expression::NullLiteral {
                     token: Box::new(token),
+                    ty: None,
                 })
             }
             TokenType::StringLiteral { .. } => {

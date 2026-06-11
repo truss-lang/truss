@@ -3945,12 +3945,41 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::CharLiteral { .. } => {
                 Ok(Some(self.context.i8_type().const_int(0, false).into()))
             }
-            Expression::NullLiteral { .. } => Ok(Some(
-                self.context
-                    .ptr_type(inkwell::AddressSpace::from(0))
-                    .const_null()
-                    .into(),
-            )),
+            Expression::NullLiteral { ty, .. } => {
+                if let Some(t) = ty.as_ref()
+                    && let Type::Enum(name, _) = &*t.borrow()
+                {
+                    let enum_type =
+                        self.enum_types.borrow().get(name).cloned().ok_or_else(|| {
+                            anyhow::anyhow!("Enum type '{}' not found in IR generation", name)
+                        })?;
+                    let payloads_type = self
+                        .enum_payload_types
+                        .borrow()
+                        .get(name)
+                        .cloned()
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "Enum payload type '{}' not found in IR generation",
+                                name
+                            )
+                        })?;
+                    let none_payload_type = payloads_type
+                        .get_field_type_at_index(0)
+                        .ok_or_else(|| anyhow::anyhow!("None payload not found"))?;
+                    let none_payload = none_payload_type.const_zero();
+                    let tag = self.context.i8_type().const_zero();
+                    let enum_val = enum_type.const_named_struct(&[tag.into(), none_payload.into()]);
+                    Ok(Some(enum_val.into()))
+                } else {
+                    Ok(Some(
+                        self.context
+                            .ptr_type(inkwell::AddressSpace::from(0))
+                            .const_null()
+                            .into(),
+                    ))
+                }
+            }
             Expression::StringLiteral { .. } => Ok(Some(
                 self.context
                     .ptr_type(inkwell::AddressSpace::from(0))
