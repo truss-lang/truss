@@ -144,6 +144,30 @@ impl Symbol {
             Self::Macro { name, .. } => Ok(name.clone()),
         }
     }
+    pub fn with_name(&self, new_name: &str) -> Self {
+        let mut cloned = self.clone();
+        match &mut cloned {
+            Self::Function { name, .. } => *name = new_name.to_string(),
+            Self::Variable { name, .. } => *name = new_name.to_string(),
+            Self::Struct { name, .. } => *name = new_name.to_string(),
+            Self::StructProperty { name, .. } => *name = new_name.to_string(),
+            Self::StructMethod { name, .. } => *name = new_name.to_string(),
+            Self::StructSubscript { name, .. } => *name = new_name.to_string(),
+            Self::Class { name, .. } => *name = new_name.to_string(),
+            Self::ClassProperty { name, .. } => *name = new_name.to_string(),
+            Self::ClassMethod { name, .. } => *name = new_name.to_string(),
+            Self::ClassSubscript { name, .. } => *name = new_name.to_string(),
+            Self::Enum { name, .. } => *name = new_name.to_string(),
+            Self::EnumCase { name, .. } => *name = new_name.to_string(),
+            Self::Protocol { name, .. } => *name = new_name.to_string(),
+            Self::ProtocolMethod { name, .. } => *name = new_name.to_string(),
+            Self::ProtocolProperty { name, .. } => *name = new_name.to_string(),
+            Self::ProtocolSubscript { name, .. } => *name = new_name.to_string(),
+            Self::Module { name, .. } => *name = new_name.to_string(),
+            Self::Macro { name, .. } => *name = new_name.to_string(),
+        }
+        cloned
+    }
     pub fn get_decl(&self) -> Result<Option<Rc<RefCell<Statement>>>> {
         match self {
             Self::Function { decl, .. } => Ok(Some(decl.clone())),

@@ -4523,3 +4523,201 @@ fn test_const_generic_default_value_resolves() {
     resolver.resolve(&program, "test".to_string());
     assert!(!engine.borrow().has_errors());
 }
+
+#[test]
+fn test_import_selective_member() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } func baz() -> Int32 { return 99 } }
+         import Foo.{bar}
+         func test() -> Int32 { return bar() }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(), 0,
+        "Expected no errors for selective import"
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_selective_member_with_alias() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo.{bar as myBar}
+         func test() -> Int32 { return myBar() }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(), 0,
+        "Expected no errors for selective import with alias"
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_selective_member_original_name_not_visible() {
+    let engine = create_engine();
+    let code = "module Foo { func bar() -> Int32 { return 42 } func baz() -> Int32 { return 99 } }
+         import Foo.{bar as myBar}
+         func test() -> Int32 { return bar() }";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    assert!(
+        engine.borrow().has_errors(),
+        "Should error because original name 'bar' is not visible after rename import"
+    );
+}
+
+#[test]
+fn test_import_selective_with_skip() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } func baz() -> Int32 { return 99 } }
+         import Foo.{bar as _, baz}
+         func test() -> Int32 { return baz() }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(), 0,
+        "Expected no errors when skipping one member and importing another"
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_selective_skip_hides_symbol() {
+    let engine = create_engine();
+    let code = "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo.{bar as _}
+         func test() -> Int32 { return bar() }";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    assert!(
+        engine.borrow().has_errors(),
+        "Should error because 'bar' was skipped with 'as _'"
+    );
+}
+
+#[test]
+fn test_import_selective_multiple_members() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Math {
+            func add(a: Int32, b: Int32) -> Int32 { return a + b }
+            func sub(a: Int32, b: Int32) -> Int32 { return a - b }
+            func mul(a: Int32, b: Int32) -> Int32 { return a * b }
+         }
+         import Math.{add, sub}
+         func test() -> Int32 { return add(1, sub(2, 3)) }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(), 0,
+        "Expected no errors for selective import of multiple members"
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_single_as_alias() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo.bar as myBar
+         func test() -> Int32 { return myBar() }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(), 0,
+        "Expected no errors for single import with 'as' alias"
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_single_as_skip() {
+    let engine = create_engine();
+    let code = "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo.bar as _
+         func test() -> Int32 { return bar() }";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(
+        Rc::new(RefCell::new(Crate::new("test".to_string()))),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "test".to_string());
+    assert!(
+        engine.borrow().has_errors(),
+        "Should error because 'bar' was skipped with 'as _'"
+    );
+}
+
+#[test]
+fn test_import_selective_member_not_found() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import Foo.{nonexistent}
+         func test() -> Int32 { return 42 }",
+    );
+    assert!(
+        engine.borrow().has_errors(),
+        "Expected error for importing non-existent member"
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_selective_module_not_found() {
+    let (statements, engine, _krate) = run_resolver(
+        "import NonExistent.{foo}
+         func test() -> Int32 { return 42 }",
+    );
+    assert!(
+        engine.borrow().has_errors(),
+        "Expected error for non-existent module in selective import"
+    );
+    assert_eq!(statements.len(), 2);
+}
+
+#[test]
+fn test_import_selective_package() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import package.Foo.{bar}
+         func test() -> Int32 { return bar() }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(), 0,
+        "Expected no errors for selective package import"
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_selective_package_with_alias() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import package.Foo.{bar as myBar}
+         func test() -> Int32 { return myBar() }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(), 0,
+        "Expected no errors for selective package import with alias"
+    );
+    assert_eq!(statements.len(), 3);
+}

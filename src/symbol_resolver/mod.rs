@@ -6,7 +6,7 @@ use crate::{
         node::Program,
         statement::{
             AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Pattern, ProtocolMember,
-            Statement, WhereRequirement, WhereRequirementKind,
+            SelectiveAlias, Statement, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -1020,89 +1020,60 @@ impl SymbolResolver {
                 self.leave_scope();
                 self.current_module = saved_module;
             }
-            Statement::ImportDecl { path, kind, token } => match kind {
-                ImportKind::Module => {
-                    let module_path = path.join(".");
-                    let result = { self.krate.borrow().modules.get(&module_path).cloned() };
-                    if let Some(module) = result {
-                        let name = path.last().unwrap().clone();
-                        let module_symbol = Rc::new(RefCell::new(Symbol::Module {
-                            name: name.clone(),
-                            decl: stmt.clone(),
-                            module: Some(module),
-                        }));
-                        let name_token = Token::new(
-                            name,
-                            crate::lexer::token::TokenType::Identifier,
-                            token.position.clone(),
-                            token.file.clone(),
-                        );
-                        self.enter(module_symbol, &name_token);
-                    } else {
-                        self.emit_error(
-                            TrussDiagnosticCode::SymbolError,
-                            format!("Module '{}' not found", module_path),
-                            token.as_ref(),
-                        );
-                    }
-                }
-                ImportKind::Member => {
-                    let member_name = path.last().unwrap().clone();
-                    let module_path = path[..path.len() - 1].join(".");
-                    let found_symbol = {
-                        self.krate.borrow().modules.get(&module_path).and_then(|m| {
-                            m.borrow()
-                                .scope
-                                .clone()
-                                .and_then(|scope| scope.borrow().get_symbol(&member_name))
-                        })
-                    };
-                    if let Some(symbol) = found_symbol {
-                        self.enter(symbol, token.as_ref());
-                    } else {
-                        let exists = self.krate.borrow().modules.contains_key(&module_path);
-                        if exists {
-                            self.emit_error(
-                                TrussDiagnosticCode::SymbolError,
-                                format!(
-                                    "Symbol '{}' not found in module '{}'",
-                                    member_name, module_path
-                                ),
-                                token.as_ref(),
-                            );
-                        } else {
-                            self.emit_error(
-                                TrussDiagnosticCode::SymbolError,
-                                format!("Module '{}' not found", module_path),
-                                token.as_ref(),
-                            );
-                        }
-                    }
-                }
-                ImportKind::Wildcard => {
+            Statement::ImportDecl {
+                path,
+                kind,
+                token,
+                selective_members,
+                ..
+            } => {
+                if let Some(members) = selective_members {
                     let module_path = path.join(".");
                     let module = self.krate.borrow().modules.get(&module_path).cloned();
                     if let Some(module) = module {
-                        let names: Vec<String> = {
-                            let scope = module.borrow().scope.clone();
-                            scope
-                                .map(|s| s.borrow().name_table.keys().cloned().collect())
-                                .unwrap_or_default()
-                        };
-                        for name in names {
-                            if let Some(symbol) = module
-                                .borrow()
-                                .scope
-                                .clone()
-                                .and_then(|scope| scope.borrow().get_symbol(&name))
-                            {
+                        for member in members {
+                            let found_symbol = module.borrow().scope.clone().and_then(|scope| {
+                                scope.borrow().get_symbol(&member.name)
+                            });
+                            if let Some(symbol) = found_symbol {
+                                let alias_name = match &member.alias {
+                                    SelectiveAlias::Direct => &member.name,
+                                    SelectiveAlias::Named(alias) => alias,
+                                    SelectiveAlias::Skip => continue,
+                                };
                                 let name_token = Token::new(
-                                    name.clone(),
+                                    alias_name.clone(),
                                     crate::lexer::token::TokenType::Identifier,
                                     token.position.clone(),
                                     token.file.clone(),
                                 );
-                                self.enter(symbol, &name_token);
+                                if alias_name != &member.name {
+                                    let renamed = Rc::new(RefCell::new(
+                                        symbol.borrow().with_name(alias_name),
+                                    ));
+                                    self.enter(renamed, &name_token);
+                                } else {
+                                    self.enter(symbol, &name_token);
+                                }
+                            } else {
+                                let exists =
+                                    self.krate.borrow().modules.contains_key(&module_path);
+                                if exists {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::SymbolError,
+                                        format!(
+                                            "Symbol '{}' not found in module '{}'",
+                                            member.name, module_path
+                                        ),
+                                        token.as_ref(),
+                                    );
+                                } else {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::SymbolError,
+                                        format!("Module '{}' not found", module_path),
+                                        token.as_ref(),
+                                    );
+                                }
                             }
                         }
                     } else {
@@ -1112,8 +1083,114 @@ impl SymbolResolver {
                             token.as_ref(),
                         );
                     }
+                } else {
+                    match kind {
+                        ImportKind::Module => {
+                            let module_path = path.join(".");
+                            let result =
+                                { self.krate.borrow().modules.get(&module_path).cloned() };
+                            if let Some(module) = result {
+                                let name = path.last().unwrap().clone();
+                                let module_symbol = Rc::new(RefCell::new(Symbol::Module {
+                                    name: name.clone(),
+                                    decl: stmt.clone(),
+                                    module: Some(module),
+                                }));
+                                let name_token = Token::new(
+                                    name,
+                                    crate::lexer::token::TokenType::Identifier,
+                                    token.position.clone(),
+                                    token.file.clone(),
+                                );
+                                self.enter(module_symbol, &name_token);
+                            } else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::SymbolError,
+                                    format!("Module '{}' not found", module_path),
+                                    token.as_ref(),
+                                );
+                            }
+                        }
+                        ImportKind::Member => {
+                            let member_name = path.last().unwrap().clone();
+                            let module_path = path[..path.len() - 1].join(".");
+                            let found_symbol = {
+                                self.krate
+                                    .borrow()
+                                    .modules
+                                    .get(&module_path)
+                                    .and_then(|m| {
+                                        m.borrow()
+                                            .scope
+                                            .clone()
+                                            .and_then(|scope| {
+                                                scope.borrow().get_symbol(&member_name)
+                                            })
+                                    })
+                            };
+                            if let Some(symbol) = found_symbol {
+                                self.enter(symbol, token.as_ref());
+                            } else {
+                                let exists =
+                                    self.krate.borrow().modules.contains_key(&module_path);
+                                if exists {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::SymbolError,
+                                        format!(
+                                            "Symbol '{}' not found in module '{}'",
+                                            member_name, module_path
+                                        ),
+                                        token.as_ref(),
+                                    );
+                                } else {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::SymbolError,
+                                        format!("Module '{}' not found", module_path),
+                                        token.as_ref(),
+                                    );
+                                }
+                            }
+                        }
+                        ImportKind::Wildcard => {
+                            let module_path = path.join(".");
+                            let module =
+                                self.krate.borrow().modules.get(&module_path).cloned();
+                            if let Some(module) = module {
+                                let names: Vec<String> = {
+                                    let scope = module.borrow().scope.clone();
+                                    scope
+                                        .map(|s| {
+                                            s.borrow().name_table.keys().cloned().collect()
+                                        })
+                                        .unwrap_or_default()
+                                };
+                                for name in names {
+                                    if let Some(symbol) = module
+                                        .borrow()
+                                        .scope
+                                        .clone()
+                                        .and_then(|scope| scope.borrow().get_symbol(&name))
+                                    {
+                                        let name_token = Token::new(
+                                            name.clone(),
+                                            crate::lexer::token::TokenType::Identifier,
+                                            token.position.clone(),
+                                            token.file.clone(),
+                                        );
+                                        self.enter(symbol, &name_token);
+                                    }
+                                }
+                            } else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::SymbolError,
+                                    format!("Module '{}' not found", module_path),
+                                    token.as_ref(),
+                                );
+                            }
+                        }
+                    }
                 }
-            },
+            }
             Statement::MacroDecl { name, .. } => {
                 let symbol = Rc::new(RefCell::new(Symbol::Macro {
                     name: name.value.clone(),
