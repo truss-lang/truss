@@ -185,12 +185,14 @@ pub enum Statement {
         name: Box<Token>,
         path: Vec<String>,
         selective_members: Option<Vec<SelectiveMember>>,
+        is_current_package: bool,
     },
     ImportDecl {
         token: Box<Token>,
         path: Vec<String>,
         kind: ImportKind,
         selective_members: Option<Vec<SelectiveMember>>,
+        is_current_package: bool,
     },
     SubscriptDecl {
         modifiers: Vec<Modifier>,

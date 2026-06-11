@@ -4823,9 +4823,7 @@ fn test_parse_protocol_with_autowired_method() {
         assert_eq!(name.value, "Copyable");
         assert_eq!(members.len(), 1);
         if let ProtocolMember::Method {
-            attributes,
-            decl,
-            ..
+            attributes, decl, ..
         } = &members[0]
         {
             assert_eq!(attributes.len(), 1);
@@ -4863,9 +4861,7 @@ fn test_parse_internal_used_attribute_on_function() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
     if let Statement::FunctionDecl {
-        attributes,
-        name,
-        ..
+        attributes, name, ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "internalHelper");
@@ -6184,9 +6180,7 @@ fn test_parse_builtintype_attribute_on_empty_struct() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
     if let Statement::StructDecl {
-        attributes,
-        name,
-        ..
+        attributes, name, ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "Bool");
@@ -6211,9 +6205,7 @@ fn test_parse_struct_without_attribute_still_works() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
     if let Statement::StructDecl {
-        attributes,
-        name,
-        ..
+        attributes, name, ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "Point");
@@ -7805,7 +7797,10 @@ fn test_parse_import_package_module() {
 fn test_parse_import_package_module_nested() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import package.Foo.Bar".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import package.Foo.Bar".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -7823,14 +7818,20 @@ fn test_parse_import_package_module_nested() {
 fn test_parse_import_package_member() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import package.Foo.Bar.baz".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import package.Foo.Bar.baz".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
-        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "baz".to_string()]);
+        assert_eq!(
+            path,
+            &vec!["Foo".to_string(), "Bar".to_string(), "baz".to_string()]
+        );
         assert_eq!(*kind, ImportKind::Member);
     } else {
         panic!("Expected ImportDecl");
@@ -7859,14 +7860,26 @@ fn test_parse_import_package_wildcard() {
 fn test_parse_import_package_deep_member() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import package.A.B.C.D.foo".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import package.A.B.C.D.foo".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
-        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string(), "foo".to_string()]);
+        assert_eq!(
+            path,
+            &vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string(),
+                "foo".to_string()
+            ]
+        );
         assert_eq!(*kind, ImportKind::Member);
     } else {
         panic!("Expected ImportDecl");
@@ -7877,14 +7890,20 @@ fn test_parse_import_package_deep_member() {
 fn test_parse_import_package_deep_wildcard() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import package.A.B.C.*".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import package.A.B.C.*".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
-        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+        assert_eq!(
+            path,
+            &vec!["A".to_string(), "B".to_string(), "C".to_string()]
+        );
         assert_eq!(*kind, ImportKind::Wildcard);
     } else {
         panic!("Expected ImportDecl");
@@ -7895,7 +7914,10 @@ fn test_parse_import_package_deep_wildcard() {
 fn test_parse_using_package_shorthand() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using package.Foo.MyInt".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using package.Foo.MyInt".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -7913,7 +7935,10 @@ fn test_parse_using_package_shorthand() {
 fn test_parse_using_package_with_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using X = package.Foo.MyInt".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using X = package.Foo.MyInt".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -7931,7 +7956,10 @@ fn test_parse_using_package_with_alias() {
 fn test_parse_using_package_deep_shorthand() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using package.A.B.C.MyType".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using package.A.B.C.MyType".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
@@ -7939,7 +7967,15 @@ fn test_parse_using_package_deep_shorthand() {
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyType");
-        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string(), "MyType".to_string()]);
+        assert_eq!(
+            path,
+            &vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "MyType".to_string()
+            ]
+        );
     } else {
         panic!("Expected UsingDecl");
     }
@@ -7954,7 +7990,10 @@ fn test_parse_import_package_not_followed_by_dot_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().get_errors().len() > 0, "Expected error for 'import package' without '.'");
+    assert!(
+        engine.borrow().get_errors().len() > 0,
+        "Expected error for 'import package' without '.'"
+    );
 }
 
 #[test]
@@ -7966,7 +8005,10 @@ fn test_parse_import_package_dot_only_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().get_errors().len() > 0, "Expected error for 'import package.'");
+    assert!(
+        engine.borrow().get_errors().len() > 0,
+        "Expected error for 'import package.'"
+    );
 }
 
 #[test]
@@ -7991,7 +8033,10 @@ fn test_parse_import_regular_ident_still_works() {
 fn test_parse_import_inside_function_errors() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("func test() { import Foo }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "func test() { import Foo }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -8006,7 +8051,10 @@ fn test_parse_import_inside_function_errors() {
 fn test_parse_import_inside_struct_errors() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("struct Foo { import Bar }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "struct Foo { import Bar }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -8021,13 +8069,17 @@ fn test_parse_import_inside_struct_errors() {
 fn test_parse_import_at_file_level_ok() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import Foo\nimport Bar".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import Foo\nimport Bar".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
     assert_eq!(
-        engine.borrow().get_errors().len(), 0,
+        engine.borrow().get_errors().len(),
+        0,
         "Expected no errors for import at file level"
     );
 }
@@ -10299,10 +10351,7 @@ fn test_parse_asm_block_comma_separated_no_operands() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::AsmBlock {
-        instructions, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::AsmBlock { instructions, .. } = &*program.statements[0].borrow() {
         assert_eq!(instructions.len(), 3);
         assert_eq!(instructions[0].value, "\"nop\"");
         assert_eq!(instructions[1].value, "\"bar\"");
@@ -10328,10 +10377,7 @@ fn test_parse_asm_block_mixed_separators() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::AsmBlock {
-        instructions, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::AsmBlock { instructions, .. } = &*program.statements[0].borrow() {
         assert_eq!(instructions.len(), 3);
     } else {
         panic!();
@@ -10755,12 +10801,21 @@ fn test_parse_generic_function_no_default_type() {
 fn test_parse_import_selective() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import Foo.Bar.{baz, qux}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import Foo.Bar.{baz, qux}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -10778,12 +10833,21 @@ fn test_parse_import_selective() {
 fn test_parse_import_selective_with_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import Foo.Bar.{baz as myBaz, qux}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import Foo.Bar.{baz as myBaz, qux}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -10801,12 +10865,21 @@ fn test_parse_import_selective_with_alias() {
 fn test_parse_import_selective_with_skip() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import Foo.Bar.{baz as _, qux}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import Foo.Bar.{baz as _, qux}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -10824,12 +10897,21 @@ fn test_parse_import_selective_with_skip() {
 fn test_parse_import_single_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import Foo.Bar.baz as myBaz".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import Foo.Bar.baz as myBaz".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -10845,12 +10927,21 @@ fn test_parse_import_single_alias() {
 fn test_parse_import_single_skip() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import Foo.Bar.baz as _".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import Foo.Bar.baz as _".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -10866,12 +10957,21 @@ fn test_parse_import_single_skip() {
 fn test_parse_import_selective_package() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import package.Foo.{bar, baz}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import package.Foo.{bar, baz}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -10889,12 +10989,21 @@ fn test_parse_import_selective_package() {
 fn test_parse_import_selective_package_with_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import package.Foo.{bar as myBar}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import package.Foo.{bar as myBar}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -10910,12 +11019,21 @@ fn test_parse_import_selective_package_with_alias() {
 fn test_parse_import_package_single_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import package.Foo.bar as myBar".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import package.Foo.bar as myBar".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -10931,12 +11049,20 @@ fn test_parse_import_package_single_alias() {
 fn test_parse_using_selective() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using Foo.Bar.{MyInt, MyString}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using Foo.Bar.{MyInt, MyString}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::UsingDecl { path, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::UsingDecl {
+        path,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         let members = selective_members.as_ref().unwrap();
         assert_eq!(members.len(), 2);
@@ -10953,17 +11079,28 @@ fn test_parse_using_selective() {
 fn test_parse_using_selective_with_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using Foo.Bar.{MyInt as YourInt, MyString}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using Foo.Bar.{MyInt as YourInt, MyString}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::UsingDecl { path, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::UsingDecl {
+        path,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         let members = selective_members.as_ref().unwrap();
         assert_eq!(members.len(), 2);
         assert_eq!(members[0].name, "MyInt");
-        assert_eq!(members[0].alias, SelectiveAlias::Named("YourInt".to_string()));
+        assert_eq!(
+            members[0].alias,
+            SelectiveAlias::Named("YourInt".to_string())
+        );
         assert_eq!(members[1].name, "MyString");
         assert_eq!(members[1].alias, SelectiveAlias::Direct);
     } else {
@@ -10975,12 +11112,20 @@ fn test_parse_using_selective_with_alias() {
 fn test_parse_using_selective_with_skip() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using Foo.Bar.{MyInt as _, MyString}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using Foo.Bar.{MyInt as _, MyString}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::UsingDecl { path, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::UsingDecl {
+        path,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         let members = selective_members.as_ref().unwrap();
         assert_eq!(members.len(), 2);
@@ -10997,12 +11142,20 @@ fn test_parse_using_selective_with_skip() {
 fn test_parse_using_selective_package() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using package.Foo.{MyInt, MyString}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using package.Foo.{MyInt, MyString}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::UsingDecl { path, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::UsingDecl {
+        path,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string()]);
         let members = selective_members.as_ref().unwrap();
         assert_eq!(members.len(), 2);
@@ -11019,17 +11172,28 @@ fn test_parse_using_selective_package() {
 fn test_parse_using_selective_package_with_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using package.Foo.{MyInt as YourInt}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using package.Foo.{MyInt as YourInt}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::UsingDecl { path, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::UsingDecl {
+        path,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string()]);
         let members = selective_members.as_ref().unwrap();
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].name, "MyInt");
-        assert_eq!(members[0].alias, SelectiveAlias::Named("YourInt".to_string()));
+        assert_eq!(
+            members[0].alias,
+            SelectiveAlias::Named("YourInt".to_string())
+        );
     } else {
         panic!("Expected UsingDecl");
     }
@@ -11039,12 +11203,21 @@ fn test_parse_using_selective_package_with_alias() {
 fn test_parse_import_selective_trailing_comma() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("import Foo.Bar.{baz, qux,}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "import Foo.Bar.{baz, qux,}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -11063,7 +11236,13 @@ fn test_parse_import_selective_single_member() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         let members = selective_members.as_ref().unwrap();
@@ -11084,19 +11263,28 @@ fn test_parse_import_as_requires_two_path_segments() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().get_errors().len() > 0, "Expected error for 'import Foo as bar' with single segment");
+    assert!(
+        engine.borrow().get_errors().len() > 0,
+        "Expected error for 'import Foo as bar' with single segment"
+    );
 }
 
 #[test]
 fn test_parse_using_selective_conflicts_with_explicit_alias() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using X = Foo.Bar.{MyInt}".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using X = Foo.Bar.{MyInt}".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().get_errors().len() > 0, "Expected error for mixing explicit alias with {{...}}");
+    assert!(
+        engine.borrow().get_errors().len() > 0,
+        "Expected error for mixing explicit alias with {{...}}"
+    );
 }
 
 #[test]
@@ -11108,7 +11296,10 @@ fn test_parse_import_selective_empty_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     parser.parse();
-    assert!(engine.borrow().get_errors().len() > 0, "Expected error for empty selective import");
+    assert!(
+        engine.borrow().get_errors().len() > 0,
+        "Expected error for empty selective import"
+    );
 }
 
 #[test]
@@ -11120,8 +11311,17 @@ fn test_parse_import_regular_member_still_works() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
-        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "baz".to_string()]);
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(
+            path,
+            &vec!["Foo".to_string(), "Bar".to_string(), "baz".to_string()]
+        );
         assert_eq!(*kind, ImportKind::Member);
         assert!(selective_members.is_none());
     } else {
@@ -11138,7 +11338,13 @@ fn test_parse_import_regular_wildcard_still_works() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
         assert_eq!(*kind, ImportKind::Wildcard);
         assert!(selective_members.is_none());
@@ -11156,7 +11362,13 @@ fn test_parse_import_regular_module_still_works() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::ImportDecl { path, kind, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::ImportDecl {
+        path,
+        kind,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(path, &vec!["Foo".to_string()]);
         assert_eq!(*kind, ImportKind::Module);
         assert!(selective_members.is_none());
@@ -11169,14 +11381,26 @@ fn test_parse_import_regular_module_still_works() {
 fn test_parse_using_regular_alias_still_works() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("using MyInt = Foo.Bar.MyInt".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "using MyInt = Foo.Bar.MyInt".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::UsingDecl { name, path, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::UsingDecl {
+        name,
+        path,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(name.value, "MyInt");
-        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]);
+        assert_eq!(
+            path,
+            &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]
+        );
         assert!(selective_members.is_none());
     } else {
         panic!("Expected UsingDecl");
@@ -11192,9 +11416,18 @@ fn test_parse_using_regular_shorthand_still_works() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
     let program = parser.parse();
-    if let Statement::UsingDecl { name, path, selective_members, .. } = &*program.statements[0].borrow() {
+    if let Statement::UsingDecl {
+        name,
+        path,
+        selective_members,
+        ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(name.value, "MyInt");
-        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]);
+        assert_eq!(
+            path,
+            &vec!["Foo".to_string(), "Bar".to_string(), "MyInt".to_string()]
+        );
         assert!(selective_members.is_none());
     } else {
         panic!("Expected UsingDecl");

@@ -7,7 +7,7 @@ use anyhow::{Ok, Result};
 
 use crate::{
     ast::statement::{Parameter, Statement},
-    krate::Module as KrateModule,
+    krate::Module as PackageModule,
     types::Type,
 };
 
@@ -113,7 +113,7 @@ pub enum Symbol {
     Module {
         name: String,
         decl: Rc<RefCell<Statement>>,
-        module: Option<Rc<RefCell<KrateModule>>>,
+        module: Option<Rc<RefCell<PackageModule>>>,
     },
     Macro {
         name: String,

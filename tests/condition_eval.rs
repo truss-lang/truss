@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::statement::Statement,
-    condition_eval::{flatten_program, TargetTriple},
+    condition_eval::{TargetTriple, flatten_program},
     lexer::{CharStream, Lexer},
     parser::Parser,
 };
@@ -18,11 +18,7 @@ fn parse(source: &str) -> Vec<Rc<RefCell<Statement>>> {
         engine,
     );
     let tokens = lexer.parse();
-    let mut parser = Parser::new(
-        Rc::new("test.truss".to_string()),
-        tokens,
-        create_engine(),
-    );
+    let mut parser = Parser::new(Rc::new("test.truss".to_string()), tokens, create_engine());
     parser.parse().statements
 }
 

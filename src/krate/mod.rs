@@ -3,11 +3,11 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::scope::Scope;
 
 #[derive(Debug, PartialEq)]
-pub struct Crate {
+pub struct Package {
     pub name: String,
     pub modules: HashMap<String, Rc<RefCell<Module>>>,
 }
-impl Crate {
+impl Package {
     pub fn new(name: String) -> Self {
         Self {
             name,

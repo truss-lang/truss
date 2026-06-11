@@ -10,12 +10,12 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Attribute,
-            Condition, ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody,
-            GenericParameter, GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType,
-            MacroPatternFragment, MatchCase, Modifier, ModifierType, OperatorFixity, Parameter,
-            Pattern, ProtocolAccessorSet, ProtocolMember, SelectiveAlias, SelectiveMember,
-            Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
+            AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Attribute, Condition,
+            ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody, GenericParameter,
+            GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment,
+            MatchCase, Modifier, ModifierType, OperatorFixity, Parameter, Pattern,
+            ProtocolAccessorSet, ProtocolMember, SelectiveAlias, SelectiveMember, Statement,
+            VariadicKind, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -3410,7 +3410,17 @@ impl Parser {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedIdentifier,
                     "Expected member name or '}' in selective import list",
-                    &Token::new(String::new(), TokenType::Identifier, Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new(String::new())),
+                    &Token::new(
+                        String::new(),
+                        TokenType::Identifier,
+                        Position {
+                            pos: 0,
+                            line: 0,
+                            col: 0,
+                            len: 0,
+                        },
+                        Rc::new(String::new()),
+                    ),
                 );
                 return Err(());
             };
@@ -3470,7 +3480,9 @@ impl Parser {
                 Some(ref comma) if SeparatorType::is_separator(comma, SeparatorType::Comma) => {
                     self.index += 1;
                 }
-                Some(ref brace) if SeparatorType::is_separator(brace, SeparatorType::CloseBrace) => {
+                Some(ref brace)
+                    if SeparatorType::is_separator(brace, SeparatorType::CloseBrace) =>
+                {
                     self.index += 1;
                     break;
                 }
@@ -3486,7 +3498,17 @@ impl Parser {
                     self.emit_error(
                         TrussDiagnosticCode::ParserError,
                         "Expected ',' or '}' but reached end of input",
-                        &Token::new(String::new(), TokenType::Identifier, Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new(String::new())),
+                        &Token::new(
+                            String::new(),
+                            TokenType::Identifier,
+                            Position {
+                                pos: 0,
+                                line: 0,
+                                col: 0,
+                                len: 0,
+                            },
+                            Rc::new(String::new()),
+                        ),
                     );
                     return Err(());
                 }
@@ -3514,6 +3536,7 @@ impl Parser {
             return Err(());
         };
         let mut path: Vec<String> = Vec::new();
+        let mut is_current_package = false;
         if KeywordType::is_keyword(&first, KeywordType::Package) {
             match self.peek() {
                 Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
@@ -3529,11 +3552,15 @@ impl Parser {
                     if !matches!(name.ty, TokenType::Identifier) {
                         self.emit_error(
                             TrussDiagnosticCode::ExpectedIdentifier,
-                            format!("Expected identifier after 'package.' but found '{}'", name.value),
+                            format!(
+                                "Expected identifier after 'package.' but found '{}'",
+                                name.value
+                            ),
                             &name,
                         );
                         return Err(());
                     }
+                    is_current_package = true;
                     path.push(name.value);
                 }
                 _ => {
@@ -3691,6 +3718,7 @@ impl Parser {
             path,
             kind,
             selective_members,
+            is_current_package,
         })
     }
 
@@ -3707,7 +3735,9 @@ impl Parser {
             return Err(());
         };
         let is_package_prefix = KeywordType::is_keyword(&next, KeywordType::Package)
-            && self.peek2().is_some_and(|t| OperatorType::is_operator(&t, OperatorType::Dot));
+            && self
+                .peek2()
+                .is_some_and(|t| OperatorType::is_operator(&t, OperatorType::Dot));
         if !matches!(next.ty, TokenType::Identifier) && !is_package_prefix {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedIdentifier,
@@ -3740,6 +3770,7 @@ impl Parser {
             return Err(());
         };
         let mut path: Vec<String> = Vec::new();
+        let mut is_current_package = false;
         if KeywordType::is_keyword(&start, KeywordType::Package) {
             match self.peek() {
                 Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
@@ -3755,11 +3786,15 @@ impl Parser {
                     if !matches!(name.ty, TokenType::Identifier) {
                         self.emit_error(
                             TrussDiagnosticCode::ExpectedIdentifier,
-                            format!("Expected identifier after 'package.' but found '{}'", name.value),
+                            format!(
+                                "Expected identifier after 'package.' but found '{}'",
+                                name.value
+                            ),
                             &name,
                         );
                         return Err(());
                     }
+                    is_current_package = true;
                     path.push(name.value);
                 }
                 _ => {
@@ -3876,6 +3911,7 @@ impl Parser {
             name,
             path,
             selective_members,
+            is_current_package,
         })
     }
 
@@ -4110,7 +4146,11 @@ impl Parser {
                 let Some(peek_token) = self.peek() else { break };
                 match peek_token.ty {
                     TokenType::Keyword { keyword } if keyword == KeywordType::Func => {
-                        let func_decl = self.parse_function_decl(false, member_attributes.clone(), member_modifiers)?;
+                        let func_decl = self.parse_function_decl(
+                            false,
+                            member_attributes.clone(),
+                            member_modifiers,
+                        )?;
                         if let Statement::FunctionDecl { .. } = &func_decl {
                             members.push(ProtocolMember::Method {
                                 attributes: member_attributes,
@@ -5067,7 +5107,9 @@ impl Parser {
                 );
                 return Err(());
             }
-            attributes.push(Attribute { name: name_tok.value });
+            attributes.push(Attribute {
+                name: name_tok.value,
+            });
         }
         Ok(attributes)
     }

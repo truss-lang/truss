@@ -18,7 +18,7 @@ use crate::{
         TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token,
         secondary_label_from_token,
     },
-    krate::{Crate, Module},
+    krate::{Module, Package},
     lexer::token::{Token, TokenType},
     scope::Scope,
     symbol::{Symbol, WeakSymbol},
@@ -29,7 +29,7 @@ type MethodInfo = Option<(String, Rc<RefCell<Type>>, Vec<Rc<RefCell<Type>>>)>;
 
 #[derive(Debug)]
 pub struct TypeResolver {
-    pub krate: Rc<RefCell<Crate>>,
+    pub pkg: Rc<RefCell<Package>>,
     current_module: Option<Rc<RefCell<Module>>>,
     current_return_type: Option<Rc<RefCell<Type>>>,
     current_scope: Option<Rc<RefCell<Scope>>>,
@@ -44,9 +44,9 @@ pub struct TypeResolver {
 }
 
 impl TypeResolver {
-    pub fn new(krate: Rc<RefCell<Crate>>, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
+    pub fn new(pkg: Rc<RefCell<Package>>, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
         Self {
-            krate,
+            pkg,
             current_module: None,
             current_return_type: None,
             current_scope: None,
@@ -968,7 +968,7 @@ impl TypeResolver {
             } => {
                 if let Some(members) = selective_members {
                     let module_path = path.join(".");
-                    let module = self.krate.borrow().modules.get(&module_path).cloned();
+                    let module = self.pkg.borrow().modules.get(&module_path).cloned();
                     if let Some(module) = module {
                         for member in members {
                             let alias_name = match &member.alias {
@@ -994,7 +994,7 @@ impl TypeResolver {
                     } else {
                         let module_path = path[..path.len() - 1].join(".");
                         let type_name = path.last().unwrap();
-                        self.krate
+                        self.pkg
                             .borrow()
                             .modules
                             .get(&module_path)
@@ -1520,7 +1520,7 @@ impl TypeResolver {
             } => {
                 if let Some(members) = selective_members {
                     let module_path = path.join(".");
-                    let module = self.krate.borrow().modules.get(&module_path).cloned();
+                    let module = self.pkg.borrow().modules.get(&module_path).cloned();
                     if let Some(module) = module {
                         for member in members {
                             let alias_name = match &member.alias {
@@ -1546,7 +1546,7 @@ impl TypeResolver {
                     } else {
                         let module_path = path[..path.len() - 1].join(".");
                         let type_name = path.last().unwrap();
-                        self.krate
+                        self.pkg
                             .borrow()
                             .modules
                             .get(&module_path)
@@ -2140,14 +2140,8 @@ impl TypeResolver {
                                 }
                             })
                         {
-                            if let Statement::FunctionDecl {
-                                attributes, ..
-                            } = &*decl.borrow()
-                            {
-                                if attributes
-                                    .iter()
-                                    .any(|a| a.name == "internalUsed")
-                                {
+                            if let Statement::FunctionDecl { attributes, .. } = &*decl.borrow() {
+                                if attributes.iter().any(|a| a.name == "internalUsed") {
                                     self.emit_error(
                                         TrussDiagnosticCode::InternalUsedReferenced,
                                         "Referencing an internal-used declaration which is intended for internal use only",
@@ -3637,15 +3631,23 @@ impl TypeResolver {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(struct_name) {
                             if let Ok(Some(decl)) = symbol.borrow().get_decl() {
-                                if let Statement::StructDecl { scope: struct_scope, .. } = &*decl.borrow() {
+                                if let Statement::StructDecl {
+                                    scope: struct_scope,
+                                    ..
+                                } = &*decl.borrow()
+                                {
                                     if let Some(s) = struct_scope {
                                         if self.is_member_accessible(symbol.clone(), member) {
-                                            if let Some(found) = s.borrow().get_type(&member.value) {
+                                            if let Some(found) = s.borrow().get_type(&member.value)
+                                            {
                                                 found
                                             } else {
                                                 self.emit_error(
                                                     TrussDiagnosticCode::UnknownType,
-                                                    format!("Type '{}' not found in struct '{}'", member.value, struct_name),
+                                                    format!(
+                                                        "Type '{}' not found in struct '{}'",
+                                                        member.value, struct_name
+                                                    ),
                                                     member,
                                                 );
                                                 return None;
@@ -3653,7 +3655,10 @@ impl TypeResolver {
                                         } else {
                                             self.emit_error(
                                                 TrussDiagnosticCode::InaccessibleMember,
-                                                format!("'{}' is inaccessible due to access level", member.value),
+                                                format!(
+                                                    "'{}' is inaccessible due to access level",
+                                                    member.value
+                                                ),
                                                 member,
                                             );
                                             return None;
@@ -3685,15 +3690,22 @@ impl TypeResolver {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(class_name) {
                             if let Ok(Some(decl)) = symbol.borrow().get_decl() {
-                                if let Statement::ClassDecl { scope: class_scope, .. } = &*decl.borrow() {
+                                if let Statement::ClassDecl {
+                                    scope: class_scope, ..
+                                } = &*decl.borrow()
+                                {
                                     if let Some(s) = class_scope {
                                         if self.is_member_accessible(symbol.clone(), member) {
-                                            if let Some(found) = s.borrow().get_type(&member.value) {
+                                            if let Some(found) = s.borrow().get_type(&member.value)
+                                            {
                                                 found
                                             } else {
                                                 self.emit_error(
                                                     TrussDiagnosticCode::UnknownType,
-                                                    format!("Type '{}' not found in class '{}'", member.value, class_name),
+                                                    format!(
+                                                        "Type '{}' not found in class '{}'",
+                                                        member.value, class_name
+                                                    ),
                                                     member,
                                                 );
                                                 return None;
@@ -3701,7 +3713,10 @@ impl TypeResolver {
                                         } else {
                                             self.emit_error(
                                                 TrussDiagnosticCode::InaccessibleMember,
-                                                format!("'{}' is inaccessible due to access level", member.value),
+                                                format!(
+                                                    "'{}' is inaccessible due to access level",
+                                                    member.value
+                                                ),
                                                 member,
                                             );
                                             return None;

@@ -357,9 +357,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn declare_struct_types(&self, statement: Rc<RefCell<Statement>>) {
         if let Statement::StructDecl {
-            name,
-            attributes,
-            ..
+            name, attributes, ..
         } = &*statement.borrow()
         {
             if attributes.iter().any(|a| a.name == "builtintype") {

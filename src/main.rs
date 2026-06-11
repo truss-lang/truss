@@ -2,10 +2,10 @@ use std::{cell::RefCell, fs, rc::Rc};
 
 use clap::Parser;
 use truss::{
-    condition_eval::{flatten_program, TargetTriple},
+    condition_eval::{TargetTriple, flatten_program},
     diag::TrussDiagnosticEngine,
     ir_gen::IRGenerator,
-    krate::Crate,
+    krate::Package,
     lexer::{CharStream, Lexer},
     macro_expander::MacroExpander,
     parser::Parser as TrussParser,
@@ -106,8 +106,8 @@ fn main() {
         println!("{:#?}", program);
     }
 
-    let krate = Rc::new(RefCell::new(Crate::new("main".to_string())));
-    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(pkg.clone(), engine.clone());
     let module = symbol_resolver.resolve(&program, file_rc.to_string());
 
     if emit_diagnostics(&engine.borrow(), &content) {
@@ -119,7 +119,7 @@ fn main() {
         println!("{:#?}", program);
     }
 
-    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    let mut type_resolver = TypeResolver::new(pkg.clone(), engine.clone());
     type_resolver.resolve(&program, module.clone());
 
     if emit_diagnostics(&engine.borrow(), &content) {

@@ -6,7 +6,7 @@ use truss::{
         statement::{FunctionBody, ProtocolMember, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
-    krate::Crate,
+    krate::Package,
     lexer::{CharStream, Lexer},
     parser::Parser,
     symbol_resolver::SymbolResolver,
@@ -30,7 +30,7 @@ fn test_infer_variable_decl() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -71,7 +71,7 @@ fn test_check_variable_decl_with_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -103,7 +103,7 @@ fn test_return_type_check() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -135,7 +135,7 @@ fn test_binary_expression_infer() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -167,7 +167,7 @@ fn test_expression_body_function() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -195,7 +195,7 @@ fn test_variable_decl_with_bool_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -236,7 +236,7 @@ fn test_type_annotation_mismatch() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -262,7 +262,7 @@ fn test_never_type_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -290,7 +290,7 @@ fn test_annotated_param_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -327,7 +327,7 @@ fn run_type_check_with_return(code: &str) -> Type {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -374,7 +374,7 @@ fn run_type_check_var(code: &str, var_name: &str) -> Type {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -548,7 +548,7 @@ fn test_parameter_type_context() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -620,7 +620,7 @@ fn test_type_mismatch_int_float() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -645,7 +645,7 @@ fn test_type_mismatch_different_int_sizes() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -670,7 +670,7 @@ fn test_function_call_parameter_type_inference_int8() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -701,7 +701,7 @@ fn test_function_call_parameter_type_inference_int64() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -732,7 +732,7 @@ fn test_function_call_parameter_type_inference_float32() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -763,7 +763,7 @@ fn test_function_call_multiple_parameters_type_inference() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -794,7 +794,7 @@ fn test_function_call_missing_label() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -818,7 +818,7 @@ fn test_function_call_with_correct_label() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -839,7 +839,7 @@ fn test_function_call_with_wrong_label() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -862,7 +862,7 @@ fn test_function_call_underscore_label() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -883,7 +883,7 @@ fn test_function_call_no_label() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -907,7 +907,7 @@ fn test_function_call_no_label_with_correct_usage() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -929,7 +929,7 @@ fn test_function_call_parameter_order_must_match() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -954,7 +954,7 @@ fn test_function_call_correct_parameter_order() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -975,7 +975,7 @@ fn test_function_call_underscore_label_with_explicit_underscore() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -996,7 +996,7 @@ fn test_pointer_type_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1025,7 +1025,7 @@ fn test_deref_expression() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1056,7 +1056,7 @@ fn test_nested_deref_expression() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1087,7 +1087,7 @@ fn test_nullptr_literal() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1131,7 +1131,7 @@ fn test_nullptr_type_inference_with_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1175,7 +1175,7 @@ fn test_nullptr_return_type_inference() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1196,7 +1196,7 @@ fn test_nullptr_default_void_pointer() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1236,7 +1236,7 @@ fn test_cast_int_to_float() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1276,7 +1276,7 @@ fn test_cast_bool_to_int() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1307,7 +1307,7 @@ fn test_cast_invalid_bool_to_float() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1329,7 +1329,7 @@ fn test_cast_int32_to_int64() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1360,7 +1360,7 @@ fn test_cast_force_no_type_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1391,7 +1391,7 @@ fn test_cast_conditional_no_type_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1422,7 +1422,7 @@ fn test_cast_force_bitcast_same_size() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1447,7 +1447,7 @@ func caller(_ c: Char) { putchar(c) }"#
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1468,7 +1468,7 @@ fn test_cast_force_bitcast_mismatched_size_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1490,7 +1490,7 @@ fn test_struct_decl_type_resolve() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1521,7 +1521,7 @@ fn test_struct_type_reference() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1553,7 +1553,7 @@ fn test_member_access_type_inference() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1594,7 +1594,7 @@ fn test_struct_method_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1620,7 +1620,7 @@ func f(_ a: UInt64, _ b: UInt64) -> UInt64 { a / b }"#
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1646,7 +1646,7 @@ fn test_struct_init_deinit_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1702,7 +1702,7 @@ fn test_type_instantiation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1726,7 +1726,7 @@ fn test_type_instantiation_arg_mismatch() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1757,7 +1757,7 @@ fn test_type_instantiation_with_func_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1785,7 +1785,7 @@ fn test_if_case_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1813,7 +1813,7 @@ fn test_if_case_binding_type_inference() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1840,7 +1840,7 @@ fn test_if_case_no_bindings_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1866,7 +1866,7 @@ fn test_if_case_enum_type_not_found() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1897,7 +1897,7 @@ fn test_if_case_case_not_found() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1931,7 +1931,7 @@ fn test_if_case_else_branch() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1952,7 +1952,7 @@ fn test_class_superclass_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -1998,7 +1998,7 @@ fn test_self_keyword_type_in_struct_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2040,7 +2040,7 @@ fn test_self_keyword_type_in_class_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2082,7 +2082,7 @@ fn test_protocol_type_registered() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2110,7 +2110,7 @@ fn test_super_keyword_type_in_subclass_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2156,7 +2156,7 @@ fn test_super_keyword_without_superclass_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2189,7 +2189,7 @@ fn test_private_set_blocks_external_write() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2225,7 +2225,7 @@ fn test_inline_private_set_blocks_external_write() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2264,7 +2264,7 @@ fn test_inline_private_set_allows_internal_write() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2301,7 +2301,7 @@ fn test_subscript_inline_private_set_blocks_external_write() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2332,7 +2332,7 @@ fn test_conflicting_setter_access_on_property() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2363,7 +2363,7 @@ fn test_conflicting_setter_access_on_subscript() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2398,7 +2398,7 @@ fn test_nonconflicting_setter_access_on_property() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -2424,7 +2424,7 @@ fn test_protocol_type_with_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2469,7 +2469,7 @@ fn test_protocol_type_with_property() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2492,7 +2492,7 @@ fn test_protocol_type_with_method_params() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2530,7 +2530,7 @@ fn test_protocol_type_with_default_impl() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2555,7 +2555,7 @@ fn test_protocol_conformance_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2580,7 +2580,7 @@ fn test_struct_protocol_conformance_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2609,7 +2609,7 @@ fn test_struct_multiple_protocol_conformance_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2634,7 +2634,7 @@ fn test_protocol_refinement_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2657,7 +2657,7 @@ fn test_protocol_any_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2697,7 +2697,7 @@ fn test_protocol_some_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2737,7 +2737,7 @@ fn test_some_type_non_protocol_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2764,7 +2764,7 @@ fn test_protocol_compound_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2804,7 +2804,7 @@ fn test_protocol_member_access_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2847,7 +2847,7 @@ fn test_any_compound_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2889,7 +2889,7 @@ fn test_protocol_conformance_missing_method_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2925,7 +2925,7 @@ fn test_protocol_conformance_with_default_impl_no_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2955,7 +2955,7 @@ fn test_protocol_conformance_struct_missing_method_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -2992,7 +2992,7 @@ fn test_protocol_conformance_missing_multiple_methods_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3028,7 +3028,7 @@ fn test_extension_method_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3062,7 +3062,7 @@ fn test_struct_copyable_conformance_no_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3081,7 +3081,7 @@ fn test_unsupported_autowired_protocol_method_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3102,15 +3102,21 @@ fn test_internal_used_function_call_warning() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
     type_resolver.resolve(&program, module);
     let engine_ref = engine.borrow();
     let warnings = engine_ref.get_warnings();
-    assert!(warnings.len() > 0, "Should emit warning for internalUsed function call");
-    assert_eq!(warnings[0].code, TrussDiagnosticCode::InternalUsedReferenced);
+    assert!(
+        warnings.len() > 0,
+        "Should emit warning for internalUsed function call"
+    );
+    assert_eq!(
+        warnings[0].code,
+        TrussDiagnosticCode::InternalUsedReferenced
+    );
 }
 
 #[test]
@@ -3126,7 +3132,7 @@ fn test_extension_self_in_return_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3155,7 +3161,7 @@ fn test_extension_struct_method_call_type_check() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3178,7 +3184,7 @@ fn test_extension_static_method_struct_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3221,7 +3227,7 @@ fn test_extension_static_method_class_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3249,7 +3255,7 @@ fn test_extension_static_method_enum_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3277,7 +3283,7 @@ fn test_extension_static_method_protocol_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3305,7 +3311,7 @@ fn test_generic_function_type_param_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3332,7 +3338,7 @@ fn test_generic_struct_type_param_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3359,7 +3365,7 @@ fn test_generic_class_type_param_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3386,7 +3392,7 @@ fn test_generic_enum_type_param_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3413,7 +3419,7 @@ fn test_typealias_in_struct_type_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3440,7 +3446,7 @@ fn test_protocol_with_associatedtype_type_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3465,7 +3471,7 @@ fn test_if_case_dot_shorthand_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -3497,7 +3503,7 @@ fn test_guard_case_type_check() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -3535,7 +3541,7 @@ fn test_match_type_check() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -3562,7 +3568,7 @@ fn test_typealias_in_protocol_type_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3589,7 +3595,7 @@ fn test_typealias_at_top_level_type_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3616,7 +3622,7 @@ fn test_generic_function_call_with_type_inference() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3643,7 +3649,7 @@ fn test_associated_type_access_on_protocol_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3670,7 +3676,7 @@ fn test_associated_type_access_typealias_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3736,7 +3742,7 @@ fn test_associated_type_access_missing_member_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3761,7 +3767,7 @@ fn test_defer_body_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3783,7 +3789,7 @@ fn test_defer_body_type_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3805,7 +3811,7 @@ fn test_implicit_return_last_expression() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3832,7 +3838,7 @@ fn test_implicit_return_type_mismatch() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3861,7 +3867,7 @@ fn test_implicit_return_if_expression() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3888,7 +3894,7 @@ fn test_implicit_return_void_function_no_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3915,7 +3921,7 @@ fn test_implicit_return_int_literal_context() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate, engine.clone());
@@ -3960,7 +3966,7 @@ fn test_match_multi_pattern_type_check() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -3996,7 +4002,7 @@ fn test_match_multi_pattern_with_guard_type_check() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4024,7 +4030,7 @@ fn test_module_func_body_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let module_id = krate.borrow().modules.get("foo").cloned().unwrap();
@@ -4052,7 +4058,7 @@ fn test_module_return_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let module_id = krate.borrow().modules.get("foo").cloned().unwrap();
@@ -4080,7 +4086,7 @@ fn test_module_variable_decl_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let module_id = krate.borrow().modules.get("foo").cloned().unwrap();
@@ -4108,7 +4114,7 @@ fn test_nested_module_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let module_id = krate.borrow().modules.get("foo.bar").cloned().unwrap();
@@ -4133,7 +4139,7 @@ fn test_empty_module_no_type_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let module_id = krate.borrow().modules.get("foo").cloned().unwrap();
@@ -4160,7 +4166,7 @@ fn test_module_with_full_pipeline_no_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let root_module = resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4187,7 +4193,7 @@ fn test_overloaded_function_call_selects_correct_overload() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4232,7 +4238,7 @@ fn test_overloaded_function_call_no_match_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4257,7 +4263,7 @@ fn test_overloaded_struct_method_call_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4293,7 +4299,7 @@ fn test_overloaded_struct_method_call_no_match_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4314,7 +4320,7 @@ fn run_type_check(code: &str) -> usize {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4519,7 +4525,7 @@ fn run_type_check_var_in_func(code: &str, func_name: &str, var_name: &str) -> Ty
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -4693,7 +4699,7 @@ fn test_closure_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -4733,7 +4739,7 @@ fn test_closure_no_params_no_return_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -4770,7 +4776,7 @@ fn test_closure_body_variable_type_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -4819,7 +4825,7 @@ fn test_function_type_expression_resolved() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -4859,7 +4865,7 @@ fn test_closure_untyped_params_inferred() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -4896,7 +4902,7 @@ fn test_closure_shorthand_type_default() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4922,7 +4928,7 @@ fn test_closure_shorthand_type_binary() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4948,7 +4954,7 @@ fn test_closure_shorthand_with_context() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -4985,7 +4991,7 @@ fn test_closure_shorthand_binary_with_context() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5023,7 +5029,7 @@ fn test_assign_to_let_variable_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5052,7 +5058,7 @@ fn test_assign_to_var_variable_ok() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5079,7 +5085,7 @@ fn test_assign_to_uninited_let_variable_ok() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5106,7 +5112,7 @@ fn test_double_assign_to_let_variable_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5135,7 +5141,7 @@ fn test_inc_on_let_variable_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5166,7 +5172,7 @@ fn test_inc_on_var_variable_ok() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5193,7 +5199,7 @@ fn test_assign_to_let_property_outside_init_errors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5224,7 +5230,7 @@ fn test_assign_to_var_property_ok() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5303,7 +5309,7 @@ fn test_address_of_variable_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5329,7 +5335,7 @@ fn test_address_of_deref_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5359,7 +5365,7 @@ fn test_struct_subscript_return_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5406,7 +5412,7 @@ fn test_struct_subscript_implicit_get() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5435,7 +5441,7 @@ fn test_class_subscript_return_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5481,7 +5487,7 @@ fn test_binary_operator_method_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5509,7 +5515,7 @@ fn test_binary_operator_method_member_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5538,7 +5544,7 @@ fn test_binary_operator_method_call_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5567,7 +5573,7 @@ fn test_prefix_operator_method_call_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5596,7 +5602,7 @@ fn test_member_binary_operator_method_call_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5625,7 +5631,7 @@ fn type_check(
     let tokens = lexer.parse();
     let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5800,7 +5806,7 @@ fn run_type_check_do(code: &str) -> Type {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine);
@@ -5889,7 +5895,7 @@ fn test_non_null_pointer_type_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -5976,7 +5982,7 @@ fn test_yield_outside_function_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let krate = Rc::new(RefCell::new(Package::new("test".to_string())));
     let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
     let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
@@ -6156,7 +6162,10 @@ fn test_using_selective_with_alias() {
          using Foo.{MyInt as YourInt}
          func test() -> YourInt { return 42 }",
     );
-    assert_eq!(errors, 0, "selective using with alias should create renamed type alias");
+    assert_eq!(
+        errors, 0,
+        "selective using with alias should create renamed type alias"
+    );
 }
 
 #[test]
@@ -6192,10 +6201,7 @@ fn test_using_selective_multiple() {
          using Foo.{A, B}
          func test(x: A) -> A { return x }",
     );
-    assert_eq!(
-        errors, 0,
-        "selective using of multiple types should work"
-    );
+    assert_eq!(errors, 0, "selective using of multiple types should work");
 }
 
 #[test]
@@ -6215,10 +6221,7 @@ fn test_using_selective_package_with_alias() {
          using package.Foo.{MyInt as YourInt}
          func test() -> YourInt { return 42 }",
     );
-    assert_eq!(
-        errors, 0,
-        "selective package using with alias should work"
-    );
+    assert_eq!(errors, 0, "selective package using with alias should work");
 }
 
 #[test]
@@ -6228,7 +6231,10 @@ fn test_using_selective_deep_path() {
          using Foo.Bar.{MyInt}
          func test() -> MyInt { return 42 }",
     );
-    assert_eq!(errors, 0, "selective using with deep module path should work");
+    assert_eq!(
+        errors, 0,
+        "selective using with deep module path should work"
+    );
 }
 
 #[test]

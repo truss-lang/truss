@@ -73,10 +73,7 @@ pub fn flatten_program(program: &mut Vec<Rc<RefCell<Statement>>>, triple: &Targe
     flatten_conditional_blocks(program, triple);
 }
 
-fn flatten_conditional_blocks(
-    statements: &mut Vec<Rc<RefCell<Statement>>>,
-    triple: &TargetTriple,
-) {
+fn flatten_conditional_blocks(statements: &mut Vec<Rc<RefCell<Statement>>>, triple: &TargetTriple) {
     let mut i = 0;
     while i < statements.len() {
         flatten_in_statement(&statements[i], triple);

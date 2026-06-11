@@ -147,7 +147,9 @@ impl DiagnosticCode for TrussDiagnosticCode {
 
     fn severity(&self) -> Severity {
         match self {
-            Self::ShadowedVariable | Self::UnusedVariable | Self::InternalUsedReferenced => Severity::Warning,
+            Self::ShadowedVariable | Self::UnusedVariable | Self::InternalUsedReferenced => {
+                Severity::Warning
+            }
             _ => Severity::Error,
         }
     }
