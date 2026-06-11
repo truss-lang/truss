@@ -1304,10 +1304,8 @@ impl SymbolResolver {
                         );
                         let self_type_expr = Expression::Type {
                             name: Box::new(Token::new(
-                                "Self".to_string(),
-                                TokenType::Keyword {
-                                    keyword: KeywordType::SelfType,
-                                },
+                                name.value.clone(),
+                                TokenType::Identifier,
                                 pos.clone(),
                                 file.clone(),
                             )),

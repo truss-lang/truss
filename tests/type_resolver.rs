@@ -3052,6 +3052,46 @@ fn test_extension_method_type_resolved() {
 }
 
 #[test]
+fn test_struct_copyable_conformance_no_error() {
+    let code = "protocol Copyable { #[autowired] func copy() -> Self }
+                 struct MyStruct: Copyable {}";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+}
+
+#[test]
+fn test_unsupported_autowired_protocol_method_error() {
+    let code = "protocol Foo { #[autowired] func bar() -> Int32 }
+                 struct MyStruct: Foo {}";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(errors.len() > 0, "Unsupported autowired should error");
+}
+
+#[test]
 fn test_extension_self_in_return_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
