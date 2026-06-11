@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod condition_eval;
 pub mod diag;
 pub mod ir_gen;
 pub mod krate;

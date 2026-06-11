@@ -2,6 +2,7 @@ use std::{cell::RefCell, fs, rc::Rc};
 
 use clap::Parser;
 use truss::{
+    condition_eval::{flatten_program, TargetTriple},
     diag::TrussDiagnosticEngine,
     ir_gen::IRGenerator,
     krate::Crate,
@@ -27,6 +28,8 @@ struct Cli {
     inspect: bool,
     #[arg(long, default_value_t = false)]
     ir: bool,
+    #[arg(long)]
+    target: Option<String>,
 }
 
 fn emit_diagnostics(engine: &TrussDiagnosticEngine, content: &str) -> bool {
@@ -89,6 +92,17 @@ fn main() {
 
     if cli.inspect || cli.ast {
         println!("=== AST (after macro expansion) ===");
+        println!("{:#?}", program);
+    }
+
+    let target_triple = match &cli.target {
+        Some(t) => TargetTriple::parse(t),
+        None => TargetTriple::host(),
+    };
+    flatten_program(&mut program.statements, &target_triple);
+
+    if cli.inspect || cli.ast {
+        println!("=== AST (after condition evaluation) ===");
         println!("{:#?}", program);
     }
 
