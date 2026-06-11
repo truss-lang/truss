@@ -4363,6 +4363,115 @@ fn test_import_deep_nested_call() {
     );
 }
 
+#[test]
+fn test_import_package_module_call() {
+    let errors = run_type_check(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import package.Foo
+         func test() -> Int32 { return Foo.bar() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package module import call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_import_package_wildcard_call() {
+    let errors = run_type_check(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import package.Foo.*
+         func test() -> Int32 { return bar() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package wildcard import call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_import_package_member_call() {
+    let errors = run_type_check(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import package.Foo.Bar.baz
+         func test() -> Int32 { return baz() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package member import call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_import_package_nested_module_call() {
+    let errors = run_type_check(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import package.Foo
+         func test() -> Int32 { return Foo.Bar.baz() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package nested module call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_import_package_deep_nested_call() {
+    let errors = run_type_check(
+        "module A { module B { module C { func foo() -> Int32 { return 1 } } } }
+         import package.A
+         func test() -> Int32 { return A.B.C.foo() }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package deep nested call, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_using_package_type_alias() {
+    let errors = run_type_check(
+        "module Foo { struct MyInt { var value: Int32 } }
+         func test() -> Int32 { using X = package.Foo.MyInt; return 42 }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for using package type alias, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_using_package_shorthand() {
+    let errors = run_type_check(
+        "module Foo { struct MyInt { var value: Int32 } }
+         func test() -> Int32 { using package.Foo.MyInt; return 42 }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for using package shorthand, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_using_package_deep_shorthand() {
+    let errors = run_type_check(
+        "module A { module B { struct MyType { var value: Int32 } } }
+         func test() -> Int32 { using package.A.B.MyType; return 42 }",
+    );
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for using package deep shorthand, got: {:?}",
+        errors
+    );
+}
+
 fn run_type_check_var_in_func(code: &str, func_name: &str, var_name: &str) -> Type {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
