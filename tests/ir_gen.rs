@@ -3822,6 +3822,45 @@ fn test_irgen_import_nested_module_call() {
 }
 
 #[test]
+fn test_irgen_import_package_module_call() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import package.Foo
+         func test() -> Int32 { return Foo.bar() }",
+    );
+    assert!(
+        llvm_ir.contains("bar"),
+        "Expected 'bar' function in IR, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_import_package_member_call() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import package.Foo.Bar.baz
+         func test() -> Int32 { return baz() }",
+    );
+    assert!(
+        llvm_ir.contains("baz"),
+        "Expected 'baz' function in IR, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_struct_typealias_access() {
+    let (_llvm_ir, engine) = run_ir_gen(
+        "struct Wrapper { typealias MyInt = Int32 }
+         func test(x: Wrapper.MyInt) -> Wrapper.MyInt { return x }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
 fn test_irgen_overloaded_function_call() {
     let code = "func foo(x: Int32) -> Int32 { return x } func foo(y: Float64) -> Float64 { return y } func caller() -> Float64 { return foo(y: 3.0) }";
     let engine = create_engine();
