@@ -3388,15 +3388,48 @@ impl Parser {
             );
             return Err(());
         };
-        if !matches!(first.ty, TokenType::Identifier) {
+        let mut path: Vec<String> = Vec::new();
+        if KeywordType::is_keyword(&first, KeywordType::Package) {
+            match self.peek() {
+                Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
+                    self.index += 1;
+                    let Some(name) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            "Expected module or member name after 'package.'",
+                            &first,
+                        );
+                        return Err(());
+                    };
+                    if !matches!(name.ty, TokenType::Identifier) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!("Expected identifier after 'package.' but found '{}'", name.value),
+                            &name,
+                        );
+                        return Err(());
+                    }
+                    path.push(name.value);
+                }
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!("Expected identifier but found '{}'", first.value),
+                        &first,
+                    );
+                    return Err(());
+                }
+            }
+        } else if !matches!(first.ty, TokenType::Identifier) {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedIdentifier,
                 format!("Expected identifier but found '{}'", first.value),
                 &first,
             );
             return Err(());
+        } else {
+            path.push(first.value.clone());
         }
-        let mut path = vec![first.value.clone()];
         let mut wildcard = false;
         loop {
             match self.peek() {
@@ -3459,7 +3492,9 @@ impl Parser {
             );
             return Err(());
         };
-        if !matches!(next.ty, TokenType::Identifier) {
+        let is_package_prefix = KeywordType::is_keyword(&next, KeywordType::Package)
+            && self.peek2().is_some_and(|t| OperatorType::is_operator(&t, OperatorType::Dot));
+        if !matches!(next.ty, TokenType::Identifier) && !is_package_prefix {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedIdentifier,
                 format!("Expected identifier but found '{}'", next.value),
@@ -3467,11 +3502,15 @@ impl Parser {
             );
             return Err(());
         }
-        let name = if let Some(eq) = self.peek2() {
-            if OperatorType::is_operator(&eq, OperatorType::Assign) {
-                let name = self.next().unwrap();
-                self.index += 1;
-                Some(name)
+        let name = if !is_package_prefix {
+            if let Some(eq) = self.peek2() {
+                if OperatorType::is_operator(&eq, OperatorType::Assign) {
+                    let name = self.next().unwrap();
+                    self.index += 1;
+                    Some(name)
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -3486,15 +3525,48 @@ impl Parser {
             );
             return Err(());
         };
-        if !matches!(start.ty, TokenType::Identifier) {
+        let mut path: Vec<String> = Vec::new();
+        if KeywordType::is_keyword(&start, KeywordType::Package) {
+            match self.peek() {
+                Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
+                    self.index += 1;
+                    let Some(name) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            "Expected module or member name after 'package.'",
+                            &token,
+                        );
+                        return Err(());
+                    };
+                    if !matches!(name.ty, TokenType::Identifier) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!("Expected identifier after 'package.' but found '{}'", name.value),
+                            &name,
+                        );
+                        return Err(());
+                    }
+                    path.push(name.value);
+                }
+                _ => {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!("Expected identifier but found '{}'", start.value),
+                        &start,
+                    );
+                    return Err(());
+                }
+            }
+        } else if !matches!(start.ty, TokenType::Identifier) {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedIdentifier,
                 format!("Expected identifier but found '{}'", start.value),
                 &start,
             );
             return Err(());
+        } else {
+            path.push(start.value.clone());
         }
-        let mut path = vec![start.value.clone()];
         loop {
             match self.peek() {
                 Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {

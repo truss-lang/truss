@@ -7784,6 +7784,210 @@ fn test_parse_using_multiple() {
 }
 
 #[test]
+fn test_parse_import_package_module() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import package.Foo".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string()]);
+        assert_eq!(*kind, ImportKind::Module);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_package_module_nested() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import package.Foo.Bar".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string()]);
+        assert_eq!(*kind, ImportKind::Module);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_package_member() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import package.Foo.Bar.baz".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string(), "Bar".to_string(), "baz".to_string()]);
+        assert_eq!(*kind, ImportKind::Member);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_package_wildcard() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import package.Foo.*".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string()]);
+        assert_eq!(*kind, ImportKind::Wildcard);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_package_deep_member() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import package.A.B.C.D.foo".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string(), "foo".to_string()]);
+        assert_eq!(*kind, ImportKind::Member);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_package_deep_wildcard() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import package.A.B.C.*".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+        assert_eq!(*kind, ImportKind::Wildcard);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
+fn test_parse_using_package_shorthand() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using package.Foo.MyInt".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "MyInt");
+        assert_eq!(path, &vec!["Foo".to_string(), "MyInt".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
+fn test_parse_using_package_with_alias() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using X = package.Foo.MyInt".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "X");
+        assert_eq!(path, &vec!["Foo".to_string(), "MyInt".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
+fn test_parse_using_package_deep_shorthand() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("using package.A.B.C.MyType".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "MyType");
+        assert_eq!(path, &vec!["A".to_string(), "B".to_string(), "C".to_string(), "MyType".to_string()]);
+    } else {
+        panic!("Expected UsingDecl");
+    }
+}
+
+#[test]
+fn test_parse_import_package_not_followed_by_dot_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import package".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().get_errors().len() > 0, "Expected error for 'import package' without '.'");
+}
+
+#[test]
+fn test_parse_import_package_dot_only_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import package.".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    parser.parse();
+    assert!(engine.borrow().get_errors().len() > 0, "Expected error for 'import package.'");
+}
+
+#[test]
+fn test_parse_import_regular_ident_still_works() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("import Foo".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
+        assert_eq!(path, &vec!["Foo".to_string()]);
+        assert_eq!(*kind, ImportKind::Module);
+    } else {
+        panic!("Expected ImportDecl");
+    }
+}
+
+#[test]
 fn test_parse_generic_call_with_type_args() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
