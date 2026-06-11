@@ -524,6 +524,8 @@ pub enum Condition {
     Platform(Token),
     Bool(bool),
     Defined(Token),
+    Os(Token),
+    Arch(Token),
     Not(Box<Condition>),
     And(Box<Condition>, Box<Condition>),
     Or(Box<Condition>, Box<Condition>),

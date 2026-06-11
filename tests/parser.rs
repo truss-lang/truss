@@ -9563,6 +9563,78 @@ fn test_parse_conditional_block_with_function_body() {
 }
 
 #[test]
+fn test_parse_os_condition() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if os(macOS)\nfunc foo() {}\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
+        assert_eq!(clauses.len(), 1);
+        assert!(matches!(
+            &clauses[0].condition,
+            Some(Condition::Os(token)) if token.value == "macOS"
+        ));
+    } else {
+        panic!("Expected ConditionalBlock");
+    }
+}
+
+#[test]
+fn test_parse_arch_condition() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if arch(x86_64)\nfunc foo() {}\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
+        assert_eq!(clauses.len(), 1);
+        assert!(matches!(
+            &clauses[0].condition,
+            Some(Condition::Arch(token)) if token.value == "x86_64"
+        ));
+    } else {
+        panic!("Expected ConditionalBlock");
+    }
+}
+
+#[test]
+fn test_parse_os_arch_combined_condition() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#if os(macOS) && arch(x86_64)\nfunc foo() {}\n#endif".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
+        assert_eq!(clauses.len(), 1);
+        if let Some(Condition::And(..)) = clauses[0].condition {
+        } else {
+            panic!("Expected And condition");
+        }
+    } else {
+        panic!("Expected ConditionalBlock");
+    }
+}
+
+#[test]
 fn test_parse_sizeof_int32() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

@@ -6064,14 +6064,14 @@ impl Parser {
             }
             TokenType::Identifier => {
                 let ident = self.next().unwrap();
-                if ident.value == "defined" {
+                if ident.value == "defined" || ident.value == "os" || ident.value == "arch" {
                     if let Some(paren) = self.peek() {
                         if SeparatorType::is_separator(&paren, SeparatorType::OpenParen) {
                             self.index += 1;
                             let Some(inner) = self.peek() else {
                                 self.emit_error(
                                     TrussDiagnosticCode::ParserError,
-                                    "Expected identifier in 'defined()'",
+                                    format!("Expected identifier in '{}()'", ident.value),
                                     &ident,
                                 );
                                 return Err(());
@@ -6079,7 +6079,7 @@ impl Parser {
                             if !matches!(inner.ty, TokenType::Identifier) {
                                 self.emit_error(
                                     TrussDiagnosticCode::ParserError,
-                                    "Expected identifier in 'defined()'",
+                                    format!("Expected identifier in '{}()'", ident.value),
                                     &inner,
                                 );
                                 return Err(());
@@ -6088,12 +6088,16 @@ impl Parser {
                             if let Some(close) = self.peek() {
                                 if SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
                                     self.index += 1;
-                                    return Ok(Condition::Defined(inner_ident));
+                                    return Ok(match ident.value.as_str() {
+                                        "os" => Condition::Os(inner_ident),
+                                        "arch" => Condition::Arch(inner_ident),
+                                        _ => Condition::Defined(inner_ident),
+                                    });
                                 }
                             }
                             self.emit_error(
                                 TrussDiagnosticCode::ParserError,
-                                "Expected ')' after 'defined('",
+                                format!("Expected ')' after '{}('", ident.value),
                                 &ident,
                             );
                             return Err(());
