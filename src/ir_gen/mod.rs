@@ -3945,6 +3945,18 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::CharLiteral { .. } => {
                 Ok(Some(self.context.i8_type().const_int(0, false).into()))
             }
+            Expression::NullLiteral { .. } => Ok(Some(
+                self.context
+                    .ptr_type(inkwell::AddressSpace::from(0))
+                    .const_null()
+                    .into(),
+            )),
+            Expression::StringLiteral { .. } => Ok(Some(
+                self.context
+                    .ptr_type(inkwell::AddressSpace::from(0))
+                    .const_null()
+                    .into(),
+            )),
             Expression::NullptrLiteral { .. } => Ok(Some(
                 self.context
                     .ptr_type(inkwell::AddressSpace::from(0))

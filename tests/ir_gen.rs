@@ -5856,3 +5856,150 @@ fn test_irgen_auto_import_enum() {
     );
     assert_eq!(engine.borrow().get_errors().len(), 0);
 }
+
+#[test]
+fn test_irgen_optional_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x: Int32 = 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+
+    let mut packages: std::collections::HashMap<String, Rc<RefCell<Package>>> =
+        std::collections::HashMap::new();
+    let test_pkg = Rc::new(RefCell::new(Package::new("test".to_string())));
+    packages.insert("test".to_string(), test_pkg.clone());
+    let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+    packages.insert("Truss".to_string(), truss_pkg.clone());
+
+    let src = "public struct Box {} public enum Optional<T> { case None, Some(T) }";
+    let mut std_lexer = Lexer::new(
+        CharStream::new(src.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let std_tokens = std_lexer.parse();
+    let mut std_parser = Parser::new(std_lexer.get_file(), std_tokens, engine.clone());
+    let std_program = std_parser.parse();
+    let mut std_resolver =
+        SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+    std_resolver.resolve(&std_program, "Truss".to_string());
+    let truss_module = truss_pkg.borrow().modules.get("Truss").cloned().unwrap();
+    let mut std_type_resolver =
+        TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+    std_type_resolver.resolve(&std_program, truss_module);
+
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+}
+
+#[test]
+fn test_irgen_array_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x: Int32 = 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+
+    let mut packages: std::collections::HashMap<String, Rc<RefCell<Package>>> =
+        std::collections::HashMap::new();
+    let test_pkg = Rc::new(RefCell::new(Package::new("test".to_string())));
+    packages.insert("test".to_string(), test_pkg.clone());
+    let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+    packages.insert("Truss".to_string(), truss_pkg.clone());
+
+    let src = "public struct Box {} public class Array<T> { public init() {} var count: UInt64 }";
+    let mut std_lexer = Lexer::new(
+        CharStream::new(src.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let std_tokens = std_lexer.parse();
+    let mut std_parser = Parser::new(std_lexer.get_file(), std_tokens, engine.clone());
+    let std_program = std_parser.parse();
+    let mut std_resolver =
+        SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+    std_resolver.resolve(&std_program, "Truss".to_string());
+    let truss_module = truss_pkg.borrow().modules.get("Truss").cloned().unwrap();
+    let mut std_type_resolver =
+        TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+    std_type_resolver.resolve(&std_program, truss_module);
+
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+}
+
+#[test]
+fn test_irgen_string_literal() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "func test() { let s: Int32 = 42 }",
+        &["#[builtintype] public struct Int32 {}"],
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+}
+
+#[test]
+fn test_irgen_null_with_optional() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let x: Int32 = 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+
+    let mut packages: std::collections::HashMap<String, Rc<RefCell<Package>>> =
+        std::collections::HashMap::new();
+    let test_pkg = Rc::new(RefCell::new(Package::new("test".to_string())));
+    packages.insert("test".to_string(), test_pkg.clone());
+    let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+    packages.insert("Truss".to_string(), truss_pkg.clone());
+
+    let src = "public struct Box {} public enum Optional<T> { case None, Some(T) }";
+    let mut std_lexer = Lexer::new(
+        CharStream::new(src.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let std_tokens = std_lexer.parse();
+    let mut std_parser = Parser::new(std_lexer.get_file(), std_tokens, engine.clone());
+    let std_program = std_parser.parse();
+    let mut std_resolver =
+        SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+    std_resolver.resolve(&std_program, "Truss".to_string());
+    let truss_module = truss_pkg.borrow().modules.get("Truss").cloned().unwrap();
+    let mut std_type_resolver =
+        TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+    std_type_resolver.resolve(&std_program, truss_module);
+
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+}
