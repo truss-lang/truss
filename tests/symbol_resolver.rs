@@ -1076,6 +1076,87 @@ fn test_struct_protocol_conformance_symbol_resolved() {
 }
 
 #[test]
+fn test_autowired_protocol_method_auto_generates_for_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Copyable { #[autowired] func copy() -> Self }
+             struct MyStruct: Copyable {}"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    // Verify the auto-generated copy() method exists on the struct
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let struct_sym = root_scope.borrow().get_symbol("MyStruct").unwrap();
+    let binding = struct_sym.borrow();
+    let Symbol::Struct { methods, .. } = &*binding else {
+        panic!("Expected Struct symbol");
+    };
+    let has_copy = methods.iter().any(|m| {
+        let mb = m.borrow();
+        matches!(&*mb, Symbol::StructMethod { name, .. } if name == "copy")
+    });
+    assert!(has_copy, "Auto-generated copy() method should exist on struct");
+}
+
+#[test]
+fn test_autowired_method_not_generated_if_already_implemented() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Copyable { #[autowired] func copy() -> Self }
+             struct MyStruct: Copyable {
+                 func copy() -> Self { return self }
+             }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    // Verify the struct has exactly one copy() method (not duplicated)
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let struct_sym = root_scope.borrow().get_symbol("MyStruct").unwrap();
+    let binding = struct_sym.borrow();
+    let Symbol::Struct { methods, .. } = &*binding else {
+        panic!("Expected Struct symbol");
+    };
+    let copy_methods: Vec<_> = methods
+        .iter()
+        .filter(|m| {
+            let mb = m.borrow();
+            matches!(&*mb, Symbol::StructMethod { name, .. } if name == "copy")
+        })
+        .collect();
+    assert_eq!(copy_methods.len(), 1, "Should have exactly one copy() method");
+}
+
+#[test]
 fn test_struct_undefined_protocol_conformance_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

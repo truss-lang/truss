@@ -98,6 +98,7 @@ pub enum Symbol {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
+        is_autowired: bool,
     },
     ProtocolProperty {
         name: String,

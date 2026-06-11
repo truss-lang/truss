@@ -11,7 +11,7 @@ use crate::{
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     krate::{Crate, Module},
-    lexer::token::{Position, Token, TokenType},
+    lexer::token::{KeywordType, Position, Token, TokenType},
     scope::Scope,
     symbol::{Symbol, WeakSymbol},
     types::Type,
@@ -679,7 +679,13 @@ impl SymbolResolver {
                 }
                 for member in members {
                     match member {
-                        ProtocolMember::Method { decl, .. } => {
+                        ProtocolMember::Method {
+                            attributes,
+                            decl,
+                            ..
+                        } => {
+                            let is_autowired =
+                                attributes.iter().any(|a| a.name == "autowired");
                             let name_token = {
                                 let d = decl.borrow();
                                 if let Statement::FunctionDecl { name: fn_name, .. } = &*d {
@@ -693,6 +699,7 @@ impl SymbolResolver {
                                 name: method_name,
                                 parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
                                 decl: Some(decl.clone()),
+                                is_autowired,
                             }));
                             methods.push(method_symbol.clone());
                             self.enter(method_symbol, &name_token);
@@ -933,6 +940,7 @@ impl SymbolResolver {
                                     name: method_name.value.clone(),
                                     parent: WeakSymbol(Rc::downgrade(&target_sym)),
                                     decl: Some(field_stmt.clone()),
+                                    is_autowired: false,
                                 }));
                                 methods.push(method_symbol.clone());
                                 self.enter(method_symbol, method_name);
@@ -1261,18 +1269,151 @@ impl SymbolResolver {
                 }
             }
             Statement::StructDecl {
+                name,
                 body,
                 scope,
                 conformances,
                 where_clause,
                 ..
             } => {
-                for conformance in conformances {
+                for conformance in conformances.iter() {
                     self.resolve_conformance(conformance.clone());
                 }
                 if let Some(where_clause) = where_clause {
                     for req in where_clause {
                         self.resolve_where_requirement(req);
+                    }
+                }
+                // Auto-generate #[autowired] protocol methods
+                let autowired_methods: Vec<(String, String)> = conformances
+                    .iter()
+                    .filter_map(|expr| {
+                        let e = expr.borrow();
+                        let protocol_name = match &*e {
+                            Expression::Type { name: n, .. } => n.value.clone(),
+                            _ => return None,
+                        };
+                        drop(e);
+                        let proto_sym = self
+                            .current_scope
+                            .as_ref()
+                            .and_then(|s| s.borrow().get_symbol(&protocol_name))?;
+                        let binding = proto_sym.borrow();
+                        let Symbol::Protocol { methods, .. } = &*binding else {
+                            return None;
+                        };
+                        let autowired: Vec<String> = methods
+                            .iter()
+                            .filter(|m| {
+                                let mb = m.borrow();
+                                matches!(&*mb, Symbol::ProtocolMethod { is_autowired: true, .. })
+                            })
+                            .filter_map(|m| m.borrow().name().ok())
+                            .collect();
+                        if autowired.is_empty() {
+                            return None;
+                        }
+                        Some((protocol_name, autowired))
+                    })
+                    .flat_map(|(_proto, methods)| methods.into_iter().map(move |m| (_proto.clone(), m)))
+                    .collect();
+                if !autowired_methods.is_empty() {
+                    // Check which methods the struct already implements
+                    let existing_methods: Vec<String> = body
+                        .iter()
+                        .filter_map(|s| {
+                            if let Statement::FunctionDecl { name: n, .. } = &*s.borrow() {
+                                Some(n.value.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    for (_protocol_name, method_name) in &autowired_methods {
+                        if existing_methods.contains(method_name) {
+                            continue;
+                        }
+                        let pos = name.position.clone();
+                        let file = name.file.clone();
+                        let func_name_tok = Token::new(
+                            method_name.clone(),
+                            TokenType::Identifier,
+                            pos.clone(),
+                            file.clone(),
+                        );
+                        let self_type_expr = Expression::Type {
+                            name: Box::new(Token::new(
+                                "Self".to_string(),
+                                TokenType::Keyword {
+                                    keyword: KeywordType::SelfType,
+                                },
+                                pos.clone(),
+                                file.clone(),
+                            )),
+                            type_parameters: None,
+                            ty: None,
+                        };
+                        let self_var_expr = Expression::Variable {
+                            name: Box::new(Token::new(
+                                "self".to_string(),
+                                TokenType::Keyword {
+                                    keyword: KeywordType::SelfKw,
+                                },
+                                pos.clone(),
+                                file.clone(),
+                            )),
+                            ty: None,
+                            symbol: None,
+                        };
+                        let return_stmt = Statement::Return {
+                            token: Box::new(Token::new(
+                                "return".to_string(),
+                                TokenType::Keyword {
+                                    keyword: KeywordType::Return,
+                                },
+                                pos.clone(),
+                                file.clone(),
+                            )),
+                            value: Some(Rc::new(RefCell::new(self_var_expr))),
+                        };
+                        let copy_func = Statement::FunctionDecl {
+                            modifiers: vec![],
+                            token: Box::new(func_name_tok.clone()),
+                            name: Box::new(func_name_tok),
+                            generic_parameters: vec![],
+                            parameters: vec![],
+                            return_type: Some(Rc::new(RefCell::new(self_type_expr))),
+                            body: Rc::new(RefCell::new(FunctionBody::Statements(vec![
+                                Rc::new(RefCell::new(return_stmt)),
+                            ]))),
+                            where_clause: None,
+                            scope: None,
+                            ty: None,
+                            static_method: false,
+                            operator_fixity: None,
+                        };
+                        let func_stmt = Rc::new(RefCell::new(copy_func));
+                        body.push(func_stmt.clone());
+                        // Register StructMethod symbol for the auto-generated method
+                        let struct_sym = self.current_scope.as_ref().and_then(|scope| {
+                            scope.borrow().get_symbol(&name.value)
+                        });
+                        if let Some(st) = struct_sym {
+                            let mut st_binding = st.borrow_mut();
+                            if let Symbol::Struct { methods, .. } = &mut *st_binding {
+                                let method_sym = Rc::new(RefCell::new(
+                                    Symbol::StructMethod {
+                                        name: method_name.clone(),
+                                        parent: WeakSymbol(Rc::downgrade(&st)),
+                                        decl: Some(func_stmt.clone()),
+                                    },
+                                ));
+                                methods.push(method_sym.clone());
+                                if let Some(s) = scope.as_ref() {
+                                    s.borrow_mut().set_symbol(method_sym);
+                                }
+                            }
+                        }
                     }
                 }
                 self.enter_scope(scope.clone());
