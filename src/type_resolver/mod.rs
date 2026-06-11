@@ -297,7 +297,7 @@ impl TypeResolver {
                     body,
                 );
                 self.validate_setter_access_conflicts(body);
-                self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
+                self.check_protocol_conformances(&name.value, name.as_ref(), conformances, false);
             }
             Statement::ClassDecl {
                 name,
@@ -439,7 +439,7 @@ impl TypeResolver {
                     body,
                 );
                 self.validate_setter_access_conflicts(body);
-                self.check_protocol_conformances(&name.value, name.as_ref(), conformances);
+                self.check_protocol_conformances(&name.value, name.as_ref(), conformances, true);
             }
             Statement::EnumDecl {
                 name,
@@ -5319,6 +5319,7 @@ impl TypeResolver {
         type_name: &str,
         type_token: &Token,
         conformances: &[Rc<RefCell<Expression>>],
+        is_class: bool,
     ) {
         for conformance in conformances {
             let expr = conformance.borrow();
@@ -5423,14 +5424,46 @@ impl TypeResolver {
 
             for req_method in &required_methods {
                 if !type_methods.contains(req_method) {
-                    self.emit_error(
-                        TrussDiagnosticCode::ProtocolRequirementNotImplemented,
-                        format!(
-                            "Type '{}' does not implement protocol '{}' requirement: 'func {}()'",
-                            type_name, protocol_name, req_method
-                        ),
-                        type_token,
-                    );
+                    let is_autowired = {
+                        let sym = protocol_symbol.borrow();
+                        match &*sym {
+                            Symbol::Protocol { methods, .. } => methods.iter().any(|m| {
+                                let mb = m.borrow();
+                                matches!(&*mb, Symbol::ProtocolMethod { name, is_autowired: true, .. } if name == req_method)
+                            }),
+                            _ => false,
+                        }
+                    };
+                    if is_autowired {
+                        if is_class {
+                            self.emit_error(
+                                TrussDiagnosticCode::TypeError,
+                                format!(
+                                    "Class '{}' cannot conform to protocol '{}' because it has compiler-provided requirements",
+                                    type_name, protocol_name
+                                ),
+                                type_token,
+                            );
+                        } else if protocol_name != "Copyable" || req_method != "copy" {
+                            self.emit_error(
+                                TrussDiagnosticCode::TypeError,
+                                format!(
+                                    "Compiler does not support autowired requirement 'func {}()' in protocol '{}'",
+                                    req_method, protocol_name
+                                ),
+                                type_token,
+                            );
+                        }
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+                            format!(
+                                "Type '{}' does not implement protocol '{}' requirement: 'func {}()'",
+                                type_name, protocol_name, req_method
+                            ),
+                            type_token,
+                        );
+                    }
                 }
             }
 

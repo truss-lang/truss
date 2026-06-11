@@ -1284,59 +1284,20 @@ impl SymbolResolver {
                         self.resolve_where_requirement(req);
                     }
                 }
-                // Auto-generate #[autowired] protocol methods
-                let autowired_methods: Vec<(String, String)> = conformances
-                    .iter()
-                    .filter_map(|expr| {
-                        let e = expr.borrow();
-                        let protocol_name = match &*e {
-                            Expression::Type { name: n, .. } => n.value.clone(),
-                            _ => return None,
-                        };
-                        drop(e);
-                        let proto_sym = self
-                            .current_scope
-                            .as_ref()
-                            .and_then(|s| s.borrow().get_symbol(&protocol_name))?;
-                        let binding = proto_sym.borrow();
-                        let Symbol::Protocol { methods, .. } = &*binding else {
-                            return None;
-                        };
-                        let autowired: Vec<String> = methods
-                            .iter()
-                            .filter(|m| {
-                                let mb = m.borrow();
-                                matches!(&*mb, Symbol::ProtocolMethod { is_autowired: true, .. })
-                            })
-                            .filter_map(|m| m.borrow().name().ok())
-                            .collect();
-                        if autowired.is_empty() {
-                            return None;
-                        }
-                        Some((protocol_name, autowired))
-                    })
-                    .flat_map(|(_proto, methods)| methods.into_iter().map(move |m| (_proto.clone(), m)))
-                    .collect();
-                if !autowired_methods.is_empty() {
-                    // Check which methods the struct already implements
-                    let existing_methods: Vec<String> = body
-                        .iter()
-                        .filter_map(|s| {
-                            if let Statement::FunctionDecl { name: n, .. } = &*s.borrow() {
-                                Some(n.value.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    for (_protocol_name, method_name) in &autowired_methods {
-                        if existing_methods.contains(method_name) {
-                            continue;
-                        }
+                // Auto-generate Copyable.copy() for structs
+                let needs_copy = conformances.iter().any(|expr| {
+                    let e = expr.borrow();
+                    matches!(&*e, Expression::Type { name, .. } if name.value == "Copyable")
+                });
+                if needs_copy {
+                    let already_has_copy = body.iter().any(|s| {
+                        matches!(&*s.borrow(), Statement::FunctionDecl { name: n, .. } if n.value == "copy")
+                    });
+                    if !already_has_copy {
                         let pos = name.position.clone();
                         let file = name.file.clone();
                         let func_name_tok = Token::new(
-                            method_name.clone(),
+                            "copy".to_string(),
                             TokenType::Identifier,
                             pos.clone(),
                             file.clone(),
@@ -1394,7 +1355,6 @@ impl SymbolResolver {
                         };
                         let func_stmt = Rc::new(RefCell::new(copy_func));
                         body.push(func_stmt.clone());
-                        // Register StructMethod symbol for the auto-generated method
                         let struct_sym = self.current_scope.as_ref().and_then(|scope| {
                             scope.borrow().get_symbol(&name.value)
                         });
@@ -1403,7 +1363,7 @@ impl SymbolResolver {
                             if let Symbol::Struct { methods, .. } = &mut *st_binding {
                                 let method_sym = Rc::new(RefCell::new(
                                     Symbol::StructMethod {
-                                        name: method_name.clone(),
+                                        name: "copy".to_string(),
                                         parent: WeakSymbol(Rc::downgrade(&st)),
                                         decl: Some(func_stmt.clone()),
                                     },
