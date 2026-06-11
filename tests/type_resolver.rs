@@ -6138,3 +6138,115 @@ fn test_function_call_missing_label_still_errors() {
     let errors = run_type_check("func f(a a: Int64) -> Int64 { return a } func f2() { f(1) }");
     assert!(errors > 0, "missing label for required param should error");
 }
+
+#[test]
+fn test_using_selective_type_alias() {
+    let errors = run_type_check(
+        "module Foo { typealias MyInt = Int32 }
+         using Foo.{MyInt}
+         func test() -> MyInt { return 42 }",
+    );
+    assert_eq!(errors, 0, "selective using should create type alias");
+}
+
+#[test]
+fn test_using_selective_with_alias() {
+    let errors = run_type_check(
+        "module Foo { typealias MyInt = Int32 }
+         using Foo.{MyInt as YourInt}
+         func test() -> YourInt { return 42 }",
+    );
+    assert_eq!(errors, 0, "selective using with alias should create renamed type alias");
+}
+
+#[test]
+fn test_using_selective_skip() {
+    let errors = run_type_check(
+        "module Foo { typealias MyInt = Int32 }
+         using Foo.{MyInt as _}
+         func test() -> Int32 { return 42 }",
+    );
+    assert_eq!(errors, 0, "selective using with skip should not error");
+}
+
+#[test]
+fn test_using_selective_original_name_not_visible() {
+    let errors = run_type_check(
+        "module Foo { typealias MyInt = Int32 }
+         using Foo.{MyInt as YourInt}
+         func test() -> MyInt { return 42 }",
+    );
+    assert!(
+        errors > 0,
+        "original type name should not be visible after alias rename"
+    );
+}
+
+#[test]
+fn test_using_selective_multiple() {
+    let errors = run_type_check(
+        "module Foo {
+            typealias A = Int32
+            typealias B = Int64
+         }
+         using Foo.{A, B}
+         func test(x: A) -> A { return x }",
+    );
+    assert_eq!(
+        errors, 0,
+        "selective using of multiple types should work"
+    );
+}
+
+#[test]
+fn test_using_selective_package() {
+    let errors = run_type_check(
+        "module Foo { typealias MyInt = Int32 }
+         using package.Foo.{MyInt}
+         func test() -> MyInt { return 42 }",
+    );
+    assert_eq!(errors, 0, "selective using with package prefix should work");
+}
+
+#[test]
+fn test_using_selective_package_with_alias() {
+    let errors = run_type_check(
+        "module Foo { typealias MyInt = Int32 }
+         using package.Foo.{MyInt as YourInt}
+         func test() -> YourInt { return 42 }",
+    );
+    assert_eq!(
+        errors, 0,
+        "selective package using with alias should work"
+    );
+}
+
+#[test]
+fn test_using_selective_deep_path() {
+    let errors = run_type_check(
+        "module Foo { module Bar { typealias MyInt = Int32 } }
+         using Foo.Bar.{MyInt}
+         func test() -> MyInt { return 42 }",
+    );
+    assert_eq!(errors, 0, "selective using with deep module path should work");
+}
+
+#[test]
+fn test_using_decl_regular_still_works() {
+    let errors = run_type_check(
+        "module Foo { typealias MyInt = Int32 }
+         using MyInt = Foo.MyInt
+         func test() -> MyInt { return 42 }",
+    );
+    assert_eq!(errors, 0, "regular using with '=' should still work");
+}
+
+#[test]
+fn test_using_shorthand_still_works() {
+    let errors = run_type_check(
+        "module Foo { typealias MyInt = Int32 }
+         using Foo.MyInt
+         func test() -> MyInt { return 42 }",
+    );
+    assert_eq!(errors, 0, "shorthand using should still work");
+}
