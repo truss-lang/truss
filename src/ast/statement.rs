@@ -443,6 +443,7 @@ pub struct EnumCaseParameter {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProtocolMember {
     Method {
+        attributes: Vec<Attribute>,
         modifiers: Vec<Modifier>,
         decl: Rc<RefCell<Statement>>,
     },

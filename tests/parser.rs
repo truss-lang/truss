@@ -4807,6 +4807,49 @@ fn test_parse_protocol_with_property_requirements() {
 }
 
 #[test]
+fn test_parse_protocol_with_autowired_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Copyable { #[autowired] func copy() -> Self }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Copyable");
+        assert_eq!(members.len(), 1);
+        if let ProtocolMember::Method {
+            attributes,
+            decl,
+            ..
+        } = &members[0]
+        {
+            assert_eq!(attributes.len(), 1);
+            assert_eq!(attributes[0].name, "autowired");
+            if let Statement::FunctionDecl {
+                name: func_name,
+                return_type,
+                ..
+            } = &*decl.borrow()
+            {
+                assert_eq!(func_name.value, "copy");
+                assert!(return_type.is_some());
+            } else {
+                panic!();
+            }
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_protocol_with_mixed_members() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

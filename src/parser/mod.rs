@@ -3758,6 +3758,7 @@ impl Parser {
                 if SeparatorType::is_separator(&t, SeparatorType::CloseBrace) {
                     break;
                 }
+                let member_attributes = self.parse_attributes()?;
                 let member_modifiers = self.parse_modifiers()?;
                 let Some(peek_token) = self.peek() else { break };
                 match peek_token.ty {
@@ -3765,6 +3766,7 @@ impl Parser {
                         let func_decl = self.parse_function_decl(false, member_modifiers)?;
                         if let Statement::FunctionDecl { .. } = &func_decl {
                             members.push(ProtocolMember::Method {
+                                attributes: member_attributes,
                                 modifiers: vec![],
                                 decl: Rc::new(RefCell::new(func_decl)),
                             });
