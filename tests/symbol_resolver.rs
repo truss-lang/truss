@@ -2756,6 +2756,70 @@ fn test_import_wildcard_with_module_decl() {
 }
 
 #[test]
+fn test_import_package_module_symbol() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import package.Foo
+         func test() -> Int32 { return Foo.bar() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package module import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_package_wildcard() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { func bar() -> Int32 { return 42 } }
+         import package.Foo.*
+         func test() -> Int32 { return bar() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package wildcard import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_package_member() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import package.Foo.Bar.baz
+         func test() -> Int32 { return baz() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package member import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
+fn test_import_package_nested_module() {
+    let (statements, engine, _krate) = run_resolver(
+        "module Foo { module Bar { func baz() -> Int32 { return 99 } } }
+         import package.Foo
+         func test() -> Int32 { return Foo.Bar.baz() }",
+    );
+    let errors = engine.borrow().get_diagnostics().len();
+    assert_eq!(
+        errors, 0,
+        "Expected no errors for package nested module import, got: {:?}",
+        errors
+    );
+    assert_eq!(statements.len(), 3);
+}
+
+#[test]
 fn test_generic_function_with_constrained_param_resolves() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
