@@ -876,14 +876,6 @@ impl Parser {
                     })
                 }
             }
-            _ => {
-                self.emit_error(
-                    TrussDiagnosticCode::ExpectedExpression,
-                    format!("Unexpected token '{}'", token.value),
-                    &token,
-                );
-                Err(())
-            }
         }?;
         while !self.is_empty() {
             let Some(token) = self.peek() else { break };
