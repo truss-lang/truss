@@ -7,6 +7,7 @@ pub mod lexer;
 pub mod macro_expander;
 pub mod parser;
 pub mod scope;
+pub mod std_lib;
 pub mod symbol;
 pub mod symbol_resolver;
 pub mod type_resolver;

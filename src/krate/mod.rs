@@ -31,3 +31,12 @@ impl Module {
         }
     }
 }
+
+pub fn single_package_map(
+    name: &str,
+) -> (HashMap<String, Rc<RefCell<Package>>>, Rc<RefCell<Package>>) {
+    let pkg = Rc::new(RefCell::new(Package::new(name.to_string())));
+    let mut map = HashMap::new();
+    map.insert(name.to_string(), pkg.clone());
+    (map, pkg)
+}

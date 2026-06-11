@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use crate::{
     ast::{
@@ -29,7 +29,8 @@ type MethodInfo = Option<(String, Rc<RefCell<Type>>, Vec<Rc<RefCell<Type>>>)>;
 
 #[derive(Debug)]
 pub struct TypeResolver {
-    pub pkg: Rc<RefCell<Package>>,
+    pub packages: HashMap<String, Rc<RefCell<Package>>>,
+    current_package: String,
     current_module: Option<Rc<RefCell<Module>>>,
     current_return_type: Option<Rc<RefCell<Type>>>,
     current_scope: Option<Rc<RefCell<Scope>>>,
@@ -44,9 +45,14 @@ pub struct TypeResolver {
 }
 
 impl TypeResolver {
-    pub fn new(pkg: Rc<RefCell<Package>>, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
+    pub fn new(
+        packages: HashMap<String, Rc<RefCell<Package>>>,
+        current_package: String,
+        engine: Rc<RefCell<TrussDiagnosticEngine>>,
+    ) -> Self {
         Self {
-            pkg,
+            packages,
+            current_package,
             current_module: None,
             current_return_type: None,
             current_scope: None,
@@ -968,7 +974,14 @@ impl TypeResolver {
             } => {
                 if let Some(members) = selective_members {
                     let module_path = path.join(".");
-                    let module = self.pkg.borrow().modules.get(&module_path).cloned();
+                    let module = self
+                        .packages
+                        .get(&self.current_package)
+                        .unwrap()
+                        .borrow()
+                        .modules
+                        .get(&module_path)
+                        .cloned();
                     if let Some(module) = module {
                         for member in members {
                             let alias_name = match &member.alias {
@@ -994,7 +1007,9 @@ impl TypeResolver {
                     } else {
                         let module_path = path[..path.len() - 1].join(".");
                         let type_name = path.last().unwrap();
-                        self.pkg
+                        self.packages
+                            .get(&self.current_package)
+                            .unwrap()
                             .borrow()
                             .modules
                             .get(&module_path)
@@ -1520,7 +1535,14 @@ impl TypeResolver {
             } => {
                 if let Some(members) = selective_members {
                     let module_path = path.join(".");
-                    let module = self.pkg.borrow().modules.get(&module_path).cloned();
+                    let module = self
+                        .packages
+                        .get(&self.current_package)
+                        .unwrap()
+                        .borrow()
+                        .modules
+                        .get(&module_path)
+                        .cloned();
                     if let Some(module) = module {
                         for member in members {
                             let alias_name = match &member.alias {
@@ -1546,7 +1568,9 @@ impl TypeResolver {
                     } else {
                         let module_path = path[..path.len() - 1].join(".");
                         let type_name = path.last().unwrap();
-                        self.pkg
+                        self.packages
+                            .get(&self.current_package)
+                            .unwrap()
                             .borrow()
                             .modules
                             .get(&module_path)

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
@@ -19,16 +19,22 @@ use crate::{
 
 #[derive(Debug)]
 pub struct SymbolResolver {
-    pub pkg: Rc<RefCell<Package>>,
+    pub packages: HashMap<String, Rc<RefCell<Package>>>,
+    current_package: String,
     current_module: Option<Rc<RefCell<Module>>>,
     current_scope: Option<Rc<RefCell<Scope>>>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
     root_module_name: String,
 }
 impl SymbolResolver {
-    pub fn new(pkg: Rc<RefCell<Package>>, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
+    pub fn new(
+        packages: HashMap<String, Rc<RefCell<Package>>>,
+        current_package: String,
+        engine: Rc<RefCell<TrussDiagnosticEngine>>,
+    ) -> Self {
         Self {
-            pkg,
+            packages,
+            current_package,
             current_module: None,
             current_scope: None,
             engine,
@@ -39,13 +45,52 @@ impl SymbolResolver {
     pub fn resolve(&mut self, program: &Program, module_name: String) -> Rc<RefCell<Module>> {
         self.root_module_name = module_name.clone();
         let module = Rc::new(RefCell::new(Module::new(module_name.clone())));
-        self.pkg
+        let current_pkg = self.packages.get(&self.current_package).unwrap();
+        current_pkg
             .borrow_mut()
             .modules
             .insert(module_name, module.clone());
         self.current_module = Some(module.clone());
         let scope = self.enter_scope(None);
         self.current_module.as_ref().unwrap().borrow_mut().scope = Some(scope.clone());
+
+        let entries: Vec<(String, Rc<RefCell<Symbol>>)> = {
+            let truss_pkg = self.packages.get("Truss");
+            let truss_module = truss_pkg.and_then(|p| p.borrow().modules.get("Truss").cloned());
+            truss_module
+                .and_then(|m| {
+                    m.borrow().scope.clone().map(|s| {
+                        s.borrow()
+                            .name_table
+                            .iter()
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect()
+                    })
+                })
+                .unwrap_or_default()
+        };
+        let file: Rc<String> = Rc::new(
+            self.packages
+                .get(&self.current_package)
+                .unwrap()
+                .borrow()
+                .name
+                .clone(),
+        );
+        for (name, symbol) in entries {
+            let name_token = Token::new(
+                name,
+                crate::lexer::token::TokenType::Identifier,
+                crate::lexer::token::Position {
+                    pos: 0,
+                    line: 0,
+                    col: 0,
+                    len: 0,
+                },
+                file.clone(),
+            );
+            self.enter(symbol, &name_token);
+        }
 
         for stmt in &program.statements {
             self.register_symbols(stmt.clone());
@@ -58,7 +103,7 @@ impl SymbolResolver {
         module
     }
 
-    fn register_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
+    pub fn register_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
         match &mut *stmt.borrow_mut() {
             Statement::FunctionDecl { name, body, .. } => {
                 let symbol = Rc::new(RefCell::new(Symbol::Function {
@@ -989,7 +1034,9 @@ impl SymbolResolver {
                     }
                 };
                 let module = Rc::new(RefCell::new(Module::new(full_path.clone())));
-                self.pkg
+                self.packages
+                    .get(&self.current_package)
+                    .unwrap()
                     .borrow_mut()
                     .modules
                     .insert(full_path, module.clone());
@@ -1022,11 +1069,24 @@ impl SymbolResolver {
                 kind,
                 token,
                 selective_members,
-                ..
+                is_current_package,
             } => {
+                let resolve_module =
+                    |pkg: &Rc<RefCell<Package>>, mp: &str| -> Option<Rc<RefCell<Module>>> {
+                        pkg.borrow().modules.get(mp).cloned()
+                    };
                 if let Some(members) = selective_members {
                     let module_path = path.join(".");
-                    let module = self.pkg.borrow().modules.get(&module_path).cloned();
+                    let target_pkg = if *is_current_package {
+                        self.packages.get(&self.current_package).cloned()
+                    } else if path.len() >= 1 && self.packages.contains_key(&path[0]) {
+                        self.packages.get(&path[0]).cloned()
+                    } else {
+                        self.packages.get(&self.current_package).cloned()
+                    };
+                    let module = target_pkg
+                        .as_ref()
+                        .and_then(|p| resolve_module(p, &module_path));
                     if let Some(module) = module {
                         for member in members {
                             let found_symbol = module
@@ -1055,23 +1115,14 @@ impl SymbolResolver {
                                     self.enter(symbol, &name_token);
                                 }
                             } else {
-                                let exists = self.pkg.borrow().modules.contains_key(&module_path);
-                                if exists {
-                                    self.emit_error(
-                                        TrussDiagnosticCode::SymbolError,
-                                        format!(
-                                            "Symbol '{}' not found in module '{}'",
-                                            member.name, module_path
-                                        ),
-                                        token.as_ref(),
-                                    );
-                                } else {
-                                    self.emit_error(
-                                        TrussDiagnosticCode::SymbolError,
-                                        format!("Module '{}' not found", module_path),
-                                        token.as_ref(),
-                                    );
-                                }
+                                self.emit_error(
+                                    TrussDiagnosticCode::SymbolError,
+                                    format!(
+                                        "Symbol '{}' not found in module '{}'",
+                                        member.name, module_path
+                                    ),
+                                    token.as_ref(),
+                                );
                             }
                         }
                     } else {
@@ -1085,8 +1136,17 @@ impl SymbolResolver {
                     match kind {
                         ImportKind::Module => {
                             let module_path = path.join(".");
-                            let result = { self.pkg.borrow().modules.get(&module_path).cloned() };
-                            if let Some(module) = result {
+                            let target_pkg = if *is_current_package {
+                                self.packages.get(&self.current_package).cloned()
+                            } else if path.len() >= 1 && self.packages.contains_key(&path[0]) {
+                                self.packages.get(&path[0]).cloned()
+                            } else {
+                                self.packages.get(&self.current_package).cloned()
+                            };
+                            let module = target_pkg
+                                .as_ref()
+                                .and_then(|p| resolve_module(p, &module_path));
+                            if let Some(module) = module {
                                 let name = path.last().unwrap().clone();
                                 let module_symbol = Rc::new(RefCell::new(Symbol::Module {
                                     name: name.clone(),
@@ -1111,39 +1171,43 @@ impl SymbolResolver {
                         ImportKind::Member => {
                             let member_name = path.last().unwrap().clone();
                             let module_path = path[..path.len() - 1].join(".");
-                            let found_symbol = {
-                                self.pkg.borrow().modules.get(&module_path).and_then(|m| {
+                            let target_pkg = if *is_current_package {
+                                self.packages.get(&self.current_package).cloned()
+                            } else if path.len() >= 2 && self.packages.contains_key(&path[0]) {
+                                self.packages.get(&path[0]).cloned()
+                            } else {
+                                self.packages.get(&self.current_package).cloned()
+                            };
+                            let found_symbol = target_pkg.as_ref().and_then(|p| {
+                                p.borrow().modules.get(&module_path).and_then(|m| {
                                     m.borrow()
                                         .scope
                                         .clone()
                                         .and_then(|scope| scope.borrow().get_symbol(&member_name))
                                 })
-                            };
+                            });
                             if let Some(symbol) = found_symbol {
                                 self.enter(symbol, token.as_ref());
                             } else {
-                                let exists = self.pkg.borrow().modules.contains_key(&module_path);
-                                if exists {
-                                    self.emit_error(
-                                        TrussDiagnosticCode::SymbolError,
-                                        format!(
-                                            "Symbol '{}' not found in module '{}'",
-                                            member_name, module_path
-                                        ),
-                                        token.as_ref(),
-                                    );
-                                } else {
-                                    self.emit_error(
-                                        TrussDiagnosticCode::SymbolError,
-                                        format!("Module '{}' not found", module_path),
-                                        token.as_ref(),
-                                    );
-                                }
+                                self.emit_error(
+                                    TrussDiagnosticCode::SymbolError,
+                                    format!("Symbol '{}' not found", member_name),
+                                    token.as_ref(),
+                                );
                             }
                         }
                         ImportKind::Wildcard => {
                             let module_path = path.join(".");
-                            let module = self.pkg.borrow().modules.get(&module_path).cloned();
+                            let target_pkg = if *is_current_package {
+                                self.packages.get(&self.current_package).cloned()
+                            } else if path.len() >= 1 && self.packages.contains_key(&path[0]) {
+                                self.packages.get(&path[0]).cloned()
+                            } else {
+                                self.packages.get(&self.current_package).cloned()
+                            };
+                            let module = target_pkg
+                                .as_ref()
+                                .and_then(|p| resolve_module(p, &module_path));
                             if let Some(module) = module {
                                 let names: Vec<String> = {
                                     let scope = module.borrow().scope.clone();

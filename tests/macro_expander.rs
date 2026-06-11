@@ -112,8 +112,12 @@ fn test_macro_symbold_declared() {
     let mut expander = MacroExpander::new(engine.clone());
     expander.expand(&mut program);
 
-    let krate = Rc::new(RefCell::new(truss::krate::Package::new("test".to_string())));
-    let mut resolver = truss::symbol_resolver::SymbolResolver::new(krate.clone(), engine.clone());
+    let (packages, krate) = truss::krate::single_package_map("test");
+    let mut resolver = truss::symbol_resolver::SymbolResolver::new(
+        packages.clone(),
+        "test".to_string(),
+        engine.clone(),
+    );
     resolver.resolve(&program, "test".to_string());
 
     let scope = krate

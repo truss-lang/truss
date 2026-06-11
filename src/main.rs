@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fs, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fs, rc::Rc};
 
 use clap::Parser;
 use truss::{
@@ -30,6 +30,8 @@ struct Cli {
     ir: bool,
     #[arg(long)]
     target: Option<String>,
+    #[arg(long)]
+    stdlib_path: Option<String>,
 }
 
 fn emit_diagnostics(engine: &TrussDiagnosticEngine, content: &str) -> bool {
@@ -106,8 +108,42 @@ fn main() {
         println!("{:#?}", program);
     }
 
-    let pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
-    let mut symbol_resolver = SymbolResolver::new(pkg.clone(), engine.clone());
+    let main_pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
+    let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
+    packages.insert("main".to_string(), main_pkg.clone());
+
+    if let Some(ref stdlib_path) = cli.stdlib_path {
+        let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+        packages.insert("Truss".to_string(), truss_pkg.clone());
+
+        let std_file_rc = Rc::new(stdlib_path.clone());
+        let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let file_programs =
+            truss::std_lib::parse_std_lib(stdlib_path, std_file_rc, std_engine.clone());
+
+        if !emit_diagnostics(&std_engine.borrow(), "") {
+            let mut std_resolver =
+                SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+            let dummy_program = truss::ast::node::Program {
+                file: Rc::new("".to_string()),
+                statements: Vec::new(),
+            };
+            std_resolver.resolve(&dummy_program, "Truss".to_string());
+
+            for file_stmts in file_programs {
+                let file_prog = truss::ast::node::Program {
+                    file: Rc::new("".to_string()),
+                    statements: file_stmts,
+                };
+                for stmt in &file_prog.statements {
+                    std_resolver.register_symbols(stmt.clone());
+                }
+            }
+        }
+    }
+
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "main".to_string(), engine.clone());
     let module = symbol_resolver.resolve(&program, file_rc.to_string());
 
     if emit_diagnostics(&engine.borrow(), &content) {
@@ -119,7 +155,7 @@ fn main() {
         println!("{:#?}", program);
     }
 
-    let mut type_resolver = TypeResolver::new(pkg.clone(), engine.clone());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "main".to_string(), engine.clone());
     type_resolver.resolve(&program, module.clone());
 
     if emit_diagnostics(&engine.borrow(), &content) {
