@@ -5485,3 +5485,61 @@ fn test_irgen_default_with_label() {
     assert_eq!(engine.borrow().get_errors().len(), 0);
     assert!(llvm_ir.contains("call i32 @foo(i32 0, i32 10)"));
 }
+
+#[test]
+fn test_irgen_builtintype_struct_no_llvm_struct() {
+    let code = r#"
+        #[builtintype] public struct Int32 {}
+        func test() -> Int32 { return 42 }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+    let llvm_ir = module.print_to_string().to_string();
+    assert!(!llvm_ir.contains("struct.Int32"), "Built-in type should not create LLVM struct type");
+    assert!(llvm_ir.contains("i32"), "Should use i32 for Int32");
+}
+
+#[test]
+fn test_irgen_non_builtintype_struct_creates_llvm_struct() {
+    let code = r#"
+        struct Point { let x: Int32 let y: Int32 }
+        func test() -> Int32 {
+            var p: Point
+            return p.x
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut symbol_resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate.clone(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    assert_eq!(engine.borrow().get_errors().len(), 0);
+    let llvm_ir = module.print_to_string().to_string();
+    assert!(llvm_ir.contains("struct.Point"), "Non-built-in struct should create LLVM struct type");
+}

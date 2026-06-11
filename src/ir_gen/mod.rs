@@ -356,7 +356,15 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn declare_struct_types(&self, statement: Rc<RefCell<Statement>>) {
-        if let Statement::StructDecl { name, .. } = &*statement.borrow() {
+        if let Statement::StructDecl {
+            name,
+            attributes,
+            ..
+        } = &*statement.borrow()
+        {
+            if attributes.iter().any(|a| a.name == "builtintype") {
+                return;
+            }
             let struct_name = &name.value;
             if !self.struct_types.borrow().contains_key(struct_name) {
                 let struct_type = self
@@ -391,7 +399,16 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_struct_type_bodies(&self, statement: Rc<RefCell<Statement>>) {
-        if let Statement::StructDecl { name, body, .. } = &*statement.borrow() {
+        if let Statement::StructDecl {
+            name,
+            body,
+            attributes,
+            ..
+        } = &*statement.borrow()
+        {
+            if attributes.iter().any(|a| a.name == "builtintype") {
+                return;
+            }
             let struct_name = &name.value;
             if let Some(struct_type) = self.struct_types.borrow().get(struct_name).cloned() {
                 let field_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = body
