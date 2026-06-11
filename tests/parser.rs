@@ -4850,6 +4850,33 @@ fn test_parse_protocol_with_autowired_method() {
 }
 
 #[test]
+fn test_parse_internal_used_attribute_on_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#[internalUsed] public func internalHelper() -> Int32 { return 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::FunctionDecl {
+        attributes,
+        name,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "internalHelper");
+        assert_eq!(attributes.len(), 1);
+        assert_eq!(attributes[0].name, "internalUsed");
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_protocol_with_mixed_members() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

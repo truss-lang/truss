@@ -2081,6 +2081,21 @@ impl TypeResolver {
                                 }
                             })
                         {
+                            if let Statement::FunctionDecl {
+                                attributes, ..
+                            } = &*decl.borrow()
+                            {
+                                if attributes
+                                    .iter()
+                                    .any(|a| a.name == "internalUsed")
+                                {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::InternalUsedReferenced,
+                                        "Referencing an internal-used declaration which is intended for internal use only",
+                                        &callee.borrow().token(),
+                                    );
+                                }
+                            }
                             let callee_token = callee.borrow().token();
                             let decl_params = match &*decl.borrow() {
                                 Statement::FunctionDecl { parameters, .. } => parameters.clone(),

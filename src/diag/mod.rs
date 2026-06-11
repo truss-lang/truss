@@ -61,6 +61,7 @@ pub enum TrussDiagnosticCode {
     OpenOnlyOnClass,
     ConflictingSetterAccess,
     YieldNotAllowedHere,
+    InternalUsedReferenced,
 
     IRError,
     UnsupportedFeature,
@@ -130,6 +131,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::OpenOnlyOnClass => "E0322",
             Self::ConflictingSetterAccess => "E0323",
             Self::YieldNotAllowedHere => "E0324",
+            Self::InternalUsedReferenced => "W0325",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",
@@ -145,7 +147,7 @@ impl DiagnosticCode for TrussDiagnosticCode {
 
     fn severity(&self) -> Severity {
         match self {
-            Self::ShadowedVariable | Self::UnusedVariable => Severity::Warning,
+            Self::ShadowedVariable | Self::UnusedVariable | Self::InternalUsedReferenced => Severity::Warning,
             _ => Severity::Error,
         }
     }

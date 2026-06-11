@@ -3092,6 +3092,28 @@ fn test_unsupported_autowired_protocol_method_error() {
 }
 
 #[test]
+fn test_internal_used_function_call_warning() {
+    let code = "#[internalUsed] public func internalHelper() -> Int32 { return 42 }
+                func caller() -> Int32 { return internalHelper() }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let krate = Rc::new(RefCell::new(Crate::new("test".to_string())));
+    let mut resolver = SymbolResolver::new(krate.clone(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(krate, engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let warnings = engine_ref.get_warnings();
+    assert!(warnings.len() > 0, "Should emit warning for internalUsed function call");
+    assert_eq!(warnings[0].code, TrussDiagnosticCode::InternalUsedReferenced);
+}
+
+#[test]
 fn test_extension_self_in_return_type() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
