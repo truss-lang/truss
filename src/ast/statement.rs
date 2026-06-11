@@ -184,11 +184,13 @@ pub enum Statement {
         token: Box<Token>,
         name: Box<Token>,
         path: Vec<String>,
+        selective_members: Option<Vec<SelectiveMember>>,
     },
     ImportDecl {
         token: Box<Token>,
         path: Vec<String>,
         kind: ImportKind,
+        selective_members: Option<Vec<SelectiveMember>>,
     },
     SubscriptDecl {
         modifiers: Vec<Modifier>,
@@ -486,6 +488,19 @@ pub enum ImportKind {
     Module,
     Member,
     Wildcard,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SelectiveAlias {
+    Direct,
+    Named(String),
+    Skip,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectiveMember {
+    pub name: String,
+    pub alias: SelectiveAlias,
 }
 
 #[derive(Debug, Clone, PartialEq)]

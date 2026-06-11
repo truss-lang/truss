@@ -14,8 +14,8 @@ use crate::{
             Condition, ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody,
             GenericParameter, GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType,
             MacroPatternFragment, MatchCase, Modifier, ModifierType, OperatorFixity, Parameter,
-            Pattern, ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind,
-            WhereRequirement, WhereRequirementKind,
+            Pattern, ProtocolAccessorSet, ProtocolMember, SelectiveAlias, SelectiveMember,
+            Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -3402,6 +3402,99 @@ impl Parser {
         }
     }
 
+    fn parse_selective_members(&mut self) -> Result<Vec<SelectiveMember>, ()> {
+        let mut members = Vec::new();
+        let mut first = true;
+        loop {
+            let Some(name_token) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    "Expected member name or '}' in selective import list",
+                    &Token::new(String::new(), TokenType::Identifier, Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new(String::new())),
+                );
+                return Err(());
+            };
+            if SeparatorType::is_separator(&name_token, SeparatorType::CloseBrace) {
+                if first {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected at least one member in selective import list",
+                        &name_token,
+                    );
+                    return Err(());
+                }
+                break;
+            }
+            first = false;
+            if !matches!(name_token.ty, TokenType::Identifier) {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    format!("Expected identifier but found '{}'", name_token.value),
+                    &name_token,
+                );
+                return Err(());
+            }
+            let name = name_token.value.clone();
+            let alias = if let Some(ref as_kw) = self.peek() {
+                if KeywordType::is_keyword(as_kw, KeywordType::As) {
+                    self.index += 1;
+                    let Some(alias_token) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            "Expected alias name after 'as'",
+                            &name_token,
+                        );
+                        return Err(());
+                    };
+                    if !matches!(alias_token.ty, TokenType::Identifier) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!("Expected identifier but found '{}'", alias_token.value),
+                            &alias_token,
+                        );
+                        return Err(());
+                    }
+                    if alias_token.value == "_" {
+                        SelectiveAlias::Skip
+                    } else {
+                        SelectiveAlias::Named(alias_token.value)
+                    }
+                } else {
+                    SelectiveAlias::Direct
+                }
+            } else {
+                SelectiveAlias::Direct
+            };
+            members.push(SelectiveMember { name, alias });
+            match self.peek() {
+                Some(ref comma) if SeparatorType::is_separator(comma, SeparatorType::Comma) => {
+                    self.index += 1;
+                }
+                Some(ref brace) if SeparatorType::is_separator(brace, SeparatorType::CloseBrace) => {
+                    self.index += 1;
+                    break;
+                }
+                Some(other) => {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        format!("Expected ',' or '}}' but found '{}'", other.value),
+                        &other,
+                    );
+                    return Err(());
+                }
+                None => {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected ',' or '}' but reached end of input",
+                        &Token::new(String::new(), TokenType::Identifier, Position { pos: 0, line: 0, col: 0, len: 0 }, Rc::new(String::new())),
+                    );
+                    return Err(());
+                }
+            }
+        }
+        Ok(members)
+    }
+
     fn parse_import(&mut self) -> Result<Statement, ()> {
         let token = self.next().unwrap();
         if self.scope_nesting > 0 {
@@ -3466,6 +3559,11 @@ impl Parser {
         loop {
             match self.peek() {
                 Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
+                    if let Some(next) = self.peek2() {
+                        if SeparatorType::is_separator(&next, SeparatorType::OpenBrace) {
+                            break;
+                        }
+                    }
                     self.index += 1;
                     if let Some(ref star) = self.peek() {
                         if let TokenType::Operator {
@@ -3498,17 +3596,101 @@ impl Parser {
                 _ => break,
             }
         }
-        let kind = if wildcard {
-            ImportKind::Wildcard
-        } else if path.len() >= 3 {
-            ImportKind::Member
+        let (selective_members, kind) = if let Some(ref brace_or_dot) = self.peek() {
+            if SeparatorType::is_separator(brace_or_dot, SeparatorType::OpenBrace) {
+                self.index += 1;
+                let members = self.parse_selective_members()?;
+                (Some(members), ImportKind::Module)
+            } else if OperatorType::is_operator(brace_or_dot, OperatorType::Dot) {
+                if let Some(ref brace) = self.peek2() {
+                    if SeparatorType::is_separator(brace, SeparatorType::OpenBrace) {
+                        self.index += 1;
+                        self.index += 1;
+                        let members = self.parse_selective_members()?;
+                        (Some(members), ImportKind::Module)
+                    } else {
+                        let kind = if wildcard {
+                            ImportKind::Wildcard
+                        } else if path.len() >= 3 {
+                            ImportKind::Member
+                        } else {
+                            ImportKind::Module
+                        };
+                        (None, kind)
+                    }
+                } else {
+                    let kind = if wildcard {
+                        ImportKind::Wildcard
+                    } else if path.len() >= 3 {
+                        ImportKind::Member
+                    } else {
+                        ImportKind::Module
+                    };
+                    (None, kind)
+                }
+            } else if KeywordType::is_keyword(brace_or_dot, KeywordType::As) {
+                self.index += 1;
+                if path.len() < 2 {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "'as' requires a dotted path with at least a module and a member name",
+                        brace_or_dot,
+                    );
+                    return Err(());
+                }
+                let member_name = path.pop().unwrap();
+                let Some(alias_token) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        "Expected alias name after 'as'",
+                        brace_or_dot,
+                    );
+                    return Err(());
+                };
+                let alias = if matches!(alias_token.ty, TokenType::Identifier) {
+                    if alias_token.value == "_" {
+                        SelectiveAlias::Skip
+                    } else {
+                        SelectiveAlias::Named(alias_token.value)
+                    }
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!("Expected identifier but found '{}'", alias_token.value),
+                        &alias_token,
+                    );
+                    return Err(());
+                };
+                let member = SelectiveMember {
+                    name: member_name,
+                    alias,
+                };
+                (Some(vec![member]), ImportKind::Module)
+            } else {
+                let kind = if wildcard {
+                    ImportKind::Wildcard
+                } else if path.len() >= 3 {
+                    ImportKind::Member
+                } else {
+                    ImportKind::Module
+                };
+                (None, kind)
+            }
         } else {
-            ImportKind::Module
+            let kind = if wildcard {
+                ImportKind::Wildcard
+            } else if path.len() >= 3 {
+                ImportKind::Member
+            } else {
+                ImportKind::Module
+            };
+            (None, kind)
         };
         Ok(Statement::ImportDecl {
             token: Box::new(token),
             path,
             kind,
+            selective_members,
         })
     }
 
@@ -3602,6 +3784,11 @@ impl Parser {
         loop {
             match self.peek() {
                 Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
+                    if let Some(next) = self.peek2() {
+                        if SeparatorType::is_separator(&next, SeparatorType::OpenBrace) {
+                            break;
+                        }
+                    }
                     self.index += 1;
                     let Some(name) = self.next() else {
                         self.emit_error(
@@ -3624,19 +3811,71 @@ impl Parser {
                 _ => break,
             }
         }
-        let name = name.unwrap_or_else(|| {
-            let last = path.last().unwrap();
-            Token::new(
+        let selective_members = if let Some(ref brace_or_dot) = self.peek() {
+            if SeparatorType::is_separator(brace_or_dot, SeparatorType::OpenBrace) {
+                if name.is_some() {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "'{...}' syntax is not allowed with explicit alias using '='",
+                        brace_or_dot,
+                    );
+                    return Err(());
+                }
+                self.index += 1;
+                let members = self.parse_selective_members()?;
+                Some(members)
+            } else if OperatorType::is_operator(brace_or_dot, OperatorType::Dot) {
+                if let Some(ref brace) = self.peek2() {
+                    if SeparatorType::is_separator(brace, SeparatorType::OpenBrace) {
+                        if name.is_some() {
+                            self.emit_error(
+                                TrussDiagnosticCode::ParserError,
+                                "'{...}' syntax is not allowed with explicit alias using '='",
+                                brace_or_dot,
+                            );
+                            return Err(());
+                        }
+                        self.index += 1;
+                        self.index += 1;
+                        let members = self.parse_selective_members()?;
+                        Some(members)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let name = if selective_members.is_some() {
+            let last = path.last().cloned().unwrap_or_default();
+            Box::new(Token::new(
                 last.clone(),
                 TokenType::Identifier,
                 token.position.clone(),
                 token.file.clone(),
-            )
-        });
+            ))
+        } else {
+            let inner = name.unwrap_or_else(|| {
+                let last = path.last().unwrap();
+                Token::new(
+                    last.clone(),
+                    TokenType::Identifier,
+                    token.position.clone(),
+                    token.file.clone(),
+                )
+            });
+            Box::new(inner)
+        };
         Ok(Statement::UsingDecl {
             token: Box::new(token),
-            name: Box::new(name),
+            name,
             path,
+            selective_members,
         })
     }
 
