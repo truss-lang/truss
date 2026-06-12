@@ -3594,9 +3594,9 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::Return { value, .. } => {
                 match value {
                     Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
-                        let value = self.resolve_expression(value.clone())?.unwrap();
+                        let val = self.resolve_expression(value.clone())?.unwrap();
                         self.emit_all_deinit_calls();
-                        self.builder.build_return(Some(&value))?;
+                        self.builder.build_return(Some(&val))?;
                     }
                     _ => {
                         self.emit_all_deinit_calls();
@@ -4026,12 +4026,43 @@ impl<'ctx> IRGenerator<'ctx> {
                     Some(t) => self.resolve_type(t.clone())?,
                     None => self.context.i32_type().into(),
                 };
-                Ok(Some(
-                    llvm_type
-                        .into_int_type()
-                        .const_int(*value as u64, false)
-                        .into(),
-                ))
+                let is_optional = matches!(ty, Some(t) if matches!(&*t.borrow(), Type::Enum(name, _) if name == "Optional"));
+                if is_optional {
+                    let t_ref = ty.as_ref().unwrap();
+                    let enum_name = match &*t_ref.borrow() {
+                        Type::Enum(name, _) => name.clone(),
+                        _ => unreachable!(),
+                    };
+                    let enum_type = self.enum_types.borrow().get(&enum_name).cloned()
+                        .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
+                    let payloads_type = self.enum_payload_types.borrow().get(&enum_name).cloned()
+                        .ok_or_else(|| anyhow::anyhow!("Enum payload type '{}' not found", enum_name))?;
+                    let int_val = self.context.i32_type().const_int(*value as u64, false);
+                    let int_alloca = self.builder.build_alloca(self.context.i32_type(), "")?;
+                    self.builder.build_store(int_alloca, int_val)?;
+                    let loaded = self.builder.build_load(self.context.i32_type(), int_alloca, "val")?;
+                    let payload_alloca = self.builder.build_alloca(payloads_type.as_basic_type_enum(), "payload")?;
+                    if payloads_type.get_field_type_at_index(1).is_none() {
+                        anyhow::bail!("Some payload slot not found");
+                    }
+                    let payload_ptr = self.builder.build_struct_gep(payloads_type, payload_alloca, 1, "slot")?;
+                    self.builder.build_store(payload_ptr, loaded)?;
+                    let payload_val = self.builder.build_load(payloads_type.as_basic_type_enum(), payload_alloca, "payload_val")?;
+                    let enum_alloca = self.builder.build_alloca(enum_type.as_basic_type_enum(), "optional")?;
+                    let tag_ptr = self.builder.build_struct_gep(enum_type, enum_alloca, 0, "tag")?;
+                    self.builder.build_store(tag_ptr, self.context.i8_type().const_int(1, false))?;
+                    let payload_store_ptr = self.builder.build_struct_gep(enum_type, enum_alloca, 1, "payload")?;
+                    self.builder.build_store(payload_store_ptr, payload_val)?;
+                    let result = self.builder.build_load(enum_type.as_basic_type_enum(), enum_alloca, "result")?;
+                    Ok(Some(result))
+                } else {
+                    Ok(Some(
+                        llvm_type
+                            .into_int_type()
+                            .const_int(*value as u64, false)
+                            .into(),
+                    ))
+                }
             }
             Expression::BooleanLiteral { token } => {
                 let value = match &token.ty {
