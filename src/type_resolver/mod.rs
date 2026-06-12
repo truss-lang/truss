@@ -3981,8 +3981,30 @@ impl TypeResolver {
                         let lookup_result = match &object_t_clone {
                             Type::Struct(struct_name, _) | Type::Class(struct_name, _) => {
                                 let struct_name = struct_name.clone();
+                                let token = object.borrow().token();
                                 let scope = self.current_scope.as_ref().unwrap().borrow();
                                 scope.get_symbol(&struct_name).and_then(|symbol| {
+                                    if !self.is_member_accessible(symbol.clone(), &token) {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::InaccessibleMember,
+                                            format!(
+                                                "'{}' is inaccessible due to '{}' level",
+                                                struct_name,
+                                                symbol
+                                                    .borrow()
+                                                    .get_decl()
+                                                    .unwrap()
+                                                    .unwrap()
+                                                    .borrow()
+                                                    .access_modifier()
+                                                    .map_or(String::from("internal"), |m| m
+                                                        .map(|m| m.token.value.clone())
+                                                        .unwrap_or(String::from("internal")))
+                                            ),
+                                            &token,
+                                        );
+                                        return None;
+                                    }
                                     let subscripts = match &*symbol.borrow() {
                                         Symbol::Struct { subscripts, .. }
                                         | Symbol::Class { subscripts, .. } => subscripts.clone(),
@@ -3995,6 +4017,40 @@ impl TypeResolver {
                                                 &*decl.borrow()
                                             && let Some(t) = sub_ty
                                         {
+                                            if !self.is_member_symbol_accessible(
+                                                sub.clone(),
+                                                &token,
+                                            ) {
+                                                self.emit_error(
+                                                    TrussDiagnosticCode::InaccessibleMember,
+                                                    format!(
+                                                        "subscript is inaccessible due to '{}' level",
+                                                        sub
+                                                            .borrow()
+                                                            .get_decl()
+                                                            .ok()
+                                                            .flatten()
+                                                            .map(|d| {
+                                                                d.borrow()
+                                                                    .access_modifier()
+                                                                    .map_or(
+                                                                        String::from("internal"),
+                                                                        |m| {
+                                                                            m.map(|m| {
+                                                                                m.token.value.clone()
+                                                                            })
+                                                                            .unwrap_or(String::from(
+                                                                                "internal",
+                                                                            ))
+                                                                        },
+                                                                    )
+                                                            })
+                                                            .unwrap_or(String::from("internal"))
+                                                    ),
+                                                    &token,
+                                                );
+                                                return None;
+                                            }
                                             if let Type::Function(_, ret_type, _) = &*t.borrow() {
                                                 return Some(ret_type.clone());
                                             }

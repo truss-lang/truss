@@ -6542,6 +6542,60 @@ fn test_null_with_optional_type() {
 }
 
 #[test]
+fn test_subscript_public_accessible() {
+    let errors = run_type_check(
+        "struct Array { public subscript(index: Int32) -> Int32 { return 42 } }
+         func test(a: Array) -> Int32 { return a[0] }",
+    );
+    assert_eq!(errors, 0, "public subscript should be accessible");
+}
+
+#[test]
+fn test_subscript_private_inaccessible() {
+    let errors = run_type_check(
+        "struct Array { private subscript(index: Int32) -> Int32 { return 42 } }
+         func test(a: Array) -> Int32 { return a[0] }",
+    );
+    assert!(errors > 0, "private subscript should be inaccessible from outside");
+}
+
+#[test]
+fn test_subscript_fileprivate_same_file_accessible() {
+    let errors = run_type_check(
+        "struct Array { fileprivate subscript(index: Int32) -> Int32 { return 42 } }
+         func test(a: Array) -> Int32 { return a[0] }",
+    );
+    assert_eq!(errors, 0, "fileprivate subscript should be accessible in same file");
+}
+
+#[test]
+fn test_subscript_private_set_allows_read() {
+    let errors = run_type_check(
+        "struct Array { private(set) subscript(index: Int32) -> Int32 { get { return 42 } set { } } }
+         func test(a: Array) -> Int32 { return a[0] }",
+    );
+    assert_eq!(errors, 0, "private(set) subscript should allow reading");
+}
+
+#[test]
+fn test_subscript_private_set_disallows_write() {
+    let errors = run_type_check(
+        "struct Array { private(set) subscript(index: Int32) -> Int32 { get { return 42 } set { } } }
+         func test(a: Array) { a[0] = 1 }",
+    );
+    assert!(errors > 0, "private(set) subscript should disallow writing from outside");
+}
+
+#[test]
+fn test_subscript_internal_default_accessible() {
+    let errors = run_type_check(
+        "struct Array { subscript(index: Int32) -> Int32 { return 42 } }
+         func test(a: Array) -> Int32 { return a[0] }",
+    );
+    assert_eq!(errors, 0, "default (internal) subscript should be accessible");
+}
+
+#[test]
 fn test_array_literal_integer_elements() {
     let errors = run_type_check("func test() { let a = [1, 2, 3] }");
     assert_eq!(errors, 0, "array literal with integer elements should type-check");
