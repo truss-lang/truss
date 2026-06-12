@@ -353,7 +353,7 @@ impl SymbolResolver {
                                         }
                                     }
                                     for s in &accessor.body {
-                                        self.resolve_statement(s.clone());
+                                        self.register_symbols(s.clone());
                                     }
                                     self.current_scope = saved;
                                 }
@@ -580,7 +580,7 @@ impl SymbolResolver {
                                         }
                                     }
                                     for s in &accessor.body {
-                                        self.resolve_statement(s.clone());
+                                        self.register_symbols(s.clone());
                                     }
                                     self.current_scope = saved;
                                 }
@@ -1427,7 +1427,6 @@ impl SymbolResolver {
                         self.resolve_where_requirement(req);
                     }
                 }
-                // Auto-generate Copyable.copy() for structs
                 let needs_copy = conformances.iter().any(|expr| {
                     let e = expr.borrow();
                     matches!(&*e, Expression::Type { name, .. } if name.value == "Copyable")
