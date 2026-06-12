@@ -384,17 +384,17 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
 
+        // resolve_statement first to create all function definitions
         for stmt in stdlib_stmts {
-            self.create_function_declarations(stmt.clone());
+            let _ = self.resolve_statement(stmt.clone());
         }
+
+        // Then create vtable and witness table globals referencing these functions
         for stmt in stdlib_stmts {
             self.create_vtable_instances(stmt.clone());
         }
         for stmt in stdlib_stmts {
             self.create_protocol_witness_tables(stmt.clone());
-        }
-        for stmt in stdlib_stmts {
-            let _ = self.resolve_statement(stmt.clone());
         }
 
         std::mem::replace(&mut self.module, main_module)
