@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fs, rc::Rc};
 
 use clap::Parser;
 use truss::{
+    ast::statement::Statement,
     condition_eval::{TargetTriple, flatten_program},
     diag::TrussDiagnosticEngine,
     ir_gen::IRGenerator,
@@ -112,6 +113,8 @@ fn main() {
     let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
     packages.insert("main".to_string(), main_pkg.clone());
 
+    let mut stdlib_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+
     if let Some(ref stdlib_path) = cli.stdlib_path {
         let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
         packages.insert("Truss".to_string(), truss_pkg.clone());
@@ -133,6 +136,13 @@ fn main() {
             }
         };
 
+        // Flatten stdlib statements for use in both registration and IRGen
+        for file_stmts in file_programs {
+            for stmt in &file_stmts {
+                stdlib_stmts.push(stmt.clone());
+            }
+        }
+
         if !has_std_errors {
             let mut std_resolver =
                 SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
@@ -146,10 +156,8 @@ fn main() {
                 std_resolver.enter_scope(Some(scope));
             }
 
-            for file_stmts in file_programs {
-                for stmt in &file_stmts {
-                    std_resolver.register_symbols(stmt.clone());
-                }
+            for stmt in &stdlib_stmts {
+                std_resolver.register_symbols(stmt.clone());
             }
 
             let mut std_type_resolver =
@@ -190,7 +198,11 @@ fn main() {
     let context = inkwell::context::Context::create();
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let ir_generator = IRGenerator::new(&context, engine.clone());
-    let module = ir_generator.generate(&program, module.borrow().scope.clone().unwrap());
+    let module = ir_generator.generate_with_stdlib(
+        &program,
+        &stdlib_stmts,
+        module.borrow().scope.clone().unwrap(),
+    );
 
     if emit_diagnostics(&engine.borrow(), &content) {
         return;

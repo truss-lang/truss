@@ -286,48 +286,67 @@ impl<'ctx> IRGenerator<'ctx> {
         None
     }
 
-    pub fn generate(&self, program: &Program, scope: Rc<RefCell<TrussScope>>) -> Rc<Module<'ctx>> {
+    pub fn generate(
+        &self,
+        program: &Program,
+        scope: Rc<RefCell<TrussScope>>,
+    ) -> Rc<Module<'ctx>> {
+        self.generate_with_stdlib(program, &[], scope)
+    }
+
+    pub fn generate_with_stdlib(
+        &self,
+        program: &Program,
+        stdlib_stmts: &[Rc<RefCell<Statement>>],
+        scope: Rc<RefCell<TrussScope>>,
+    ) -> Rc<Module<'ctx>> {
         *self.program_scope.borrow_mut() = Some(scope);
 
-        for stmt in &program.statements {
+        let all_stmts: Vec<Rc<RefCell<Statement>>> = stdlib_stmts
+            .iter()
+            .chain(program.statements.iter())
+            .cloned()
+            .collect();
+
+        for stmt in &all_stmts {
             self.declare_struct_types(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.declare_class_types(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.declare_enum_types(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_vtable_types(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_protocol_witness_table_types(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_struct_type_bodies(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_class_type_bodies(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_existential_container_types(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_enum_type_bodies(stmt.clone());
         }
 
         {
             let mut counts: HashMap<String, usize> = HashMap::new();
-            for stmt in &program.statements {
+            for stmt in &all_stmts {
                 Self::count_fn_name_frequencies(stmt, &mut counts);
             }
             *self.overloaded_fn_names.borrow_mut() = counts
@@ -337,15 +356,15 @@ impl<'ctx> IRGenerator<'ctx> {
                 .collect();
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_function_declarations(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_vtable_instances(stmt.clone());
         }
 
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_protocol_witness_tables(stmt.clone());
         }
 
@@ -4620,7 +4639,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid types for modulus");
                         }
                     }
-                    BinaryOperator::RangeTo | BinaryOperator::RangeUntil | BinaryOperator::OpenRange => {
+                    BinaryOperator::RangeTo
+                    | BinaryOperator::RangeUntil
+                    | BinaryOperator::OpenRange => {
                         self.emit_error(
                             TrussDiagnosticCode::UnsupportedFeature,
                             "Range expressions are not yet supported in IR generation",
