@@ -6774,18 +6774,45 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                     _ => {
-                        self.emit_error(
-                            TrussDiagnosticCode::UnsupportedFeature,
-                            "Only simple function calls and method calls are supported",
-                            None,
-                        );
-                        anyhow::bail!("Unsupported callee");
+                        // For SelfType, treat as constructor call
+                        if let Expression::SelfType { ty, .. } = &*callee.borrow() {
+                            if let Some(ty) = ty {
+                                let type_name = match &*ty.borrow() {
+                                    Type::Struct(name, _) => name.clone(),
+                                    Type::Class(name, _) => name.clone(),
+                                    _ => {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::UnsupportedFeature,
+                                            "Self(...) is only supported for struct and class types",
+                                            None,
+                                        );
+                                        anyhow::bail!("Self(...) on non-struct/class type");
+                                    }
+                                };
+                                (format!("{}.init", type_name), true)
+                            } else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::TypeInferenceFailed,
+                                    "Self type not resolved",
+                                    None,
+                                );
+                                anyhow::bail!("Self type not resolved");
+                            }
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnsupportedFeature,
+                                "Only simple function calls and method calls are supported",
+                                None,
+                            );
+                            anyhow::bail!("Unsupported callee");
+                        }
                     }
                 };
 
                 let callee_ty = match &*callee.borrow() {
                     Expression::Variable { ty, .. } => ty.clone(),
                     Expression::MemberAccess { ty, .. } => ty.clone(),
+                    Expression::SelfType { ty, .. } => ty.clone(),
                     _ => None,
                 };
                 if let Some(ty) = callee_ty
