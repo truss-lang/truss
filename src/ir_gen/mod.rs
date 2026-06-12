@@ -4620,7 +4620,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid types for modulus");
                         }
                     }
-                    BinaryOperator::RangeTo | BinaryOperator::RangeUntil => {
+                    BinaryOperator::RangeTo | BinaryOperator::RangeUntil | BinaryOperator::OpenRange => {
                         self.emit_error(
                             TrussDiagnosticCode::UnsupportedFeature,
                             "Range expressions are not yet supported in IR generation",
@@ -6774,7 +6774,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                     _ => {
-                        // For SelfType, treat as constructor call
                         if let Expression::SelfType { ty, .. } = &*callee.borrow() {
                             if let Some(ty) = ty {
                                 let type_name = match &*ty.borrow() {

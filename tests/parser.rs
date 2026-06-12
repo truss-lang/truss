@@ -12202,3 +12202,40 @@ fn test_parse_tuple_expression_statement() {
         engine.borrow().get_diagnostics()
     );
 }
+
+#[test]
+fn test_parse_range_operator() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("0..<count".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+}
+#[test]
+fn test_parse_range_operator_to() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("0..count".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+}
+#[test]
+fn test_parse_if_let_mixed_condition() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "if let x = opt && (a > 0) || (b < 0) { x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+}

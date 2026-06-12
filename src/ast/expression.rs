@@ -456,6 +456,7 @@ pub enum BinaryOperator {
     RightShift,
     RangeTo,
     RangeUntil,
+    OpenRange,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
@@ -505,6 +506,7 @@ impl BinaryOperator {
             BinaryOperator::RightShift => ">>",
             BinaryOperator::RangeTo => "..",
             BinaryOperator::RangeUntil => "..<",
+            BinaryOperator::OpenRange => "...",
         }
     }
 
@@ -529,6 +531,7 @@ impl BinaryOperator {
             OperatorType::RightShift => Some(BinaryOperator::RightShift),
             OperatorType::RangeTo => Some(BinaryOperator::RangeTo),
             OperatorType::RangeUntil => Some(BinaryOperator::RangeUntil),
+            OperatorType::OpenRange => Some(BinaryOperator::OpenRange),
             _ => None,
         }
     }

@@ -389,7 +389,8 @@ impl Parser {
                 self.index += 1;
                 if let TokenType::Operator { operator } = token.ty {
                     let right = self.parse_binary(prec)?;
-                    let Some(op) = BinaryOperator::from_operator(operator) else {
+                    let op = BinaryOperator::from_operator(operator);
+                    let Some(op) = op else {
                         self.emit_error(
                             TrussDiagnosticCode::InvalidOperator,
                             format!("Invalid binary operator '{}'", token.value),
@@ -397,12 +398,53 @@ impl Parser {
                         );
                         return Err(());
                     };
-                    left = Expression::Binary {
-                        left: Rc::new(RefCell::new(left)),
-                        operator: op,
-                        right: Rc::new(RefCell::new(right)),
-                        overloads: vec![],
-                        selected_index: None,
+                    if matches!(op, BinaryOperator::RangeTo | BinaryOperator::RangeUntil | BinaryOperator::OpenRange) {
+                        let range_token = Token::new(
+                            "range".to_string(),
+                            TokenType::Identifier,
+                            token.position.clone(),
+                            token.file.clone(),
+                        );
+                        let from_label = Token::new(
+                            "from".to_string(),
+                            TokenType::Identifier,
+                            token.position.clone(),
+                            token.file.clone(),
+                        );
+                        let to_label = Token::new(
+                            "to".to_string(),
+                            TokenType::Identifier,
+                            token.position.clone(),
+                            token.file.clone(),
+                        );
+                        left = Expression::Call {
+                            callee: Rc::new(RefCell::new(Expression::Variable {
+                                name: Box::new(range_token),
+                                ty: None,
+                                symbol: None,
+                            })),
+                            type_parameters: None,
+                            parameters: vec![
+                                crate::ast::expression::CallParameter {
+                                    label: Some(Box::new(from_label)),
+                                    expression: Rc::new(RefCell::new(left)),
+                                },
+                                crate::ast::expression::CallParameter {
+                                    label: Some(Box::new(to_label)),
+                                    expression: Rc::new(RefCell::new(right)),
+                                },
+                            ],
+                            overloads: vec![],
+                            selected_index: None,
+                        };
+                    } else {
+                        left = Expression::Binary {
+                            left: Rc::new(RefCell::new(left)),
+                            operator: op,
+                            right: Rc::new(RefCell::new(right)),
+                            overloads: vec![],
+                            selected_index: None,
+                        };
                     }
                 } else if let TokenType::Keyword { keyword } = token.ty
                     && keyword == KeywordType::As
@@ -5361,8 +5403,14 @@ impl Parser {
                     selected_index: None,
                 })
             } else {
-                self.index -= 1;
-                Ok(case_expr)
+                let right = self.parse_expression()?;
+                Ok(Expression::Binary {
+                    left: Rc::new(RefCell::new(case_expr)),
+                    operator: crate::ast::expression::BinaryOperator::And,
+                    right: Rc::new(RefCell::new(right)),
+                    overloads: vec![],
+                    selected_index: None,
+                })
             }
         } else {
             Ok(case_expr)

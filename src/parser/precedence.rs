@@ -40,7 +40,7 @@ impl Precedence {
                 | OperatorType::LessEqual
                 | OperatorType::Greater
                 | OperatorType::GreaterEqual => Some(Precedence::Relational),
-                OperatorType::RangeTo | OperatorType::RangeUntil => Some(Precedence::Range),
+                OperatorType::RangeTo | OperatorType::RangeUntil | OperatorType::OpenRange => Some(Precedence::Range),
                 OperatorType::LeftShift | OperatorType::RightShift => Some(Precedence::Shift),
                 OperatorType::Plus | OperatorType::Minus => Some(Precedence::Additive),
                 OperatorType::Multiply | OperatorType::Divide | OperatorType::Modulus => {
