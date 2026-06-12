@@ -32,7 +32,7 @@ fn test_parse_function_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "test");
@@ -63,7 +63,7 @@ fn test_parse_function_decl_with_label() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "_");
@@ -83,7 +83,7 @@ fn test_parse_function_decl_with_custom_label() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(
@@ -111,7 +111,7 @@ fn test_parse_function_decl_with_multiple_underscore_labels() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters[0].borrow().label.as_ref().unwrap().value, "_");
@@ -133,7 +133,7 @@ fn test_parse_function_call_with_label() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -156,7 +156,7 @@ fn test_parse_function_call_without_label() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -179,7 +179,7 @@ fn test_parse_underscore_pattern() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -201,7 +201,7 @@ fn test_parse_variable_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -223,7 +223,7 @@ fn test_parse_function_call() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -247,7 +247,7 @@ fn test_parse_unary() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -292,7 +292,7 @@ fn test_parse_binary() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -322,7 +322,7 @@ fn test_parse_assignment() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -352,7 +352,7 @@ fn test_parse_return() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -380,7 +380,7 @@ fn test_parse_return_without_value_before_brace() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -404,7 +404,7 @@ fn test_parse_for() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -428,7 +428,7 @@ fn test_parse_char_literal() {
         CharStream::new("'a'".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow()
         && let Expression::CharLiteral { token } = &*expression.borrow()
@@ -446,7 +446,7 @@ fn test_parse_variable_decl_at_eof() {
         CharStream::new("let a: Never".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "a");
@@ -462,7 +462,7 @@ fn test_parse_variable_decl_no_type_at_eof() {
         CharStream::new("let a".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "a");
@@ -481,7 +481,7 @@ fn test_parse_variable_decl_in_function_at_eof() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -503,7 +503,7 @@ fn test_parse_extern_block_single_func() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExternBlock { linkage, items, .. } = &*program.statements[0].borrow() {
         assert_eq!(linkage.value, r#""C""#);
@@ -528,7 +528,7 @@ fn test_parse_extern_block_multiple_decls() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExternBlock { items, .. } = &*program.statements[0].borrow() {
         assert_eq!(items.len(), 3);
@@ -547,7 +547,7 @@ fn test_parse_extern_single_func() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExternDecl {
         linkage, statement, ..
@@ -574,7 +574,7 @@ fn test_parse_extern_single_let() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExternDecl {
         linkage, statement, ..
@@ -601,7 +601,7 @@ fn test_parse_extern_single_var() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExternDecl {
         linkage, statement, ..
@@ -628,7 +628,7 @@ fn test_parse_extern_variadic_func() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExternDecl {
         linkage, statement, ..
@@ -664,7 +664,7 @@ fn test_parse_extern_variadic_func_bare() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExternDecl {
         linkage, statement, ..
@@ -700,7 +700,7 @@ fn test_parse_deref() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -735,7 +735,7 @@ fn test_parse_deref_nested() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -782,7 +782,7 @@ fn test_parse_deref_with_binary() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -821,7 +821,7 @@ fn test_parse_address_of() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -856,7 +856,7 @@ fn test_parse_address_of_deref() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -903,7 +903,7 @@ fn test_parse_deref_address_of() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -950,7 +950,7 @@ fn test_parse_address_of_binary() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1009,7 +1009,7 @@ fn test_parse_deref_postfix_inc() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1056,7 +1056,7 @@ fn test_parse_deref_prefix_inc() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1103,7 +1103,7 @@ fn test_parse_cast_regular() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1139,7 +1139,7 @@ fn test_parse_cast_conditional() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1178,7 +1178,7 @@ fn test_parse_cast_force() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1217,7 +1217,7 @@ fn test_parse_cast_force_bitcast() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1257,7 +1257,7 @@ fn test_parse_cast_chained() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1307,7 +1307,7 @@ fn test_parse_cast_precedence() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1344,7 +1344,7 @@ fn test_parse_cast_to_pointer() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1371,7 +1371,7 @@ fn test_parse_cast_conditional_to_pointer() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1398,7 +1398,7 @@ fn test_parse_struct_decl_empty() {
         CharStream::new("struct Point {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -1419,7 +1419,7 @@ fn test_parse_struct_decl_with_fields() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -1455,7 +1455,7 @@ fn test_parse_struct_decl_with_function() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Calculator");
@@ -1484,7 +1484,7 @@ fn test_parse_struct_decl_mixed_members() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Person");
@@ -1529,7 +1529,7 @@ fn test_parse_struct_decl_nested_function_body() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Math");
@@ -1560,7 +1560,7 @@ fn test_parse_member_access_simple() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1585,7 +1585,7 @@ fn test_parse_member_access_chain() {
         CharStream::new("func test() { a.b.c }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1623,7 +1623,7 @@ fn test_parse_member_access_with_call() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1652,7 +1652,7 @@ fn test_parse_member_access_in_assignment() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -1681,12 +1681,14 @@ fn test_parse_member_access_deinit_call() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
         && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
-        && let Expression::Call { callee, parameters, .. } = &*expression.borrow()
+        && let Expression::Call {
+            callee, parameters, ..
+        } = &*expression.borrow()
         && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
     {
         if let Expression::Variable { name, .. } = &*object.borrow() {
@@ -1711,7 +1713,7 @@ fn test_parse_init_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -1738,7 +1740,7 @@ fn test_parse_init_decl_empty_params() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
         assert_eq!(body.len(), 1);
@@ -1762,7 +1764,7 @@ fn test_parse_failable_init_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -1793,7 +1795,7 @@ fn test_parse_failable_init_decl_with_params() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -1826,7 +1828,7 @@ fn test_parse_non_failable_init_not_affected() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
         if let Statement::InitDecl { is_failable, .. } = &*body[0].borrow() {
@@ -1849,7 +1851,7 @@ fn test_parse_failable_init_in_class() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -1874,7 +1876,7 @@ fn test_parse_deinit_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -1899,7 +1901,7 @@ fn test_parse_struct_decl_with_init_deinit() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -1937,7 +1939,7 @@ fn test_parse_type_instantiation_call() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -1972,7 +1974,7 @@ fn test_parse_extension_with_method() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExtensionDecl {
         type_name, body, ..
@@ -2000,7 +2002,7 @@ fn test_parse_extension_with_protocol_conformance() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExtensionDecl {
         type_name,
@@ -2024,7 +2026,7 @@ fn test_parse_extension_empty_body() {
         CharStream::new("extension Foo {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExtensionDecl {
         type_name, body, ..
@@ -2047,7 +2049,7 @@ fn test_parse_extension_of_protocol() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExtensionDecl {
         type_name, body, ..
@@ -2075,7 +2077,7 @@ fn test_parse_extension_static_method_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     if let Statement::ExtensionDecl {
@@ -2110,7 +2112,7 @@ fn test_parse_extension_static_method_class() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     if let Statement::ExtensionDecl {
@@ -2145,7 +2147,7 @@ fn test_parse_extension_static_method_enum() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     if let Statement::ExtensionDecl {
@@ -2180,7 +2182,7 @@ fn test_parse_extension_static_method_protocol() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     if let Statement::ExtensionDecl {
@@ -2215,7 +2217,7 @@ fn test_parse_extension_instance_method_not_static() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExtensionDecl { body, .. } = &*program.statements[1].borrow() {
         if let Statement::FunctionDecl {
@@ -2273,7 +2275,7 @@ fn test_parse_public_function() {
         CharStream::new("public func foo() {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "foo");
@@ -2290,7 +2292,7 @@ fn test_parse_private_variable() {
         CharStream::new("private var x: Int32".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "x");
@@ -2310,7 +2312,7 @@ fn test_parse_internal_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Bar");
@@ -2327,7 +2329,7 @@ fn test_parse_package_function() {
         CharStream::new("package func foo() {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "foo");
@@ -2344,7 +2346,7 @@ fn test_parse_package_variable() {
         CharStream::new("package var x: Int32".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "x");
@@ -2361,7 +2363,7 @@ fn test_parse_package_struct() {
         CharStream::new("package struct Bar {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Bar");
@@ -2381,7 +2383,7 @@ fn test_parse_package_class() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl { name, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -2401,7 +2403,7 @@ fn test_parse_public_init_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
         assert_eq!(body.len(), 1);
@@ -2421,7 +2423,7 @@ fn test_parse_private_deinit_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
         assert_eq!(body.len(), 2);
@@ -2442,7 +2444,7 @@ fn test_parse_struct_with_public_method() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Foo");
@@ -2466,7 +2468,7 @@ fn test_parse_function_without_modifier() {
         CharStream::new("func foo() {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_has_no_modifiers(&program.statements[0].borrow());
 }
@@ -2478,7 +2480,7 @@ fn test_parse_variable_without_modifier() {
         CharStream::new("let x: Int32".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_has_no_modifiers(&program.statements[0].borrow());
 }
@@ -2490,7 +2492,7 @@ fn test_parse_struct_without_modifier() {
         CharStream::new("struct Empty {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_has_no_modifiers(&program.statements[0].borrow());
 }
@@ -2505,7 +2507,7 @@ fn test_parse_private_struct_field() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
         assert_eq!(body.len(), 2);
@@ -2530,7 +2532,7 @@ fn test_parse_var_get_shorthand() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name,
@@ -2562,7 +2564,7 @@ fn test_parse_var_get_explicit() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name, accessors, ..
@@ -2586,7 +2588,7 @@ fn test_parse_var_get_set() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name, accessors, ..
@@ -2633,7 +2635,7 @@ fn test_parse_var_didset_only() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name,
@@ -2680,7 +2682,7 @@ fn test_parse_var_set_no_param() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name, accessors, ..
@@ -2706,7 +2708,7 @@ fn test_parse_var_accessors_in_function() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -2732,7 +2734,7 @@ fn test_parse_var_accessors_in_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow()
         && let Statement::VariableDecl {
@@ -3385,7 +3387,7 @@ fn test_parse_enum_simple_cases() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl { name, cases, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Direction");
@@ -3409,7 +3411,7 @@ fn test_parse_enum_with_payload() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl { name, cases, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Result");
@@ -3435,7 +3437,7 @@ fn test_parse_enum_with_labeled_parameters() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl { name, cases, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -3460,7 +3462,7 @@ fn test_parse_enum_with_body() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl {
         name, cases, body, ..
@@ -3494,7 +3496,7 @@ fn test_parse_enum_with_multiple_case_lines() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl { name, cases, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Status");
@@ -3520,7 +3522,7 @@ fn test_parse_enum_case_constructor() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3560,7 +3562,7 @@ fn test_parse_if_case_no_bindings() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3600,7 +3602,7 @@ fn test_parse_if_case_with_bindings() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3646,7 +3648,7 @@ fn test_parse_if_case_with_else() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3690,7 +3692,7 @@ fn test_parse_if_case_else_if() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3745,7 +3747,7 @@ fn test_parse_if_case_multiple_bindings() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3777,7 +3779,7 @@ fn test_parse_if_case_normal_if_still_works() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3802,7 +3804,7 @@ fn test_parse_case_alone() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -3826,7 +3828,7 @@ fn test_parse_class_decl_empty() {
         CharStream::new("class Point {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -3846,7 +3848,7 @@ fn test_parse_class_decl_with_fields() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -3882,7 +3884,7 @@ fn test_parse_class_decl_with_method() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Calculator");
@@ -3910,7 +3912,7 @@ fn test_parse_class_decl_with_init_deinit() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
@@ -3933,7 +3935,7 @@ fn test_parse_public_class() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name, modifiers, ..
@@ -3957,7 +3959,7 @@ fn test_parse_class_decl_with_superclass() {
         CharStream::new("class Dog: Animal {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name,
@@ -3992,7 +3994,7 @@ fn test_parse_class_decl_with_superclass_and_body() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name,
@@ -4025,7 +4027,7 @@ fn test_parse_class_decl_without_superclass() {
         CharStream::new("class Empty {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name, superclass, ..
@@ -4048,7 +4050,7 @@ fn test_parse_class_decl_with_superclass_type_parameters() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name,
@@ -4084,7 +4086,7 @@ fn test_parse_void_literal_empty_parens() {
         CharStream::new("let a: () = ()".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(
         !program.statements.is_empty(),
@@ -4110,7 +4112,7 @@ fn test_parse_grouped_expression() {
         CharStream::new("let a = (1)".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4133,7 +4135,7 @@ fn test_parse_tuple_literal_two_elements() {
         CharStream::new("let a = (1, 2)".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4162,7 +4164,7 @@ fn test_parse_tuple_literal_three_elements() {
         CharStream::new("let a = (1, 2, 3)".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4186,7 +4188,7 @@ fn test_parse_tuple_type_in_variable_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4214,7 +4216,7 @@ fn test_parse_grouped_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4239,7 +4241,7 @@ fn test_parse_tuple_pointer_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4263,7 +4265,7 @@ fn test_parse_nested_tuple_literal() {
         CharStream::new("let a = ((1, 2), 3)".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4295,7 +4297,7 @@ fn test_parse_non_null_pointer_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4323,7 +4325,7 @@ fn test_parse_non_null_pointer_in_param() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow()
         && let Some(param) = parameters.first()
@@ -4348,7 +4350,7 @@ fn test_parse_non_null_ptr_star_bang() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4382,7 +4384,7 @@ fn test_parse_regular_pointer_still_has_non_null_false() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4408,7 +4410,7 @@ fn test_parse_tuple_non_null_pointer_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4433,7 +4435,7 @@ fn test_parse_tuple_index_access_dot() {
         CharStream::new("let a = (1, 2).0".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4459,7 +4461,7 @@ fn test_parse_tuple_index_access_second_element() {
         CharStream::new("let a = (1, 2).1".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4479,7 +4481,7 @@ fn test_parse_member_access_still_works() {
         CharStream::new("let a = obj.field".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4500,7 +4502,7 @@ fn test_parse_self_keyword() {
         CharStream::new("func test() { self }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4525,7 +4527,7 @@ fn test_parse_self_member_access() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4549,7 +4551,7 @@ fn test_parse_self_method_call() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4571,7 +4573,7 @@ fn test_parse_self_as_expression_statement() {
         CharStream::new("self".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         assert!(matches!(
@@ -4590,7 +4592,7 @@ fn test_parse_super_keyword() {
         CharStream::new("func test() { super }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4615,7 +4617,7 @@ fn test_parse_super_member_access() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4639,7 +4641,7 @@ fn test_parse_super_method_call() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -4661,7 +4663,7 @@ fn test_parse_named_tuple_literal() {
         CharStream::new("let a = (x: 1, y: 2)".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4692,7 +4694,7 @@ fn test_parse_single_element_named_tuple() {
         CharStream::new("let a = (x: 1)".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         initializer: Some(init),
@@ -4721,7 +4723,7 @@ fn test_parse_named_tuple_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         type_expression: Some(type_expr),
@@ -4759,7 +4761,7 @@ fn test_parse_protocol_empty() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl {
         name,
@@ -4786,7 +4788,7 @@ fn test_parse_protocol_with_modifier() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl {
         name, modifiers, ..
@@ -4813,7 +4815,7 @@ fn test_parse_protocol_with_conformances() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl {
         name, conformances, ..
@@ -4841,7 +4843,7 @@ fn test_parse_protocol_with_method_requirement() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
@@ -4876,7 +4878,7 @@ fn test_parse_protocol_with_default_implementation() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
@@ -4912,7 +4914,7 @@ fn test_parse_protocol_with_property_requirements() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
@@ -5025,7 +5027,7 @@ fn test_parse_protocol_with_mixed_members() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "MyProtocol");
@@ -5048,7 +5050,7 @@ fn test_parse_protocol_property_get_only_default() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
         assert_eq!(members.len(), 1);
@@ -5073,7 +5075,7 @@ fn test_parse_class_with_protocol_conformance() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name,
@@ -5100,7 +5102,7 @@ fn test_parse_class_with_superclass_and_protocols() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name,
@@ -5140,7 +5142,7 @@ fn test_parse_struct_with_protocol_conformance() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl {
         name, conformances, ..
@@ -5168,7 +5170,7 @@ fn test_parse_struct_with_multiple_protocol_conformances() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl {
         name, conformances, ..
@@ -5203,7 +5205,7 @@ fn test_parse_struct_without_conformances_still_works() {
         CharStream::new("struct Empty {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl {
         name, conformances, ..
@@ -5223,7 +5225,7 @@ fn test_parse_any_type() {
         CharStream::new("let x: any MyProtocol".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name,
@@ -5259,7 +5261,7 @@ fn test_parse_some_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name,
@@ -5295,7 +5297,7 @@ fn test_parse_some_type_in_function_return() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         name,
@@ -5345,7 +5347,7 @@ fn test_parse_compound_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         type_expression: Some(ty_expr),
@@ -5381,7 +5383,7 @@ fn test_parse_compound_type_three() {
         CharStream::new("let x: A & B & C".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         type_expression: Some(ty_expr),
@@ -5414,7 +5416,7 @@ fn test_parse_inline_type_auto() {
         CharStream::new("let x: inline Dog".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name,
@@ -5453,7 +5455,7 @@ fn test_parse_inline_type_explicit_size() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name,
@@ -5490,7 +5492,7 @@ fn test_parse_inline_type_empty_brackets() {
         CharStream::new("let x: inline<> Dog".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::VariableDecl {
         name,
@@ -5529,7 +5531,7 @@ fn test_parse_generic_function() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         name,
@@ -5563,7 +5565,7 @@ fn test_parse_generic_function_param_with_constraints() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -5596,7 +5598,7 @@ fn test_parse_generic_function_multi_param() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -5620,7 +5622,7 @@ fn test_parse_generic_function_with_combined_constraint() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -5659,7 +5661,7 @@ fn test_parse_generic_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl {
         name,
@@ -5685,7 +5687,7 @@ fn test_parse_generic_class() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name,
@@ -5714,7 +5716,7 @@ fn test_parse_generic_enum() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl {
         name,
@@ -5740,7 +5742,7 @@ fn test_parse_generic_protocol_with_sugar() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl {
         name,
@@ -5769,7 +5771,7 @@ fn test_parse_protocol_associatedtype() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
         assert!(matches!(members[0], ProtocolMember::AssociatedType { .. }));
@@ -5795,7 +5797,7 @@ fn test_parse_protocol_associatedtype_with_constraint() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
         if let ProtocolMember::AssociatedType {
@@ -5822,7 +5824,7 @@ fn test_parse_typealias_in_protocol() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
         assert!(matches!(members[0], ProtocolMember::TypeAlias { .. }));
@@ -5846,7 +5848,7 @@ fn test_parse_typealias_in_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
         assert!(matches!(&*body[0].borrow(), Statement::TypeAlias { .. }));
@@ -5870,7 +5872,7 @@ fn test_parse_typealias_at_top_level() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(matches!(
         &*program.statements[0].borrow(),
@@ -5893,7 +5895,7 @@ fn test_parse_typealias_in_function_body() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow() {
         if let FunctionBody::Statements(stmts) = &*body.borrow() {
@@ -5921,7 +5923,7 @@ fn test_parse_const_generic_function() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -5948,7 +5950,7 @@ fn test_parse_const_generic_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl {
         name,
@@ -5983,7 +5985,7 @@ fn test_parse_const_generic_class() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name,
@@ -6013,7 +6015,7 @@ fn test_parse_const_generic_enum() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl {
         name,
@@ -6043,7 +6045,7 @@ fn test_parse_const_generic_multi_params() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -6090,7 +6092,7 @@ fn test_parse_type_params_with_literal_at_call_site() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(program.statements.len() > 0);
 }
@@ -6105,7 +6107,7 @@ fn test_parse_type_params_with_mixed_type_and_literal() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(program.statements.len() > 0);
 }
@@ -6120,7 +6122,7 @@ fn test_parse_protocol_with_const_generic() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl {
         name,
@@ -6159,7 +6161,7 @@ fn test_parse_struct_conformance_with_generic_protocol() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl {
         name,
@@ -6198,7 +6200,7 @@ fn test_parse_function_where_clause() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters,
@@ -6229,7 +6231,7 @@ fn test_parse_function_where_clause_multi_and() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { where_clause, .. } = &*program.statements[0].borrow() {
         assert!(where_clause.is_some());
@@ -6258,7 +6260,7 @@ fn test_parse_struct_with_where_clause() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl {
         generic_parameters,
@@ -6367,7 +6369,7 @@ fn test_parse_extension_where_clause() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ExtensionDecl {
         type_name,
@@ -6392,7 +6394,7 @@ fn test_parse_non_generic_function_still_works() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         name,
@@ -6419,7 +6421,7 @@ fn test_parse_generic_function_less_than_no_conflict() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -6441,7 +6443,7 @@ fn test_parse_type_instantiation_inside_generic_context() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { .. } = &*program.statements[0].borrow() {
     } else {
@@ -6462,7 +6464,7 @@ fn test_parse_if_case_dot_shorthand() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6496,7 +6498,7 @@ fn test_parse_if_case_connect_with_and() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6537,7 +6539,7 @@ fn test_parse_match_simple() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6579,7 +6581,7 @@ fn test_parse_match_with_guard() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6609,7 +6611,7 @@ fn test_parse_guard_statement() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6644,7 +6646,7 @@ fn test_parse_fallthrough_and_break() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6678,7 +6680,7 @@ fn test_parse_pattern_value_binding() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6713,7 +6715,7 @@ fn test_parse_mixed_literal_and_binding_patterns() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6753,7 +6755,7 @@ fn test_parse_match_in_expression_context() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6772,7 +6774,7 @@ fn test_parse_match_malformed_no_brace_error() {
         CharStream::new("match x".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(
         program.statements.is_empty()
@@ -6790,7 +6792,7 @@ fn test_parse_guard_without_else_error() {
         CharStream::new("guard case .x = x".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(
         program.statements.is_empty()
@@ -6808,7 +6810,7 @@ fn test_parse_associated_type_access_in_param() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(program.statements.len() >= 2);
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
@@ -6834,7 +6836,7 @@ fn test_parse_associated_type_access_chained() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
         let ty_expr = parameters[0].borrow().type_expression.clone();
@@ -6867,7 +6869,7 @@ fn test_parse_associated_type_with_pointer() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
         let ty_expr = parameters[0].borrow().type_expression.clone();
@@ -6899,7 +6901,7 @@ fn test_parse_associated_type_in_variable_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -6928,7 +6930,7 @@ fn test_parse_associated_type_in_parenthesized_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[1].borrow() {
         let ty_expr = parameters[0].borrow().type_expression.clone();
@@ -6953,7 +6955,7 @@ fn test_parse_defer_statement() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -6981,7 +6983,7 @@ fn test_parse_defer_nested() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7046,7 +7048,7 @@ fn test_parse_if_as_variable_initializer() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7078,7 +7080,7 @@ fn test_parse_if_as_function_body_last_expression() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7099,7 +7101,7 @@ fn test_parse_if_elseif_chain() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7121,7 +7123,7 @@ fn test_parse_if_without_else_as_expression() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7154,7 +7156,7 @@ fn test_parse_match_multi_pattern_literals() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7202,7 +7204,7 @@ fn test_parse_match_multi_pattern_enum() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7245,7 +7247,7 @@ fn test_parse_match_multi_pattern_with_guard() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7272,7 +7274,7 @@ fn test_parse_empty_module() {
         CharStream::new("module foo {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     let stmt = program.statements[0].borrow();
@@ -7294,7 +7296,7 @@ fn test_parse_module_with_body() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     let stmt = program.statements[0].borrow();
@@ -7316,7 +7318,7 @@ fn test_parse_module_dotted_path() {
         CharStream::new("module foo.bar { }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     let stmt = program.statements[0].borrow();
@@ -7355,7 +7357,7 @@ fn test_parse_nested_module() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     let stmt = program.statements[0].borrow();
@@ -7394,7 +7396,7 @@ fn test_parse_multiple_modules() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     let stmt0 = program.statements[0].borrow();
@@ -7442,7 +7444,7 @@ fn test_dotted_and_nested_module_equivalence() {
         CharStream::new("module foo.bar { }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     let stmt = program.statements[0].borrow();
@@ -7513,7 +7515,7 @@ fn test_parse_module_deep_dotted_path() {
         CharStream::new("module a.b.c { }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     let stmt = program.statements[0].borrow();
@@ -7562,7 +7564,7 @@ fn test_parse_overloaded_top_level_functions() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     if let Statement::FunctionDecl {
@@ -7606,7 +7608,7 @@ fn test_parse_import_module_single() {
         CharStream::new("import Foo".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7624,7 +7626,7 @@ fn test_parse_import_module_nested() {
         CharStream::new("import Foo.Bar".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7642,7 +7644,7 @@ fn test_parse_import_member() {
         CharStream::new("import Foo.Bar.baz".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7663,7 +7665,7 @@ fn test_parse_import_wildcard() {
         CharStream::new("import Foo.Bar.*".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7681,7 +7683,7 @@ fn test_parse_import_member_deep() {
         CharStream::new("import A.B.C.D.foo".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7708,7 +7710,7 @@ fn test_parse_import_wildcard_deep() {
         CharStream::new("import A.B.C.*".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7732,7 +7734,7 @@ fn test_parse_multiple_imports() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 4);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7774,7 +7776,7 @@ fn test_parse_using_with_alias() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -7795,7 +7797,7 @@ fn test_parse_using_shorthand() {
         CharStream::new("using Foo.Bar.MyInt".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -7816,7 +7818,7 @@ fn test_parse_using_single_path() {
         CharStream::new("using Foo".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -7834,7 +7836,7 @@ fn test_parse_using_deep_path() {
         CharStream::new("using A.B.C.D.E".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -7861,7 +7863,7 @@ fn test_parse_using_with_alias_deep_path() {
         CharStream::new("using X = A.B.C.D.E".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -7891,7 +7893,7 @@ fn test_parse_using_multiple() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 3);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -7924,7 +7926,7 @@ fn test_parse_import_package_module() {
         CharStream::new("import package.Foo".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7945,7 +7947,7 @@ fn test_parse_import_package_module_nested() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7966,7 +7968,7 @@ fn test_parse_import_package_member() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -7987,7 +7989,7 @@ fn test_parse_import_package_wildcard() {
         CharStream::new("import package.Foo.*".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -8008,7 +8010,7 @@ fn test_parse_import_package_deep_member() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -8038,7 +8040,7 @@ fn test_parse_import_package_deep_wildcard() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -8062,7 +8064,7 @@ fn test_parse_using_package_shorthand() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -8083,7 +8085,7 @@ fn test_parse_using_package_with_alias() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -8104,7 +8106,7 @@ fn test_parse_using_package_deep_shorthand() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::UsingDecl { name, path, .. } = &*program.statements[0].borrow() {
@@ -8160,7 +8162,7 @@ fn test_parse_import_regular_ident_still_works() {
         CharStream::new("import Foo".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ImportDecl { path, kind, .. } = &*program.statements[0].borrow() {
@@ -8236,7 +8238,7 @@ fn test_parse_generic_call_with_type_args() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -8272,7 +8274,7 @@ fn test_parse_generic_call_multi_type_args() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -8308,7 +8310,7 @@ fn test_parse_generic_call_nested_type_args() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -8339,7 +8341,7 @@ fn test_parse_nested_generic_type_double_gt() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -8376,7 +8378,7 @@ fn test_parse_generic_method_call_with_type_args() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -8413,7 +8415,7 @@ fn test_parse_where_clause_equality() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { where_clause, .. } = &*program.statements[0].borrow() {
         assert!(where_clause.is_some());
@@ -8438,7 +8440,7 @@ fn test_parse_generic_class_with_where_clause() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ClassDecl {
         name,
@@ -8466,7 +8468,7 @@ fn test_parse_generic_enum_with_where_clause() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl {
         name,
@@ -8494,7 +8496,7 @@ fn test_parse_generic_protocol_with_where_clause() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ProtocolDecl {
         name,
@@ -8522,7 +8524,7 @@ fn test_parse_closure_typed_params() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
@@ -8561,7 +8563,7 @@ fn test_parse_closure_no_return_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
@@ -8595,7 +8597,7 @@ fn test_parse_closure_no_params() {
         CharStream::new("let f = { in 42 }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
@@ -8626,7 +8628,7 @@ fn test_parse_closure_multi_statement_body() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
@@ -8659,7 +8661,7 @@ fn test_parse_function_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl {
@@ -8700,7 +8702,7 @@ fn test_parse_function_type_single_param() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl {
@@ -8729,7 +8731,7 @@ fn test_parse_function_type_void_params() {
         CharStream::new("let f: () -> Void".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl {
@@ -8757,7 +8759,7 @@ fn test_parse_closure_with_function_type_annotation() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl {
@@ -8783,7 +8785,7 @@ fn test_parse_block_not_closure() {
         CharStream::new("let b = { 42 }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
@@ -8804,7 +8806,7 @@ fn test_parse_shorthand_argument() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
@@ -8842,7 +8844,7 @@ fn test_parse_shorthand_argument_plus() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
@@ -8896,7 +8898,7 @@ fn test_parse_shorthand_argument_multi() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!program.statements.is_empty());
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
@@ -8932,7 +8934,7 @@ fn test_parse_subscript_decl_get() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::SubscriptDecl {
@@ -8960,7 +8962,7 @@ fn test_parse_subscript_decl_get_set() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::SubscriptDecl {
@@ -8989,7 +8991,7 @@ fn test_parse_subscript_decl_implicit_get() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::SubscriptDecl {
@@ -9016,7 +9018,7 @@ fn test_parse_subscript_with_label() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::SubscriptDecl { parameters, .. } = &*program.statements[0].borrow() {
@@ -9034,7 +9036,7 @@ fn test_parse_subscript_access_single_index() {
         CharStream::new("arr[0]".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
@@ -9068,7 +9070,7 @@ fn test_parse_subscript_access_multi_index() {
         CharStream::new("matrix[row, col]".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
@@ -9093,7 +9095,7 @@ fn test_parse_subscript_in_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
@@ -9129,7 +9131,7 @@ fn test_parse_subscript_in_protocol() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
@@ -9166,7 +9168,7 @@ fn test_parse_subscript_in_class() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ClassDecl { body, .. } = &*program.statements[0].borrow() {
@@ -9189,7 +9191,7 @@ fn test_parse_macro_decl_simple() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::MacroDecl { name, arms, .. } = &*program.statements[0].borrow() {
@@ -9217,7 +9219,7 @@ fn test_parse_macro_decl_multi_arm() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::MacroDecl { name, arms, .. } = &*program.statements[0].borrow() {
@@ -9242,7 +9244,7 @@ fn test_parse_macro_invocation_paren() {
         CharStream::new("my_macro!(1 + 2)".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
@@ -9271,7 +9273,7 @@ fn test_parse_macro_invocation_brace() {
         CharStream::new("my_macro! { 1 + 2 }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
@@ -9296,7 +9298,7 @@ fn test_parse_macro_invocation_bracket() {
         CharStream::new("my_macro![1, 2, 3]".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
@@ -9324,7 +9326,7 @@ fn test_parse_macro_decl_var_types() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::MacroDecl { arms, .. } = &*program.statements[0].borrow() {
@@ -9372,7 +9374,7 @@ fn test_parse_macro_decl_and_invocation() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     assert!(matches!(
@@ -9413,7 +9415,7 @@ fn test_parse_operator_function_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl {
@@ -9439,7 +9441,7 @@ fn test_parse_prefix_operator_function_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl {
@@ -9615,7 +9617,7 @@ fn test_parse_static_operator_function_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl {
@@ -9641,7 +9643,7 @@ fn test_parse_static_prefix_operator_function_decl() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl {
@@ -9669,7 +9671,7 @@ fn test_parse_operator_function_inside_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
@@ -9713,7 +9715,7 @@ fn test_parse_member_operator_function_inside_struct() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
@@ -9753,7 +9755,7 @@ fn test_parse_conditional_block_simple() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
@@ -9775,7 +9777,7 @@ fn test_parse_conditional_block_if_else() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
@@ -9800,7 +9802,7 @@ fn test_parse_conditional_block_if_elseif_else() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
@@ -9823,7 +9825,7 @@ fn test_parse_conditional_block_condition_types() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(program.statements.len() >= 6);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
@@ -9844,7 +9846,7 @@ fn test_parse_ifdef_and_ifndef() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[1].borrow() {
@@ -9862,7 +9864,7 @@ fn test_parse_defined_in_condition() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
 }
@@ -9877,7 +9879,7 @@ fn test_parse_nested_conditional_blocks() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
@@ -9900,7 +9902,7 @@ fn test_parse_pragma_error_and_warning() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 2);
     assert!(matches!(
@@ -9920,7 +9922,7 @@ fn test_parse_empty_conditional_block() {
         CharStream::new("#if FOO\n#endif".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
 }
@@ -10027,7 +10029,7 @@ fn test_parse_conditional_block_with_function_body() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
 }
@@ -10042,7 +10044,7 @@ fn test_parse_os_condition() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
@@ -10066,7 +10068,7 @@ fn test_parse_arch_condition() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
@@ -10090,7 +10092,7 @@ fn test_parse_os_arch_combined_condition() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::ConditionalBlock { clauses } = &*program.statements[0].borrow() {
@@ -10114,7 +10116,7 @@ fn test_parse_sizeof_int32() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -10183,7 +10185,7 @@ fn test_parse_asm_block_empty() {
         CharStream::new("asm {}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::AsmBlock {
@@ -10213,7 +10215,7 @@ fn test_parse_asm_block_instructions_only() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::AsmBlock {
@@ -10245,7 +10247,7 @@ fn test_parse_asm_block_with_outputs() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock {
         instructions,
@@ -10277,7 +10279,7 @@ fn test_parse_asm_block_with_inputs() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock {
         instructions,
@@ -10309,7 +10311,7 @@ fn test_parse_asm_block_full() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock {
         instructions,
@@ -10354,7 +10356,7 @@ fn test_parse_asm_block_multiple_instructions() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock {
         instructions,
@@ -10381,7 +10383,7 @@ fn test_parse_asm_block_clobbers_only() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock {
         instructions,
@@ -10424,7 +10426,7 @@ fn test_parse_asm_block_multiple_outputs() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock { outputs, .. } = &*program.statements[0].borrow() {
         assert_eq!(outputs.len(), 2);
@@ -10442,7 +10444,7 @@ fn test_parse_asm_block_in_expression_statement_fallback() {
         CharStream::new(r#"asm { "nop" }"#.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     assert!(matches!(
@@ -10461,7 +10463,7 @@ fn test_parse_asm_block_comma_separated_instructions() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock {
         instructions,
@@ -10491,7 +10493,7 @@ fn test_parse_asm_block_comma_separated_no_operands() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock { instructions, .. } = &*program.statements[0].borrow() {
         assert_eq!(instructions.len(), 3);
@@ -10517,7 +10519,7 @@ fn test_parse_asm_block_mixed_separators() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::AsmBlock { instructions, .. } = &*program.statements[0].borrow() {
         assert_eq!(instructions.len(), 3);
@@ -10534,7 +10536,7 @@ fn test_parse_do_expression() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert_eq!(program.statements.len(), 1);
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
@@ -10556,7 +10558,7 @@ fn test_parse_do_empty_body() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -10593,7 +10595,7 @@ fn test_parse_do_nested() {
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
@@ -10622,7 +10624,7 @@ fn test_parse_yield_with_value() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -10643,7 +10645,7 @@ fn test_parse_yield_without_value() {
         CharStream::new("func test() { yield }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -10667,7 +10669,7 @@ fn test_parse_yield_in_do_expression() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -10726,7 +10728,7 @@ fn test_parse_function_decl_with_default_value() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters.len(), 1);
@@ -10748,7 +10750,7 @@ fn test_parse_function_decl_with_label_and_default_value() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters.len(), 2);
@@ -10773,7 +10775,7 @@ fn test_parse_function_decl_with_expression_default_value() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters.len(), 1);
@@ -10795,7 +10797,7 @@ fn test_parse_function_decl_no_label_with_default_value() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         assert_eq!(parameters.len(), 1);
@@ -10816,7 +10818,7 @@ fn test_parse_generic_function_with_default_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -10844,7 +10846,7 @@ fn test_parse_generic_function_with_constraint_and_default_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -10874,7 +10876,7 @@ fn test_parse_generic_struct_with_default_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::StructDecl {
         generic_parameters, ..
@@ -10898,7 +10900,7 @@ fn test_parse_const_generic_with_default_value() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -10926,7 +10928,7 @@ fn test_parse_generic_function_no_default_type() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::FunctionDecl {
         generic_parameters, ..
@@ -10949,7 +10951,7 @@ fn test_parse_import_selective() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -10981,7 +10983,7 @@ fn test_parse_import_selective_with_alias() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11013,7 +11015,7 @@ fn test_parse_import_selective_with_skip() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11045,7 +11047,7 @@ fn test_parse_import_single_alias() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11075,7 +11077,7 @@ fn test_parse_import_single_skip() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11105,7 +11107,7 @@ fn test_parse_import_selective_package() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11137,7 +11139,7 @@ fn test_parse_import_selective_package_with_alias() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11167,7 +11169,7 @@ fn test_parse_import_package_single_alias() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11197,7 +11199,7 @@ fn test_parse_using_selective() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::UsingDecl {
         path,
@@ -11227,7 +11229,7 @@ fn test_parse_using_selective_with_alias() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::UsingDecl {
         path,
@@ -11260,7 +11262,7 @@ fn test_parse_using_selective_with_skip() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::UsingDecl {
         path,
@@ -11290,7 +11292,7 @@ fn test_parse_using_selective_package() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::UsingDecl {
         path,
@@ -11320,7 +11322,7 @@ fn test_parse_using_selective_package_with_alias() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::UsingDecl {
         path,
@@ -11351,7 +11353,7 @@ fn test_parse_import_selective_trailing_comma() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11376,7 +11378,7 @@ fn test_parse_import_selective_single_member() {
         CharStream::new("import Foo.Bar.{baz}".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11451,7 +11453,7 @@ fn test_parse_import_regular_member_still_works() {
         CharStream::new("import Foo.Bar.baz".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11478,7 +11480,7 @@ fn test_parse_import_regular_wildcard_still_works() {
         CharStream::new("import Foo.Bar.*".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11502,7 +11504,7 @@ fn test_parse_import_regular_module_still_works() {
         CharStream::new("import Foo".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::ImportDecl {
         path,
@@ -11529,7 +11531,7 @@ fn test_parse_using_regular_alias_still_works() {
         ),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::UsingDecl {
         name,
@@ -11556,7 +11558,7 @@ fn test_parse_using_regular_shorthand_still_works() {
         CharStream::new("using Foo.Bar.MyInt".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
-    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::UsingDecl {
         name,
@@ -12032,5 +12034,55 @@ fn test_parse_array_literal_trailing_comma() {
         }
     } else {
         panic!("Expected VariableDecl with initializer");
+    }
+}
+
+#[test]
+fn test_parse_self_type_as_primary() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("Self".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        assert!(matches!(&*expr, Expression::SelfType { .. }));
+    } else {
+        panic!("Expected ExpressionStatement with SelfType");
+    }
+}
+
+#[test]
+fn test_parse_self_call() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "Self(count: self.count, capacity: self.capacity)".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        if let Expression::Call {
+            callee, parameters, ..
+        } = &*expr
+        {
+            assert!(matches!(&*callee.borrow(), Expression::SelfType { .. }));
+            assert_eq!(parameters.len(), 2);
+            assert_eq!(parameters[0].label.as_ref().unwrap().value, "count");
+            assert_eq!(parameters[1].label.as_ref().unwrap().value, "capacity");
+        } else {
+            panic!("Expected Call expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
     }
 }

@@ -618,6 +618,13 @@ impl Parser {
                         symbol: None,
                     })
                 }
+                KeywordType::SelfType => {
+                    self.index += 1;
+                    Ok(Expression::SelfType {
+                        token: Box::new(token),
+                        ty: None,
+                    })
+                }
                 KeywordType::SuperKw => {
                     self.index += 1;
                     Ok(Expression::SuperKeyword {
