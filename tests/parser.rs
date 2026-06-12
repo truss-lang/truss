@@ -11684,7 +11684,7 @@ fn test_parse_optional_type_in_func_return() {
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
-    let program = parser.parse();
+    let _program = parser.parse();
     assert!(!engine.borrow().has_errors());
 }
 
@@ -11699,7 +11699,7 @@ fn test_parse_array_type_in_func_param() {
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
-    let program = parser.parse();
+    let _program = parser.parse();
     assert!(!engine.borrow().has_errors());
 }
 
@@ -11713,7 +11713,11 @@ fn test_parse_array_literal_empty() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
         let init = init.borrow();
         assert!(matches!(&*init, Expression::ArrayLiteral { elements, .. } if elements.is_empty()));
     } else {
@@ -11731,11 +11735,18 @@ fn test_parse_array_literal_single_element() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
         let init = init.borrow();
         if let Expression::ArrayLiteral { elements, .. } = &*init {
             assert_eq!(elements.len(), 1);
-            assert!(matches!(&*elements[0].borrow(), Expression::IntegerLiteral { value: 42, .. }));
+            assert!(matches!(
+                &*elements[0].borrow(),
+                Expression::IntegerLiteral { value: 42, .. }
+            ));
         } else {
             panic!("Expected ArrayLiteral");
         }
@@ -11754,7 +11765,11 @@ fn test_parse_array_literal_multi_element() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
         let init = init.borrow();
         if let Expression::ArrayLiteral { elements, .. } = &*init {
             assert_eq!(elements.len(), 3);
@@ -11776,7 +11791,11 @@ fn test_parse_array_literal_member_access() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
         let init = init.borrow();
         assert!(matches!(&*init, Expression::MemberAccess { .. }));
     } else {
@@ -11794,7 +11813,11 @@ fn test_parse_array_literal_subscript_not_confused() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
         let init = init.borrow();
         assert!(matches!(&*init, Expression::SubscriptAccess { .. }));
     } else {
@@ -11810,7 +11833,7 @@ fn test_parse_array_literal_missing_bracket() {
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
-    let program = parser.parse();
+    let _program = parser.parse();
     assert!(engine.borrow().has_errors());
 }
 
@@ -11818,11 +11841,14 @@ fn test_parse_array_literal_missing_bracket() {
 fn test_parse_array_literal_in_function_return() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("func test() { return [] }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "func test() { return [] }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
-    let program = parser.parse();
+    let _program = parser.parse();
     assert!(!engine.borrow().has_errors());
 }
 
@@ -11830,11 +11856,14 @@ fn test_parse_array_literal_in_function_return() {
 fn test_parse_array_literal_nested() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("let x = [[1, 2], [3, 4]]".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "let x = [[1, 2], [3, 4]]".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
-    let program = parser.parse();
+    let _program = parser.parse();
     assert!(!engine.borrow().has_errors());
 }
 
@@ -11848,7 +11877,11 @@ fn test_parse_array_literal_trailing_comma() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        initializer: Some(init),
+        ..
+    } = &*program.statements[0].borrow()
+    {
         let init = init.borrow();
         if let Expression::ArrayLiteral { elements, .. } = &*init {
             assert_eq!(elements.len(), 2);

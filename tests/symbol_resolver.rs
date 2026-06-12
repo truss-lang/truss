@@ -171,7 +171,7 @@ fn test_builtintype_struct_symbol_is_marked() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let root_module = resolver.resolve(&program, "test".to_string());
     {
@@ -205,7 +205,7 @@ fn test_non_builtintype_struct_symbol_not_marked() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let root_module = resolver.resolve(&program, "test".to_string());
     {
@@ -2217,7 +2217,7 @@ fn test_module_registers_symbol_in_parent_scope() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
     let root_module = resolver.resolve(&program, "test".to_string());
     let root_scope = root_module.borrow().scope.clone().unwrap();
@@ -2388,7 +2388,7 @@ fn test_module_func_call_resolves() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let engine_borrow = engine.borrow();
@@ -2413,7 +2413,7 @@ fn test_overloaded_functions_register_without_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let engine_borrow = engine.borrow();
@@ -2438,7 +2438,7 @@ fn test_overloaded_struct_methods_register_without_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let engine_borrow = engine.borrow();
@@ -2464,7 +2464,7 @@ fn test_get_all_symbols_returns_overloads() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     let engine_borrow = engine.borrow();
@@ -3846,7 +3846,7 @@ fn resolve_and_check(
     let tokens = lexer.parse();
     let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     resolver.resolve(&program, "test".to_string());
     (engine, program.statements)
@@ -4504,9 +4504,7 @@ fn test_import_selective_package_with_alias() {
 
 #[test]
 fn test_array_literal_elements_resolve() {
-    let (_, engine, _) = run_resolver(
-        "func test() { let a = [1, 2, 3] }",
-    );
+    let (_, engine, _) = run_resolver("func test() { let a = [1, 2, 3] }");
     assert_eq!(
         engine.borrow().get_diagnostics().len(),
         0,
@@ -4516,9 +4514,7 @@ fn test_array_literal_elements_resolve() {
 
 #[test]
 fn test_array_literal_empty_resolves() {
-    let (_, engine, _) = run_resolver(
-        "func test() { let a = [] }",
-    );
+    let (_, engine, _) = run_resolver("func test() { let a = [] }");
     assert_eq!(
         engine.borrow().get_diagnostics().len(),
         0,
@@ -4528,9 +4524,7 @@ fn test_array_literal_empty_resolves() {
 
 #[test]
 fn test_array_literal_resolves_variable() {
-    let (_, engine, _) = run_resolver(
-        "func test() { let x = 42; let a = [x] }",
-    );
+    let (_, engine, _) = run_resolver("func test() { let x = 42; let a = [x] }");
     assert_eq!(
         engine.borrow().get_diagnostics().len(),
         0,
@@ -4540,9 +4534,7 @@ fn test_array_literal_resolves_variable() {
 
 #[test]
 fn test_array_literal_undefined_variable() {
-    let (_, engine, _) = run_resolver(
-        "func test() { let a = [undefinedVar] }",
-    );
+    let (_, engine, _) = run_resolver("func test() { let a = [undefinedVar] }");
     assert!(
         engine.borrow().has_errors(),
         "Undefined variable in array literal should produce error"

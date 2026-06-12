@@ -26,7 +26,7 @@ fn test_irgen_nullptr_literal() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -52,7 +52,7 @@ fn test_irgen_pointer_parameter() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -78,7 +78,7 @@ fn test_irgen_deref_in_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -104,7 +104,7 @@ fn test_irgen_non_null_pointer_param() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -130,7 +130,7 @@ fn test_irgen_void_pointer_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -155,7 +155,7 @@ fn test_irgen_cast_int_to_float() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -180,7 +180,7 @@ fn test_irgen_cast_float_to_int() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -205,7 +205,7 @@ fn test_irgen_cast_int_extend() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -230,7 +230,7 @@ fn test_irgen_cast_force_bitcast() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -262,7 +262,7 @@ fn test_irgen_struct_field_access() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -300,7 +300,7 @@ fn test_irgen_struct_method_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -337,7 +337,7 @@ fn test_irgen_struct_method_call_with_params() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -373,7 +373,7 @@ fn test_irgen_type_instantiation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -405,7 +405,7 @@ fn test_irgen_var_getter_shorthand() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -437,7 +437,7 @@ fn test_irgen_var_getter_explicit() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -471,7 +471,7 @@ fn test_irgen_var_get_set() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -505,7 +505,7 @@ fn test_irgen_var_willset_didset() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -543,7 +543,7 @@ fn test_irgen_var_all_accessors() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -578,7 +578,7 @@ fn test_irgen_var_set_no_param() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -613,7 +613,7 @@ fn test_irgen_struct_getter_shorthand() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -648,7 +648,7 @@ fn test_irgen_struct_getter_explicit() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -686,7 +686,7 @@ fn test_irgen_struct_get_set() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -724,7 +724,7 @@ fn test_irgen_struct_willset_didset() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -765,7 +765,7 @@ fn test_irgen_struct_get_set_read_write() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -801,7 +801,7 @@ fn test_irgen_enum_decl_simple_cases() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -835,7 +835,7 @@ fn test_irgen_enum_case_construction_no_payload() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -869,7 +869,7 @@ fn test_irgen_enum_case_construction_with_payload() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -904,7 +904,7 @@ fn test_irgen_enum_case_with_labeled_payload() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -940,7 +940,7 @@ fn test_irgen_enum_multiple_cases() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -978,7 +978,7 @@ fn test_irgen_enum_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1013,7 +1013,7 @@ fn test_irgen_enum_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1044,7 +1044,7 @@ fn test_irgen_if_case_no_bindings() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1078,7 +1078,7 @@ fn test_irgen_if_case_with_bindings() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1122,7 +1122,7 @@ fn test_irgen_if_case_with_else() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1159,7 +1159,7 @@ fn test_irgen_if_case_else_if() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1192,7 +1192,7 @@ fn test_irgen_class_decl() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1233,7 +1233,7 @@ fn test_irgen_class_method_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1271,7 +1271,7 @@ fn test_irgen_class_vtable_global() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1323,7 +1323,7 @@ fn test_irgen_class_vtable_method_call_is_indirect() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1378,7 +1378,7 @@ fn test_irgen_class_inheritance_vtable_inherited_methods() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1439,7 +1439,7 @@ fn test_irgen_class_inheritance_field_layout() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1481,7 +1481,7 @@ fn test_irgen_class_inheritance_field_access() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1525,7 +1525,7 @@ fn test_irgen_class_inheritance_multi_level() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1564,7 +1564,7 @@ fn test_irgen_tuple_type_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1609,7 +1609,7 @@ fn test_irgen_self_return_in_struct_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1647,7 +1647,7 @@ fn test_irgen_self_in_init() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1676,7 +1676,7 @@ fn test_irgen_tuple_literal() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1715,7 +1715,7 @@ fn test_irgen_tuple_index_access() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1754,7 +1754,7 @@ fn test_irgen_tuple_literal_as_return() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1788,7 +1788,7 @@ fn test_irgen_named_tuple_literal() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1822,7 +1822,7 @@ fn test_irgen_named_tuple_member_access() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1856,7 +1856,7 @@ fn test_irgen_named_tuple_positional_access() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1891,7 +1891,7 @@ fn test_irgen_named_tuple_type_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1920,7 +1920,7 @@ fn test_irgen_protocol_empty() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1945,7 +1945,7 @@ fn test_irgen_protocol_method_requirement_only() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -1973,7 +1973,7 @@ fn test_irgen_protocol_default_implementation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2003,7 +2003,7 @@ fn test_irgen_protocol_default_impl_no_crash() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2041,7 +2041,7 @@ fn test_irgen_protocol_only_requirement_no_default() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2080,7 +2080,7 @@ fn test_irgen_protocol_existential_container() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2117,7 +2117,7 @@ fn test_irgen_protocol_witness_table_for_class() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (_packages, _krate) = truss::krate::single_package_map("test");
 
     let errors_before = engine.borrow().get_errors().len();
     let (packages, _) = truss::krate::single_package_map("test");
@@ -2169,7 +2169,7 @@ fn test_irgen_protocol_witness_table_for_struct() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (_packages, _krate) = truss::krate::single_package_map("test");
 
     let errors_before = engine.borrow().get_errors().len();
     let (packages, _) = truss::krate::single_package_map("test");
@@ -2226,7 +2226,7 @@ fn test_irgen_compound_protocol_existential_dispatch() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (_packages, _krate) = truss::krate::single_package_map("test");
 
     let errors_before = engine.borrow().get_errors().len();
     let (packages, _) = truss::krate::single_package_map("test");
@@ -2284,7 +2284,7 @@ fn test_irgen_some_type_protocol_no_error() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2316,7 +2316,7 @@ fn test_irgen_some_type_return_function() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (_packages, _krate) = truss::krate::single_package_map("test");
 
     let errors_before = engine.borrow().get_errors().len();
     let (packages, _) = truss::krate::single_package_map("test");
@@ -2372,7 +2372,7 @@ fn test_irgen_class_computed_property_getter_in_vtable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2424,7 +2424,7 @@ fn test_irgen_class_computed_property_setter_in_vtable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2478,7 +2478,7 @@ fn test_irgen_class_computed_property_inheritance_override() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2540,7 +2540,7 @@ fn test_irgen_class_stored_property_auto_getter_setter() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2593,7 +2593,7 @@ fn test_irgen_class_stored_var_auto_getter_and_setter() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2635,7 +2635,7 @@ fn test_irgen_struct_auto_deinit() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2673,7 +2673,7 @@ fn test_irgen_enum_auto_deinit() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2710,7 +2710,7 @@ fn test_irgen_struct_deinit_called_on_scope_exit() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2755,7 +2755,7 @@ fn test_irgen_user_defined_struct_deinit() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2798,7 +2798,7 @@ fn test_irgen_enum_deinit_called_on_scope_exit() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2832,7 +2832,7 @@ fn test_irgen_extension_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2861,7 +2861,7 @@ fn test_irgen_extension_self_access() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2890,7 +2890,7 @@ fn test_irgen_extension_protocol_witness_table() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2924,7 +2924,7 @@ fn test_irgen_extension_static_method_struct() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2963,7 +2963,7 @@ fn test_irgen_extension_static_method_class() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -2997,7 +2997,7 @@ fn test_irgen_extension_static_method_enum() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3026,7 +3026,7 @@ fn test_irgen_extension_static_method_protocol() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3055,7 +3055,7 @@ fn test_irgen_extension_instance_method_has_self_param() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3085,7 +3085,7 @@ fn test_irgen_extension_static_method_with_params() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3125,7 +3125,7 @@ fn test_irgen_guard_case_success() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3165,7 +3165,7 @@ fn test_irgen_match_simple() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3211,7 +3211,7 @@ fn test_irgen_guard_dot_shorthand() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3242,7 +3242,7 @@ fn test_irgen_associated_type_access_on_protocol() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3280,7 +3280,7 @@ fn test_irgen_associated_type_access_typealias() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3315,7 +3315,7 @@ fn test_irgen_defer_basic() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3347,7 +3347,7 @@ fn test_irgen_defer_lifo_order() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3383,7 +3383,7 @@ fn test_irgen_defer_nested_scope() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3411,7 +3411,7 @@ fn test_irgen_implicit_return_int_literal() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3439,7 +3439,7 @@ fn test_irgen_implicit_return_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3467,7 +3467,7 @@ fn test_irgen_if_as_expression_value() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3498,7 +3498,7 @@ fn test_irgen_if_as_variable_initializer() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3529,7 +3529,7 @@ fn test_irgen_if_elseif_chain_as_value() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3567,7 +3567,7 @@ fn test_irgen_match_multi_pattern_enum() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3617,7 +3617,7 @@ fn test_irgen_match_multi_pattern_with_guard() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3657,7 +3657,7 @@ fn test_irgen_module_with_func() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3692,7 +3692,7 @@ fn test_irgen_module_with_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3722,7 +3722,7 @@ fn test_irgen_empty_module() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3751,7 +3751,7 @@ fn test_irgen_module_with_nested_func_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3787,7 +3787,7 @@ fn test_irgen_overloaded_functions_mangled_names() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3822,7 +3822,7 @@ fn test_irgen_overloaded_struct_methods_mangled_names() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3860,7 +3860,7 @@ fn run_ir_gen(code: &str) -> (String, Rc<RefCell<TrussDiagnosticEngine>>) {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -3983,7 +3983,7 @@ fn test_irgen_overloaded_function_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4019,7 +4019,7 @@ fn test_irgen_generic_function_decl() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4053,7 +4053,7 @@ fn test_irgen_generic_call_with_ptr_arg() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4087,7 +4087,7 @@ fn test_irgen_generic_bool_arg() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4120,7 +4120,7 @@ fn test_irgen_closure_simple() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4154,7 +4154,7 @@ fn test_irgen_closure_no_params() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4184,7 +4184,7 @@ fn test_irgen_closure_multi_param() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4218,7 +4218,7 @@ fn test_irgen_closure_with_return() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4252,7 +4252,7 @@ fn test_irgen_closure_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4285,7 +4285,7 @@ fn test_irgen_higher_order_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4321,7 +4321,7 @@ fn test_irgen_function_ref_assignment() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4355,7 +4355,7 @@ fn test_irgen_fn_ref_call_through_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4393,7 +4393,7 @@ fn test_irgen_closure_capture_outer_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4428,7 +4428,7 @@ fn test_irgen_closure_multi_statement_body() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4469,7 +4469,7 @@ fn test_irgen_closure_trailing_syntax() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4509,7 +4509,7 @@ fn test_irgen_closure_expression_only_body() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4539,7 +4539,7 @@ fn test_irgen_closure_multiple_in_function() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4579,7 +4579,7 @@ fn test_irgen_closure_implicit_return_last_expression() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4619,7 +4619,7 @@ fn test_irgen_closure_void_return_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4659,7 +4659,7 @@ fn test_irgen_closure_shorthand_argument() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4694,7 +4694,7 @@ fn test_irgen_closure_shorthand_binary() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4734,7 +4734,7 @@ fn test_irgen_closure_shorthand_with_type_annotation() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4770,7 +4770,7 @@ fn test_irgen_closure_shorthand_multi_args() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4818,7 +4818,7 @@ fn test_irgen_super_method_call() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4863,7 +4863,7 @@ fn test_irgen_address_of_variable() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4907,7 +4907,7 @@ fn test_irgen_struct_subscript_getter() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -4953,7 +4953,7 @@ fn test_irgen_struct_subscript_get_set() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5002,7 +5002,7 @@ fn test_irgen_class_subscript_getter() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5037,7 +5037,7 @@ fn test_irgen_address_of_deref() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5074,7 +5074,7 @@ fn test_irgen_macro_declaration() {
     let mut program = parser.parse();
     let mut expander = MacroExpander::new(engine.clone());
     expander.expand(&mut program);
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5105,7 +5105,7 @@ fn test_irgen_macro_expanded() {
     let mut program = parser.parse();
     let mut expander = MacroExpander::new(engine.clone());
     expander.expand(&mut program);
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5134,7 +5134,7 @@ fn test_irgen_static_binary_operator_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5164,7 +5164,7 @@ fn test_irgen_member_binary_operator_method() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5604,7 +5604,7 @@ fn test_irgen_const_generic_function_decl() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5630,7 +5630,7 @@ fn run_ir_gen_defaults(code: &str) -> (String, Rc<RefCell<TrussDiagnosticEngine>
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5686,7 +5686,7 @@ fn test_irgen_builtintype_struct_no_llvm_struct() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5721,7 +5721,7 @@ fn test_irgen_non_builtintype_struct_creates_llvm_struct() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let (packages, krate) = truss::krate::single_package_map("test");
+    let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
@@ -5850,7 +5850,7 @@ fn test_irgen_auto_import_builtin_type() {
 
 #[test]
 fn test_irgen_auto_import_enum() {
-    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+    let (_llvm_ir, engine) = run_ir_gen_with_stdlib(
         "func test() -> Int32 { return 42 }",
         &["#[builtintype] public struct Int32 {}"],
     );
@@ -5905,10 +5905,7 @@ fn test_irgen_optional_type() {
 
 #[test]
 fn test_irgen_array_literal_empty() {
-    let (_llvm_ir, engine) = run_ir_gen_with_stdlib(
-        "func test() { let a = [] }",
-        &[],
-    );
+    let (_llvm_ir, engine) = run_ir_gen_with_stdlib("func test() { let a = [] }", &[]);
     assert_eq!(
         engine.borrow().get_errors().len(),
         0,
@@ -5918,11 +5915,12 @@ fn test_irgen_array_literal_empty() {
 
 #[test]
 fn test_irgen_array_literal_integers() {
-    let (_llvm_ir, engine) = run_ir_gen_with_stdlib(
-        "func test() { let a = [1, 2, 3] }",
-        &[],
+    let (_llvm_ir, engine) = run_ir_gen_with_stdlib("func test() { let a = [1, 2, 3] }", &[]);
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "array literal with integers should compile"
     );
-    assert_eq!(engine.borrow().get_errors().len(), 0, "array literal with integers should compile");
 }
 
 #[test]
@@ -5931,5 +5929,9 @@ fn test_irgen_array_literal_with_type() {
         "func test() { let a = [1, 2, 3] }",
         &["#[builtintype] public struct Int32 {}"],
     );
-    assert_eq!(engine.borrow().get_errors().len(), 0, "array literal with typed elements should compile");
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "array literal with typed elements should compile"
+    );
 }
