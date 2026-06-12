@@ -4501,3 +4501,50 @@ fn test_import_selective_package_with_alias() {
     );
     assert_eq!(statements.len(), 3);
 }
+
+#[test]
+fn test_array_literal_elements_resolve() {
+    let (_, engine, _) = run_resolver(
+        "func test() { let a = [1, 2, 3] }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(),
+        0,
+        "Array literal elements should resolve"
+    );
+}
+
+#[test]
+fn test_array_literal_empty_resolves() {
+    let (_, engine, _) = run_resolver(
+        "func test() { let a = [] }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(),
+        0,
+        "Empty array literal should resolve"
+    );
+}
+
+#[test]
+fn test_array_literal_resolves_variable() {
+    let (_, engine, _) = run_resolver(
+        "func test() { let x = 42; let a = [x] }",
+    );
+    assert_eq!(
+        engine.borrow().get_diagnostics().len(),
+        0,
+        "Array literal with variable reference should resolve"
+    );
+}
+
+#[test]
+fn test_array_literal_undefined_variable() {
+    let (_, engine, _) = run_resolver(
+        "func test() { let a = [undefinedVar] }",
+    );
+    assert!(
+        engine.borrow().has_errors(),
+        "Undefined variable in array literal should produce error"
+    );
+}

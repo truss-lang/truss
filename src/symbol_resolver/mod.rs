@@ -1855,6 +1855,11 @@ impl SymbolResolver {
                     self.resolve_expression(element.clone());
                 }
             }
+            Expression::ArrayLiteral { elements, .. } => {
+                for element in elements {
+                    self.resolve_expression(element.clone());
+                }
+            }
             Expression::TupleType { elements, .. } => {
                 for (_, element) in elements {
                     self.resolve_expression(element.clone());
