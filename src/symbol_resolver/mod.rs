@@ -2075,6 +2075,12 @@ impl SymbolResolver {
                     self.resolve_expression(pt.clone());
                 }
             }
+            Expression::OptionalType { inner, .. } => {
+                self.resolve_expression(inner.clone());
+            }
+            Expression::ArrayType { inner, .. } => {
+                self.resolve_expression(inner.clone());
+            }
             _ => {}
         }
     }

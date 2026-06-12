@@ -11594,23 +11594,14 @@ fn test_parse_optional_type_sugar() {
     } = &*program.statements[0].borrow()
     {
         let ty = ty.borrow();
-        if let Expression::Type {
-            name,
-            type_parameters,
-            ..
-        } = &*ty
-        {
-            assert_eq!(name.value, "Optional");
-            assert!(type_parameters.is_some());
-            let params = type_parameters.as_ref().unwrap();
-            assert_eq!(params.len(), 1);
-            if let Expression::Type { name, .. } = &*params[0].borrow() {
+        if let Expression::OptionalType { inner, .. } = &*ty {
+            if let Expression::Type { name, .. } = &*inner.borrow() {
                 assert_eq!(name.value, "Int32");
             } else {
-                panic!("Expected Type for Optional parameter");
+                panic!("Expected Type for Optional inner");
             }
         } else {
-            panic!("Expected Type expression for Optional");
+            panic!("Expected OptionalType expression");
         }
     } else {
         panic!("Expected VariableDecl");
@@ -11636,10 +11627,9 @@ fn test_parse_optional_type_on_tuple() {
     } = &*program.statements[0].borrow()
     {
         let ty = ty.borrow();
-        if let Expression::Type { name, .. } = &*ty {
-            assert_eq!(name.value, "Optional");
+        if let Expression::OptionalType { .. } = &*ty {
         } else {
-            panic!("Expected Type expression for Optional");
+            panic!("Expected OptionalType expression");
         }
     } else {
         panic!("Expected VariableDecl");
@@ -11662,21 +11652,14 @@ fn test_parse_optional_with_pointer() {
     } = &*program.statements[0].borrow()
     {
         let ty = ty.borrow();
-        if let Expression::Type {
-            name,
-            type_parameters,
-            ..
-        } = &*ty
-        {
-            assert_eq!(name.value, "Optional");
-            let params = type_parameters.as_ref().unwrap();
-            if let Expression::PointerType { non_null, .. } = &*params[0].borrow() {
+        if let Expression::OptionalType { inner, .. } = &*ty {
+            if let Expression::PointerType { non_null, .. } = &*inner.borrow() {
                 assert!(!non_null);
             } else {
                 panic!("Expected PointerType inside Optional");
             }
         } else {
-            panic!("Expected Type for Optional");
+            panic!("Expected OptionalType expression");
         }
     } else {
         panic!("Expected VariableDecl");
@@ -11699,23 +11682,14 @@ fn test_parse_array_type_sugar() {
     } = &*program.statements[0].borrow()
     {
         let ty = ty.borrow();
-        if let Expression::Type {
-            name,
-            type_parameters,
-            ..
-        } = &*ty
-        {
-            assert_eq!(name.value, "Array");
-            assert!(type_parameters.is_some());
-            let params = type_parameters.as_ref().unwrap();
-            assert_eq!(params.len(), 1);
-            if let Expression::Type { name, .. } = &*params[0].borrow() {
+        if let Expression::ArrayType { inner, .. } = &*ty {
+            if let Expression::Type { name, .. } = &*inner.borrow() {
                 assert_eq!(name.value, "Int32");
             } else {
-                panic!("Expected Type for Array parameter");
+                panic!("Expected Type for Array inner");
             }
         } else {
-            panic!("Expected Type expression for Array");
+            panic!("Expected ArrayType expression");
         }
     } else {
         panic!("Expected VariableDecl");
@@ -11738,27 +11712,18 @@ fn test_parse_array_type_nested() {
     } = &*program.statements[0].borrow()
     {
         let ty = ty.borrow();
-        if let Expression::Type {
-            name,
-            type_parameters,
-            ..
-        } = &*ty
-        {
-            assert_eq!(name.value, "Array");
-            let params = type_parameters.as_ref().unwrap();
-            if let Expression::Type {
-                name: iname,
-                type_parameters: iparams,
-                ..
-            } = &*params[0].borrow()
-            {
-                assert_eq!(iname.value, "Array");
-                assert!(iparams.is_some());
+        if let Expression::ArrayType { inner, .. } = &*ty {
+            if let Expression::ArrayType { inner: inner2, .. } = &*inner.borrow() {
+                if let Expression::Type { name, .. } = &*inner2.borrow() {
+                    assert_eq!(name.value, "Int32");
+                } else {
+                    panic!("Expected Type inside nested Array");
+                }
             } else {
-                panic!("Expected nested Array");
+                panic!("Expected nested ArrayType");
             }
         } else {
-            panic!("Expected Type for outer Array");
+            panic!("Expected ArrayType for outer Array");
         }
     } else {
         panic!("Expected VariableDecl");
@@ -12212,7 +12177,11 @@ fn test_parse_range_operator() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 #[test]
 fn test_parse_range_operator_to() {
@@ -12223,7 +12192,11 @@ fn test_parse_range_operator_to() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 #[test]
 fn test_parse_if_let_mixed_condition() {
@@ -12237,5 +12210,9 @@ fn test_parse_if_let_mixed_condition() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }

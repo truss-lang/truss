@@ -398,7 +398,12 @@ impl Parser {
                         );
                         return Err(());
                     };
-                    if matches!(op, BinaryOperator::RangeTo | BinaryOperator::RangeUntil | BinaryOperator::OpenRange) {
+                    if matches!(
+                        op,
+                        BinaryOperator::RangeTo
+                            | BinaryOperator::RangeUntil
+                            | BinaryOperator::OpenRange
+                    ) {
                         let range_token = Token::new(
                             "range".to_string(),
                             TokenType::Identifier,
@@ -1196,14 +1201,8 @@ impl Parser {
                 );
                 return Err(());
             }
-            return Ok(Expression::Type {
-                name: Box::new(Token::new(
-                    "Array".to_string(),
-                    TokenType::Identifier,
-                    token.position.clone(),
-                    token.file.clone(),
-                )),
-                type_parameters: Some(vec![Rc::new(RefCell::new(element))]),
+            return Ok(Expression::ArrayType {
+                inner: Rc::new(RefCell::new(element)),
                 ty: None,
             });
         }
@@ -1413,14 +1412,8 @@ impl Parser {
                     && OperatorType::is_operator(&token, OperatorType::QuestionMark)
                 {
                     self.index += 1;
-                    tuple_type_expr = Expression::Type {
-                        name: Box::new(Token::new(
-                            "Optional".to_string(),
-                            TokenType::Identifier,
-                            token.position.clone(),
-                            token.file.clone(),
-                        )),
-                        type_parameters: Some(vec![Rc::new(RefCell::new(tuple_type_expr))]),
+                    tuple_type_expr = Expression::OptionalType {
+                        inner: Rc::new(RefCell::new(tuple_type_expr)),
                         ty: None,
                     };
                 }
@@ -1511,14 +1504,8 @@ impl Parser {
                 && OperatorType::is_operator(&token, OperatorType::QuestionMark)
             {
                 self.index += 1;
-                type_expr = Expression::Type {
-                    name: Box::new(Token::new(
-                        "Optional".to_string(),
-                        TokenType::Identifier,
-                        token.position.clone(),
-                        token.file.clone(),
-                    )),
-                    type_parameters: Some(vec![Rc::new(RefCell::new(type_expr))]),
+                type_expr = Expression::OptionalType {
+                    inner: Rc::new(RefCell::new(type_expr)),
                     ty: None,
                 };
             }
@@ -1624,14 +1611,8 @@ impl Parser {
             && OperatorType::is_operator(&token, OperatorType::QuestionMark)
         {
             self.index += 1;
-            type_expr = Expression::Type {
-                name: Box::new(Token::new(
-                    "Optional".to_string(),
-                    TokenType::Identifier,
-                    token.position.clone(),
-                    token.file.clone(),
-                )),
-                type_parameters: Some(vec![Rc::new(RefCell::new(type_expr))]),
+            type_expr = Expression::OptionalType {
+                inner: Rc::new(RefCell::new(type_expr)),
                 ty: None,
             };
         }

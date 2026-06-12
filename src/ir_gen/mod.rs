@@ -3919,7 +3919,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::SizeOf { ty, .. }
                 | Expression::PointerType { ty, .. }
                 | Expression::Type { ty, .. }
-                | Expression::Do { ty, .. } => ty.clone(),
+                | Expression::Do { ty, .. }
+                | Expression::OptionalType { ty, .. }
+                | Expression::ArrayType { ty, .. } => ty.clone(),
                 _ => None,
             };
             let ty = self.resolve_type(
@@ -3981,7 +3983,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::SizeOf { ty, .. }
                 | Expression::PointerType { ty, .. }
                 | Expression::Type { ty, .. }
-                | Expression::Do { ty, .. } => ty.clone(),
+                | Expression::Do { ty, .. }
+                | Expression::OptionalType { ty, .. }
+                | Expression::ArrayType { ty, .. } => ty.clone(),
                 _ => None,
             };
             let out_ty = self.resolve_type(

@@ -4198,6 +4198,22 @@ impl TypeResolver {
                 *ty = Some(Rc::new(RefCell::new(Type::Inline(base_ty, None))));
                 ty.clone().unwrap()
             }
+            Expression::OptionalType { inner, ty } => {
+                let _inner_ty = self.infer_type(inner.clone())?;
+                *ty = Some(Rc::new(RefCell::new(Type::Enum(
+                    "Optional".to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                ))));
+                ty.clone().unwrap()
+            }
+            Expression::ArrayType { inner, ty } => {
+                let _inner_ty = self.infer_type(inner.clone())?;
+                *ty = Some(Rc::new(RefCell::new(Type::Struct(
+                    "Array".to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                ))));
+                ty.clone().unwrap()
+            }
         };
         Some(result)
     }

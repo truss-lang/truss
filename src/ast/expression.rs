@@ -229,6 +229,14 @@ pub enum Expression {
         base: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    OptionalType {
+        inner: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+    ArrayType {
+        inner: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -289,6 +297,8 @@ impl Expression {
             Self::SizeOf { ty, .. } => Ok(ty),
             Self::Do { ty, .. } => Ok(ty),
             Self::InlineType { ty, .. } => Ok(ty),
+            Self::OptionalType { ty, .. } => Ok(ty),
+            Self::ArrayType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
@@ -316,6 +326,8 @@ impl Expression {
             Self::SizeOf { ty, .. } => Ok(ty),
             Self::Do { ty, .. } => Ok(ty),
             Self::InlineType { ty, .. } => Ok(ty),
+            Self::OptionalType { ty, .. } => Ok(ty),
+            Self::ArrayType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
@@ -416,6 +428,8 @@ impl Expression {
             Expression::SizeOf { token, .. } => (**token).clone(),
             Expression::Do { token, .. } => (**token).clone(),
             Expression::InlineType { base, .. } => base.borrow().token(),
+            Expression::OptionalType { inner, .. } => inner.borrow().token(),
+            Expression::ArrayType { inner, .. } => inner.borrow().token(),
         }
     }
 }
