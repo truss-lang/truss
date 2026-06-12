@@ -3988,6 +3988,17 @@ impl<'ctx> IRGenerator<'ctx> {
                     .const_null()
                     .into(),
             )),
+            Expression::ArrayLiteral { elements, .. } => {
+                for element in elements {
+                    self.resolve_expression(element.clone())?;
+                }
+                Ok(Some(
+                    self.context
+                        .ptr_type(inkwell::AddressSpace::from(0))
+                        .const_null()
+                        .into(),
+                ))
+            }
             Expression::NullptrLiteral { .. } => Ok(Some(
                 self.context
                     .ptr_type(inkwell::AddressSpace::from(0))
@@ -7764,6 +7775,8 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::Struct(name, _) => {
                 if let Some(struct_type) = self.struct_types.borrow().get(name) {
                     struct_type.as_basic_type_enum()
+                } else if name == "Array" || name == "String" {
+                    self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::StructTypeNotSupported,
