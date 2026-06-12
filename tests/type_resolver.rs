@@ -6542,6 +6542,34 @@ fn test_null_with_optional_type() {
 }
 
 #[test]
+fn test_failable_init_return_null() {
+    let errors = run_type_check_with_stdlib(
+        "struct Point { init?() { return null } }",
+        &["public enum Optional<T> { case None, Some(T) }"],
+    );
+    assert_eq!(errors, 0, "return null should work in failable init");
+}
+
+#[test]
+fn test_failable_init_call_returns_optional() {
+    let errors = run_type_check_with_stdlib(
+        "struct Point { init?() {} }
+         func test() -> Optional<Point> { return Point() }",
+        &["public enum Optional<T> { case None, Some(T) }"],
+    );
+    assert_eq!(errors, 0, "calling failable init should produce Optional type");
+}
+
+#[test]
+fn test_non_failable_init_return_null_error() {
+    let errors = run_type_check_with_stdlib(
+        "struct Point { init() { return null } }",
+        &["public enum Optional<T> { case None, Some(T) }"],
+    );
+    assert!(errors > 0, "return null should error in non-failable init");
+}
+
+#[test]
 fn test_subscript_public_accessible() {
     let errors = run_type_check(
         "struct Array { public subscript(index: Int32) -> Int32 { return 42 } }

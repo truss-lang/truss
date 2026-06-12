@@ -579,9 +579,17 @@ impl TypeResolver {
                 body,
                 scope,
                 ty,
+                is_failable,
                 ..
             } => {
-                let ret_type = Rc::new(RefCell::new(Type::Void));
+                let ret_type = if *is_failable {
+                    self.current_scope
+                        .as_ref()
+                        .and_then(|s| s.borrow().get_type("Optional"))
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                } else {
+                    Rc::new(RefCell::new(Type::Void))
+                };
                 let mut parameter_types = Vec::new();
                 for param in parameters.iter() {
                     let param_type = self.infer_type(param.borrow().type_expression.clone());
@@ -1214,6 +1222,8 @@ impl TypeResolver {
                 parameters,
                 body,
                 scope,
+                is_failable,
+                ty,
                 ..
             } => {
                 self.enter_scope(scope.as_ref().unwrap().clone());
@@ -1221,6 +1231,15 @@ impl TypeResolver {
                 let saved_in_init = self.is_in_init;
                 self.is_in_init = true;
                 self.initialized_properties.clear();
+
+                let saved_return_type = self.current_return_type.clone();
+                if *is_failable {
+                    if let Some(fn_ty) = ty
+                        && let Type::Function(_, ret, _) = &*fn_ty.borrow()
+                    {
+                        self.current_return_type = Some(ret.clone());
+                    }
+                }
 
                 for param in parameters.iter() {
                     if let Some(param_ty) = param.borrow().ty.clone() {
@@ -1234,6 +1253,7 @@ impl TypeResolver {
 
                 self.resolve_function_body(body.clone());
                 self.is_in_init = saved_in_init;
+                self.current_return_type = saved_return_type;
                 self.initialized_lets.pop();
                 self.leave_scope();
             }
@@ -2325,26 +2345,31 @@ impl TypeResolver {
                         resolved_ret_ty
                     }
                     Type::Struct(struct_name, _) => {
-                        let init_params_info = {
+                        let (init_params_info, is_failable_init) = {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
                             if let Some(symbol) = scope.get_symbol(struct_name)
                                 && let Symbol::Struct { constructors, .. } = &*symbol.borrow()
                             {
-                                constructors.iter().find_map(|constructor| {
+                                let mut found_failable = false;
+                                let result = constructors.iter().find_map(|constructor| {
                                     if let Ok(Some(decl)) = constructor.borrow().get_decl()
                                         && let Statement::InitDecl {
-                                            ty: Some(init_ty), ..
+                                            ty: Some(init_ty),
+                                            is_failable,
+                                            ..
                                         } = &*decl.borrow()
                                         && let Type::Function(param_tys, _, is_vararg) =
                                             &*init_ty.borrow()
                                     {
+                                        found_failable = *is_failable;
                                         Some((decl.clone(), param_tys.clone(), *is_vararg))
                                     } else {
                                         None
                                     }
-                                })
+                                });
+                                (result, found_failable)
                             } else {
-                                None
+                                (None, false)
                             }
                         };
                         if let Some((decl, param_tys, is_vararg)) = init_params_info {
@@ -2392,10 +2417,17 @@ impl TypeResolver {
                                 }
                             }
                         }
-                        callee_type.clone()
+                        if is_failable_init {
+                            self.current_scope
+                                .as_ref()
+                                .and_then(|s| s.borrow().get_type("Optional"))
+                                .unwrap_or(callee_type.clone())
+                        } else {
+                            callee_type.clone()
+                        }
                     }
                     Type::Class(class_name, _) => {
-                        let init_params_info = {
+                        let (init_params_info, is_failable_init) = {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
                             if let Some(symbol) = scope.get_symbol(class_name) {
                                 let constructors = match &*symbol.borrow() {
@@ -2403,21 +2435,26 @@ impl TypeResolver {
                                     | Symbol::Class { constructors, .. } => constructors.clone(),
                                     _ => return Some(callee_type.clone()),
                                 };
-                                constructors.iter().find_map(|constructor| {
+                                let mut found_failable = false;
+                                let result = constructors.iter().find_map(|constructor| {
                                     if let Ok(Some(decl)) = constructor.borrow().get_decl()
                                         && let Statement::InitDecl {
-                                            ty: Some(init_ty), ..
+                                            ty: Some(init_ty),
+                                            is_failable,
+                                            ..
                                         } = &*decl.borrow()
                                         && let Type::Function(param_tys, _, is_vararg) =
                                             &*init_ty.borrow()
                                     {
+                                        found_failable = *is_failable;
                                         Some((decl.clone(), param_tys.clone(), *is_vararg))
                                     } else {
                                         None
                                     }
-                                })
+                                });
+                                (result, found_failable)
                             } else {
-                                None
+                                (None, false)
                             }
                         };
                         if let Some((decl, param_tys, is_vararg)) = init_params_info {
@@ -2465,7 +2502,14 @@ impl TypeResolver {
                                 }
                             }
                         }
-                        callee_type.clone()
+                        if is_failable_init {
+                            self.current_scope
+                                .as_ref()
+                                .and_then(|s| s.borrow().get_type("Optional"))
+                                .unwrap_or(callee_type.clone())
+                        } else {
+                            callee_type.clone()
+                        }
                     }
                     _ => {
                         self.emit_error(
