@@ -207,7 +207,7 @@ impl TypeResolver {
                     .as_ref()
                     .unwrap()
                     .borrow_mut()
-                    .set_type(name.value.clone(), struct_ty);
+                    .set_type(name.value.clone(), struct_ty.clone());
 
                 for conformance in conformances.iter() {
                     self.infer_type(conformance.clone());
@@ -244,6 +244,11 @@ impl TypeResolver {
                     .unwrap()
                     .borrow_mut()
                     .set_type("self".to_string(), self_ty);
+                self.current_scope
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_type("Self".to_string(), struct_ty.clone());
                 for stmt in body.iter() {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
@@ -332,7 +337,7 @@ impl TypeResolver {
                     .as_ref()
                     .unwrap()
                     .borrow_mut()
-                    .set_type(name.value.clone(), class_ty);
+                    .set_type(name.value.clone(), class_ty.clone());
 
                 if let Some(superclass_expr) = superclass {
                     self.infer_type(superclass_expr.clone());
@@ -386,6 +391,11 @@ impl TypeResolver {
                     .unwrap()
                     .borrow_mut()
                     .set_type("self".to_string(), self_ty);
+                self.current_scope
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_type("Self".to_string(), class_ty.clone());
                 for stmt in body.iter() {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
@@ -2849,344 +2859,352 @@ impl TypeResolver {
                 match &*object_ty.borrow() {
                     Type::Struct(struct_name, _) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
-                        if let Some(symbol) = scope.get_symbol(struct_name)
-                            && let Symbol::Struct {
-                                properties,
-                                methods,
-                                ..
-                            } = &*symbol.borrow()
-                        {
-                            if !self.is_member_accessible(symbol.clone(), member) {
-                                self.emit_error(
-                                    TrussDiagnosticCode::InaccessibleMember,
-                                    format!(
-                                        "'{}' is inaccessible due to '{}' level",
-                                        member.value,
-                                        symbol
-                                            .borrow()
-                                            .get_decl()
-                                            .unwrap()
-                                            .unwrap()
-                                            .borrow()
-                                            .access_modifier()
-                                            .map_or(String::from("internal"), |m| m
-                                                .map(|m| m.token.value.clone())
-                                                .unwrap_or(String::from("internal")))
-                                    ),
-                                    member,
-                                );
-                                return None;
-                            }
-                            for field in properties {
-                                if field.borrow().name().as_ref().ok() == Some(&member.value)
-                                    && let Some(decl) = field.borrow().get_decl().ok().flatten()
-                                    && let Statement::VariableDecl { ty: field_ty, .. } =
-                                        &*decl.borrow()
-                                    && let Some(t) = field_ty
-                                {
-                                    if !self.is_member_symbol_accessible(field.clone(), member) {
-                                        self.emit_error(
-                                            TrussDiagnosticCode::InaccessibleMember,
-                                            format!(
-                                                "'{}' is inaccessible due to '{}' level",
-                                                member.value,
-                                                field
-                                                    .borrow()
-                                                    .get_decl()
-                                                    .ok()
-                                                    .flatten()
-                                                    .map(|d| {
-                                                        d.borrow().access_modifier().map_or(
-                                                            String::from("internal"),
-                                                            |m| {
-                                                                m.map(|m| m.token.value.clone())
-                                                                    .unwrap_or(String::from(
-                                                                        "internal",
-                                                                    ))
-                                                            },
-                                                        )
-                                                    })
-                                                    .unwrap_or(String::from("internal"))
-                                            ),
-                                            member,
-                                        );
-                                        return None;
-                                    }
-                                    *ty = Some(t.clone());
-                                    return Some(t.clone());
-                                }
-                            }
-                            for method in methods {
-                                if method.borrow().name().as_ref().ok() == Some(&member.value)
-                                    && let Some(decl) = method.borrow().get_decl().ok().flatten()
-                                {
-                                    if !self.is_member_symbol_accessible(method.clone(), member) {
-                                        self.emit_error(
-                                            TrussDiagnosticCode::InaccessibleMember,
-                                            format!(
-                                                "'{}' is inaccessible due to '{}' level",
-                                                member.value,
-                                                method
-                                                    .borrow()
-                                                    .get_decl()
-                                                    .ok()
-                                                    .flatten()
-                                                    .map(|d| {
-                                                        d.borrow().access_modifier().map_or(
-                                                            String::from("internal"),
-                                                            |m| {
-                                                                m.map(|m| m.token.value.clone())
-                                                                    .unwrap_or(String::from(
-                                                                        "internal",
-                                                                    ))
-                                                            },
-                                                        )
-                                                    })
-                                                    .unwrap_or(String::from("internal"))
-                                            ),
-                                            member,
-                                        );
-                                        return None;
-                                    }
-                                    let method_ty = {
-                                        let decl_ref = decl.borrow();
-                                        if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
-                                            ty.clone()
-                                        } else if let Statement::InitDecl { ty, .. } = &*decl_ref {
-                                            ty.clone()
-                                        } else if let Statement::DeinitDecl { ty, .. } = &*decl_ref
-                                        {
-                                            ty.clone()
-                                        } else {
-                                            continue;
-                                        }
-                                    };
-                                    if let Some(t) = method_ty {
-                                        *ty = Some(t.clone());
-                                        return Some(t.clone());
-                                    }
-                                }
-                            }
-                            let token = &*member;
-                            self.emit_error(
-                                TrussDiagnosticCode::FieldNotFound,
-                                format!(
-                                    "Field '{}' not found on struct '{}'",
-                                    member.value, struct_name
-                                ),
-                                token,
-                            );
-                            return None;
-                        } else {
-                            let token = &*member;
+                        let symbol_opt = scope.get_symbol(struct_name);
+                        drop(scope);
+                        let Some(symbol) = symbol_opt else {
                             self.emit_error(
                                 TrussDiagnosticCode::FieldNotFound,
                                 format!("Struct symbol '{}' not found", struct_name),
-                                token,
+                                member,
+                            );
+                            return None;
+                        };
+
+                        if !self.is_member_accessible(symbol.clone(), member) {
+                            self.emit_error(
+                                TrussDiagnosticCode::InaccessibleMember,
+                                format!(
+                                    "'{}' is inaccessible due to '{}' level",
+                                    member.value,
+                                    symbol
+                                        .borrow()
+                                        .get_decl()
+                                        .unwrap()
+                                        .unwrap()
+                                        .borrow()
+                                        .access_modifier()
+                                        .map_or(String::from("internal"), |m| m
+                                            .map(|m| m.token.value.clone())
+                                            .unwrap_or(String::from("internal")))
+                                ),
+                                member,
                             );
                             return None;
                         }
-                    }
-                    Type::Class(class_name, _) => {
-                        let scope = self.current_scope.as_ref().unwrap().borrow();
-                        if let Some(symbol) = scope.get_symbol(class_name) {
-                            let binding = symbol.borrow();
-                            let (properties, methods) = match &*binding {
-                                Symbol::Struct {
-                                    properties,
-                                    methods,
-                                    ..
-                                }
-                                | Symbol::Class {
-                                    properties,
-                                    methods,
-                                    ..
-                                } => (properties, methods),
-                                _ => {
+
+                        let binding = symbol.borrow();
+                        let Symbol::Struct {
+                            properties,
+                            methods,
+                            ..
+                        } = &*binding
+                        else {
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!("Struct '{}' has unexpected symbol type", struct_name),
+                                member,
+                            );
+                            return None;
+                        };
+                        for field in properties {
+                            if field.borrow().name().as_ref().ok() == Some(&member.value)
+                                && let Some(decl) = field.borrow().get_decl().ok().flatten()
+                                && let Statement::VariableDecl { ty: field_ty, .. } =
+                                    &*decl.borrow()
+                                && let Some(t) = field_ty
+                            {
+                                if !self.is_member_symbol_accessible(field.clone(), member) {
                                     self.emit_error(
-                                        TrussDiagnosticCode::FieldNotFound,
+                                        TrussDiagnosticCode::InaccessibleMember,
                                         format!(
-                                            "Class symbol '{}' has unexpected type",
-                                            class_name
+                                            "'{}' is inaccessible due to '{}' level",
+                                            member.value,
+                                            field
+                                                .borrow()
+                                                .get_decl()
+                                                .ok()
+                                                .flatten()
+                                                .map(|d| {
+                                                    d.borrow().access_modifier().map_or(
+                                                        String::from("internal"),
+                                                        |m| {
+                                                            m.map(|m| m.token.value.clone())
+                                                                .unwrap_or(String::from(
+                                                                    "internal",
+                                                                ))
+                                                        },
+                                                    )
+                                                })
+                                                .unwrap_or(String::from("internal"))
                                         ),
                                         member,
                                     );
                                     return None;
                                 }
-                            };
-                            if !self.is_member_accessible(symbol.clone(), member) {
+                                *ty = Some(t.clone());
+                                return Some(t.clone());
+                            }
+                        }
+                        for method in methods {
+                            if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                            {
+                                if !self.is_member_symbol_accessible(method.clone(), member) {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::InaccessibleMember,
+                                        format!(
+                                            "'{}' is inaccessible due to '{}' level",
+                                            member.value,
+                                            method
+                                                .borrow()
+                                                .get_decl()
+                                                .ok()
+                                                .flatten()
+                                                .map(|d| {
+                                                    d.borrow().access_modifier().map_or(
+                                                        String::from("internal"),
+                                                        |m| {
+                                                            m.map(|m| m.token.value.clone())
+                                                                .unwrap_or(String::from(
+                                                                    "internal",
+                                                                ))
+                                                        },
+                                                    )
+                                                })
+                                                .unwrap_or(String::from("internal"))
+                                        ),
+                                        member,
+                                    );
+                                    return None;
+                                }
+                                let method_ty = {
+                                    let decl_ref = decl.borrow();
+                                    if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                        ty.clone()
+                                    } else if let Statement::InitDecl { ty, .. } = &*decl_ref {
+                                        ty.clone()
+                                    } else if let Statement::DeinitDecl { ty, .. } = &*decl_ref {
+                                        ty.clone()
+                                    } else {
+                                        continue;
+                                    }
+                                };
+                                if let Some(t) = method_ty {
+                                    *ty = Some(t.clone());
+                                    return Some(t.clone());
+                                }
+                            }
+                        }
+                        let token = &*member;
+                        self.emit_error(
+                            TrussDiagnosticCode::FieldNotFound,
+                            format!(
+                                "Field '{}' not found on struct '{}'",
+                                member.value, struct_name
+                            ),
+                            token,
+                        );
+                        return None;
+                    }
+                    Type::Class(class_name, _) => {
+                        let scope = self.current_scope.as_ref().unwrap().borrow();
+                        let symbol_opt = scope.get_symbol(class_name);
+                        drop(scope);
+                        let Some(symbol) = symbol_opt else {
+                            self.emit_error(
+                                TrussDiagnosticCode::FieldNotFound,
+                                format!("Class '{}' not found", class_name),
+                                member,
+                            );
+                            return None;
+                        };
+
+                        if !self.is_member_accessible(symbol.clone(), member) {
+                            self.emit_error(
+                                TrussDiagnosticCode::InaccessibleMember,
+                                format!(
+                                    "'{}' is inaccessible due to '{}' level",
+                                    member.value,
+                                    symbol
+                                        .borrow()
+                                        .get_decl()
+                                        .unwrap()
+                                        .unwrap()
+                                        .borrow()
+                                        .access_modifier()
+                                        .map_or(String::from("internal"), |m| m
+                                            .map(|m| m.token.value.clone())
+                                            .unwrap_or(String::from("internal")))
+                                ),
+                                member,
+                            );
+                            return None;
+                        }
+
+                        let binding = symbol.borrow();
+                        let (properties, methods) = match &*binding {
+                            Symbol::Struct {
+                                properties,
+                                methods,
+                                ..
+                            }
+                            | Symbol::Class {
+                                properties,
+                                methods,
+                                ..
+                            } => (properties, methods),
+                            _ => {
                                 self.emit_error(
-                                    TrussDiagnosticCode::InaccessibleMember,
+                                    TrussDiagnosticCode::FieldNotFound,
                                     format!(
-                                        "'{}' is inaccessible due to '{}' level",
-                                        member.value,
-                                        symbol
-                                            .borrow()
-                                            .get_decl()
-                                            .unwrap()
-                                            .unwrap()
-                                            .borrow()
-                                            .access_modifier()
-                                            .map_or(String::from("internal"), |m| m
-                                                .map(|m| m.token.value.clone())
-                                                .unwrap_or(String::from("internal")))
+                                        "Class symbol '{}' has unexpected type",
+                                        class_name
                                     ),
                                     member,
                                 );
                                 return None;
                             }
-                            for field in properties {
-                                if field.borrow().name().as_ref().ok() == Some(&member.value)
-                                    && let Some(decl) = field.borrow().get_decl().ok().flatten()
-                                    && let Statement::VariableDecl { ty: field_ty, .. } =
-                                        &*decl.borrow()
-                                    && let Some(t) = field_ty
-                                {
-                                    if !self.is_member_symbol_accessible(field.clone(), member) {
-                                        self.emit_error(
-                                            TrussDiagnosticCode::InaccessibleMember,
-                                            format!(
-                                                "'{}' is inaccessible due to '{}' level",
-                                                member.value,
-                                                field
-                                                    .borrow()
-                                                    .get_decl()
-                                                    .ok()
-                                                    .flatten()
-                                                    .map(|d| {
-                                                        d.borrow().access_modifier().map_or(
-                                                            String::from("internal"),
-                                                            |m| {
-                                                                m.map(|m| m.token.value.clone())
-                                                                    .unwrap_or(String::from(
-                                                                        "internal",
-                                                                    ))
-                                                            },
-                                                        )
-                                                    })
-                                                    .unwrap_or(String::from("internal"))
-                                            ),
-                                            member,
-                                        );
-                                        return None;
+                        };
+                        for field in properties {
+                            if field.borrow().name().as_ref().ok() == Some(&member.value)
+                                && let Some(decl) = field.borrow().get_decl().ok().flatten()
+                                && let Statement::VariableDecl { ty: field_ty, .. } =
+                                    &*decl.borrow()
+                                && let Some(t) = field_ty
+                            {
+                                if !self.is_member_symbol_accessible(field.clone(), member) {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::InaccessibleMember,
+                                        format!(
+                                            "'{}' is inaccessible due to '{}' level",
+                                            member.value,
+                                            field
+                                                .borrow()
+                                                .get_decl()
+                                                .ok()
+                                                .flatten()
+                                                .map(|d| {
+                                                    d.borrow().access_modifier().map_or(
+                                                        String::from("internal"),
+                                                        |m| {
+                                                            m.map(|m| m.token.value.clone())
+                                                                .unwrap_or(String::from(
+                                                                    "internal",
+                                                                ))
+                                                        },
+                                                    )
+                                                })
+                                                .unwrap_or(String::from("internal"))
+                                        ),
+                                        member,
+                                    );
+                                    return None;
+                                }
+                                *ty = Some(t.clone());
+                                return Some(t.clone());
+                            }
+                        }
+                        for method in methods {
+                            if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                            {
+                                if !self.is_member_symbol_accessible(method.clone(), member) {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::InaccessibleMember,
+                                        format!(
+                                            "'{}' is inaccessible due to '{}' level",
+                                            member.value,
+                                            method
+                                                .borrow()
+                                                .get_decl()
+                                                .ok()
+                                                .flatten()
+                                                .map(|d| {
+                                                    d.borrow().access_modifier().map_or(
+                                                        String::from("internal"),
+                                                        |m| {
+                                                            m.map(|m| m.token.value.clone())
+                                                                .unwrap_or(String::from(
+                                                                    "internal",
+                                                                ))
+                                                        },
+                                                    )
+                                                })
+                                                .unwrap_or(String::from("internal"))
+                                        ),
+                                        member,
+                                    );
+                                    return None;
+                                }
+                                let method_ty = {
+                                    let decl_ref = decl.borrow();
+                                    if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                        ty.clone()
+                                    } else if let Statement::InitDecl { ty, .. } = &*decl_ref {
+                                        ty.clone()
+                                    } else if let Statement::DeinitDecl { ty, .. } = &*decl_ref {
+                                        ty.clone()
+                                    } else {
+                                        continue;
                                     }
+                                };
+                                if let Some(t) = method_ty {
                                     *ty = Some(t.clone());
                                     return Some(t.clone());
                                 }
                             }
-                            for method in methods {
-                                if method.borrow().name().as_ref().ok() == Some(&member.value)
-                                    && let Some(decl) = method.borrow().get_decl().ok().flatten()
-                                {
-                                    if !self.is_member_symbol_accessible(method.clone(), member) {
-                                        self.emit_error(
-                                            TrussDiagnosticCode::InaccessibleMember,
-                                            format!(
-                                                "'{}' is inaccessible due to '{}' level",
-                                                member.value,
-                                                method
-                                                    .borrow()
-                                                    .get_decl()
-                                                    .ok()
-                                                    .flatten()
-                                                    .map(|d| {
-                                                        d.borrow().access_modifier().map_or(
-                                                            String::from("internal"),
-                                                            |m| {
-                                                                m.map(|m| m.token.value.clone())
-                                                                    .unwrap_or(String::from(
-                                                                        "internal",
-                                                                    ))
-                                                            },
-                                                        )
-                                                    })
-                                                    .unwrap_or(String::from("internal"))
-                                            ),
-                                            member,
-                                        );
-                                        return None;
-                                    }
-                                    let method_ty = {
-                                        let decl_ref = decl.borrow();
-                                        if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
-                                            ty.clone()
-                                        } else if let Statement::InitDecl { ty, .. } = &*decl_ref {
-                                            ty.clone()
-                                        } else if let Statement::DeinitDecl { ty, .. } = &*decl_ref
-                                        {
-                                            ty.clone()
-                                        } else {
-                                            continue;
-                                        }
-                                    };
-                                    if let Some(t) = method_ty {
-                                        *ty = Some(t.clone());
-                                        return Some(t.clone());
-                                    }
-                                }
-                            }
-
-                            let decl = symbol.borrow().get_decl().ok().flatten();
-                            let super_info = decl.as_ref().and_then(|decl| {
-                                if let Statement::ClassDecl {
-                                    superclass: Some(super_expr),
-                                    ..
-                                } = &*decl.borrow()
-                                {
-                                    if let Expression::Type {
-                                        name: super_name, ..
-                                    } = &*super_expr.borrow()
-                                    {
-                                        return Some((
-                                            super_name.value.clone(),
-                                            super_name.position.clone(),
-                                            super_name.file.clone(),
-                                        ));
-                                    }
-                                }
-                                None
-                            });
-                            drop(binding);
-                            drop(scope);
-
-                            if let Some((super_name, pos, file)) = super_info {
-                                let super_object = Rc::new(RefCell::new(Expression::Variable {
-                                    name: Box::new(Token::new(
-                                        super_name,
-                                        TokenType::Identifier,
-                                        pos,
-                                        file,
-                                    )),
-                                    ty: None,
-                                    symbol: None,
-                                }));
-                                let member_expr = Rc::new(RefCell::new(Expression::MemberAccess {
-                                    object: super_object,
-                                    member: Box::new(member.as_ref().clone()),
-                                    ty: None,
-                                }));
-                                return self.infer_type(member_expr);
-                            }
-
-                            let token = &*member;
-                            self.emit_error(
-                                TrussDiagnosticCode::FieldNotFound,
-                                format!(
-                                    "Field '{}' not found on class '{}'",
-                                    member.value, class_name
-                                ),
-                                token,
-                            );
-                            return None;
-                        } else {
-                            let token = &*member;
-                            self.emit_error(
-                                TrussDiagnosticCode::FieldNotFound,
-                                format!("Class symbol '{}' not found", class_name),
-                                token,
-                            );
-                            return None;
                         }
+
+                        let decl = symbol.borrow().get_decl().ok().flatten();
+                        let super_info = decl.as_ref().and_then(|decl| {
+                            if let Statement::ClassDecl {
+                                superclass: Some(super_expr),
+                                ..
+                            } = &*decl.borrow()
+                            {
+                                if let Expression::Type {
+                                    name: super_name, ..
+                                } = &*super_expr.borrow()
+                                {
+                                    return Some((
+                                        super_name.value.clone(),
+                                        super_name.position.clone(),
+                                        super_name.file.clone(),
+                                    ));
+                                }
+                            }
+                            None
+                        });
+
+                        if let Some((super_name, pos, file)) = super_info {
+                            let super_object = Rc::new(RefCell::new(Expression::Variable {
+                                name: Box::new(Token::new(
+                                    super_name,
+                                    TokenType::Identifier,
+                                    pos,
+                                    file,
+                                )),
+                                ty: None,
+                                symbol: None,
+                            }));
+                            let member_expr = Rc::new(RefCell::new(Expression::MemberAccess {
+                                object: super_object,
+                                member: Box::new(member.as_ref().clone()),
+                                ty: None,
+                            }));
+                            return self.infer_type(member_expr);
+                        }
+
+                        let token = &*member;
+                        self.emit_error(
+                            TrussDiagnosticCode::FieldNotFound,
+                            format!(
+                                "Field '{}' not found on class '{}'",
+                                member.value, class_name
+                            ),
+                            token,
+                        );
+                        return None;
                     }
                     Type::Enum(enum_name, _) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
@@ -3729,33 +3747,32 @@ impl TypeResolver {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(struct_name) {
                             if let Ok(Some(decl)) = symbol.borrow().get_decl() {
+                                if !self.is_member_accessible(symbol.clone(), member) {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::InaccessibleMember,
+                                        format!(
+                                            "'{}' is inaccessible due to access level",
+                                            member.value
+                                        ),
+                                        member,
+                                    );
+                                    return None;
+                                }
                                 if let Statement::StructDecl {
                                     scope: struct_scope,
                                     ..
                                 } = &*decl.borrow()
                                 {
                                     if let Some(s) = struct_scope {
-                                        if self.is_member_accessible(symbol.clone(), member) {
-                                            if let Some(found) = s.borrow().get_type(&member.value)
-                                            {
-                                                found
-                                            } else {
-                                                self.emit_error(
-                                                    TrussDiagnosticCode::UnknownType,
-                                                    format!(
-                                                        "Type '{}' not found in struct '{}'",
-                                                        member.value, struct_name
-                                                    ),
-                                                    member,
-                                                );
-                                                return None;
-                                            }
+                                        if let Some(found) = s.borrow().get_type(&member.value)
+                                        {
+                                            found
                                         } else {
                                             self.emit_error(
-                                                TrussDiagnosticCode::InaccessibleMember,
+                                                TrussDiagnosticCode::UnknownType,
                                                 format!(
-                                                    "'{}' is inaccessible due to access level",
-                                                    member.value
+                                                    "Type '{}' not found in struct '{}'",
+                                                    member.value, struct_name
                                                 ),
                                                 member,
                                             );
@@ -3788,32 +3805,31 @@ impl TypeResolver {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(class_name) {
                             if let Ok(Some(decl)) = symbol.borrow().get_decl() {
+                                if !self.is_member_accessible(symbol.clone(), member) {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::InaccessibleMember,
+                                        format!(
+                                            "'{}' is inaccessible due to access level",
+                                            member.value
+                                        ),
+                                        member,
+                                    );
+                                    return None;
+                                }
                                 if let Statement::ClassDecl {
                                     scope: class_scope, ..
                                 } = &*decl.borrow()
                                 {
                                     if let Some(s) = class_scope {
-                                        if self.is_member_accessible(symbol.clone(), member) {
-                                            if let Some(found) = s.borrow().get_type(&member.value)
-                                            {
-                                                found
-                                            } else {
-                                                self.emit_error(
-                                                    TrussDiagnosticCode::UnknownType,
-                                                    format!(
-                                                        "Type '{}' not found in class '{}'",
-                                                        member.value, class_name
-                                                    ),
-                                                    member,
-                                                );
-                                                return None;
-                                            }
+                                        if let Some(found) = s.borrow().get_type(&member.value)
+                                        {
+                                            found
                                         } else {
                                             self.emit_error(
-                                                TrussDiagnosticCode::InaccessibleMember,
+                                                TrussDiagnosticCode::UnknownType,
                                                 format!(
-                                                    "'{}' is inaccessible due to access level",
-                                                    member.value
+                                                    "Type '{}' not found in class '{}'",
+                                                    member.value, class_name
                                                 ),
                                                 member,
                                             );
@@ -5245,7 +5261,6 @@ impl TypeResolver {
         let mut has_errors = false;
 
         for cp in old_params {
-            // Treat '_' label as unlabeled
             let is_underscore_label = cp.label.as_ref().is_some_and(|l| l.value == "_");
             if let Some(label_token) = &cp.label
                 && !is_underscore_label
@@ -5290,7 +5305,6 @@ impl TypeResolver {
                     );
                 }
             } else {
-                // Unlabeled param: first by position, skip already matched
                 while next_pos < decl_params.len() && matched[next_pos] {
                     next_pos += 1;
                 }
@@ -5382,7 +5396,6 @@ impl TypeResolver {
                 }
             }
             (Some(expected), None) => {
-                // Skip missing label error if param has a default value (omitted param)
                 if decl_param.borrow().default_value.is_none() {
                     let token = call_param.expression.borrow().token();
                     self.emit_error(
@@ -5409,34 +5422,34 @@ impl TypeResolver {
     }
 
     fn is_member_accessible(&self, container: Rc<RefCell<Symbol>>, member_token: &Token) -> bool {
-        let access_modifier = {
+        // Extract all data from the symbol declaration. Use try_borrow to handle
+        // the case where the declaration's RefCell is already mutably borrowed
+        // (e.g. during struct body processing in resolve_statement).
+        let (access_modifier, decl_file) = {
             let symbol = container.borrow();
-            let Some(m) = symbol.get_decl().ok().flatten().and_then(|decl| {
-                decl.borrow()
-                    .modifiers()
-                    .unwrap()
-                    .iter()
-                    .find(|m| matches!(m.ty, ModifierType::Access(_)))
-                    .cloned()
-            }) else {
+            let Some(decl_rc) = symbol.get_decl().ok().flatten() else {
                 return true;
             };
-            m.ty
+            let Ok(decl) = decl_rc.try_borrow() else {
+                return true;
+            };
+            let modifiers = decl.modifiers().unwrap();
+            let access = modifiers.iter().find_map(|m| {
+                if let ModifierType::Access(access) = &m.ty {
+                    Some(*access)
+                } else {
+                    None
+                }
+            });
+            let file = decl.token().file.clone();
+            (access, file)
         };
-        let ModifierType::Access(access) = &access_modifier else {
+        let Some(access) = access_modifier else {
             return true;
         };
         match access {
             AccessModifier::Open | AccessModifier::Public | AccessModifier::Internal => true,
-            AccessModifier::Fileprivate => {
-                let symbol = container.borrow();
-                if let Some(decl) = symbol.get_decl().ok().flatten() {
-                    let decl_file = decl.borrow().token().file;
-                    member_token.file == decl_file
-                } else {
-                    true
-                }
-            }
+            AccessModifier::Fileprivate => member_token.file == decl_file,
             AccessModifier::Private => self
                 .current_owner
                 .as_ref()

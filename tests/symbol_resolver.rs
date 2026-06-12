@@ -1189,7 +1189,6 @@ fn test_autowired_protocol_method_auto_generates_for_struct() {
     assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
     drop(engine_ref);
 
-    // Verify the auto-generated copy() method exists on the struct
     let root_module = krate.borrow().modules.get("test").cloned().unwrap();
     let root_scope = root_module.borrow().scope.clone().unwrap();
     let struct_sym = root_scope.borrow().get_symbol("MyStruct").unwrap();
@@ -1232,7 +1231,6 @@ fn test_autowired_method_not_generated_if_already_implemented() {
     assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
     drop(engine_ref);
 
-    // Verify the struct has exactly one copy() method (not duplicated)
     let root_module = krate.borrow().modules.get("test").cloned().unwrap();
     let root_scope = root_module.borrow().scope.clone().unwrap();
     let struct_sym = root_scope.borrow().get_symbol("MyStruct").unwrap();
@@ -4689,5 +4687,36 @@ fn test_array_literal_undefined_variable() {
     assert!(
         engine.borrow().has_errors(),
         "Undefined variable in array literal should produce error"
+    );
+}
+
+#[test]
+fn test_self_type_constructor_call() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo {
+    var x: Int32
+    init(x: Int32) { self.x = x }
+    func clone() -> Foo { Self(x: self.x) }
+}"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors"
+    );
+    let (packages, _pkg) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    assert!(
+        !engine.borrow().has_errors(),
+        "SymbolResolver should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
     );
 }

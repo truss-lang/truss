@@ -6725,3 +6725,89 @@ fn test_array_literal_stdlib() {
         "array literal with explicit Array<Int32> annotation should type-check"
     );
 }
+
+#[test]
+fn test_self_type_constructor_in_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo {
+    var x: Int32
+    init(x: Int32) { self.x = x }
+    func clone() -> Foo { Self(x: self.x) }
+}
+func test() -> Foo {
+    let f = Foo(x: 42)
+    f.clone()
+}"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors"
+    );
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    assert!(
+        !engine.borrow().has_errors(),
+        "SymbolResolver should have no errors"
+    );
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    assert!(
+        !engine.borrow().has_errors(),
+        "TypeResolver should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+}
+
+#[test]
+fn test_self_type_constructor_in_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Foo {
+    var x: Int32
+    init(x: Int32) { self.x = x }
+    func clone() -> Foo { Self(x: self.x) }
+}
+func test() -> Foo {
+    let f = Foo(x: 42)
+    f.clone()
+}"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors"
+    );
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    assert!(
+        !engine.borrow().has_errors(),
+        "SymbolResolver should have no errors"
+    );
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    assert!(
+        !engine.borrow().has_errors(),
+        "TypeResolver should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+}
