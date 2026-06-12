@@ -24,10 +24,10 @@ pub enum Type {
     Pointer(Rc<RefCell<Type>>),
     NonNullPointer(Rc<RefCell<Type>>),
     Tuple(Vec<(Option<String>, Rc<RefCell<Type>>)>),
-    Struct(String, WeakSymbol),
-    Class(String, WeakSymbol),
-    Enum(String, WeakSymbol),
-    Protocol(String, WeakSymbol),
+    Struct(String, WeakSymbol, Vec<Rc<RefCell<Type>>>),
+    Class(String, WeakSymbol, Vec<Rc<RefCell<Type>>>),
+    Enum(String, WeakSymbol, Vec<Rc<RefCell<Type>>>),
+    Protocol(String, WeakSymbol, Vec<Rc<RefCell<Type>>>),
     Compound(Vec<Rc<RefCell<Type>>>),
     Inline(Rc<RefCell<Type>>, Option<u64>),
     GenericParam(String),
@@ -82,10 +82,62 @@ impl fmt::Display for Type {
                 }
                 write!(f, ")")
             }
-            Type::Struct(name, _) => write!(f, "{}", name),
-            Type::Class(name, _) => write!(f, "{}", name),
-            Type::Enum(name, _) => write!(f, "{}", name),
-            Type::Protocol(name, _) => write!(f, "{}", name),
+            Type::Struct(name, _, type_params) => {
+                if type_params.is_empty() {
+                    write!(f, "{}", name)
+                } else {
+                    write!(f, "{}<", name)?;
+                    for (i, tp) in type_params.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", tp.borrow())?;
+                    }
+                    write!(f, ">")
+                }
+            }
+            Type::Class(name, _, type_params) => {
+                if type_params.is_empty() {
+                    write!(f, "{}", name)
+                } else {
+                    write!(f, "{}<", name)?;
+                    for (i, tp) in type_params.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", tp.borrow())?;
+                    }
+                    write!(f, ">")
+                }
+            }
+            Type::Enum(name, _, type_params) => {
+                if type_params.is_empty() {
+                    write!(f, "{}", name)
+                } else {
+                    write!(f, "{}<", name)?;
+                    for (i, tp) in type_params.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", tp.borrow())?;
+                    }
+                    write!(f, ">")
+                }
+            }
+            Type::Protocol(name, _, type_params) => {
+                if type_params.is_empty() {
+                    write!(f, "{}", name)
+                } else {
+                    write!(f, "{}<", name)?;
+                    for (i, tp) in type_params.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", tp.borrow())?;
+                    }
+                    write!(f, ">")
+                }
+            }
             Type::Compound(types) => {
                 for (i, t) in types.iter().enumerate() {
                     if i > 0 {

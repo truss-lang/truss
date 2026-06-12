@@ -201,6 +201,7 @@ impl TypeResolver {
                 let struct_ty = Rc::new(RefCell::new(Type::Struct(
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
+                vec![],
                 )));
                 let self_ty = struct_ty.clone();
                 self.current_scope
@@ -331,6 +332,7 @@ impl TypeResolver {
                 let class_ty = Rc::new(RefCell::new(Type::Class(
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
+                vec![],
                 )));
                 let self_ty = class_ty.clone();
                 self.current_scope
@@ -477,6 +479,7 @@ impl TypeResolver {
                 let enum_ty = Rc::new(RefCell::new(Type::Enum(
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
+                vec![],
                 )));
                 self.current_scope
                     .as_ref()
@@ -717,6 +720,7 @@ impl TypeResolver {
                 let protocol_ty = Rc::new(RefCell::new(Type::Protocol(
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
+                vec![],
                 )));
                 self.current_scope
                     .as_ref()
@@ -875,18 +879,22 @@ impl TypeResolver {
                     Symbol::Struct { name, .. } => Some(Rc::new(RefCell::new(Type::Struct(
                         name.clone(),
                         WeakSymbol(Rc::downgrade(&target_sym)),
+                        vec![],
                     )))),
                     Symbol::Class { name, .. } => Some(Rc::new(RefCell::new(Type::Class(
                         name.clone(),
                         WeakSymbol(Rc::downgrade(&target_sym)),
+                        vec![],
                     )))),
                     Symbol::Enum { name, .. } => Some(Rc::new(RefCell::new(Type::Enum(
                         name.clone(),
                         WeakSymbol(Rc::downgrade(&target_sym)),
+                        vec![],
                     )))),
                     Symbol::Protocol { name, .. } => Some(Rc::new(RefCell::new(Type::Protocol(
                         name.clone(),
                         WeakSymbol(Rc::downgrade(&target_sym)),
+                        vec![],
                     )))),
                     _ => None,
                 };
@@ -1886,6 +1894,43 @@ impl TypeResolver {
         }
     }
 
+    fn create_parameterized_type_from_truss(
+        &self,
+        type_name: &str,
+        inner_ty: Rc<RefCell<Type>>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let truss_type = self.lookup_type_from_truss_package(type_name);
+        let (name, symbol) = if let Some(ty) = truss_type {
+            match &*ty.borrow() {
+                Type::Enum(n, s, ..) | Type::Struct(n, s, ..) | Type::Class(n, s, ..) => {
+                    (n.clone(), s.clone())
+                }
+                _ => (type_name.to_string(), WeakSymbol(std::rc::Weak::new())),
+            }
+        } else {
+            (type_name.to_string(), WeakSymbol(std::rc::Weak::new()))
+        };
+        let variant = if type_name == "Optional" {
+            Type::Enum(name, symbol, vec![inner_ty])
+        } else if type_name == "Array" {
+            Type::Struct(name, symbol, vec![inner_ty])
+        } else {
+            Type::Struct(name, symbol, vec![inner_ty])
+        };
+        Some(Rc::new(RefCell::new(variant)))
+    }
+
+    fn lookup_type_from_truss_package(&self, type_name: &str) -> Option<Rc<RefCell<Type>>> {
+        if let Some(truss_pkg) = self.packages.get("Truss") {
+            if let Some(truss_module) = truss_pkg.borrow().modules.get("Truss") {
+                if let Some(scope) = &truss_module.borrow().scope {
+                    return scope.borrow().get_type(type_name);
+                }
+            }
+        }
+        None
+    }
+
     fn infer_if_type(&mut self, expression: Rc<RefCell<Expression>>) -> Option<Rc<RefCell<Type>>> {
         let condition;
         let then: Vec<Rc<RefCell<Statement>>>;
@@ -2011,6 +2056,7 @@ impl TypeResolver {
                         let t = Rc::new(RefCell::new(Type::Struct(
                             "String".to_string(),
                             WeakSymbol(std::rc::Weak::new()),
+                            vec![],
                         )));
                         *ty = Some(t.clone());
                         t
@@ -2019,6 +2065,7 @@ impl TypeResolver {
                     let t = Rc::new(RefCell::new(Type::Struct(
                         "String".to_string(),
                         WeakSymbol(std::rc::Weak::new()),
+                        vec![],
                     )));
                     *ty = Some(t.clone());
                     t
@@ -2354,7 +2401,7 @@ impl TypeResolver {
                         }
                         resolved_ret_ty
                     }
-                    Type::Struct(struct_name, _) => {
+                    Type::Struct(struct_name, ..) => {
                         let (init_params_info, is_failable_init) = {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
                             if let Some(symbol) = scope.get_symbol(struct_name)
@@ -2436,7 +2483,7 @@ impl TypeResolver {
                             callee_type.clone()
                         }
                     }
-                    Type::Class(class_name, _) => {
+                    Type::Class(class_name, ..) => {
                         let (init_params_info, is_failable_init) = {
                             let scope = self.current_scope.as_ref().unwrap().borrow();
                             if let Some(symbol) = scope.get_symbol(class_name) {
@@ -2600,7 +2647,7 @@ impl TypeResolver {
                             );
                         }
                     } else if let Some(expr_ty) = expr_ty.as_ref() {
-                        if let Type::Enum(enum_name, _) = &*expr_ty.borrow() {
+                        if let Type::Enum(enum_name, ..) = &*expr_ty.borrow() {
                             let scope = current_scope.borrow();
                             if let Some(symbol) = scope.get_symbol(enum_name) {
                                 if let Symbol::Enum { cases, .. } = &*symbol.borrow() {
@@ -2752,7 +2799,7 @@ impl TypeResolver {
                         {
                             if !bindings.is_empty() {
                                 if let Some(ref subject_ty) = subject_ty {
-                                    if let Type::Enum(enum_name, _) = &*subject_ty.borrow() {
+                                    if let Type::Enum(enum_name, ..) = &*subject_ty.borrow() {
                                         let param_types = self.get_enum_case_parameter_types(
                                             enum_name,
                                             &case_name.value,
@@ -2857,7 +2904,7 @@ impl TypeResolver {
                 }
                 let object_ty = self.infer_type(object.clone())?;
                 match &*object_ty.borrow() {
-                    Type::Struct(struct_name, _) => {
+                    Type::Struct(struct_name, ..) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let symbol_opt = scope.get_symbol(struct_name);
                         drop(scope);
@@ -3002,7 +3049,7 @@ impl TypeResolver {
                         );
                         return None;
                     }
-                    Type::Class(class_name, _) => {
+                    Type::Class(class_name, ..) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let symbol_opt = scope.get_symbol(class_name);
                         drop(scope);
@@ -3195,7 +3242,7 @@ impl TypeResolver {
                         );
                         return None;
                     }
-                    Type::Enum(enum_name, _) => {
+                    Type::Enum(enum_name, ..) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(enum_name)
                             && let Symbol::Enum { cases, .. } = &*symbol.borrow()
@@ -3277,7 +3324,7 @@ impl TypeResolver {
                         );
                         return None;
                     }
-                    Type::Protocol(protocol_name, _) => {
+                    Type::Protocol(protocol_name, ..) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let protocol_name = protocol_name.clone();
                         if let Some(symbol) = scope.get_symbol(&protocol_name)
@@ -3325,7 +3372,7 @@ impl TypeResolver {
                         let protocol_names: Vec<String> = types
                             .iter()
                             .filter_map(|t| {
-                                if let Type::Protocol(name, _) = &*t.borrow() {
+                                if let Type::Protocol(name, ..) = &*t.borrow() {
                                     Some(name.clone())
                                 } else {
                                     None
@@ -3389,7 +3436,7 @@ impl TypeResolver {
                     Type::Inline(inner, _) => {
                         let inner_borrow = inner.borrow();
                         match &*inner_borrow {
-                            Type::Class(class_name, _) => {
+                            Type::Class(class_name, ..) => {
                                 let scope = self.current_scope.as_ref().unwrap().borrow();
                                 if let Some(symbol) = scope.get_symbol(class_name) {
                                     let binding = symbol.borrow();
@@ -3639,7 +3686,7 @@ impl TypeResolver {
                     None => return None,
                 };
                 let result = match &*object_ty.borrow() {
-                    Type::Protocol(protocol_name, weak_sym) => {
+                    Type::Protocol(protocol_name, weak_sym, ..) => {
                         if let Some(sym) = weak_sym.0.upgrade() {
                             if let Ok(Some(decl)) = sym.borrow().get_decl() {
                                 if let Statement::ProtocolDecl { scope, .. } = &*decl.borrow() {
@@ -3685,7 +3732,7 @@ impl TypeResolver {
                     Type::Compound(types) => {
                         let mut result = None;
                         for t in types {
-                            if let Type::Protocol(_name, weak_sym) = &*t.borrow() {
+                            if let Type::Protocol(_name, weak_sym, ..) = &*t.borrow() {
                                 if let Some(sym) = weak_sym.0.upgrade() {
                                     if let Ok(Some(decl)) = sym.borrow().get_decl() {
                                         if let Statement::ProtocolDecl { scope, .. } =
@@ -3733,7 +3780,7 @@ impl TypeResolver {
                         object_ty.clone(),
                         member.value.clone(),
                     ))),
-                    Type::Struct(struct_name, _) => {
+                    Type::Struct(struct_name, ..) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(struct_name) {
                             if let Ok(Some(decl)) = symbol.borrow().get_decl() {
@@ -3790,7 +3837,7 @@ impl TypeResolver {
                             return None;
                         }
                     }
-                    Type::Class(class_name, _) => {
+                    Type::Class(class_name, ..) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         if let Some(symbol) = scope.get_symbol(class_name) {
                             if let Ok(Some(decl)) = symbol.borrow().get_decl() {
@@ -4027,7 +4074,7 @@ impl TypeResolver {
                     if let Some(ref object_t) = object_ty {
                         let object_t_clone = object_t.borrow().clone();
                         let lookup_result = match &object_t_clone {
-                            Type::Struct(struct_name, _) | Type::Class(struct_name, _) => {
+                            Type::Struct(struct_name, ..) | Type::Class(struct_name, ..) => {
                                 let struct_name = struct_name.clone();
                                 let token = object.borrow().token();
                                 let scope = self.current_scope.as_ref().unwrap().borrow();
@@ -4167,6 +4214,7 @@ impl TypeResolver {
                         let array_ty = Rc::new(RefCell::new(Type::Struct(
                             "Array".to_string(),
                             WeakSymbol(std::rc::Weak::new()),
+                            vec![],
                         )));
                         *ty = Some(array_ty.clone());
                         array_ty
@@ -4175,6 +4223,7 @@ impl TypeResolver {
                     let array_ty = Rc::new(RefCell::new(Type::Struct(
                         "Array".to_string(),
                         WeakSymbol(std::rc::Weak::new()),
+                        vec![],
                     )));
                     *ty = Some(array_ty.clone());
                     array_ty
@@ -4185,7 +4234,7 @@ impl TypeResolver {
             } => {
                 let base_ty = self.infer_type(base.clone())?;
                 match &*base_ty.borrow() {
-                    Type::Class(_, _) => {}
+                    Type::Class(_, ..) => {}
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::TypeError,
@@ -4199,19 +4248,13 @@ impl TypeResolver {
                 ty.clone().unwrap()
             }
             Expression::OptionalType { inner, ty } => {
-                let _inner_ty = self.infer_type(inner.clone())?;
-                *ty = Some(Rc::new(RefCell::new(Type::Enum(
-                    "Optional".to_string(),
-                    WeakSymbol(std::rc::Weak::new()),
-                ))));
+                let inner_ty = self.infer_type(inner.clone())?;
+                *ty = self.create_parameterized_type_from_truss("Optional", inner_ty.clone());
                 ty.clone().unwrap()
             }
             Expression::ArrayType { inner, ty } => {
-                let _inner_ty = self.infer_type(inner.clone())?;
-                *ty = Some(Rc::new(RefCell::new(Type::Struct(
-                    "Array".to_string(),
-                    WeakSymbol(std::rc::Weak::new()),
-                ))));
+                let inner_ty = self.infer_type(inner.clone())?;
+                *ty = self.create_parameterized_type_from_truss("Array", inner_ty.clone());
                 ty.clone().unwrap()
             }
         };
@@ -4265,7 +4308,7 @@ impl TypeResolver {
 
         if is_int_literal {
             let is_expected_optional =
-                matches!(&*expected.borrow(), Type::Enum(name, _) if name == "Optional");
+                matches!(&*expected.borrow(), Type::Enum(name, ..) if name == "Optional");
             if Self::is_integer_type(&expected.borrow()) {
                 let mut expr_mut = expression.borrow_mut();
                 if let Expression::IntegerLiteral { ty, .. } = &mut *expr_mut {
@@ -4290,7 +4333,7 @@ impl TypeResolver {
             }
         } else if is_float_literal {
             let is_expected_optional =
-                matches!(&*expected.borrow(), Type::Enum(name, _) if name == "Optional");
+                matches!(&*expected.borrow(), Type::Enum(name, ..) if name == "Optional");
             if Self::is_float_type(&expected.borrow()) {
                 let mut expr_mut = expression.borrow_mut();
                 if let Expression::DecimalLiteral { ty, .. } = &mut *expr_mut {
@@ -4329,7 +4372,7 @@ impl TypeResolver {
             drop(expr_mut);
         } else if is_null {
             let is_expected_optional = match &*expected.borrow() {
-                Type::Enum(name, _) | Type::Struct(name, _) | Type::Class(name, _) => {
+                Type::Enum(name, ..) | Type::Struct(name, ..) | Type::Class(name, ..) => {
                     name == "Optional"
                 }
                 _ => false,
@@ -4349,7 +4392,7 @@ impl TypeResolver {
             }
         } else if is_array_literal {
             let is_expected_array = match &*expected.borrow() {
-                Type::Class(name, _) | Type::Struct(name, _) => name == "Array",
+                Type::Class(name, ..) | Type::Struct(name, ..) => name == "Array",
                 _ => false,
             };
             if is_expected_array {
@@ -4378,7 +4421,7 @@ impl TypeResolver {
                 let is_protocol_compat =
                     matches!(&expected_clone, Type::Protocol(..) | Type::Compound(..));
 
-                let is_optional_box = if let Type::Enum(name, _) = &expected_clone {
+                let is_optional_box = if let Type::Enum(name, ..) = &expected_clone {
                     name == "Optional"
                 } else {
                     false
@@ -4810,7 +4853,7 @@ impl TypeResolver {
     ) -> Option<Vec<Rc<RefCell<Symbol>>>> {
         let object_ty = self.infer_type(object)?;
         let type_name = match &*object_ty.borrow() {
-            Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => n.clone(),
+            Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => n.clone(),
             _ => return None,
         };
         let scope = self.current_scope.as_ref().unwrap().borrow();
@@ -4844,7 +4887,7 @@ impl TypeResolver {
         bin_selected: &mut Option<usize>,
     ) -> Option<Rc<RefCell<Type>>> {
         let type_name = match &*left_ty.borrow() {
-            Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => n.clone(),
+            Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => n.clone(),
             _ => return None,
         };
         let matching = {
@@ -4947,7 +4990,7 @@ impl TypeResolver {
         un_selected: &mut Option<usize>,
     ) -> Option<Rc<RefCell<Type>>> {
         let type_name = match &*operand_ty.borrow() {
-            Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => n.clone(),
+            Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => n.clone(),
             _ => return None,
         };
         let matching = {
@@ -5199,10 +5242,10 @@ impl TypeResolver {
             | (Type::Char, Type::Char)
             | (Type::Void, Type::Void)
             | (Type::Never, Type::Never) => true,
-            (Type::Struct(n1, _), Type::Struct(n2, _))
-            | (Type::Class(n1, _), Type::Class(n2, _))
-            | (Type::Enum(n1, _), Type::Enum(n2, _))
-            | (Type::Protocol(n1, _), Type::Protocol(n2, _)) => n1 == n2,
+            (Type::Struct(n1, ..), Type::Struct(n2, ..))
+            | (Type::Class(n1, ..), Type::Class(n2, ..))
+            | (Type::Enum(n1, ..), Type::Enum(n2, ..))
+            | (Type::Protocol(n1, ..), Type::Protocol(n2, ..)) => n1 == n2,
             (Type::Pointer(t1), Type::Pointer(t2)) => {
                 Self::types_are_type_compatible(&t1.borrow(), &t2.borrow())
             }
@@ -5572,7 +5615,7 @@ impl TypeResolver {
     ) -> Option<Vec<Rc<RefCell<Type>>>> {
         if let Some(name) = enum_name {
             self.get_enum_case_parameter_types(name, &case_name.value)
-        } else if let Type::Enum(enum_name, _) = &*expr_ty.borrow() {
+        } else if let Type::Enum(enum_name, ..) = &*expr_ty.borrow() {
             self.get_enum_case_parameter_types(enum_name, &case_name.value)
         } else {
             None
@@ -6059,7 +6102,7 @@ impl TypeResolver {
                 let object_ty = self.infer_type(object.clone());
                 if let Some(object_ty) = object_ty {
                     let type_name = match &*object_ty.borrow() {
-                        Type::Struct(n, _) | Type::Class(n, _) => Some(n.clone()),
+                        Type::Struct(n, ..) | Type::Class(n, ..) => Some(n.clone()),
                         _ => None,
                     };
                     if let Some(type_name) = type_name {
@@ -6158,7 +6201,7 @@ impl TypeResolver {
                 let object_ty = self.infer_type(object.clone());
                 if let Some(object_ty) = object_ty {
                     let type_name = match &*object_ty.borrow() {
-                        Type::Struct(n, _) | Type::Class(n, _) => Some(n.clone()),
+                        Type::Struct(n, ..) | Type::Class(n, ..) => Some(n.clone()),
                         _ => None,
                     };
                     if let Some(type_name) = type_name {

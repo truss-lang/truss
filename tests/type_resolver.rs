@@ -12,6 +12,7 @@ use truss::{
     symbol_resolver::SymbolResolver,
     type_resolver::TypeResolver,
     types::Type,
+    symbol::WeakSymbol,
 };
 
 fn create_engine() -> Rc<RefCell<TrussDiagnosticEngine>> {
@@ -2120,7 +2121,7 @@ fn test_self_keyword_type_in_struct_method() {
         {
             let self_ty = ty.as_ref().expect("self should have a type");
             match &*self_ty.borrow() {
-                Type::Struct(name, _) => assert_eq!(name, "Point"),
+                Type::Struct(name, ..) => assert_eq!(name, "Point"),
                 other => panic!("Expected Struct type for self, got {:?}", other),
             }
         } else {
@@ -2163,7 +2164,7 @@ fn test_self_keyword_type_in_class_method() {
         {
             let self_ty = ty.as_ref().expect("self should have a type");
             match &*self_ty.borrow() {
-                Type::Class(name, _) => assert_eq!(name, "Animal"),
+                Type::Class(name, ..) => assert_eq!(name, "Animal"),
                 other => panic!("Expected Class type for self, got {:?}", other),
             }
         } else {
@@ -2235,7 +2236,7 @@ fn test_super_keyword_type_in_subclass_method() {
         {
             let super_ty = ty.as_ref().expect("super should have a type");
             match &*super_ty.borrow() {
-                Type::Class(name, _) => assert_eq!(name, "Animal"),
+                Type::Class(name, ..) => assert_eq!(name, "Animal"),
                 other => panic!("Expected Class(Animal) type for super, got {:?}", other),
             }
         } else {
@@ -2799,7 +2800,7 @@ fn test_protocol_any_type_resolved() {
         assert!(ty.is_some(), "Variable should have a type annotation");
         let resolved = ty.as_ref().unwrap().borrow();
         assert!(
-            matches!(&*resolved, Type::Protocol(name, _) if name == "MyProtocol"),
+            matches!(&*resolved, Type::Protocol(name, ..) if name == "MyProtocol"),
             "Expected Protocol type, got {:?}",
             resolved
         );
@@ -2840,7 +2841,7 @@ fn test_protocol_some_type_resolved() {
         assert!(ty.is_some(), "Variable should have a type annotation");
         let resolved = ty.as_ref().unwrap().borrow();
         assert!(
-            matches!(&*resolved, Type::Protocol(name, _) if name == "MyProtocol"),
+            matches!(&*resolved, Type::Protocol(name, ..) if name == "MyProtocol"),
             "Expected Protocol type, got {:?}",
             resolved
         );
@@ -6810,4 +6811,62 @@ func test() -> Foo {
         "TypeResolver should have no errors: {:?}",
         engine.borrow().get_diagnostics()
     );
+}
+
+#[test]
+fn test_optional_type_display_shows_generic_params() {
+    let ty = Type::Enum("Optional".to_string(), WeakSymbol(std::rc::Weak::new()), vec![
+        Rc::new(RefCell::new(Type::Int32)),
+    ]);
+    assert_eq!(format!("{}", ty), "Optional<Int32>");
+}
+
+#[test]
+fn test_array_type_display_shows_generic_params() {
+    let ty = Type::Struct("Array".to_string(), WeakSymbol(std::rc::Weak::new()), vec![
+        Rc::new(RefCell::new(Type::Int32)),
+    ]);
+    assert_eq!(format!("{}", ty), "Array<Int32>");
+}
+
+#[test]
+fn test_non_generic_type_display_no_params() {
+    let ty = Type::Struct("Point".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]);
+    assert_eq!(format!("{}", ty), "Point");
+}
+
+#[test]
+fn test_optional_type_sugar_in_type_resolver_no_crash() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: Int32? = 10".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine);
+    type_resolver.resolve(&program, module_id);
+}
+
+#[test]
+fn test_array_type_sugar_in_type_resolver_no_crash() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: [Int32] = {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine);
+    type_resolver.resolve(&program, module_id);
 }
