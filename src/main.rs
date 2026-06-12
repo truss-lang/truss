@@ -197,7 +197,7 @@ fn main() {
     let context = inkwell::context::Context::create();
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let ir_generator = IRGenerator::new(&context, engine.clone());
-    let module = ir_generator.generate_with_stdlib(
+    let modules = ir_generator.generate_with_stdlib(
         &program,
         &stdlib_stmts,
         module.borrow().scope.clone().unwrap(),
@@ -208,8 +208,13 @@ fn main() {
     }
 
     if cli.ir || cli.inspect {
-        let ir_content = module.print_to_string().to_string();
-        println!("=== LLVM IR ===");
-        println!("{}", ir_content);
+        if let Some(stdlib_mod) = &modules.stdlib {
+            let ir = stdlib_mod.print_to_string().to_string();
+            println!("=== LLVM IR (stdlib) ===");
+            println!("{}", ir);
+        }
+        let ir = modules.main.print_to_string().to_string();
+        println!("=== LLVM IR (main) ===");
+        println!("{}", ir);
     }
 }

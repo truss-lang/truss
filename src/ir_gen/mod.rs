@@ -51,6 +51,11 @@ impl<'ctx> Scope<'ctx> {
     }
 }
 
+pub struct IRModules<'ctx> {
+    pub main: Rc<Module<'ctx>>,
+    pub stdlib: Option<Rc<Module<'ctx>>>,
+}
+
 pub struct IRGenerator<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
@@ -291,7 +296,7 @@ impl<'ctx> IRGenerator<'ctx> {
         program: &Program,
         scope: Rc<RefCell<TrussScope>>,
     ) -> Rc<Module<'ctx>> {
-        self.generate_with_stdlib(program, &[], scope)
+        self.generate_with_stdlib(program, &[], scope).main
     }
 
     pub fn generate_with_stdlib(
@@ -299,73 +304,46 @@ impl<'ctx> IRGenerator<'ctx> {
         program: &Program,
         stdlib_stmts: &[Rc<RefCell<Statement>>],
         scope: Rc<RefCell<TrussScope>>,
-    ) -> Rc<Module<'ctx>> {
+    ) -> IRModules<'ctx> {
         if stdlib_stmts.is_empty() {
             *self.program_scope.borrow_mut() = Some(scope);
             let all_stmts: Vec<Rc<RefCell<Statement>>> = program.statements.iter().cloned().collect();
             self.run_all_passes(&all_stmts);
-            return Rc::new(self.module);
+            return IRModules { main: Rc::new(self.module), stdlib: None };
         }
 
-        // Process stdlib into its own module
+        // Process stdlib
         let stdlib_mod = self.context.create_module("stdlib");
         let main_mod = std::mem::replace(&mut self.module, stdlib_mod);
         *self.program_scope.borrow_mut() = Some(scope.clone());
-
         self.run_all_passes(stdlib_stmts);
-
-        // Save stdlib module, restore main module
         let compiled_stdlib = std::mem::replace(&mut self.module, main_mod);
 
-        // Collect all function signatures from stdlib module
-        let mut stdlib_fns: Vec<(String, inkwell::types::FunctionType<'ctx>)> = Vec::new();
+        // Declare stdlib functions in main module
         for func in compiled_stdlib.get_functions() {
             let name = func.get_name().to_str().unwrap_or("").to_string();
-            if !name.is_empty() {
-                stdlib_fns.push((name, func.get_type()));
+            if !name.is_empty() && self.module.get_function(&name).is_none() {
+                self.module.add_function(&name, func.get_type(), None);
             }
         }
-
-        // Collect vtable globals from stdlib module
-        let stdlib_vtables: Vec<String> = {
-            self.vtable_types.borrow().keys().cloned().collect()
-        };
-
-        *self.program_scope.borrow_mut() = Some(scope);
-
-        // Declare all stdlib functions in main module as extern
-        for (name, fn_type) in &stdlib_fns {
-            if self.module.get_function(name).is_none() {
-                self.module.add_function(name, *fn_type, None);
-            }
-        }
-
-        // Declare vtable globals as extern in main module
-        for name in &stdlib_vtables {
-            if let Some(vtable_type) = self.vtable_types.borrow().get(name) {
-                if self.module.get_global(name).is_none() {
-                    let gv = self.module.add_global(vtable_type.as_basic_type_enum(), None, name);
+        for name in self.vtable_types.borrow().keys().cloned().collect::<Vec<_>>() {
+            if let Some(t) = self.vtable_types.borrow().get(&name) {
+                if self.module.get_global(&name).is_none() {
+                    let gv = self.module.add_global(t.as_basic_type_enum(), None, &name);
                     gv.set_linkage(inkwell::module::Linkage::External);
                 }
             }
         }
 
-        // Process main program into main module
+        // Process main
+        *self.program_scope.borrow_mut() = Some(scope);
         let all_main: Vec<Rc<RefCell<Statement>>> = program.statements.iter().cloned().collect();
         self.run_all_passes(&all_main);
 
-        // Link stdlib module into main module
-        if let Err(e) = self.module.link_in_module(compiled_stdlib) {
-            self.emit_error(
-                TrussDiagnosticCode::IRError,
-                format!("Failed to link stdlib: {}", e),
-                None,
-            );
+        IRModules {
+            main: Rc::new(std::mem::replace(&mut self.module, self.context.create_module("done"))),
+            stdlib: Some(Rc::new(compiled_stdlib)),
         }
-
-        // Return main module (swap with dummy to satisfy ownership)
-        let result = std::mem::replace(&mut self.module, self.context.create_module("done"));
-        Rc::new(result)
     }
 
     fn run_all_passes(&self, stmts: &[Rc<RefCell<Statement>>]) {
@@ -1508,40 +1486,6 @@ impl<'ctx> IRGenerator<'ctx> {
                                 None,
                             );
                         }
-                    }
-                }
-            }
-            let init_name = format!("{}.init", name.value);
-            if self.module.get_function(&init_name).is_none() {
-                let void_ty = Rc::new(RefCell::new(Type::Void));
-                let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                    Type::Void,
-                )))));
-                if let Ok(fn_type) = self.get_function_type(void_ty, vec![self_param], false) {
-                    let f = self.module.add_function(&init_name, fn_type, None);
-                    let entry = self.context.append_basic_block(f, "entry");
-                    let current_block = self.builder.get_insert_block();
-                    self.builder.position_at_end(entry);
-                    let _ = self.builder.build_return(None);
-                    if let Some(block) = current_block {
-                        self.builder.position_at_end(block);
-                    }
-                }
-            }
-            let deinit_name = format!("{}.deinit", name.value);
-            if self.module.get_function(&deinit_name).is_none() {
-                let void_ty = Rc::new(RefCell::new(Type::Void));
-                let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                    Type::Void,
-                )))));
-                if let Ok(fn_type) = self.get_function_type(void_ty, vec![self_param], false) {
-                    let f = self.module.add_function(&deinit_name, fn_type, None);
-                    let entry = self.context.append_basic_block(f, "entry");
-                    let current_block = self.builder.get_insert_block();
-                    self.builder.position_at_end(entry);
-                    let _ = self.builder.build_return(None);
-                    if let Some(block) = current_block {
-                        self.builder.position_at_end(block);
                     }
                 }
             }
