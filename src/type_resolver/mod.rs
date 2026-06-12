@@ -4055,6 +4055,18 @@ impl TypeResolver {
                 }
                 if let Some(t) = ty.as_ref() {
                     t.clone()
+                } else if let Some(current_scope) = &self.current_scope {
+                    if let Some(t) = current_scope.borrow().get_type("Array") {
+                        *ty = Some(t.clone());
+                        t
+                    } else {
+                        let array_ty = Rc::new(RefCell::new(Type::Struct(
+                            "Array".to_string(),
+                            WeakSymbol(std::rc::Weak::new()),
+                        )));
+                        *ty = Some(array_ty.clone());
+                        array_ty
+                    }
                 } else {
                     let array_ty = Rc::new(RefCell::new(Type::Struct(
                         "Array".to_string(),
@@ -4129,6 +4141,7 @@ impl TypeResolver {
         let is_float_literal = matches!(&*expression.borrow(), Expression::DecimalLiteral { .. });
         let is_nullptr = matches!(&*expression.borrow(), Expression::NullptrLiteral { .. });
         let is_null = matches!(&*expression.borrow(), Expression::NullLiteral { .. });
+        let is_array_literal = matches!(&*expression.borrow(), Expression::ArrayLiteral { .. });
 
         if is_int_literal {
             if Self::is_integer_type(&expected.borrow()) {
@@ -4195,6 +4208,27 @@ impl TypeResolver {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
                     format!("Type mismatch: expected {}, found null", expected.borrow()),
+                    token,
+                );
+            }
+        } else if is_array_literal {
+            let is_expected_array = match &*expected.borrow() {
+                Type::Class(name, _) | Type::Struct(name, _) => name == "Array",
+                _ => false,
+            };
+            if is_expected_array {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::ArrayLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+            } else {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!(
+                        "Type mismatch: expected {}, found array literal",
+                        expected.borrow()
+                    ),
                     token,
                 );
             }

@@ -6540,3 +6540,48 @@ fn test_null_with_optional_type() {
     );
     assert_eq!(errors, 0, "null should work as Optional.None");
 }
+
+#[test]
+fn test_array_literal_integer_elements() {
+    let errors = run_type_check("func test() { let a = [1, 2, 3] }");
+    assert_eq!(errors, 0, "array literal with integer elements should type-check");
+}
+
+#[test]
+fn test_array_literal_empty() {
+    let errors = run_type_check("func test() { let a = [] }");
+    assert_eq!(errors, 0, "empty array literal should type-check");
+}
+
+#[test]
+fn test_array_literal_bool_elements() {
+    let errors = run_type_check("func test() { let a = [true, false] }");
+    assert_eq!(errors, 0, "array literal with bool elements should type-check");
+}
+
+#[test]
+fn test_array_literal_single_element() {
+    let errors = run_type_check("func test() { let a = [42] }");
+    assert_eq!(errors, 0, "single-element array literal should type-check");
+}
+
+#[test]
+fn test_array_literal_nested() {
+    let errors = run_type_check("func test() { let a = [[1], [2]] }");
+    assert_eq!(errors, 0, "nested array literal should type-check");
+}
+
+#[test]
+fn test_array_literal_as_variable() {
+    let errors = run_type_check("func test() { let x = [1, 2, 3]; let y = x }");
+    assert_eq!(errors, 0, "array literal assigned to variable should type-check");
+}
+
+#[test]
+fn test_array_literal_stdlib() {
+    let errors = run_type_check_with_stdlib(
+        "func test() { let a: Array<Int32> = [1, 2, 3] }",
+        &["#[builtintype] public struct Int32 {}", "public class Array<T> { public init() {} var count: UInt64 }"],
+    );
+    assert_eq!(errors, 0, "array literal with explicit Array<Int32> annotation should type-check");
+}
