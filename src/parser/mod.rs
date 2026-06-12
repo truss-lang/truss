@@ -1025,7 +1025,14 @@ impl Parser {
                                 index_value: value as u64,
                                 ty: None,
                             };
-                        } else if TokenType::Identifier == member_token.ty {
+                        } else if TokenType::Identifier == member_token.ty
+                            || matches!(
+                                member_token.ty,
+                                TokenType::Keyword {
+                                    keyword: KeywordType::Deinit
+                                }
+                            )
+                        {
                             expression = Expression::MemberAccess {
                                 object: Rc::new(RefCell::new(expression)),
                                 member: Box::new(member_token),

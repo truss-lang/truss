@@ -1672,6 +1672,36 @@ fn test_parse_member_access_in_assignment() {
 }
 
 #[test]
+fn test_parse_member_access_deinit_call() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { obj.deinit() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+        && let Expression::Call { callee, parameters, .. } = &*expression.borrow()
+        && let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
+    {
+        if let Expression::Variable { name, .. } = &*object.borrow() {
+            assert_eq!(name.value, "obj");
+        } else {
+            panic!("Expected variable expression");
+        }
+        assert_eq!(member.value, "deinit");
+        assert_eq!(parameters.len(), 0);
+    } else {
+        panic!("Expected Call expression on MemberAccess with member 'deinit'");
+    }
+}
+
+#[test]
 fn test_parse_init_decl() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
@@ -1737,7 +1767,12 @@ fn test_parse_failable_init_decl() {
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
         assert_eq!(body.len(), 1);
-        if let Statement::InitDecl { parameters, is_failable, .. } = &*body[0].borrow() {
+        if let Statement::InitDecl {
+            parameters,
+            is_failable,
+            ..
+        } = &*body[0].borrow()
+        {
             assert!(is_failable);
             assert_eq!(parameters.len(), 0);
         } else {
@@ -1763,7 +1798,12 @@ fn test_parse_failable_init_decl_with_params() {
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
         assert_eq!(body.len(), 1);
-        if let Statement::InitDecl { parameters, is_failable, .. } = &*body[0].borrow() {
+        if let Statement::InitDecl {
+            parameters,
+            is_failable,
+            ..
+        } = &*body[0].borrow()
+        {
             assert!(is_failable);
             assert_eq!(parameters.len(), 2);
             assert_eq!(parameters[0].borrow().name.value, "x");
