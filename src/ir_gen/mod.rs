@@ -3796,6 +3796,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::ShorthandArgument { ty, .. }
                 | Expression::Cast { ty, .. }
                 | Expression::TupleLiteral { ty, .. }
+                | Expression::ArrayLiteral { ty, .. }
                 | Expression::TupleIndexAccess { ty, .. }
                 | Expression::SelfKeyword { ty, .. }
                 | Expression::SuperKeyword { ty, .. }
@@ -3857,6 +3858,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::ShorthandArgument { ty, .. }
                 | Expression::Cast { ty, .. }
                 | Expression::TupleLiteral { ty, .. }
+                | Expression::ArrayLiteral { ty, .. }
                 | Expression::TupleIndexAccess { ty, .. }
                 | Expression::SelfKeyword { ty, .. }
                 | Expression::SuperKeyword { ty, .. }

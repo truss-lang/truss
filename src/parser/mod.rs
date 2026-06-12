@@ -670,6 +670,55 @@ impl Parser {
             },
             TokenType::Separator { separator } => match separator {
                 SeparatorType::OpenBrace => self.parse_closure_expression(),
+                SeparatorType::OpenBracket => {
+                    self.index += 1;
+                    let left = token;
+                    let mut elements = Vec::new();
+
+                    if let Some(t) = self.peek()
+                        && !SeparatorType::is_separator(&t, SeparatorType::CloseBracket)
+                    {
+                        let first_expr = self.parse_expression()?;
+                        elements.push(Rc::new(RefCell::new(first_expr)));
+
+                        while let Some(t) = self.peek()
+                            && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                        {
+                            self.index += 1;
+                            if let Some(next) = self.peek()
+                                && SeparatorType::is_separator(&next, SeparatorType::CloseBracket)
+                            {
+                                break;
+                            }
+                            let expr = self.parse_expression()?;
+                            elements.push(Rc::new(RefCell::new(expr)));
+                        }
+                    }
+
+                    let Some(right) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            "Expected closing bracket",
+                            &left,
+                        );
+                        return Err(());
+                    };
+                    if !SeparatorType::is_separator(&right, SeparatorType::CloseBracket) {
+                        self.emit_error(
+                            TrussDiagnosticCode::UnexpectedToken,
+                            format!("Expected ']' but found '{}'", right.value),
+                            &right,
+                        );
+                        return Err(());
+                    }
+
+                    Ok(Expression::ArrayLiteral {
+                        left: Box::new(left),
+                        elements,
+                        right: Box::new(right),
+                        ty: None,
+                    })
+                }
                 SeparatorType::OpenParen => {
                     self.index += 1;
                     let left = token;

@@ -11702,3 +11702,160 @@ fn test_parse_array_type_in_func_param() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
 }
+
+#[test]
+fn test_parse_array_literal_empty() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = []".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+        let init = init.borrow();
+        assert!(matches!(&*init, Expression::ArrayLiteral { elements, .. } if elements.is_empty()));
+    } else {
+        panic!("Expected VariableDecl with initializer");
+    }
+}
+
+#[test]
+fn test_parse_array_literal_single_element() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = [42]".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+        let init = init.borrow();
+        if let Expression::ArrayLiteral { elements, .. } = &*init {
+            assert_eq!(elements.len(), 1);
+            assert!(matches!(&*elements[0].borrow(), Expression::IntegerLiteral { value: 42, .. }));
+        } else {
+            panic!("Expected ArrayLiteral");
+        }
+    } else {
+        panic!("Expected VariableDecl with initializer");
+    }
+}
+
+#[test]
+fn test_parse_array_literal_multi_element() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = [1, 2, 3]".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+        let init = init.borrow();
+        if let Expression::ArrayLiteral { elements, .. } = &*init {
+            assert_eq!(elements.len(), 3);
+        } else {
+            panic!("Expected ArrayLiteral");
+        }
+    } else {
+        panic!("Expected VariableDecl with initializer");
+    }
+}
+
+#[test]
+fn test_parse_array_literal_member_access() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = [1, 2].count".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+        let init = init.borrow();
+        assert!(matches!(&*init, Expression::MemberAccess { .. }));
+    } else {
+        panic!("Expected VariableDecl with initializer");
+    }
+}
+
+#[test]
+fn test_parse_array_literal_subscript_not_confused() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = a[0]".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+        let init = init.borrow();
+        assert!(matches!(&*init, Expression::SubscriptAccess { .. }));
+    } else {
+        panic!("Expected SubscriptAccess");
+    }
+}
+
+#[test]
+fn test_parse_array_literal_missing_bracket() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = [1, 2".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(engine.borrow().has_errors());
+}
+
+#[test]
+fn test_parse_array_literal_in_function_return() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test() { return [] }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+}
+
+#[test]
+fn test_parse_array_literal_nested() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = [[1, 2], [3, 4]]".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+}
+
+#[test]
+fn test_parse_array_literal_trailing_comma() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = [1, 2,]".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer: Some(init), .. } = &*program.statements[0].borrow() {
+        let init = init.borrow();
+        if let Expression::ArrayLiteral { elements, .. } = &*init {
+            assert_eq!(elements.len(), 2);
+        } else {
+            panic!("Expected ArrayLiteral");
+        }
+    } else {
+        panic!("Expected VariableDecl with initializer");
+    }
+}

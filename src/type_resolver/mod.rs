@@ -4049,6 +4049,21 @@ impl TypeResolver {
                     block_ty
                 }
             }
+            Expression::ArrayLiteral { elements, ty, .. } => {
+                for element in elements {
+                    self.infer_type(element.clone());
+                }
+                if let Some(t) = ty.as_ref() {
+                    t.clone()
+                } else {
+                    let array_ty = Rc::new(RefCell::new(Type::Struct(
+                        "Array".to_string(),
+                        WeakSymbol(std::rc::Weak::new()),
+                    )));
+                    *ty = Some(array_ty.clone());
+                    array_ty
+                }
+            }
             Expression::InlineType {
                 base, ty, token, ..
             } => {
