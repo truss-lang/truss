@@ -9,10 +9,10 @@ use truss::{
     krate::Package,
     lexer::{CharStream, Lexer},
     parser::Parser,
+    symbol::WeakSymbol,
     symbol_resolver::SymbolResolver,
     type_resolver::TypeResolver,
     types::Type,
-    symbol::WeakSymbol,
 };
 
 fn create_engine() -> Rc<RefCell<TrussDiagnosticEngine>> {
@@ -6815,23 +6815,31 @@ func test() -> Foo {
 
 #[test]
 fn test_optional_type_display_shows_generic_params() {
-    let ty = Type::Enum("Optional".to_string(), WeakSymbol(std::rc::Weak::new()), vec![
-        Rc::new(RefCell::new(Type::Int32)),
-    ]);
+    let ty = Type::Enum(
+        "Optional".to_string(),
+        WeakSymbol(std::rc::Weak::new()),
+        vec![Rc::new(RefCell::new(Type::Int32))],
+    );
     assert_eq!(format!("{}", ty), "Optional<Int32>");
 }
 
 #[test]
 fn test_array_type_display_shows_generic_params() {
-    let ty = Type::Struct("Array".to_string(), WeakSymbol(std::rc::Weak::new()), vec![
-        Rc::new(RefCell::new(Type::Int32)),
-    ]);
+    let ty = Type::Struct(
+        "Array".to_string(),
+        WeakSymbol(std::rc::Weak::new()),
+        vec![Rc::new(RefCell::new(Type::Int32))],
+    );
     assert_eq!(format!("{}", ty), "Array<Int32>");
 }
 
 #[test]
 fn test_non_generic_type_display_no_params() {
-    let ty = Type::Struct("Point".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]);
+    let ty = Type::Struct(
+        "Point".to_string(),
+        WeakSymbol(std::rc::Weak::new()),
+        vec![],
+    );
     assert_eq!(format!("{}", ty), "Point");
 }
 
@@ -6854,6 +6862,178 @@ fn test_optional_type_sugar_in_type_resolver_no_crash() {
 }
 
 #[test]
+fn test_override_missing_modifier_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Base { func foo() -> Int32 { return 1 } }
+             class Derived: Base { func foo() -> Int32 { return 2 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let has_error = engine.borrow().get_diagnostics().iter().any(|d| {
+        d.code == TrussDiagnosticCode::MissingOverrideModifier
+    });
+    assert!(has_error, "Should report missing override modifier");
+}
+
+#[test]
+fn test_override_correct_modifier_no_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Base { func foo() -> Int32 { return 1 } }
+             class Derived: Base { override func foo() -> Int32 { return 2 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let has_missing = engine.borrow().get_diagnostics().iter().any(|d| {
+        d.code == TrussDiagnosticCode::MissingOverrideModifier
+            || d.code == TrussDiagnosticCode::OverrideWithoutOverride
+    });
+    assert!(!has_missing, "Should not report override errors when override modifier is used");
+}
+
+#[test]
+fn test_override_without_override_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Base { func foo() -> Int32 { return 1 } }
+             class Unrelated: Base { override func bar() -> Int32 { return 2 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let has_error = engine.borrow().get_diagnostics().iter().any(|d| {
+        d.code == TrussDiagnosticCode::OverrideWithoutOverride
+    });
+    assert!(has_error, "Should report override without purpose");
+}
+
+#[test]
+fn test_override_final_method_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Base { final func foo() -> Int32 { return 1 } }
+             class Derived: Base { override func foo() -> Int32 { return 2 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let has_error = engine.borrow().get_diagnostics().iter().any(|d| {
+        d.code == TrussDiagnosticCode::CannotOverrideFinal
+    });
+    assert!(has_error, "Should report cannot override final method");
+}
+
+#[test]
+fn test_override_in_final_class_no_override_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Base { func foo() -> Int32 { return 1 } }
+             final class Derived: Base { override func foo() -> Int32 { return 2 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let errors: Vec<_> = {
+        let engine_ref = engine.borrow();
+        engine_ref.get_diagnostics().iter().filter(|d| {
+            d.code == TrussDiagnosticCode::MissingOverrideModifier
+                || d.code == TrussDiagnosticCode::OverrideWithoutOverride
+                || d.code == TrussDiagnosticCode::CannotOverrideFinal
+        }).map(|d| format!("{:?}", d.code)).collect::<Vec<_>>()
+    };
+    assert_eq!(errors.len(), 0, "Final class with override should not produce override errors: {:?}", errors);
+}
+
+#[test]
+fn test_override_computed_property_no_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Base { var name: Int32 { get { return 1 } set { } } }
+             class Derived: Base { override var name: Int32 { get { return 2 } set { } } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let errors: Vec<_> = {
+        let engine_ref = engine.borrow();
+        engine_ref.get_diagnostics().iter().filter(|d| {
+            d.code == TrussDiagnosticCode::MissingOverrideModifier
+                || d.code == TrussDiagnosticCode::OverrideWithoutOverride
+        }).map(|d| format!("{:?}", d.code)).collect::<Vec<_>>()
+    };
+    assert_eq!(errors.len(), 0, "Should not report override errors for correct property override: {:?}", errors);
+}
+
+#[test]
 fn test_array_type_sugar_in_type_resolver_no_crash() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
@@ -6870,3 +7050,4 @@ fn test_array_type_sugar_in_type_resolver_no_crash() {
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine);
     type_resolver.resolve(&program, module_id);
 }
+

@@ -201,7 +201,7 @@ impl TypeResolver {
                 let struct_ty = Rc::new(RefCell::new(Type::Struct(
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
-                vec![],
+                    vec![],
                 )));
                 let self_ty = struct_ty.clone();
                 self.current_scope
@@ -332,7 +332,7 @@ impl TypeResolver {
                 let class_ty = Rc::new(RefCell::new(Type::Class(
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
-                vec![],
+                    vec![],
                 )));
                 let self_ty = class_ty.clone();
                 self.current_scope
@@ -452,6 +452,7 @@ impl TypeResolver {
                 }
                 self.leave_scope();
                 self.current_owner = prev_owner;
+                self.validate_class_member_overrides(name, superclass, body);
                 self.validate_member_access_levels(
                     container_access.clone(),
                     is_container_class,
@@ -479,7 +480,7 @@ impl TypeResolver {
                 let enum_ty = Rc::new(RefCell::new(Type::Enum(
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
-                vec![],
+                    vec![],
                 )));
                 self.current_scope
                     .as_ref()
@@ -720,7 +721,7 @@ impl TypeResolver {
                 let protocol_ty = Rc::new(RefCell::new(Type::Protocol(
                     name.value.clone(),
                     WeakSymbol(Rc::downgrade(&symbol)),
-                vec![],
+                    vec![],
                 )));
                 self.current_scope
                     .as_ref()
@@ -5720,6 +5721,178 @@ impl TypeResolver {
                 })
                 .unwrap_or(false),
             AccessModifier::Package => true,
+        }
+    }
+
+    fn validate_class_member_overrides(
+        &self,
+        _class_name: &Token,
+        superclass: &Option<Rc<RefCell<Expression>>>,
+        body: &[Rc<RefCell<Statement>>],
+    ) {
+        let superclass_symbol = superclass.as_ref().and_then(|super_expr| {
+            if let Expression::Type {
+                name: super_name, ..
+            } = &*super_expr.borrow()
+            {
+                self.current_scope.as_ref().and_then(|scope| {
+                    scope
+                        .borrow()
+                        .get_symbol(&super_name.value)
+                })
+            } else {
+                None
+            }
+        });
+
+        let (super_method_names, super_property_names, _is_super_abstract) =
+            superclass_symbol
+                .as_ref()
+                .map(|sym| {
+                    let binding = sym.borrow();
+                    if let Symbol::Class {
+                        methods,
+                        properties,
+                        is_abstract,
+                        ..
+                    } = &*binding
+                    {
+                        let method_names: Vec<String> = methods
+                            .iter()
+                            .filter_map(|m| {
+                                let mb = m.borrow();
+                                if let Symbol::ClassMethod { name, .. } = &*mb {
+                                    Some(name.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        let property_names: Vec<String> = properties
+                            .iter()
+                            .filter_map(|p| {
+                                let pb = p.borrow();
+                                if let Symbol::ClassProperty { name, .. } = &*pb {
+                                    Some(name.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        (method_names, property_names, *is_abstract)
+                    } else {
+                        (vec![], vec![], false)
+                    }
+                })
+                .unwrap_or_default();
+
+        for member in body {
+            let member_ref = member.borrow();
+            match &*member_ref {
+                Statement::FunctionDecl {
+                    name: method_name,
+                    modifiers,
+                    ..
+                } => {
+                    let is_override =
+                        modifiers.iter().any(|m| m.ty == ModifierType::Override);
+                    let exists_in_super =
+                        super_method_names.contains(&method_name.value);
+
+                    if exists_in_super {
+                        if let Some(ref super_sym) = superclass_symbol {
+                            let binding = super_sym.borrow();
+                            if let Symbol::Class { methods, .. } = &*binding {
+                                if let Some(super_method) = methods.iter().find(|m| {
+                                    if let Ok(n) = m.borrow().name() {
+                                        n == method_name.value
+                                    } else {
+                                        false
+                                    }
+                                }) {
+                                    let smb = super_method.borrow();
+                                    if let Symbol::ClassMethod { is_final, .. } = &*smb {
+                                        if *is_final {
+                                            let token = modifiers
+                                                .iter()
+                                                .find(|m| m.ty == ModifierType::Override)
+                                                .map(|m| &*m.token)
+                                                .unwrap_or(method_name);
+                                            self.emit_error(
+                                                TrussDiagnosticCode::CannotOverrideFinal,
+                                                format!(
+                                                    "Cannot override final method '{}'",
+                                                    method_name.value
+                                                ),
+                                                token,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if !is_override {
+                            self.emit_error(
+                                TrussDiagnosticCode::MissingOverrideModifier,
+                                format!(
+                                    "Method '{}' overrides a superclass method but is missing 'override' modifier",
+                                    method_name.value
+                                ),
+                                method_name,
+                            );
+                        }
+                    } else if is_override {
+                        self.emit_error(
+                            TrussDiagnosticCode::OverrideWithoutOverride,
+                            format!(
+                                "Method '{}' marked with 'override' but does not override anything",
+                                method_name.value
+                            ),
+                            method_name,
+                        );
+                    }
+                }
+                Statement::VariableDecl {
+                    name: var_name,
+                    modifiers,
+                    accessors,
+                    ..
+                } => {
+                    let has_override =
+                        modifiers.iter().any(|m| m.ty == ModifierType::Override);
+                    let is_computed = accessors
+                        .iter()
+                        .any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
+                    if is_computed {
+                        let exists_in_super =
+                            super_property_names.contains(&var_name.value);
+
+                        if exists_in_super {
+                            if !has_override {
+                                self.emit_error(
+                                    TrussDiagnosticCode::MissingOverrideModifier,
+                                    format!(
+                                        "Property '{}' overrides a superclass property but is missing 'override' modifier",
+                                        var_name.value
+                                    ),
+                                    var_name,
+                                );
+                            }
+                        } else if has_override {
+                            self.emit_error(
+                                TrussDiagnosticCode::OverrideWithoutOverride,
+                                format!(
+                                    "Property '{}' marked with 'override' but does not override anything",
+                                    var_name.value
+                                ),
+                                var_name,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
