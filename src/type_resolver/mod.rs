@@ -2929,9 +2929,7 @@ impl TypeResolver {
                                                         String::from("internal"),
                                                         |m| {
                                                             m.map(|m| m.token.value.clone())
-                                                                .unwrap_or(String::from(
-                                                                    "internal",
-                                                                ))
+                                                                .unwrap_or(String::from("internal"))
                                                         },
                                                     )
                                                 })
@@ -2965,9 +2963,7 @@ impl TypeResolver {
                                                         String::from("internal"),
                                                         |m| {
                                                             m.map(|m| m.token.value.clone())
-                                                                .unwrap_or(String::from(
-                                                                    "internal",
-                                                                ))
+                                                                .unwrap_or(String::from("internal"))
                                                         },
                                                     )
                                                 })
@@ -3056,10 +3052,7 @@ impl TypeResolver {
                             _ => {
                                 self.emit_error(
                                     TrussDiagnosticCode::FieldNotFound,
-                                    format!(
-                                        "Class symbol '{}' has unexpected type",
-                                        class_name
-                                    ),
+                                    format!("Class symbol '{}' has unexpected type", class_name),
                                     member,
                                 );
                                 return None;
@@ -3088,9 +3081,7 @@ impl TypeResolver {
                                                         String::from("internal"),
                                                         |m| {
                                                             m.map(|m| m.token.value.clone())
-                                                                .unwrap_or(String::from(
-                                                                    "internal",
-                                                                ))
+                                                                .unwrap_or(String::from("internal"))
                                                         },
                                                     )
                                                 })
@@ -3124,9 +3115,7 @@ impl TypeResolver {
                                                         String::from("internal"),
                                                         |m| {
                                                             m.map(|m| m.token.value.clone())
-                                                                .unwrap_or(String::from(
-                                                                    "internal",
-                                                                ))
+                                                                .unwrap_or(String::from("internal"))
                                                         },
                                                     )
                                                 })
@@ -3615,6 +3604,7 @@ impl TypeResolver {
                 let class_name = class_name
                     .strip_prefix("Class(")
                     .and_then(|s| s.strip_suffix(')'))
+                    .or(Some(class_name.as_str()))
                     .map(|s| s.to_string());
 
                 let super_ty = class_name
@@ -3764,8 +3754,7 @@ impl TypeResolver {
                                 } = &*decl.borrow()
                                 {
                                     if let Some(s) = struct_scope {
-                                        if let Some(found) = s.borrow().get_type(&member.value)
-                                        {
+                                        if let Some(found) = s.borrow().get_type(&member.value) {
                                             found
                                         } else {
                                             self.emit_error(
@@ -3821,8 +3810,7 @@ impl TypeResolver {
                                 } = &*decl.borrow()
                                 {
                                     if let Some(s) = class_scope {
-                                        if let Some(found) = s.borrow().get_type(&member.value)
-                                        {
+                                        if let Some(found) = s.borrow().get_type(&member.value) {
                                             found
                                         } else {
                                             self.emit_error(
@@ -4260,7 +4248,15 @@ impl TypeResolver {
         let is_array_literal = matches!(&*expression.borrow(), Expression::ArrayLiteral { .. });
 
         if is_int_literal {
+            let is_expected_optional =
+                matches!(&*expected.borrow(), Type::Enum(name, _) if name == "Optional");
             if Self::is_integer_type(&expected.borrow()) {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::IntegerLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+            } else if is_expected_optional {
                 let mut expr_mut = expression.borrow_mut();
                 if let Expression::IntegerLiteral { ty, .. } = &mut *expr_mut {
                     *ty = Some(expected.clone());
@@ -4277,7 +4273,15 @@ impl TypeResolver {
                 );
             }
         } else if is_float_literal {
+            let is_expected_optional =
+                matches!(&*expected.borrow(), Type::Enum(name, _) if name == "Optional");
             if Self::is_float_type(&expected.borrow()) {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::DecimalLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+            } else if is_expected_optional {
                 let mut expr_mut = expression.borrow_mut();
                 if let Expression::DecimalLiteral { ty, .. } = &mut *expr_mut {
                     *ty = Some(expected.clone());
@@ -4350,14 +4354,27 @@ impl TypeResolver {
             }
         } else {
             self.closure_expected_type = Some(expected.clone());
-            let inferred = self.infer_type(expression);
+            let inferred = self.infer_type(expression.clone());
             self.closure_expected_type = None;
             if let Some(inferred) = inferred {
                 let inferred_clone = inferred.borrow().clone();
                 let expected_clone = expected.borrow().clone();
                 let is_protocol_compat =
                     matches!(&expected_clone, Type::Protocol(..) | Type::Compound(..));
-                if !is_protocol_compat
+
+                let is_optional_box = if let Type::Enum(name, _) = &expected_clone {
+                    name == "Optional"
+                } else {
+                    false
+                };
+
+                if is_optional_box {
+                    let mut expr_mut = expression.borrow_mut();
+                    if let Ok(ty) = expr_mut.get_ty_mut_ref() {
+                        *ty = Some(expected.clone());
+                    }
+                    drop(expr_mut);
+                } else if !is_protocol_compat
                     && inferred_clone != expected_clone
                     && !Self::types_are_type_compatible(&inferred_clone, &expected_clone)
                 {
@@ -5422,9 +5439,6 @@ impl TypeResolver {
     }
 
     fn is_member_accessible(&self, container: Rc<RefCell<Symbol>>, member_token: &Token) -> bool {
-        // Extract all data from the symbol declaration. Use try_borrow to handle
-        // the case where the declaration's RefCell is already mutably borrowed
-        // (e.g. during struct body processing in resolve_statement).
         let (access_modifier, decl_file) = {
             let symbol = container.borrow();
             let Some(decl_rc) = symbol.get_decl().ok().flatten() else {

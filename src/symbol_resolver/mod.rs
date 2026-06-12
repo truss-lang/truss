@@ -156,6 +156,13 @@ impl SymbolResolver {
                     subscripts: vec![],
                 }));
                 self.enter(struct_symbol.clone(), name);
+                if let Some(scope) = self.current_scope.as_ref() {
+                    let struct_ty = Rc::new(RefCell::new(Type::Struct(
+                        name.value.clone(),
+                        WeakSymbol(Rc::downgrade(&struct_symbol)),
+                    )));
+                    scope.borrow_mut().set_type(name.value.clone(), struct_ty);
+                }
                 let Symbol::Struct {
                     properties: fields,
                     methods,
@@ -383,6 +390,13 @@ impl SymbolResolver {
                     subscripts: vec![],
                 }));
                 self.enter(class_symbol.clone(), name);
+                if let Some(scope) = self.current_scope.as_ref() {
+                    let class_ty = Rc::new(RefCell::new(Type::Class(
+                        name.value.clone(),
+                        WeakSymbol(Rc::downgrade(&class_symbol)),
+                    )));
+                    scope.borrow_mut().set_type(name.value.clone(), class_ty);
+                }
                 let Symbol::Class {
                     properties: fields,
                     methods,
@@ -607,6 +621,13 @@ impl SymbolResolver {
                     methods: vec![],
                 }));
                 self.enter(enum_symbol.clone(), name);
+                if let Some(scope) = self.current_scope.as_ref() {
+                    let enum_ty = Rc::new(RefCell::new(Type::Enum(
+                        name.value.clone(),
+                        WeakSymbol(Rc::downgrade(&enum_symbol)),
+                    )));
+                    scope.borrow_mut().set_type(name.value.clone(), enum_ty);
+                }
                 let Symbol::Enum { cases, methods, .. } = &mut *enum_symbol.borrow_mut() else {
                     return;
                 };

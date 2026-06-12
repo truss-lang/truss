@@ -82,10 +82,10 @@ impl fmt::Display for Type {
                 }
                 write!(f, ")")
             }
-            Type::Struct(name, _) => write!(f, "Struct({})", name),
-            Type::Class(name, _) => write!(f, "Class({})", name),
-            Type::Enum(name, _) => write!(f, "Enum({})", name),
-            Type::Protocol(name, _) => write!(f, "Protocol({})", name),
+            Type::Struct(name, _) => write!(f, "{}", name),
+            Type::Class(name, _) => write!(f, "{}", name),
+            Type::Enum(name, _) => write!(f, "{}", name),
+            Type::Protocol(name, _) => write!(f, "{}", name),
             Type::Compound(types) => {
                 for (i, t) in types.iter().enumerate() {
                     if i > 0 {
