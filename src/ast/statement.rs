@@ -87,6 +87,7 @@ pub enum Statement {
         token: Box<Token>,
         parameters: Vec<Rc<RefCell<Parameter>>>,
         body: Rc<RefCell<FunctionBody>>,
+        is_failable: bool,
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },

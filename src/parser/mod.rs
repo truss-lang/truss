@@ -1589,6 +1589,17 @@ impl Parser {
         }
     }
 
+    fn parse_failable_init_qualifier(&mut self) -> bool {
+        self.peek().is_some_and(|t| {
+            if OperatorType::is_operator(&t, OperatorType::QuestionMark) {
+                self.index += 1;
+                true
+            } else {
+                false
+            }
+        })
+    }
+
     fn parse_function_decl(
         &mut self,
         is_extern: bool,
@@ -1599,6 +1610,7 @@ impl Parser {
             return Err(());
         };
         let is_init = KeywordType::is_keyword(&token, KeywordType::Init);
+        let is_failable = is_init && self.parse_failable_init_qualifier();
         let (name, generic_parameters) = if !is_init {
             let Some(name) = self.next() else {
                 self.emit_error(
@@ -1925,6 +1937,7 @@ impl Parser {
                 token: Box::new(token),
                 parameters,
                 body: Rc::new(RefCell::new(body)),
+                is_failable,
                 scope: None,
                 ty: None,
             })
@@ -3182,6 +3195,7 @@ impl Parser {
             token: init_token,
             parameters,
             body: Rc::new(RefCell::new(FunctionBody::None)),
+            is_failable: false,
             scope: None,
             ty: None,
         };

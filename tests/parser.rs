@@ -1723,6 +1723,108 @@ fn test_parse_init_decl_empty_params() {
 }
 
 #[test]
+fn test_parse_failable_init_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { init?() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 1);
+        if let Statement::InitDecl { parameters, is_failable, .. } = &*body[0].borrow() {
+            assert!(is_failable);
+            assert_eq!(parameters.len(), 0);
+        } else {
+            panic!("Expected InitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_failable_init_decl_with_params() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { init?(x: Int32, y: Int32) {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 1);
+        if let Statement::InitDecl { parameters, is_failable, .. } = &*body[0].borrow() {
+            assert!(is_failable);
+            assert_eq!(parameters.len(), 2);
+            assert_eq!(parameters[0].borrow().name.value, "x");
+            assert_eq!(parameters[1].borrow().name.value, "y");
+        } else {
+            panic!("Expected InitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_non_failable_init_not_affected() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { init(x: Int32) {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        if let Statement::InitDecl { is_failable, .. } = &*body[0].borrow() {
+            assert!(!is_failable);
+        } else {
+            panic!("Expected InitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_failable_init_in_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Point { init?() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine);
+    let program = parser.parse();
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 1);
+        if let Statement::InitDecl { is_failable, .. } = &*body[0].borrow() {
+            assert!(is_failable);
+        } else {
+            panic!("Expected InitDecl");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
 fn test_parse_deinit_decl() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
