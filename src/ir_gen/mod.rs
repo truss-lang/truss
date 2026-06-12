@@ -4214,10 +4214,81 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Expression::StringLiteral { value, .. } => {
-                let gv = unsafe {
+                let string_data = unsafe {
                     self.builder.build_global_string(value, ".str")?
                 };
-                Ok(Some(gv.as_pointer_value().into()))
+                let raw_src = string_data.as_pointer_value();
+                let i8_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                let i64_ty = self.context.i64_type();
+                let len = value.len() as u64;
+
+                // Try to create a proper heap-allocated String class instance
+                if let Some(str_type) = self.class_types.borrow().get("String").copied() {
+                    let null_i8 = self.builder.build_int_to_ptr(
+                        i64_ty.const_int(0, false),
+                        i8_ty,
+                        "",
+                    )?;
+                    let size_val = unsafe {
+                        let gep = self.builder.build_gep(
+                            str_type.as_basic_type_enum(),
+                            null_i8,
+                            &[i64_ty.const_int(1, false)],
+                            "",
+                        )?;
+                        self.builder.build_ptr_to_int(gep, i64_ty, "")?
+                    };
+                    let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+                        let fn_ty = i8_ty.fn_type(&[i64_ty.into()], false);
+                        self.module.add_function("malloc", fn_ty, None)
+                    });
+                    // Allocate String class on heap
+                    let malloc_class =
+                        self.builder.build_call(malloc_fn, &[size_val.into()], "")?;
+                    let class_ptr = match malloc_class.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(
+                            inkwell::values::BasicValueEnum::PointerValue(p),
+                        ) => p,
+                        _ => anyhow::bail!("malloc expected to return pointer"),
+                    };
+
+                    // Set refcount to 1 (field 1)
+                    let rc_ptr = self
+                        .builder
+                        .build_struct_gep(str_type, class_ptr, 1, "")?;
+                    self.builder
+                        .build_store(rc_ptr, i64_ty.const_int(1, false))?;
+
+                    // Get or declare String.init for external reference
+                    let init_fn = self.module.get_function("String.init").unwrap_or_else(|| {
+                        let fn_ty = i8_ty.fn_type(
+                            &[i8_ty.into(), i8_ty.into(), i64_ty.into()],
+                            false,
+                        );
+                        self.module.add_function("String.init", fn_ty, None)
+                    });
+
+                    // Cast @.str to i8* and call String.init(class_ptr, raw, size)
+                    let raw_src_i8 = self
+                        .builder
+                        .build_pointer_cast(raw_src, i8_ty, "")?;
+                    self.builder.build_call(
+                        init_fn,
+                        &[
+                            class_ptr.into(),
+                            raw_src_i8.into(),
+                            i64_ty.const_int(len + 1, false).into(),
+                        ],
+                        "",
+                    )?;
+
+                    Ok(Some(class_ptr.into()))
+                } else {
+                    let bitcast = self
+                        .builder
+                        .build_pointer_cast(raw_src, i8_ty, "")?;
+                    Ok(Some(bitcast.into()))
+                }
             }
             Expression::ArrayLiteral { elements, .. } => {
                 for element in elements {
