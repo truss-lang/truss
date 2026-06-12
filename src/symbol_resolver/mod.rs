@@ -5,8 +5,9 @@ use crate::{
         expression::{ElseBranch, Expression},
         node::Program,
         statement::{
-            AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Pattern, ProtocolMember,
-            SelectiveAlias, Statement, WhereRequirement, WhereRequirementKind,
+            AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Modifier, ModifierType,
+            Pattern, ProtocolMember, SelectiveAlias, Statement, WhereRequirement,
+            WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -160,6 +161,7 @@ impl SymbolResolver {
                     let struct_ty = Rc::new(RefCell::new(Type::Struct(
                         name.value.clone(),
                         WeakSymbol(Rc::downgrade(&struct_symbol)),
+                        vec![],
                     )));
                     scope.borrow_mut().set_type(name.value.clone(), struct_ty);
                 }
@@ -377,8 +379,11 @@ impl SymbolResolver {
                 body,
                 scope,
                 generic_parameters,
+                modifiers,
                 ..
             } => {
+                let is_abstract = Self::has_modifier(modifiers, ModifierType::Abstract);
+                let is_final = Self::has_modifier(modifiers, ModifierType::Final);
                 let class_symbol = Rc::new(RefCell::new(Symbol::Class {
                     name: name.value.clone(),
                     decl: stmt.clone(),
@@ -388,12 +393,15 @@ impl SymbolResolver {
                     destrcutor: None,
                     superclass: None,
                     subscripts: vec![],
+                    is_abstract,
+                    is_final,
                 }));
                 self.enter(class_symbol.clone(), name);
                 if let Some(scope) = self.current_scope.as_ref() {
                     let class_ty = Rc::new(RefCell::new(Type::Class(
                         name.value.clone(),
                         WeakSymbol(Rc::downgrade(&class_symbol)),
+                        vec![],
                     )));
                     scope.borrow_mut().set_type(name.value.clone(), class_ty);
                 }
@@ -446,26 +454,49 @@ impl SymbolResolver {
                     if let Statement::VariableDecl {
                         name: field_name,
                         token: field_token,
+                        modifiers: field_mods,
                         ..
                     } = &*field_stmt.borrow()
                     {
                         let is_var = field_token.value == "var";
+                        let is_field_final = Self::has_modifier(field_mods, ModifierType::Final);
+                        let is_field_override =
+                            Self::has_modifier(field_mods, ModifierType::Override);
                         let field_symbol = Rc::new(RefCell::new(Symbol::ClassProperty {
                             name: field_name.value.clone(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
                             is_var,
+                            is_final: is_field_final || is_final,
+                            is_override: is_field_override,
                         }));
                         fields.push(field_symbol.clone());
                         self.enter(field_symbol, field_name);
                     } else if let Statement::FunctionDecl {
-                        name: method_name, ..
+                        name: method_name,
+                        modifiers: method_mods,
+                        ..
                     } = &*field_stmt.borrow()
                     {
+                        let is_method_abstract =
+                            Self::has_modifier(method_mods, ModifierType::Abstract);
+                        let is_method_final = Self::has_modifier(method_mods, ModifierType::Final);
+                        let is_method_override =
+                            Self::has_modifier(method_mods, ModifierType::Override);
+                        if is_method_abstract && !is_abstract {
+                            self.emit_error(
+                                TrussDiagnosticCode::AbstractMemberInNonAbstractClass,
+                                format!("Abstract method '{}' can only be defined in an abstract class", method_name.value),
+                                method_name,
+                            );
+                        }
                         let method_symbol = Rc::new(RefCell::new(Symbol::ClassMethod {
                             name: method_name.value.clone(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
+                            is_abstract: is_method_abstract,
+                            is_final: is_method_final || is_final,
+                            is_override: is_method_override,
                         }));
                         methods.push(method_symbol.clone());
                         self.enter(method_symbol, method_name);
@@ -490,6 +521,9 @@ impl SymbolResolver {
                             name: "init".to_string(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
+                            is_abstract: false,
+                            is_final: is_final,
+                            is_override: false,
                         }));
                         constructors.push(init_symbol.clone());
                         let init_token = {
@@ -511,6 +545,9 @@ impl SymbolResolver {
                             name: "deinit".to_string(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
+                            is_abstract: false,
+                            is_final: is_final,
+                            is_override: false,
                         }));
                         methods.push(deinit_symbol.clone());
                         let deinit_token = {
@@ -541,6 +578,7 @@ impl SymbolResolver {
                             name: "subscript".to_string(),
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
+                            is_final,
                         }));
                         _subscripts.push(sub_sym.clone());
                         {
@@ -625,6 +663,7 @@ impl SymbolResolver {
                     let enum_ty = Rc::new(RefCell::new(Type::Enum(
                         name.value.clone(),
                         WeakSymbol(Rc::downgrade(&enum_symbol)),
+                        vec![],
                     )));
                     scope.borrow_mut().set_type(name.value.clone(), enum_ty);
                 }
@@ -1544,6 +1583,7 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Statement::ClassDecl {
+                name,
                 body,
                 scope,
                 superclass,
@@ -1562,6 +1602,26 @@ impl SymbolResolver {
                         if let Some(type_parameters) = type_parameters {
                             for tp in type_parameters {
                                 self.resolve_expression(tp.clone());
+                            }
+                        }
+                        // Fill Symbol::Class.superclass WeakSymbol
+                        if let Some(super_sym) = self
+                            .current_scope
+                            .as_ref()
+                            .and_then(|scope| scope.borrow().get_symbol(&super_name.value))
+                        {
+                            if let Some(class_sym) = self
+                                .current_scope
+                                .as_ref()
+                                .and_then(|scope| scope.borrow().get_symbol(&name.value))
+                            {
+                                let mut class_binding = class_sym.borrow_mut();
+                                if let Symbol::Class {
+                                    superclass: sc, ..
+                                } = &mut *class_binding
+                                {
+                                    *sc = Some(WeakSymbol(Rc::downgrade(&super_sym)));
+                                }
                             }
                         }
                     }
@@ -2287,6 +2347,10 @@ impl SymbolResolver {
 
     fn leave_scope(&mut self) {
         self.current_scope = self.current_scope.clone().unwrap().borrow().parent.clone();
+    }
+
+    fn has_modifier(modifiers: &[Modifier], target: ModifierType) -> bool {
+        modifiers.iter().any(|m| m.ty == target)
     }
 
     fn emit_error(&self, code: TrussDiagnosticCode, message: impl Into<String>, token: &Token) {

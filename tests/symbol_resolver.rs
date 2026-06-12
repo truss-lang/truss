@@ -5,7 +5,7 @@ use truss::{
         expression::{ElseBranch, Expression},
         statement::{FunctionBody, GenericParameterKind, Statement},
     },
-    diag::TrussDiagnosticEngine,
+    diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
     krate::Package,
     lexer::{CharStream, Lexer},
     parser::Parser,
@@ -4730,7 +4730,11 @@ fn test_optional_type_sugar_resolves_inner_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
     let (packages, _) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
     resolver.resolve(&program, "test".to_string());
@@ -4745,8 +4749,208 @@ fn test_array_type_sugar_resolves_inner_type() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
     let (packages, _) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
     resolver.resolve(&program, "test".to_string());
+}
+
+#[test]
+fn test_abstract_class_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "abstract class Shape { abstract func draw() -> Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let class_sym = root_scope.borrow().get_symbol("Shape").unwrap();
+    let binding = class_sym.borrow();
+    let Symbol::Class { methods, is_abstract, .. } = &*binding else {
+        panic!("Expected Class symbol");
+    };
+    assert!(*is_abstract, "Shape should be abstract");
+    let has_abstract_method = methods.iter().any(|m| {
+        let mb = m.borrow();
+        matches!(&*mb, Symbol::ClassMethod { name, is_abstract, .. } if name == "draw" && *is_abstract)
+    });
+    assert!(has_abstract_method, "draw method should be abstract");
+}
+
+#[test]
+fn test_final_class_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "final class Constants { let maxSize: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let class_sym = root_scope.borrow().get_symbol("Constants").unwrap();
+    let binding = class_sym.borrow();
+    let Symbol::Class { is_final, .. } = &*binding else {
+        panic!("Expected Class symbol");
+    };
+    assert!(*is_final, "Constants should be final");
+}
+
+#[test]
+fn test_final_method_in_final_class_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "final class FinalClass { func method() -> Int32 { return 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let class_sym = root_scope.borrow().get_symbol("FinalClass").unwrap();
+    let binding = class_sym.borrow();
+    let Symbol::Class { methods, .. } = &*binding else {
+        panic!("Expected Class symbol");
+    };
+    let has_final_method = methods.iter().any(|m| {
+        let mb = m.borrow();
+        matches!(&*mb, Symbol::ClassMethod { name, is_final, .. } if name == "method" && *is_final)
+    });
+    assert!(has_final_method, "method in final class should be final");
+}
+
+#[test]
+fn test_override_method_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Base { func foo() -> Int32 { return 1 } }
+             class Derived: Base { override func foo() -> Int32 { return 2 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let derived_sym = root_scope.borrow().get_symbol("Derived").unwrap();
+    let binding = derived_sym.borrow();
+    let Symbol::Class { methods, .. } = &*binding else {
+        panic!("Expected Class symbol");
+    };
+    let has_override = methods.iter().any(|m| {
+        let mb = m.borrow();
+        matches!(&*mb, Symbol::ClassMethod { name, is_override, .. } if name == "foo" && *is_override)
+    });
+    assert!(has_override, "foo should have is_override=true");
+}
+
+#[test]
+fn test_abstract_method_in_non_abstract_class_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Concrete { abstract func foo() -> Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let has_abstract_error = engine_ref.get_diagnostics().iter().any(|d| {
+        d.code == TrussDiagnosticCode::AbstractMemberInNonAbstractClass
+    });
+    assert!(has_abstract_error, "Should report error for abstract method in non-abstract class");
+}
+
+#[test]
+fn test_final_property_in_final_class_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "final class Constants { var value: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let class_sym = root_scope.borrow().get_symbol("Constants").unwrap();
+    let binding = class_sym.borrow();
+    let Symbol::Class { properties, .. } = &*binding else {
+        panic!("Expected Class symbol");
+    };
+    let has_final_property = properties.iter().any(|p| {
+        let pb = p.borrow();
+        matches!(&*pb, Symbol::ClassProperty { name, is_final, .. } if name == "value" && *is_final)
+    });
+    assert!(has_final_property, "property in final class should be final");
 }
