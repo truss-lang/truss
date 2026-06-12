@@ -302,6 +302,74 @@ fn test_struct_init_deinit_symbol() {
 }
 
 #[test]
+fn test_struct_failable_init_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { let x: Int32 init?(x: Int32) { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 2);
+        if let Statement::InitDecl { parameters, is_failable, .. } = &*body[1].borrow() {
+            assert!(is_failable);
+            assert_eq!(parameters.len(), 1);
+            assert_eq!(parameters[0].borrow().name.value, "x");
+        } else {
+            panic!("Expected InitDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_class_failable_init_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Point { init?() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Point");
+        assert_eq!(body.len(), 1);
+        if let Statement::InitDecl { is_failable, .. } = &*body[0].borrow() {
+            assert!(is_failable);
+        } else {
+            panic!("Expected InitDecl");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
 fn test_if_case_symbol_resolved() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
