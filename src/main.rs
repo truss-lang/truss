@@ -116,12 +116,24 @@ fn main() {
         let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
         packages.insert("Truss".to_string(), truss_pkg.clone());
 
-        let std_file_rc = Rc::new(stdlib_path.clone());
         let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-        let file_programs =
-            truss::std_lib::parse_std_lib(stdlib_path, std_file_rc, std_engine.clone());
+        let (file_programs, _std_sources) =
+            truss::std_lib::parse_std_lib(stdlib_path, std_engine.clone());
 
-        if !emit_diagnostics(&std_engine.borrow(), "") {
+        let has_std_errors = {
+            let engine = std_engine.borrow();
+            if engine.has_errors() {
+                let formatted = duck_diagnostic::format_all_smart(&*engine, false);
+                if !formatted.is_empty() {
+                    println!("{}", formatted);
+                }
+                true
+            } else {
+                false
+            }
+        };
+
+        if !has_std_errors {
             let mut std_resolver =
                 SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
             let dummy_program = truss::ast::node::Program {
