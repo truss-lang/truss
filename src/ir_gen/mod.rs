@@ -4125,12 +4125,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     ))
                 }
             }
-            Expression::StringLiteral { .. } => Ok(Some(
-                self.context
-                    .ptr_type(inkwell::AddressSpace::from(0))
-                    .const_null()
-                    .into(),
-            )),
+            Expression::StringLiteral { value, .. } => {
+                let gv = unsafe {
+                    self.builder.build_global_string(value, ".str")?
+                };
+                Ok(Some(gv.as_pointer_value().into()))
+            }
             Expression::ArrayLiteral { elements, .. } => {
                 for element in elements {
                     self.resolve_expression(element.clone())?;
