@@ -287,7 +287,7 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     pub fn generate(
-        mut self,
+        self,
         program: &Program,
         scope: Rc<RefCell<TrussScope>>,
     ) -> Rc<Module<'ctx>> {
@@ -295,171 +295,73 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     pub fn generate_with_stdlib(
-        &mut self,
+        self,
         program: &Program,
         stdlib_stmts: &[Rc<RefCell<Statement>>],
         scope: Rc<RefCell<TrussScope>>,
     ) -> Rc<Module<'ctx>> {
         *self.program_scope.borrow_mut() = Some(scope);
 
-        // Phase 1: Process stdlib into a separate module
-        let stdlib_module = if !stdlib_stmts.is_empty() {
-            Some(self.process_stdlib(stdlib_stmts))
-        } else {
-            None
-        };
+        let all_stmts: Vec<Rc<RefCell<Statement>>> = stdlib_stmts
+            .iter()
+            .chain(program.statements.iter())
+            .cloned()
+            .collect();
 
-        // Phase 2: Process main program into self.module
-        self.process_main_program(program);
-
-        // Phase 3: Link stdlib module into main module
-        if let Some(stdlib_mod) = stdlib_module {
-            if let Err(e) = self.module.link_in_module(stdlib_mod) {
-                self.emit_error(
-                    TrussDiagnosticCode::IRError,
-                    format!("Failed to link stdlib module: {}", e),
-                    None,
-                );
-            }
-        }
-
-        Rc::new(std::mem::replace(
-            &mut self.module,
-            self.context.create_module("dummy"),
-        ))
-    }
-
-    fn process_stdlib(
-        &mut self,
-        stdlib_stmts: &[Rc<RefCell<Statement>>],
-    ) -> Module<'ctx> {
-        let main_module = std::mem::replace(
-            &mut self.module,
-            self.context.create_module("stdlib"),
-        );
-
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.declare_struct_types(stmt.clone());
         }
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.declare_class_types(stmt.clone());
         }
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.declare_enum_types(stmt.clone());
         }
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.create_vtable_types(stmt.clone());
         }
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.create_protocol_witness_table_types(stmt.clone());
         }
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.create_struct_type_bodies(stmt.clone());
         }
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.create_class_type_bodies(stmt.clone());
         }
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.create_existential_container_types(stmt.clone());
         }
-        for stmt in stdlib_stmts {
+        for stmt in &all_stmts {
             self.create_enum_type_bodies(stmt.clone());
         }
 
         {
             let mut counts: HashMap<String, usize> = HashMap::new();
-            for stmt in stdlib_stmts {
+            for stmt in &all_stmts {
                 Self::count_fn_name_frequencies(stmt, &mut counts);
             }
-            let existing: HashSet<String> = self
-                .overloaded_fn_names
-                .borrow()
-                .iter()
-                .cloned()
+            *self.overloaded_fn_names.borrow_mut() = counts
+                .into_iter()
+                .filter(|(_, c)| *c > 1)
+                .map(|(n, _)| n)
                 .collect();
-            for (name, count) in counts {
-                if count > 1 || existing.contains(&name) {
-                    self.overloaded_fn_names.borrow_mut().insert(name);
-                }
-            }
         }
 
-        // resolve_statement first to create all function definitions
-        for stmt in stdlib_stmts {
-            let _ = self.resolve_statement(stmt.clone());
-        }
-
-        // Then create vtable and witness table globals referencing these functions
-        for stmt in stdlib_stmts {
-            self.create_vtable_instances(stmt.clone());
-        }
-        for stmt in stdlib_stmts {
-            self.create_protocol_witness_tables(stmt.clone());
-        }
-
-        std::mem::replace(&mut self.module, main_module)
-    }
-
-    fn process_main_program(&mut self, program: &Program) {
-        for stmt in &program.statements {
-            self.declare_struct_types(stmt.clone());
-        }
-        for stmt in &program.statements {
-            self.declare_class_types(stmt.clone());
-        }
-        for stmt in &program.statements {
-            self.declare_enum_types(stmt.clone());
-        }
-        for stmt in &program.statements {
-            self.create_vtable_types(stmt.clone());
-        }
-        for stmt in &program.statements {
-            self.create_protocol_witness_table_types(stmt.clone());
-        }
-        for stmt in &program.statements {
-            self.create_struct_type_bodies(stmt.clone());
-        }
-        for stmt in &program.statements {
-            self.create_class_type_bodies(stmt.clone());
-        }
-        for stmt in &program.statements {
-            self.create_existential_container_types(stmt.clone());
-        }
-        for stmt in &program.statements {
-            self.create_enum_type_bodies(stmt.clone());
-        }
-
-        {
-            let mut counts: HashMap<String, usize> = HashMap::new();
-            for stmt in &program.statements {
-                Self::count_fn_name_frequencies(stmt, &mut counts);
-            }
-            let existing: HashSet<String> = self
-                .overloaded_fn_names
-                .borrow()
-                .iter()
-                .cloned()
-                .collect();
-            for (name, count) in counts {
-                if count > 1 || existing.contains(&name) {
-                    self.overloaded_fn_names.borrow_mut().insert(name);
-                }
-            }
-        }
-
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_function_declarations(stmt.clone());
         }
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_vtable_instances(stmt.clone());
         }
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             self.create_protocol_witness_tables(stmt.clone());
         }
-
-        for stmt in &program.statements {
+        for stmt in &all_stmts {
             let _ = self.resolve_statement(stmt.clone());
         }
+
+        Rc::new(self.module)
     }
 
     fn declare_struct_types(&self, statement: Rc<RefCell<Statement>>) {
@@ -4222,7 +4124,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 let i64_ty = self.context.i64_type();
                 let len = value.len() as u64;
 
-                // Try to create a proper heap-allocated String class instance
                 if let Some(str_type) = self.class_types.borrow().get("String").copied() {
                     let null_i8 = self.builder.build_int_to_ptr(
                         i64_ty.const_int(0, false),
@@ -4242,7 +4143,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         let fn_ty = i8_ty.fn_type(&[i64_ty.into()], false);
                         self.module.add_function("malloc", fn_ty, None)
                     });
-                    // Allocate String class on heap
                     let malloc_class =
                         self.builder.build_call(malloc_fn, &[size_val.into()], "")?;
                     let class_ptr = match malloc_class.try_as_basic_value() {
@@ -4252,14 +4152,12 @@ impl<'ctx> IRGenerator<'ctx> {
                         _ => anyhow::bail!("malloc expected to return pointer"),
                     };
 
-                    // Set refcount to 1 (field 1)
                     let rc_ptr = self
                         .builder
                         .build_struct_gep(str_type, class_ptr, 1, "")?;
                     self.builder
                         .build_store(rc_ptr, i64_ty.const_int(1, false))?;
 
-                    // Get or declare String.init for external reference
                     let init_fn = self.module.get_function("String.init").unwrap_or_else(|| {
                         let fn_ty = i8_ty.fn_type(
                             &[i8_ty.into(), i8_ty.into(), i64_ty.into()],
@@ -4268,7 +4166,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.module.add_function("String.init", fn_ty, None)
                     });
 
-                    // Cast @.str to i8* and call String.init(class_ptr, raw, size)
                     let raw_src_i8 = self
                         .builder
                         .build_pointer_cast(raw_src, i8_ty, "")?;
