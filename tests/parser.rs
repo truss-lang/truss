@@ -12216,3 +12216,206 @@ fn test_parse_if_let_mixed_condition() {
         engine.borrow().get_diagnostics()
     );
 }
+
+#[test]
+fn test_parse_abstract_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "abstract class Shape { abstract func draw() -> Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ClassDecl { name, modifiers, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Shape");
+        assert!(modifiers.iter().any(|m| m.ty == ModifierType::Abstract));
+        assert_eq!(body.len(), 1);
+        if let Statement::FunctionDecl { name: fn_name, modifiers: fn_mods, .. } = &*body[0].borrow() {
+            assert_eq!(fn_name.value, "draw");
+            assert!(fn_mods.iter().any(|m| m.ty == ModifierType::Abstract));
+        } else {
+            panic!("Expected FunctionDecl in class body");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_parse_final_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "final class Dog { func bark() -> Int32 { return 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ClassDecl { name, modifiers, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Dog");
+        assert!(modifiers.iter().any(|m| m.ty == ModifierType::Final));
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_parse_final_method_in_class() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Animal { final func run() -> Int32 { return 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Animal");
+        if let Statement::FunctionDecl { name: fn_name, modifiers: fn_mods, .. } = &*body[0].borrow() {
+            assert_eq!(fn_name.value, "run");
+            assert!(fn_mods.iter().any(|m| m.ty == ModifierType::Final));
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_parse_override_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Animal { func speak() -> Int32 { return 1 } }
+             class Dog: Animal { override func speak() -> Int32 { return 2 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[1].borrow() {
+        assert_eq!(name.value, "Dog");
+        if let Statement::FunctionDecl { name: fn_name, modifiers: fn_mods, .. } = &*body[0].borrow() {
+            assert_eq!(fn_name.value, "speak");
+            assert!(fn_mods.iter().any(|m| m.ty == ModifierType::Override));
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_parse_override_var() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Base { var name: Int32 { get { return 1 } set { } } }
+             class Derived: Base { override var name: Int32 { get { return 2 } set { } } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[1].borrow() {
+        assert_eq!(name.value, "Derived");
+        if let Statement::VariableDecl { name: var_name, modifiers: var_mods, .. } = &*body[0].borrow() {
+            assert_eq!(var_name.value, "name");
+            assert!(var_mods.iter().any(|m| m.ty == ModifierType::Override));
+        } else {
+            panic!("Expected VariableDecl");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_parse_final_var() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "final class Constants { final let maxSize: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ClassDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Constants");
+        if let Statement::VariableDecl { name: var_name, modifiers: var_mods, .. } = &*body[0].borrow() {
+            assert_eq!(var_name.value, "maxSize");
+            assert!(var_mods.iter().any(|m| m.ty == ModifierType::Final));
+        } else {
+            panic!("Expected VariableDecl");
+        }
+    } else {
+        panic!("Expected ClassDecl");
+    }
+}
+
+#[test]
+fn test_parse_modifier_abstract_on_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { return 1 }
+             abstract func absTest() -> Int32"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { name, modifiers, .. } = &*program.statements[1].borrow() {
+        assert_eq!(name.value, "absTest");
+        assert!(modifiers.iter().any(|m| m.ty == ModifierType::Abstract));
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}

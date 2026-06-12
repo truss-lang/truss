@@ -5542,6 +5542,9 @@ impl Parser {
                     KeywordType::Static => ModifierType::Static,
                     KeywordType::Prefix => ModifierType::OperatorFixity(OperatorFixity::Prefix),
                     KeywordType::Postfix => ModifierType::OperatorFixity(OperatorFixity::Postfix),
+                    KeywordType::Override => ModifierType::Override,
+                    KeywordType::Abstract => ModifierType::Abstract,
+                    KeywordType::Final => ModifierType::Final,
                     _ => {
                         break;
                     }

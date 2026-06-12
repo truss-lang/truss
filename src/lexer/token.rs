@@ -82,6 +82,9 @@ pub enum KeywordType {
     Using,
     Do,
     Inline,
+    Override,
+    Abstract,
+    Final,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -200,6 +203,9 @@ impl KeywordType {
             KeywordType::Using => "using",
             KeywordType::Do => "do",
             KeywordType::Inline => "inline",
+            KeywordType::Override => "override",
+            KeywordType::Abstract => "abstract",
+            KeywordType::Final => "final",
         }
         .to_string()
     }

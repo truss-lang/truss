@@ -327,6 +327,9 @@ pub enum ModifierType {
     AccessSet(AccessModifier),
     Static,
     OperatorFixity(OperatorFixity),
+    Override,
+    Abstract,
+    Final,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
