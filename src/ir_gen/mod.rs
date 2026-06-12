@@ -295,73 +295,101 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     pub fn generate_with_stdlib(
-        self,
+        mut self,
         program: &Program,
         stdlib_stmts: &[Rc<RefCell<Statement>>],
         scope: Rc<RefCell<TrussScope>>,
     ) -> Rc<Module<'ctx>> {
+        if stdlib_stmts.is_empty() {
+            *self.program_scope.borrow_mut() = Some(scope);
+            let all_stmts: Vec<Rc<RefCell<Statement>>> = program.statements.iter().cloned().collect();
+            self.run_all_passes(&all_stmts);
+            return Rc::new(self.module);
+        }
+
+        // Process stdlib into its own module
+        let stdlib_mod = self.context.create_module("stdlib");
+        let main_mod = std::mem::replace(&mut self.module, stdlib_mod);
+        *self.program_scope.borrow_mut() = Some(scope.clone());
+
+        self.run_all_passes(stdlib_stmts);
+
+        // Save stdlib module, restore main module
+        let compiled_stdlib = std::mem::replace(&mut self.module, main_mod);
+
+        // Collect all function signatures from stdlib module
+        let mut stdlib_fns: Vec<(String, inkwell::types::FunctionType<'ctx>)> = Vec::new();
+        for func in compiled_stdlib.get_functions() {
+            let name = func.get_name().to_str().unwrap_or("").to_string();
+            if !name.is_empty() {
+                stdlib_fns.push((name, func.get_type()));
+            }
+        }
+
+        // Collect vtable globals from stdlib module
+        let stdlib_vtables: Vec<String> = {
+            self.vtable_types.borrow().keys().cloned().collect()
+        };
+
         *self.program_scope.borrow_mut() = Some(scope);
 
-        let all_stmts: Vec<Rc<RefCell<Statement>>> = stdlib_stmts
-            .iter()
-            .chain(program.statements.iter())
-            .cloned()
-            .collect();
+        // Declare all stdlib functions in main module as extern
+        for (name, fn_type) in &stdlib_fns {
+            if self.module.get_function(name).is_none() {
+                self.module.add_function(name, *fn_type, None);
+            }
+        }
 
-        for stmt in &all_stmts {
-            self.declare_struct_types(stmt.clone());
+        // Declare vtable globals as extern in main module
+        for name in &stdlib_vtables {
+            if let Some(vtable_type) = self.vtable_types.borrow().get(name) {
+                if self.module.get_global(name).is_none() {
+                    let gv = self.module.add_global(vtable_type.as_basic_type_enum(), None, name);
+                    gv.set_linkage(inkwell::module::Linkage::External);
+                }
+            }
         }
-        for stmt in &all_stmts {
-            self.declare_class_types(stmt.clone());
+
+        // Process main program into main module
+        let all_main: Vec<Rc<RefCell<Statement>>> = program.statements.iter().cloned().collect();
+        self.run_all_passes(&all_main);
+
+        // Link stdlib module into main module
+        if let Err(e) = self.module.link_in_module(compiled_stdlib) {
+            self.emit_error(
+                TrussDiagnosticCode::IRError,
+                format!("Failed to link stdlib: {}", e),
+                None,
+            );
         }
-        for stmt in &all_stmts {
-            self.declare_enum_types(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            self.create_vtable_types(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            self.create_protocol_witness_table_types(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            self.create_struct_type_bodies(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            self.create_class_type_bodies(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            self.create_existential_container_types(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            self.create_enum_type_bodies(stmt.clone());
-        }
+
+        // Return main module (swap with dummy to satisfy ownership)
+        let result = std::mem::replace(&mut self.module, self.context.create_module("done"));
+        Rc::new(result)
+    }
+
+    fn run_all_passes(&self, stmts: &[Rc<RefCell<Statement>>]) {
+        for stmt in stmts { self.declare_struct_types(stmt.clone()); }
+        for stmt in stmts { self.declare_class_types(stmt.clone()); }
+        for stmt in stmts { self.declare_enum_types(stmt.clone()); }
+        for stmt in stmts { self.create_vtable_types(stmt.clone()); }
+        for stmt in stmts { self.create_protocol_witness_table_types(stmt.clone()); }
+        for stmt in stmts { self.create_struct_type_bodies(stmt.clone()); }
+        for stmt in stmts { self.create_class_type_bodies(stmt.clone()); }
+        for stmt in stmts { self.create_existential_container_types(stmt.clone()); }
+        for stmt in stmts { self.create_enum_type_bodies(stmt.clone()); }
 
         {
             let mut counts: HashMap<String, usize> = HashMap::new();
-            for stmt in &all_stmts {
-                Self::count_fn_name_frequencies(stmt, &mut counts);
-            }
+            for stmt in stmts { Self::count_fn_name_frequencies(stmt, &mut counts); }
             *self.overloaded_fn_names.borrow_mut() = counts
-                .into_iter()
-                .filter(|(_, c)| *c > 1)
-                .map(|(n, _)| n)
-                .collect();
+                .into_iter().filter(|(_, c)| *c > 1).map(|(n, _)| n).collect();
         }
 
-        for stmt in &all_stmts {
-            self.create_function_declarations(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            self.create_vtable_instances(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            self.create_protocol_witness_tables(stmt.clone());
-        }
-        for stmt in &all_stmts {
-            let _ = self.resolve_statement(stmt.clone());
-        }
-
-        Rc::new(self.module)
+        for stmt in stmts { self.create_function_declarations(stmt.clone()); }
+        for stmt in stmts { self.create_vtable_instances(stmt.clone()); }
+        for stmt in stmts { self.create_protocol_witness_tables(stmt.clone()); }
+        for stmt in stmts { let _ = self.resolve_statement(stmt.clone()); }
     }
 
     fn declare_struct_types(&self, statement: Rc<RefCell<Statement>>) {
