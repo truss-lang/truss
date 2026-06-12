@@ -12086,3 +12086,79 @@ fn test_parse_self_call() {
         panic!("Expected ExpressionStatement");
     }
 }
+
+#[test]
+fn test_parse_if_let_simple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "if let x = optional { x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        if let Expression::If { condition, .. } = &*expr {
+            if let Expression::Case { case_name, bindings, .. } = &*condition.borrow() {
+                assert_eq!(case_name.value, "Some");
+                assert_eq!(bindings.len(), 1);
+            } else {
+                panic!("Expected Case expression in if-let condition");
+            }
+        } else {
+            panic!("Expected If expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_guard_let_simple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "guard let x = optional else { return }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+}
+
+#[test]
+fn test_parse_while_let_simple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "while let x = iterator() { x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+}
+
+#[test]
+fn test_parse_if_let_ignore() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "if let _ = optional { 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+}

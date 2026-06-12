@@ -31,6 +31,7 @@ pub struct Parser {
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
     pending_greater_count: u32,
     scope_nesting: usize,
+    suppress_trailing_closure: bool,
 }
 
 impl Parser {
@@ -46,6 +47,7 @@ impl Parser {
             engine,
             pending_greater_count: 0,
             scope_nesting: 0,
+            suppress_trailing_closure: false,
         }
     }
 
@@ -315,7 +317,8 @@ impl Parser {
     }
 
     fn apply_trailing_closure(&mut self, expr: Expression) -> Result<Expression, ()> {
-        if let Some(token) = self.peek()
+        if !self.suppress_trailing_closure
+            && let Some(token) = self.peek()
             && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
             && matches!(
                 expr,
@@ -2613,7 +2616,13 @@ impl Parser {
 
     fn parse_while(&mut self) -> Result<Statement, ()> {
         let token = self.next().unwrap();
-        let condition = self.parse_expression()?;
+        let condition = if let Some(t) = self.peek()
+            && KeywordType::is_keyword(&t, KeywordType::Let)
+        {
+            self.parse_if_let_condition()?
+        } else {
+            self.parse_expression()?
+        };
         if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
@@ -5022,7 +5031,8 @@ impl Parser {
             return Err(());
         };
         if SeparatorType::is_separator(&next, SeparatorType::CloseParen) {
-            if let Some(token) = self.peek()
+            if !self.suppress_trailing_closure
+                && let Some(token) = self.peek()
                 && SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
             {
                 let closure = self.parse_closure_expression()?;
@@ -5050,7 +5060,13 @@ impl Parser {
 
     fn parse_if(&mut self) -> Result<Expression, ()> {
         self.index += 1;
-        let condition = self.parse_expression()?;
+        let condition = if let Some(t) = self.peek()
+            && KeywordType::is_keyword(&t, KeywordType::Let)
+        {
+            self.parse_if_let_condition()?
+        } else {
+            self.parse_expression()?
+        };
         if let Some(token) = self.peek()
             && !SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
         {
@@ -5219,6 +5235,103 @@ impl Parser {
             expression: Rc::new(RefCell::new(expression)),
             ty: None,
         })
+    }
+
+    fn parse_if_let_condition(&mut self) -> Result<Expression, ()> {
+        let let_token = self.next().unwrap();
+
+        if !KeywordType::is_keyword(&let_token, KeywordType::Let) {
+            self.emit_error(
+                TrussDiagnosticCode::ParserError,
+                "Expected 'let' in if-let condition",
+                &let_token,
+            );
+            return Err(());
+        }
+
+        let name = self.next().ok_or_else(|| {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected variable name after 'let'",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+        })?;
+
+        if name.ty != TokenType::Identifier {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected variable name after 'let' but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
+
+        let equals = self.next().ok_or_else(|| {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '=' in if-let condition",
+                &self.tokens[self.index.saturating_sub(1)],
+            );
+        })?;
+
+        if !OperatorType::is_operator(&equals, OperatorType::Assign) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '=' but found '{}'", equals.value),
+                &equals,
+            );
+            return Err(());
+        }
+
+        let saved_suppress = self.suppress_trailing_closure;
+        self.suppress_trailing_closure = true;
+        let value = self.parse_binary(Precedence::And)?;
+        self.suppress_trailing_closure = saved_suppress;
+
+        let pattern = if name.value == "_" {
+            crate::ast::statement::Pattern::Ignore
+        } else {
+            crate::ast::statement::Pattern::Identifier(Box::new(name))
+        };
+
+        let some_token = Token::new(
+            "Some".to_string(),
+            TokenType::Identifier,
+            let_token.position.clone(),
+            let_token.file.clone(),
+        );
+
+        let case_expr = Expression::Case {
+            token: Box::new(let_token),
+            enum_type: None,
+            case_name: Box::new(some_token),
+            bindings: vec![pattern],
+            expression: Rc::new(RefCell::new(value)),
+            ty: None,
+        };
+
+        if let Some(t) = self.peek()
+            && OperatorType::is_operator(&t, OperatorType::And)
+        {
+            let _and_token = self.next().unwrap();
+            if let Some(next) = self.peek()
+                && KeywordType::is_keyword(&next, KeywordType::Let)
+            {
+                let right = self.parse_if_let_condition()?;
+                Ok(Expression::Binary {
+                    left: Rc::new(RefCell::new(case_expr)),
+                    operator: crate::ast::expression::BinaryOperator::And,
+                    right: Rc::new(RefCell::new(right)),
+                    overloads: vec![],
+                    selected_index: None,
+                })
+            } else {
+                self.index -= 1;
+                Ok(case_expr)
+            }
+        } else {
+            Ok(case_expr)
+        }
     }
 
     fn parse_attributes(&mut self) -> Result<Vec<Attribute>, ()> {
@@ -5763,7 +5876,13 @@ impl Parser {
 
     fn parse_guard(&mut self) -> Result<Statement, ()> {
         let token = self.next().unwrap();
-        let condition = self.parse_expression()?;
+        let condition = if let Some(t) = self.peek()
+            && KeywordType::is_keyword(&t, KeywordType::Let)
+        {
+            self.parse_if_let_condition()?
+        } else {
+            self.parse_expression()?
+        };
 
         let Some(else_token) = self.next() else {
             self.emit_error(
