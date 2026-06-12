@@ -1676,13 +1676,23 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_extern_declaration(&self, statement: Rc<RefCell<Statement>>) -> Result<()> {
-        if let Statement::FunctionDecl { name, ty, .. } = &*statement.borrow()
+        if let Statement::FunctionDecl {
+            name,
+            ty,
+            attributes,
+            ..
+        } = &*statement.borrow()
             && let Some(ty) = ty
             && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
         {
+            let llvm_name = attributes
+                .iter()
+                .find(|a| a.name == "cname")
+                .and_then(|a| a.value.as_deref())
+                .unwrap_or(&name.value);
             let function_type =
                 self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)?;
-            self.module.add_function(&name.value, function_type, None);
+            self.module.add_function(llvm_name, function_type, None);
         }
         if let Statement::VariableDecl { name, ty, .. } = &*statement.borrow()
             && let Some(ty) = ty
@@ -3605,6 +3615,9 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
+                    if let Statement::FunctionDecl { .. } = &*item.borrow() {
+                        continue;
+                    }
                     let _ = self.resolve_statement(item.clone());
                 }
                 Ok(false)

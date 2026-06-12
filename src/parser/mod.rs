@@ -122,7 +122,7 @@ impl Parser {
                 KeywordType::Class => self.parse_class_decl(modifiers),
                 KeywordType::Protocol => self.parse_protocol_decl(modifiers),
                 KeywordType::Enum => self.parse_enum_decl(modifiers),
-                KeywordType::Extern => self.parse_extern(modifiers),
+                KeywordType::Extern => self.parse_extern(attributes, modifiers),
                 KeywordType::Init => self.parse_function_decl(false, attributes, modifiers),
                 KeywordType::Deinit => self.parse_deinit_decl(modifiers),
                 KeywordType::Return => {
@@ -2773,7 +2773,7 @@ impl Parser {
         })
     }
 
-    fn parse_extern(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+    fn parse_extern(&mut self, _attributes: Vec<Attribute>, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
         let Some(extern_token) = self.next() else {
             return Err(());
         };
@@ -2844,12 +2844,13 @@ impl Parser {
     }
 
     fn parse_extern_item(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+        let attrs = self.parse_attributes()?;
         let Some(token) = self.peek() else {
             return Err(());
         };
         match token.ty {
             TokenType::Keyword { keyword } => match keyword {
-                KeywordType::Func => self.parse_function_decl(true, vec![], modifiers),
+                KeywordType::Func => self.parse_function_decl(true, attrs, modifiers),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(true, modifiers),
                 _ => {
                     self.emit_error(
@@ -5431,6 +5432,52 @@ impl Parser {
                 );
                 return Err(());
             }
+            let attr_value = if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::OpenParen)
+            {
+                self.index += 1;
+                let Some(val_tok) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected string literal in attribute value",
+                        &tok,
+                    );
+                    return Err(());
+                };
+                let value = match &val_tok.ty {
+                    TokenType::StringLiteral { value } => value.clone(),
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserError,
+                            format!(
+                                "Expected string literal but found '{}'",
+                                val_tok.value
+                            ),
+                            &val_tok,
+                        );
+                        return Err(());
+                    }
+                };
+                let Some(close_paren) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected ')' to close attribute value",
+                        &tok,
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&close_paren, SeparatorType::CloseParen) {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        format!("Expected ')' but found '{}'", close_paren.value),
+                        &close_paren,
+                    );
+                    return Err(());
+                }
+                Some(value)
+            } else {
+                None
+            };
             let Some(close) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::ParserError,
@@ -5449,6 +5496,7 @@ impl Parser {
             }
             attributes.push(Attribute {
                 name: name_tok.value,
+                value: attr_value,
             });
         }
         Ok(attributes)

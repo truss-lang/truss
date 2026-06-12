@@ -8,6 +8,7 @@ use crate::{lexer::token::Token, scope::Scope, types::Type};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attribute {
     pub name: String,
+    pub value: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
