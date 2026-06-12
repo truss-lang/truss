@@ -12196,5 +12196,9 @@ fn test_parse_tuple_expression_statement() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser should have no errors: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }

@@ -140,28 +140,25 @@ fn main() {
                 file: Rc::new("".to_string()),
                 statements: Vec::new(),
             };
-            std_resolver.resolve(&dummy_program, "Truss".to_string());
+            let std_module = std_resolver.resolve(&dummy_program, "Truss".to_string());
+
+            if let Some(scope) = std_module.borrow().scope.clone() {
+                std_resolver.enter_scope(Some(scope));
+            }
 
             for file_stmts in file_programs {
-                let file_prog = truss::ast::node::Program {
-                    file: Rc::new("".to_string()),
-                    statements: file_stmts,
-                };
-                for stmt in &file_prog.statements {
+                for stmt in &file_stmts {
                     std_resolver.register_symbols(stmt.clone());
                 }
             }
 
-            let truss_module_ref = truss_pkg.borrow().modules.get("Truss").cloned();
-            if let Some(truss_module) = truss_module_ref {
-                let mut std_type_resolver =
-                    TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
-                let empty_prog = truss::ast::node::Program {
-                    file: Rc::new("".to_string()),
-                    statements: vec![],
-                };
-                std_type_resolver.resolve(&empty_prog, truss_module);
-            }
+            let mut std_type_resolver =
+                TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+            let empty_prog = truss::ast::node::Program {
+                file: Rc::new("".to_string()),
+                statements: vec![],
+            };
+            std_type_resolver.resolve(&empty_prog, std_module);
         }
     }
 

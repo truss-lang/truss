@@ -2249,7 +2249,7 @@ impl SymbolResolver {
         }
     }
 
-    fn enter_scope(&mut self, scope: Option<Rc<RefCell<Scope>>>) -> Rc<RefCell<Scope>> {
+    pub fn enter_scope(&mut self, scope: Option<Rc<RefCell<Scope>>>) -> Rc<RefCell<Scope>> {
         let sc = if let Some(scope) = scope {
             scope
         } else {

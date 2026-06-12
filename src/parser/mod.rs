@@ -2714,7 +2714,13 @@ impl Parser {
             );
             return Err(());
         }
-        let iterator = self.parse_expression()?;
+        let iterator = {
+            let saved_suppress = self.suppress_trailing_closure;
+            self.suppress_trailing_closure = true;
+            let iter = self.parse_expression()?;
+            self.suppress_trailing_closure = saved_suppress;
+            iter
+        };
         if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
