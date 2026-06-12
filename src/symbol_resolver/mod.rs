@@ -271,6 +271,7 @@ impl SymbolResolver {
                             parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
                         }));
+                        methods.push(deinit_symbol.clone());
                         let deinit_token = {
                             let stmt = field_stmt.borrow();
                             if let Statement::DeinitDecl { token, .. } = &*stmt {
@@ -497,6 +498,7 @@ impl SymbolResolver {
                             parent: WeakSymbol(Rc::downgrade(&class_symbol)),
                             decl: Some(field_stmt.clone()),
                         }));
+                        methods.push(deinit_symbol.clone());
                         let deinit_token = {
                             let stmt = field_stmt.borrow();
                             if let Statement::DeinitDecl { token, .. } = &*stmt {

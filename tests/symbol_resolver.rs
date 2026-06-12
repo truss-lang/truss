@@ -324,7 +324,12 @@ fn test_struct_failable_init_symbol() {
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Point");
         assert_eq!(body.len(), 2);
-        if let Statement::InitDecl { parameters, is_failable, .. } = &*body[1].borrow() {
+        if let Statement::InitDecl {
+            parameters,
+            is_failable,
+            ..
+        } = &*body[1].borrow()
+        {
             assert!(is_failable);
             assert_eq!(parameters.len(), 1);
             assert_eq!(parameters[0].borrow().name.value, "x");
@@ -334,6 +339,45 @@ fn test_struct_failable_init_symbol() {
     } else {
         panic!("Expected StructDecl");
     }
+}
+
+#[test]
+fn test_struct_deinit_method_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Point { let x: Int32 deinit { } } func test(p: Point) { p.deinit() }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let struct_sym = root_scope.borrow().get_symbol("Point").unwrap();
+    let binding = struct_sym.borrow();
+    let Symbol::Struct { methods, .. } = &*binding else {
+        panic!("Expected Struct symbol");
+    };
+    let has_deinit = methods.iter().any(|m| {
+        let mb = m.borrow();
+        matches!(&*mb, Symbol::StructMethod { name, .. } if name == "deinit")
+    });
+    assert!(
+        has_deinit,
+        "deinit should exist as a method in the struct's methods list"
+    );
 }
 
 #[test]
@@ -654,6 +698,45 @@ fn test_class_init_deinit_symbol() {
     } else {
         panic!("Expected ClassDecl");
     }
+}
+
+#[test]
+fn test_class_deinit_method_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class Point { let x: Int32 deinit { } } func test(p: Point) { p.deinit() }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should not have errors, got: {:?}", errors);
+    drop(engine_ref);
+
+    let root_module = krate.borrow().modules.get("test").cloned().unwrap();
+    let root_scope = root_module.borrow().scope.clone().unwrap();
+    let class_sym = root_scope.borrow().get_symbol("Point").unwrap();
+    let binding = class_sym.borrow();
+    let Symbol::Class { methods, .. } = &*binding else {
+        panic!("Expected Class symbol");
+    };
+    let has_deinit = methods.iter().any(|m| {
+        let mb = m.borrow();
+        matches!(&*mb, Symbol::ClassMethod { name, .. } if name == "deinit")
+    });
+    assert!(
+        has_deinit,
+        "deinit should exist as a method in the class's methods list"
+    );
 }
 
 #[test]
