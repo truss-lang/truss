@@ -2616,12 +2616,18 @@ impl Parser {
 
     fn parse_while(&mut self) -> Result<Statement, ()> {
         let token = self.next().unwrap();
+        let saved_suppress = self.suppress_trailing_closure;
+        self.suppress_trailing_closure = true;
         let condition = if let Some(t) = self.peek()
             && KeywordType::is_keyword(&t, KeywordType::Let)
         {
-            self.parse_if_let_condition()?
+            let cond = self.parse_if_let_condition()?;
+            self.suppress_trailing_closure = saved_suppress;
+            cond
         } else {
-            self.parse_expression()?
+            let cond = self.parse_expression()?;
+            self.suppress_trailing_closure = saved_suppress;
+            cond
         };
         if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
@@ -5060,12 +5066,18 @@ impl Parser {
 
     fn parse_if(&mut self) -> Result<Expression, ()> {
         self.index += 1;
+        let saved_suppress = self.suppress_trailing_closure;
+        self.suppress_trailing_closure = true;
         let condition = if let Some(t) = self.peek()
             && KeywordType::is_keyword(&t, KeywordType::Let)
         {
-            self.parse_if_let_condition()?
+            let cond = self.parse_if_let_condition()?;
+            self.suppress_trailing_closure = saved_suppress;
+            cond
         } else {
-            self.parse_expression()?
+            let cond = self.parse_expression()?;
+            self.suppress_trailing_closure = saved_suppress;
+            cond
         };
         if let Some(token) = self.peek()
             && !SeparatorType::is_separator(&token, SeparatorType::OpenBrace)
@@ -5260,7 +5272,10 @@ impl Parser {
         if name.ty != TokenType::Identifier {
             self.emit_error(
                 TrussDiagnosticCode::ExpectedIdentifier,
-                format!("Expected variable name after 'let' but found '{}'", name.value),
+                format!(
+                    "Expected variable name after 'let' but found '{}'",
+                    name.value
+                ),
                 &name,
             );
             return Err(());
@@ -5876,12 +5891,18 @@ impl Parser {
 
     fn parse_guard(&mut self) -> Result<Statement, ()> {
         let token = self.next().unwrap();
+        let saved_suppress = self.suppress_trailing_closure;
+        self.suppress_trailing_closure = true;
         let condition = if let Some(t) = self.peek()
             && KeywordType::is_keyword(&t, KeywordType::Let)
         {
-            self.parse_if_let_condition()?
+            let cond = self.parse_if_let_condition()?;
+            self.suppress_trailing_closure = saved_suppress;
+            cond
         } else {
-            self.parse_expression()?
+            let cond = self.parse_expression()?;
+            self.suppress_trailing_closure = saved_suppress;
+            cond
         };
 
         let Some(else_token) = self.next() else {
