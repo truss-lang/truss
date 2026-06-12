@@ -53,7 +53,7 @@ impl<'ctx> Scope<'ctx> {
 
 pub struct IRGenerator<'ctx> {
     context: &'ctx Context,
-    module: Rc<Module<'ctx>>,
+    module: Module<'ctx>,
     builder: Builder<'ctx>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
     scope_stack: Rc<RefCell<Vec<Scope<'ctx>>>>,
@@ -81,7 +81,7 @@ pub struct IRGenerator<'ctx> {
 
 impl<'ctx> IRGenerator<'ctx> {
     pub fn new(context: &'ctx Context, engine: Rc<RefCell<TrussDiagnosticEngine>>) -> Self {
-        let module = Rc::new(context.create_module("main"));
+        let module = context.create_module("main");
         let builder = context.create_builder();
         Self {
             context,
@@ -287,7 +287,7 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     pub fn generate(
-        &self,
+        mut self,
         program: &Program,
         scope: Rc<RefCell<TrussScope>>,
     ) -> Rc<Module<'ctx>> {
@@ -295,83 +295,171 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     pub fn generate_with_stdlib(
-        &self,
+        &mut self,
         program: &Program,
         stdlib_stmts: &[Rc<RefCell<Statement>>],
         scope: Rc<RefCell<TrussScope>>,
     ) -> Rc<Module<'ctx>> {
         *self.program_scope.borrow_mut() = Some(scope);
 
-        let all_stmts: Vec<Rc<RefCell<Statement>>> = stdlib_stmts
-            .iter()
-            .chain(program.statements.iter())
-            .cloned()
-            .collect();
+        // Phase 1: Process stdlib into a separate module
+        let stdlib_module = if !stdlib_stmts.is_empty() {
+            Some(self.process_stdlib(stdlib_stmts))
+        } else {
+            None
+        };
 
-        for stmt in &all_stmts {
+        // Phase 2: Process main program into self.module
+        self.process_main_program(program);
+
+        // Phase 3: Link stdlib module into main module
+        if let Some(stdlib_mod) = stdlib_module {
+            if let Err(e) = self.module.link_in_module(stdlib_mod) {
+                self.emit_error(
+                    TrussDiagnosticCode::IRError,
+                    format!("Failed to link stdlib module: {}", e),
+                    None,
+                );
+            }
+        }
+
+        Rc::new(std::mem::replace(
+            &mut self.module,
+            self.context.create_module("dummy"),
+        ))
+    }
+
+    fn process_stdlib(
+        &mut self,
+        stdlib_stmts: &[Rc<RefCell<Statement>>],
+    ) -> Module<'ctx> {
+        let main_module = std::mem::replace(
+            &mut self.module,
+            self.context.create_module("stdlib"),
+        );
+
+        for stmt in stdlib_stmts {
             self.declare_struct_types(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.declare_class_types(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.declare_enum_types(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.create_vtable_types(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.create_protocol_witness_table_types(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.create_struct_type_bodies(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.create_class_type_bodies(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.create_existential_container_types(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.create_enum_type_bodies(stmt.clone());
         }
 
         {
             let mut counts: HashMap<String, usize> = HashMap::new();
-            for stmt in &all_stmts {
+            for stmt in stdlib_stmts {
                 Self::count_fn_name_frequencies(stmt, &mut counts);
             }
-            *self.overloaded_fn_names.borrow_mut() = counts
-                .into_iter()
-                .filter(|(_, c)| *c > 1)
-                .map(|(n, _)| n)
+            let existing: HashSet<String> = self
+                .overloaded_fn_names
+                .borrow()
+                .iter()
+                .cloned()
                 .collect();
+            for (name, count) in counts {
+                if count > 1 || existing.contains(&name) {
+                    self.overloaded_fn_names.borrow_mut().insert(name);
+                }
+            }
         }
 
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.create_function_declarations(stmt.clone());
         }
-
-        for stmt in &all_stmts {
+        for stmt in stdlib_stmts {
             self.create_vtable_instances(stmt.clone());
         }
+        for stmt in stdlib_stmts {
+            self.create_protocol_witness_tables(stmt.clone());
+        }
+        for stmt in stdlib_stmts {
+            let _ = self.resolve_statement(stmt.clone());
+        }
 
-        for stmt in &all_stmts {
+        std::mem::replace(&mut self.module, main_module)
+    }
+
+    fn process_main_program(&mut self, program: &Program) {
+        for stmt in &program.statements {
+            self.declare_struct_types(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.declare_class_types(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.declare_enum_types(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.create_vtable_types(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.create_protocol_witness_table_types(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.create_struct_type_bodies(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.create_class_type_bodies(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.create_existential_container_types(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.create_enum_type_bodies(stmt.clone());
+        }
+
+        {
+            let mut counts: HashMap<String, usize> = HashMap::new();
+            for stmt in &program.statements {
+                Self::count_fn_name_frequencies(stmt, &mut counts);
+            }
+            let existing: HashSet<String> = self
+                .overloaded_fn_names
+                .borrow()
+                .iter()
+                .cloned()
+                .collect();
+            for (name, count) in counts {
+                if count > 1 || existing.contains(&name) {
+                    self.overloaded_fn_names.borrow_mut().insert(name);
+                }
+            }
+        }
+
+        for stmt in &program.statements {
+            self.create_function_declarations(stmt.clone());
+        }
+        for stmt in &program.statements {
+            self.create_vtable_instances(stmt.clone());
+        }
+        for stmt in &program.statements {
             self.create_protocol_witness_tables(stmt.clone());
         }
 
         for stmt in &program.statements {
             let _ = self.resolve_statement(stmt.clone());
         }
-        self.module.clone()
     }
 
     fn declare_struct_types(&self, statement: Rc<RefCell<Statement>>) {

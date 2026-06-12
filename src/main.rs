@@ -136,7 +136,6 @@ fn main() {
             }
         };
 
-        // Flatten stdlib statements for use in both registration and IRGen
         for file_stmts in file_programs {
             for stmt in &file_stmts {
                 stdlib_stmts.push(stmt.clone());
@@ -197,7 +196,7 @@ fn main() {
 
     let context = inkwell::context::Context::create();
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-    let ir_generator = IRGenerator::new(&context, engine.clone());
+    let mut ir_generator = IRGenerator::new(&context, engine.clone());
     let module = ir_generator.generate_with_stdlib(
         &program,
         &stdlib_stmts,
