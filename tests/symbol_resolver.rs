@@ -4720,3 +4720,33 @@ fn test_self_type_constructor_call() {
         engine.borrow().get_diagnostics()
     );
 }
+
+#[test]
+fn test_optional_type_sugar_resolves_inner_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: Int32? = 10".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_diagnostics());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+}
+
+#[test]
+fn test_array_type_sugar_resolves_inner_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x: [Int32] = {}".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_diagnostics());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+}
