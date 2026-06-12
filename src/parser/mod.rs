@@ -290,6 +290,20 @@ impl Parser {
                         token: Box::new(token),
                     })
                 }
+                SeparatorType::OpenParen => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            "Modifiers are not allowed on expression statement.",
+                            &modifiers[0].token,
+                        );
+                    }
+                    let expr = self.parse_expression()?;
+                    let expr = self.apply_trailing_closure(expr)?;
+                    Ok(Statement::ExpressionStatement {
+                        expression: Rc::new(RefCell::new(expr)),
+                    })
+                }
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
