@@ -6032,3 +6032,61 @@ fn test_irgen_failable_init_call() {
         "calling failable init should compile"
     );
 }
+
+#[test]
+fn test_irgen_optional_type_sugar_in_annotation_no_error() {
+    let code = r#"
+        func test() -> Int32 {
+            let x: Int32? = 10
+            return 1
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    drop(engine_ref);
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let _result = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+}
+
+#[test]
+fn test_irgen_array_type_sugar_in_annotation_no_error() {
+    let code = r#"
+        func test() -> Int32 {
+            let x: [Int32] = {}
+            return 1
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    drop(engine_ref);
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let _result = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+}

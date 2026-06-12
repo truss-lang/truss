@@ -152,7 +152,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 if let Some(ty) = ty {
                     let ty_borrow = ty.borrow();
-                    if let Type::Struct(type_name, _) = &*ty_borrow {
+                    if let Type::Struct(type_name, ..) = &*ty_borrow {
                         let type_name = type_name.clone();
                         drop(ty_borrow);
                         let mut stack = self.scope_stack.borrow_mut();
@@ -161,7 +161,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             .unwrap()
                             .deferred_vars
                             .push((ptr, type_name));
-                    } else if let Type::Enum(type_name, _) = &*ty_borrow {
+                    } else if let Type::Enum(type_name, ..) = &*ty_borrow {
                         let type_name = type_name.clone();
                         drop(ty_borrow);
                         let mut stack = self.scope_stack.borrow_mut();
@@ -174,7 +174,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         let class_name = {
                             let inner_borrow = inner.borrow();
                             match &*inner_borrow {
-                                Type::Class(name, _) => Some(name.clone()),
+                                Type::Class(name, ..) => Some(name.clone()),
                                 _ => None,
                             }
                         };
@@ -706,7 +706,7 @@ impl<'ctx> IRGenerator<'ctx> {
         ret_ty: Rc<RefCell<Type>>,
     ) -> Result<()> {
         let enum_name = match &*ret_ty.borrow() {
-            Type::Enum(name, _) => name.clone(),
+            Type::Enum(name, ..) => name.clone(),
             _ => anyhow::bail!("Expected Enum type for Optional return"),
         };
         let enum_type = self
@@ -1071,10 +1071,10 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::Char => "C".into(),
             Type::Void => "V".into(),
             Type::Never => "N".into(),
-            Type::Struct(name, _)
-            | Type::Class(name, _)
-            | Type::Enum(name, _)
-            | Type::Protocol(name, _) => name.clone(),
+            Type::Struct(name, ..)
+            | Type::Class(name, ..)
+            | Type::Enum(name, ..)
+            | Type::Protocol(name, ..) => name.clone(),
             Type::Pointer(_) => "P".into(),
             Type::NonNullPointer(_) => "NP".into(),
             Type::Tuple(_) => "T".into(),
@@ -1132,10 +1132,10 @@ impl<'ctx> IRGenerator<'ctx> {
             | (Type::Char, Type::Char)
             | (Type::Void, Type::Void)
             | (Type::Never, Type::Never) => true,
-            (Type::Struct(n1, _), Type::Struct(n2, _))
-            | (Type::Class(n1, _), Type::Class(n2, _))
-            | (Type::Enum(n1, _), Type::Enum(n2, _))
-            | (Type::Protocol(n1, _), Type::Protocol(n2, _)) => n1 == n2,
+            (Type::Struct(n1, ..), Type::Struct(n2, ..))
+            | (Type::Class(n1, ..), Type::Class(n2, ..))
+            | (Type::Enum(n1, ..), Type::Enum(n2, ..))
+            | (Type::Protocol(n1, ..), Type::Protocol(n2, ..)) => n1 == n2,
             (Type::Pointer(t1), Type::Pointer(t2)) => {
                 Self::types_compatible(&t1.borrow(), &t2.borrow())
             }
@@ -2070,7 +2070,7 @@ impl<'ctx> IRGenerator<'ctx> {
         types
             .iter()
             .filter_map(|t| match &*t.borrow() {
-                Type::Protocol(name, _) => Some(name.clone()),
+                Type::Protocol(name, ..) => Some(name.clone()),
                 _ => None,
             })
             .collect()
@@ -2850,7 +2850,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             if let Some(ty) = ty {
                                 let ty_borrow = ty.borrow();
                                 match &*ty_borrow {
-                                    Type::Protocol(protocol_name, _) => {
+                                    Type::Protocol(protocol_name, ..) => {
                                         let protocol_name = protocol_name.clone();
                                         drop(ty_borrow);
                                         if let Some(ct) = self
@@ -4030,11 +4030,11 @@ impl<'ctx> IRGenerator<'ctx> {
                     Some(t) => self.resolve_type(t.clone())?,
                     None => self.context.i32_type().into(),
                 };
-                let is_optional = matches!(ty, Some(t) if matches!(&*t.borrow(), Type::Enum(name, _) if name == "Optional"));
+                let is_optional = matches!(ty, Some(t) if matches!(&*t.borrow(), Type::Enum(name, ..) if name == "Optional"));
                 if is_optional {
                     let t_ref = ty.as_ref().unwrap();
                     let enum_name = match &*t_ref.borrow() {
-                        Type::Enum(name, _) => name.clone(),
+                        Type::Enum(name, ..) => name.clone(),
                         _ => unreachable!(),
                     };
                     let enum_type = self.enum_types.borrow().get(&enum_name).cloned()
@@ -4092,7 +4092,7 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Expression::NullLiteral { ty, .. } => {
                 if let Some(t) = ty.as_ref()
-                    && let Type::Enum(name, _) = &*t.borrow()
+                    && let Type::Enum(name, ..) = &*t.borrow()
                 {
                     let enum_type =
                         self.enum_types.borrow().get(name).cloned().ok_or_else(|| {
@@ -4338,7 +4338,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             match left_ty.and_then(|t| {
                                 let tb = t.borrow();
                                 match &*tb {
-                                    Type::Struct(n, _) | Type::Class(n, _) | Type::Enum(n, _) => {
+                                    Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => {
                                         Some(n.clone())
                                     }
                                     _ => None,
@@ -4720,9 +4720,9 @@ impl<'ctx> IRGenerator<'ctx> {
                                 Some(Some(ty)) => {
                                     let tb = ty.borrow();
                                     match &*tb {
-                                        Type::Struct(n, _)
-                                        | Type::Class(n, _)
-                                        | Type::Enum(n, _) => n.clone(),
+                                        Type::Struct(n, ..)
+                                        | Type::Class(n, ..)
+                                        | Type::Enum(n, ..) => n.clone(),
                                         _ => op_name.clone(),
                                     }
                                 }
@@ -4979,7 +4979,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     drop(object_expr);
 
                     if let Some(ty) = object_ty {
-                        if let Type::Struct(struct_name, _) = &*ty.borrow() {
+                        if let Type::Struct(struct_name, ..) = &*ty.borrow() {
                             let struct_name = struct_name.clone();
                             let field_name = member.value.clone();
 
@@ -5074,7 +5074,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             let field_ty = self.get_struct_field_type(&struct_name, &field_name)?;
                             let val = self.builder.build_load(field_ty, field_ptr, "")?;
                             (field_ptr, Some(val))
-                        } else if let Type::Class(class_name, _) = &*ty.borrow() {
+                        } else if let Type::Class(class_name, ..) = &*ty.borrow() {
                             let class_name = class_name.clone();
                             let field_name = member.value.clone();
 
@@ -5192,7 +5192,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         obj.get_ty_ref()?.clone()
                     };
                     if let Some(ty) = &sub_ty
-                        && let Type::Struct(struct_name, _) = &*ty.borrow()
+                        && let Type::Struct(struct_name, ..) = &*ty.borrow()
                     {
                         let struct_name = struct_name.clone();
                         let object_val = self.resolve_expression(sub_object.clone())?.unwrap();
@@ -5217,7 +5217,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                     if let Some(ty) = &sub_ty
-                        && let Type::Class(class_name, _) = &*ty.borrow()
+                        && let Type::Class(class_name, ..) = &*ty.borrow()
                     {
                         let class_name = class_name.clone();
                         let object_val = self.resolve_expression(sub_object.clone())?.unwrap();
@@ -5845,7 +5845,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 drop(object_expr);
 
                 if let Some(ty) = &object_ty
-                    && let Type::Struct(struct_name, _) = &*ty.borrow()
+                    && let Type::Struct(struct_name, ..) = &*ty.borrow()
                 {
                     let struct_name = struct_name.clone();
                     let field_name = member.value.clone();
@@ -5888,7 +5888,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 if let Some(ty) = &object_ty
-                    && let Type::Class(class_name, _) = &*ty.borrow()
+                    && let Type::Class(class_name, ..) = &*ty.borrow()
                 {
                     let class_name = class_name.clone();
                     let field_name = member.value.clone();
@@ -6098,7 +6098,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 if let Some(ty) = &object_ty
-                    && let Type::Protocol(protocol_name, _) = &*ty.borrow()
+                    && let Type::Protocol(protocol_name, ..) = &*ty.borrow()
                 {
                     let protocol_name = protocol_name.clone();
                     let field_name = member.value.clone();
@@ -6190,7 +6190,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 if let Some(ty) = &object_ty
-                    && let Type::Enum(enum_name, _) = &*ty.borrow()
+                    && let Type::Enum(enum_name, ..) = &*ty.borrow()
                 {
                     let case_name = member.value.clone();
                     let enum_name = enum_name.clone();
@@ -6262,7 +6262,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 if let Some(ty) = &object_ty
                     && let Type::Inline(inner, _) = &*ty.borrow()
-                    && let Type::Class(class_name, _) = &*inner.borrow()
+                    && let Type::Class(class_name, ..) = &*inner.borrow()
                 {
                     let object_val = self.resolve_expression(object.clone())?.unwrap();
                     let class_type = self.class_types.borrow().get(class_name).copied();
@@ -6353,7 +6353,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             drop(object_expr);
 
                             if let Some(ty) = &object_ty
-                                && let Type::Struct(struct_name, _) = &*ty.borrow()
+                                && let Type::Struct(struct_name, ..) = &*ty.borrow()
                             {
                                 let object_val = self.resolve_expression(object.clone())?.unwrap();
                                 let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
@@ -6379,7 +6379,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 };
                                 (fn_name, false)
                             } else if let Some(ty) = &object_ty
-                                && let Type::Class(class_name, _) = &*ty.borrow()
+                                && let Type::Class(class_name, ..) = &*ty.borrow()
                             {
                                 let object_val = self.resolve_expression(object.clone())?.unwrap();
                                 let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
@@ -6654,7 +6654,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     } else {
                                         anyhow::bail!("Internal error: expected Compound type");
                                     }
-                                } else if let Type::Protocol(protocol_name, _) = &*ty.borrow() {
+                                } else if let Type::Protocol(protocol_name, ..) = &*ty.borrow() {
                                     let protocol_name = protocol_name.clone();
                                     let object_val =
                                         self.resolve_expression(object.clone())?.unwrap();
@@ -6764,7 +6764,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     anyhow::bail!("Unsupported object type for method call");
                                 }
                             } else if let Some(ty) = &object_ty
-                                && let Type::Enum(enum_name, _) = &*ty.borrow()
+                                && let Type::Enum(enum_name, ..) = &*ty.borrow()
                             {
                                 let case_name = member.value.clone();
                                 let enum_name = enum_name.clone();
@@ -6833,8 +6833,8 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let Expression::SelfType { ty, .. } = &*callee.borrow() {
                             if let Some(ty) = ty {
                                 let type_name = match &*ty.borrow() {
-                                    Type::Struct(name, _) => name.clone(),
-                                    Type::Class(name, _) => name.clone(),
+                                    Type::Struct(name, ..) => name.clone(),
+                                    Type::Class(name, ..) => name.clone(),
                                     _ => {
                                         self.emit_error(
                                             TrussDiagnosticCode::UnsupportedFeature,
@@ -7655,7 +7655,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Variable { ty, .. } => {
                 let ty = ty.as_ref()?;
                 match &*ty.borrow() {
-                    Type::Struct(name, _) | Type::Class(name, _) | Type::Enum(name, _) => {
+                    Type::Struct(name, ..) | Type::Class(name, ..) | Type::Enum(name, ..) => {
                         Some(name.clone())
                     }
                     _ => None,
@@ -7718,7 +7718,7 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             _ => return None,
         };
-        if let Type::Enum(name, _) = &*ty.borrow() {
+        if let Type::Enum(name, ..) = &*ty.borrow() {
             Some(name.clone())
         } else {
             None
@@ -7953,7 +7953,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::Pointer(_) | Type::NonNullPointer(_) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
-            Type::Struct(name, _) => {
+            Type::Struct(name, ..) => {
                 if let Some(struct_type) = self.struct_types.borrow().get(name) {
                     struct_type.as_basic_type_enum()
                 } else if name == "Array" || name == "String" {
@@ -7967,7 +7967,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("Struct type not found");
                 }
             }
-            Type::Class(name, _) => {
+            Type::Class(name, ..) => {
                 let ptr_type: BasicTypeEnum<'ctx> =
                     self.context.ptr_type(inkwell::AddressSpace::from(0)).into();
                 if self.class_types.borrow().contains_key(name) {
@@ -7981,7 +7981,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("Class type not found");
                 }
             }
-            Type::Enum(name, _) => {
+            Type::Enum(name, ..) => {
                 if let Some(enum_type) = self.enum_types.borrow().get(name) {
                     enum_type.as_basic_type_enum()
                 } else {
@@ -7993,7 +7993,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("Enum type not found");
                 }
             }
-            Type::Protocol(name, _) => {
+            Type::Protocol(name, ..) => {
                 if let Some(container_type) = self.existential_container_types.borrow().get(name) {
                     container_type.as_basic_type_enum()
                 } else {
@@ -8042,7 +8042,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::Inline(inner, _) => {
                 let inner_borrow = inner.borrow();
                 match &*inner_borrow {
-                    Type::Class(name, _) => {
+                    Type::Class(name, ..) => {
                         if let Some(class_type) = self.class_types.borrow().get(name).cloned() {
                             class_type.into()
                         } else {
