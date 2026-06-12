@@ -681,6 +681,42 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn build_optional_some_return(
+        &self,
+        self_ptr: PointerValue<'ctx>,
+        ret_ty: Rc<RefCell<Type>>,
+    ) -> Result<()> {
+        let enum_name = match &*ret_ty.borrow() {
+            Type::Enum(name, _) => name.clone(),
+            _ => anyhow::bail!("Expected Enum type for Optional return"),
+        };
+        let enum_type = self
+            .enum_types
+            .borrow()
+            .get(&enum_name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
+        let payloads_type = self
+            .enum_payload_types
+            .borrow()
+            .get(&enum_name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Enum payload type '{}' not found", enum_name))?;
+        let struct_ty = self_ptr.get_type();
+        let struct_val = self.builder.build_load(struct_ty, self_ptr, "")?;
+        let some_payload_type = payloads_type
+            .get_field_type_at_index(1)
+            .ok_or_else(|| anyhow::anyhow!("Some payload slot not found"))?;
+        let some_payload_struct = some_payload_type.into_struct_type();
+        let some_payload = some_payload_struct.const_named_struct(&[struct_val.into()]);
+        let tag = self.context.i8_type().const_int(1, false);
+        let optional_val = enum_type.const_named_struct(&[tag.into(), some_payload.into()]);
+        self.emit_all_deinit_calls();
+        self.emit_class_releases();
+        self.builder.build_return(Some(&optional_val))?;
+        Ok(())
+    }
+
     fn declare_enum_types(&self, statement: Rc<RefCell<Statement>>) {
         if let Statement::EnumDecl { name, .. } = &*statement.borrow() {
             let enum_name = &name.value;
@@ -2974,14 +3010,43 @@ impl<'ctx> IRGenerator<'ctx> {
                                     self.class_refs.borrow_mut().push(ptr);
                                 }
                             } else {
-                                let mut args = Vec::new();
-                                args.push(ptr.into());
-                                for param in parameters {
-                                    let arg_val =
-                                        self.resolve_expression(param.expression.clone())?.unwrap();
-                                    args.push(arg_val.into());
+                                let fn_ret_type = function.get_type().get_return_type();
+                                if fn_ret_type.is_some() {
+                                    let st = self
+                                        .struct_types
+                                        .borrow()
+                                        .get(type_name)
+                                        .cloned()
+                                        .ok_or_else(|| {
+                                            anyhow::anyhow!("Struct type '{}' not found", type_name)
+                                        })?;
+                                    let struct_ptr = self.builder.build_alloca(st, "")?;
+                                    let mut args = Vec::new();
+                                    args.push(struct_ptr.into());
+                                    for param in parameters {
+                                        let arg_val = self
+                                            .resolve_expression(param.expression.clone())?
+                                            .unwrap();
+                                        args.push(arg_val.into());
+                                    }
+                                    let call_result =
+                                        self.builder.build_call(function, &args, "")?;
+                                    let ret_val = match call_result.try_as_basic_value() {
+                                        inkwell::values::ValueKind::Basic(val) => val,
+                                        _ => return Ok(false),
+                                    };
+                                    self.builder.build_store(ptr, ret_val)?;
+                                } else {
+                                    let mut args = Vec::new();
+                                    args.push(ptr.into());
+                                    for param in parameters {
+                                        let arg_val = self
+                                            .resolve_expression(param.expression.clone())?
+                                            .unwrap();
+                                        args.push(arg_val.into());
+                                    }
+                                    self.builder.build_call(function, &args, "")?;
                                 }
-                                self.builder.build_call(function, &args, "")?;
                             }
                         }
                     } else if let Some(init) = initializer
@@ -3384,9 +3449,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 ty: Some(ty),
                 parameters,
                 body,
+                is_failable,
                 ..
             } => {
-                if let Type::Function(_parameter_types, _return_type, _) = &*ty.borrow() {
+                if let Type::Function(_parameter_types, return_type, _) = &*ty.borrow() {
                     let struct_name = self.current_struct.borrow().clone().unwrap();
                     let fn_name = format!("{}.init", struct_name);
                     let function = self.module.get_function(&fn_name).unwrap();
@@ -3412,24 +3478,47 @@ impl<'ctx> IRGenerator<'ctx> {
                     let struct_name_clone = struct_name.clone();
                     self.auto_assign_init_fields(&struct_name_clone, self_ptr, parameters);
 
+                    let is_failable = *is_failable;
+                    let optional_ret_ty = if is_failable {
+                        Some(return_type.clone())
+                    } else {
+                        None
+                    };
+
                     match &*body.borrow() {
                         FunctionBody::Statements(stmts) => {
                             self.enter_scope_with_stmts(stmts)?;
+                            let mut has_return = false;
                             for stmt in stmts {
                                 let terminates = self.resolve_statement(stmt.clone())?;
                                 if terminates {
+                                    has_return = true;
                                     break;
                                 }
                             }
-                            self.builder.build_return(None)?;
+                            if !has_return {
+                                if let Some(ret_ty) = optional_ret_ty {
+                                    self.build_optional_some_return(self_ptr, ret_ty)?;
+                                } else {
+                                    self.builder.build_return(None)?;
+                                }
+                            }
                             self.exit_scope();
                         }
                         FunctionBody::Expression(expr) => {
                             self.resolve_expression(expr.clone())?;
-                            self.builder.build_return(None)?;
+                            if let Some(ret_ty) = optional_ret_ty {
+                                self.build_optional_some_return(self_ptr, ret_ty)?;
+                            } else {
+                                self.builder.build_return(None)?;
+                            }
                         }
                         FunctionBody::None => {
-                            self.builder.build_return(None)?;
+                            if let Some(ret_ty) = optional_ret_ty {
+                                self.build_optional_some_return(self_ptr, ret_ty)?;
+                            } else {
+                                self.builder.build_return(None)?;
+                            }
                         }
                     }
 
@@ -6857,8 +6946,18 @@ impl<'ctx> IRGenerator<'ctx> {
                         let val: BasicValueEnum<'ctx> = ptr.into();
                         Ok(Some(val))
                     } else {
-                        let val = self.builder.build_load(ptr.get_type(), ptr, "")?;
-                        Ok(Some(val))
+                        let fn_ret_type = function.get_type().get_return_type();
+                        let is_void_return = fn_ret_type.is_none();
+                        if is_void_return {
+                            let val = self.builder.build_load(ptr.get_type(), ptr, "")?;
+                            Ok(Some(val))
+                        } else {
+                            let call_val = match call_result.try_as_basic_value() {
+                                inkwell::values::ValueKind::Basic(val) => val,
+                                _ => return Ok(None),
+                            };
+                            Ok(Some(call_val))
+                        }
                     }
                 } else {
                     let call_val = match call_result.try_as_basic_value() {

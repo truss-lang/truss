@@ -5743,9 +5743,16 @@ fn run_ir_gen_with_stdlib(
     code: &str,
     stdlib_decls: &[&str],
 ) -> (String, Rc<RefCell<TrussDiagnosticEngine>>) {
+    let combined_src = stdlib_decls.join("\n");
+    let full_code = if combined_src.is_empty() {
+        code.to_string()
+    } else {
+        format!("{}\n{}", combined_src, code)
+    };
+
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        CharStream::new(full_code, Rc::new("".to_string())),
         engine.clone(),
     );
     let tokens = lexer.parse();
@@ -5759,7 +5766,6 @@ fn run_ir_gen_with_stdlib(
     let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
     packages.insert("Truss".to_string(), truss_pkg.clone());
 
-    let combined_src = stdlib_decls.join("\n");
     if !combined_src.is_empty() {
         let mut std_lexer = Lexer::new(
             CharStream::new(combined_src, Rc::new("".to_string())),
@@ -5933,5 +5939,45 @@ fn test_irgen_array_literal_with_type() {
         engine.borrow().get_errors().len(),
         0,
         "array literal with typed elements should compile"
+    );
+}
+
+#[test]
+fn test_irgen_failable_init_return_null() {
+    let (_llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "struct Point { init?() { return null } }",
+        &["public enum Optional<T> { case None, Some(T) }"],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "failable init with return null should compile"
+    );
+}
+
+#[test]
+fn test_irgen_failable_init_implicit_some() {
+    let (_llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "struct Point { init?() {} }",
+        &["public enum Optional<T> { case None, Some(T) }"],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "failable init with implicit Some(self) should compile"
+    );
+}
+
+#[test]
+fn test_irgen_failable_init_call() {
+    let (_llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "struct Point { init?() {} }
+         func test() { let p = Point() }",
+        &["public enum Optional<T> { case None, Some(T) }"],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "calling failable init should compile"
     );
 }
