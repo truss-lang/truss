@@ -291,11 +291,7 @@ impl<'ctx> IRGenerator<'ctx> {
         None
     }
 
-    pub fn generate(
-        self,
-        program: &Program,
-        scope: Rc<RefCell<TrussScope>>,
-    ) -> Rc<Module<'ctx>> {
+    pub fn generate(self, program: &Program, scope: Rc<RefCell<TrussScope>>) -> Rc<Module<'ctx>> {
         self.generate_with_stdlib(program, &[], scope).main
     }
 
@@ -307,26 +303,34 @@ impl<'ctx> IRGenerator<'ctx> {
     ) -> IRModules<'ctx> {
         if stdlib_stmts.is_empty() {
             *self.program_scope.borrow_mut() = Some(scope);
-            let all_stmts: Vec<Rc<RefCell<Statement>>> = program.statements.iter().cloned().collect();
+            let all_stmts: Vec<Rc<RefCell<Statement>>> =
+                program.statements.iter().cloned().collect();
             self.run_all_passes(&all_stmts);
-            return IRModules { main: Rc::new(self.module), stdlib: None };
+            return IRModules {
+                main: Rc::new(self.module),
+                stdlib: None,
+            };
         }
 
-        // Process stdlib
         let stdlib_mod = self.context.create_module("stdlib");
         let main_mod = std::mem::replace(&mut self.module, stdlib_mod);
         *self.program_scope.borrow_mut() = Some(scope.clone());
         self.run_all_passes(stdlib_stmts);
         let compiled_stdlib = std::mem::replace(&mut self.module, main_mod);
 
-        // Declare stdlib functions in main module
         for func in compiled_stdlib.get_functions() {
             let name = func.get_name().to_str().unwrap_or("").to_string();
             if !name.is_empty() && self.module.get_function(&name).is_none() {
                 self.module.add_function(&name, func.get_type(), None);
             }
         }
-        for name in self.vtable_types.borrow().keys().cloned().collect::<Vec<_>>() {
+        for name in self
+            .vtable_types
+            .borrow()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+        {
             if let Some(t) = self.vtable_types.borrow().get(&name) {
                 if self.module.get_global(&name).is_none() {
                     let gv = self.module.add_global(t.as_basic_type_enum(), None, &name);
@@ -335,39 +339,72 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
 
-        // Process main
         *self.program_scope.borrow_mut() = Some(scope);
         let all_main: Vec<Rc<RefCell<Statement>>> = program.statements.iter().cloned().collect();
         self.run_all_passes(&all_main);
 
         IRModules {
-            main: Rc::new(std::mem::replace(&mut self.module, self.context.create_module("done"))),
+            main: Rc::new(std::mem::replace(
+                &mut self.module,
+                self.context.create_module("done"),
+            )),
             stdlib: Some(Rc::new(compiled_stdlib)),
         }
     }
 
     fn run_all_passes(&self, stmts: &[Rc<RefCell<Statement>>]) {
-        for stmt in stmts { self.declare_struct_types(stmt.clone()); }
-        for stmt in stmts { self.declare_class_types(stmt.clone()); }
-        for stmt in stmts { self.declare_enum_types(stmt.clone()); }
-        for stmt in stmts { self.create_vtable_types(stmt.clone()); }
-        for stmt in stmts { self.create_protocol_witness_table_types(stmt.clone()); }
-        for stmt in stmts { self.create_struct_type_bodies(stmt.clone()); }
-        for stmt in stmts { self.create_class_type_bodies(stmt.clone()); }
-        for stmt in stmts { self.create_existential_container_types(stmt.clone()); }
-        for stmt in stmts { self.create_enum_type_bodies(stmt.clone()); }
+        for stmt in stmts {
+            self.declare_struct_types(stmt.clone());
+        }
+        for stmt in stmts {
+            self.declare_class_types(stmt.clone());
+        }
+        for stmt in stmts {
+            self.declare_enum_types(stmt.clone());
+        }
+        for stmt in stmts {
+            self.create_vtable_types(stmt.clone());
+        }
+        for stmt in stmts {
+            self.create_protocol_witness_table_types(stmt.clone());
+        }
+        for stmt in stmts {
+            self.create_struct_type_bodies(stmt.clone());
+        }
+        for stmt in stmts {
+            self.create_class_type_bodies(stmt.clone());
+        }
+        for stmt in stmts {
+            self.create_existential_container_types(stmt.clone());
+        }
+        for stmt in stmts {
+            self.create_enum_type_bodies(stmt.clone());
+        }
 
         {
             let mut counts: HashMap<String, usize> = HashMap::new();
-            for stmt in stmts { Self::count_fn_name_frequencies(stmt, &mut counts); }
+            for stmt in stmts {
+                Self::count_fn_name_frequencies(stmt, &mut counts);
+            }
             *self.overloaded_fn_names.borrow_mut() = counts
-                .into_iter().filter(|(_, c)| *c > 1).map(|(n, _)| n).collect();
+                .into_iter()
+                .filter(|(_, c)| *c > 1)
+                .map(|(n, _)| n)
+                .collect();
         }
 
-        for stmt in stmts { self.create_function_declarations(stmt.clone()); }
-        for stmt in stmts { self.create_vtable_instances(stmt.clone()); }
-        for stmt in stmts { self.create_protocol_witness_tables(stmt.clone()); }
-        for stmt in stmts { let _ = self.resolve_statement(stmt.clone()); }
+        for stmt in stmts {
+            self.create_function_declarations(stmt.clone());
+        }
+        for stmt in stmts {
+            self.create_vtable_instances(stmt.clone());
+        }
+        for stmt in stmts {
+            self.create_protocol_witness_tables(stmt.clone());
+        }
+        for stmt in stmts {
+            let _ = self.resolve_statement(stmt.clone());
+        }
     }
 
     fn declare_struct_types(&self, statement: Rc<RefCell<Statement>>) {
@@ -1934,6 +1971,40 @@ impl<'ctx> IRGenerator<'ctx> {
             .iter()
             .position(|(name, _)| name == method_name)
             .map(|i| i as u32)
+    }
+
+    fn is_final_class(&self, class_name: &str) -> bool {
+        if let Some(scope) = self.program_scope.borrow().as_ref() {
+            if let Some(sym) = scope.borrow().get_symbol(class_name) {
+                let binding = sym.borrow();
+                if let Symbol::Class { is_final, .. } = &*binding {
+                    return *is_final;
+                }
+            }
+        }
+        false
+    }
+
+    fn is_final_method(&self, class_name: &str, method_name: &str) -> bool {
+        if let Some(scope) = self.program_scope.borrow().as_ref() {
+            if let Some(sym) = scope.borrow().get_symbol(class_name) {
+                let binding = sym.borrow();
+                if let Symbol::Class { methods, .. } = &*binding {
+                    for m in methods {
+                        let mb = m.borrow();
+                        if let Symbol::ClassMethod {
+                            name, is_final, ..
+                        } = &*mb
+                        {
+                            if name == method_name {
+                                return *is_final;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn create_vtable_instances(&self, statement: Rc<RefCell<Statement>>) {
@@ -4012,27 +4083,56 @@ impl<'ctx> IRGenerator<'ctx> {
                         Type::Enum(name, ..) => name.clone(),
                         _ => unreachable!(),
                     };
-                    let enum_type = self.enum_types.borrow().get(&enum_name).cloned()
+                    let enum_type = self
+                        .enum_types
+                        .borrow()
+                        .get(&enum_name)
+                        .cloned()
                         .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
-                    let payloads_type = self.enum_payload_types.borrow().get(&enum_name).cloned()
-                        .ok_or_else(|| anyhow::anyhow!("Enum payload type '{}' not found", enum_name))?;
+                    let payloads_type = self
+                        .enum_payload_types
+                        .borrow()
+                        .get(&enum_name)
+                        .cloned()
+                        .ok_or_else(|| {
+                        anyhow::anyhow!("Enum payload type '{}' not found", enum_name)
+                    })?;
                     let int_val = self.context.i32_type().const_int(*value as u64, false);
                     let int_alloca = self.builder.build_alloca(self.context.i32_type(), "")?;
                     self.builder.build_store(int_alloca, int_val)?;
-                    let loaded = self.builder.build_load(self.context.i32_type(), int_alloca, "")?;
-                    let payload_alloca = self.builder.build_alloca(payloads_type.as_basic_type_enum(), "")?;
+                    let loaded =
+                        self.builder
+                            .build_load(self.context.i32_type(), int_alloca, "")?;
+                    let payload_alloca = self
+                        .builder
+                        .build_alloca(payloads_type.as_basic_type_enum(), "")?;
                     if payloads_type.get_field_type_at_index(1).is_none() {
                         anyhow::bail!("Some payload slot not found");
                     }
-                    let payload_ptr = self.builder.build_struct_gep(payloads_type, payload_alloca, 1, "")?;
+                    let payload_ptr =
+                        self.builder
+                            .build_struct_gep(payloads_type, payload_alloca, 1, "")?;
                     self.builder.build_store(payload_ptr, loaded)?;
-                    let payload_val = self.builder.build_load(payloads_type.as_basic_type_enum(), payload_alloca, "")?;
-                    let enum_alloca = self.builder.build_alloca(enum_type.as_basic_type_enum(), "")?;
-                    let tag_ptr = self.builder.build_struct_gep(enum_type, enum_alloca, 0, "")?;
-                    self.builder.build_store(tag_ptr, self.context.i8_type().const_int(1, false))?;
-                    let payload_store_ptr = self.builder.build_struct_gep(enum_type, enum_alloca, 1, "")?;
+                    let payload_val = self.builder.build_load(
+                        payloads_type.as_basic_type_enum(),
+                        payload_alloca,
+                        "",
+                    )?;
+                    let enum_alloca = self
+                        .builder
+                        .build_alloca(enum_type.as_basic_type_enum(), "")?;
+                    let tag_ptr = self
+                        .builder
+                        .build_struct_gep(enum_type, enum_alloca, 0, "")?;
+                    self.builder
+                        .build_store(tag_ptr, self.context.i8_type().const_int(1, false))?;
+                    let payload_store_ptr =
+                        self.builder
+                            .build_struct_gep(enum_type, enum_alloca, 1, "")?;
                     self.builder.build_store(payload_store_ptr, payload_val)?;
-                    let result = self.builder.build_load(enum_type.as_basic_type_enum(), enum_alloca, "")?;
+                    let result =
+                        self.builder
+                            .build_load(enum_type.as_basic_type_enum(), enum_alloca, "")?;
                     Ok(Some(result))
                 } else {
                     Ok(Some(
@@ -4101,20 +4201,16 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Expression::StringLiteral { value, .. } => {
-                let string_data = unsafe {
-                    self.builder.build_global_string(value, ".str")?
-                };
+                let string_data = unsafe { self.builder.build_global_string(value, ".str")? };
                 let raw_src = string_data.as_pointer_value();
                 let i8_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                 let i64_ty = self.context.i64_type();
                 let len = value.len() as u64;
 
                 if let Some(str_type) = self.class_types.borrow().get("String").copied() {
-                    let null_i8 = self.builder.build_int_to_ptr(
-                        i64_ty.const_int(0, false),
-                        i8_ty,
-                        "",
-                    )?;
+                    let null_i8 =
+                        self.builder
+                            .build_int_to_ptr(i64_ty.const_int(0, false), i8_ty, "")?;
                     let size_val = unsafe {
                         let gep = self.builder.build_gep(
                             str_type.as_basic_type_enum(),
@@ -4137,23 +4233,17 @@ impl<'ctx> IRGenerator<'ctx> {
                         _ => anyhow::bail!("malloc expected to return pointer"),
                     };
 
-                    let rc_ptr = self
-                        .builder
-                        .build_struct_gep(str_type, class_ptr, 1, "")?;
+                    let rc_ptr = self.builder.build_struct_gep(str_type, class_ptr, 1, "")?;
                     self.builder
                         .build_store(rc_ptr, i64_ty.const_int(1, false))?;
 
                     let init_fn = self.module.get_function("String.init").unwrap_or_else(|| {
-                        let fn_ty = i8_ty.fn_type(
-                            &[i8_ty.into(), i8_ty.into(), i64_ty.into()],
-                            false,
-                        );
+                        let fn_ty =
+                            i8_ty.fn_type(&[i8_ty.into(), i8_ty.into(), i64_ty.into()], false);
                         self.module.add_function("String.init", fn_ty, None)
                     });
 
-                    let raw_src_i8 = self
-                        .builder
-                        .build_pointer_cast(raw_src, i8_ty, "")?;
+                    let raw_src_i8 = self.builder.build_pointer_cast(raw_src, i8_ty, "")?;
                     self.builder.build_call(
                         init_fn,
                         &[
@@ -4166,9 +4256,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     Ok(Some(class_ptr.into()))
                 } else {
-                    let bitcast = self
-                        .builder
-                        .build_pointer_cast(raw_src, i8_ty, "")?;
+                    let bitcast = self.builder.build_pointer_cast(raw_src, i8_ty, "")?;
                     Ok(Some(bitcast.into()))
                 }
             }
@@ -4379,9 +4467,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             match left_ty.and_then(|t| {
                                 let tb = t.borrow();
                                 match &*tb {
-                                    Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => {
-                                        Some(n.clone())
-                                    }
+                                    Type::Struct(n, ..)
+                                    | Type::Class(n, ..)
+                                    | Type::Enum(n, ..) => Some(n.clone()),
                                     _ => None,
                                 }
                             }) {
@@ -6464,6 +6552,42 @@ impl<'ctx> IRGenerator<'ctx> {
                                             return Ok(Some(val));
                                         }
                                         _ => return Ok(None),
+                                    }
+                                }
+
+                                // Static dispatch for final class or final method
+                                if self.is_final_class(class_name)
+                                    || self.is_final_method(class_name, method_name)
+                                {
+                                    let owner = self
+                                        .compute_vtable_method_list(class_name)
+                                        .iter()
+                                        .find(|(n, _)| n == method_name)
+                                        .map(|(_, owner)| owner.clone())
+                                        .unwrap_or_else(|| class_name.clone());
+                                    let fn_name = format!("{}.{}", owner, method_name);
+                                    if let Some(declared_fn) =
+                                        self.module.get_function(&fn_name)
+                                    {
+                                        let mut args: Vec<
+                                            inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                        > = Vec::new();
+                                        args.push(ptr.into());
+                                        for param in parameters {
+                                            let arg_val = self
+                                                .resolve_expression(param.expression.clone())?
+                                                .unwrap();
+                                            args.push(arg_val.into());
+                                        }
+                                        let call_result = self
+                                            .builder
+                                            .build_call(declared_fn, &args, "")?;
+                                        match call_result.try_as_basic_value() {
+                                            inkwell::values::ValueKind::Basic(val) => {
+                                                return Ok(Some(val));
+                                            }
+                                            _ => return Ok(None),
+                                        }
                                     }
                                 }
 

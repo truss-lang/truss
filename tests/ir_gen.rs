@@ -1364,7 +1364,7 @@ fn test_irgen_class_inheritance_vtable_inherited_methods() {
             func speak() -> Int32 { return 1 }
         }
         class Dog: Animal {
-            func speak() -> Int32 { return 2 }
+            override func speak() -> Int32 { return 2 }
         }
         func test() -> Int32 {
             var d: Dog
@@ -2462,7 +2462,7 @@ fn test_irgen_class_computed_property_inheritance_override() {
             }
         }
         class Derived: Base {
-            var value: Int32 {
+            override var value: Int32 {
                 get { return 2 }
             }
         }
@@ -4854,7 +4854,7 @@ fn test_irgen_super_method_call() {
             func speak() -> Int32 { return 1 }
         }
         class Dog: Animal {
-            func speak() -> Int32 { return 2 }
+            override func speak() -> Int32 { return 2 }
             func call_super() -> Int32 { return super.speak() }
         }
         func run_test() -> Int32 {
@@ -6119,7 +6119,113 @@ fn test_irgen_string_literal_produces_global() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
-    assert!(llvm_ir.contains("@.str"), "LLVM IR should contain a global string constant");
-    assert!(llvm_ir.contains("hello world"), "LLVM IR should contain the string data");
-    assert!(!llvm_ir.contains("null"), "LLVM IR should not produce null for string literals");
+    assert!(
+        llvm_ir.contains("@.str"),
+        "LLVM IR should contain a global string constant"
+    );
+    assert!(
+        llvm_ir.contains("hello world"),
+        "LLVM IR should contain the string data"
+    );
+    assert!(
+        !llvm_ir.contains("null"),
+        "LLVM IR should not produce null for string literals"
+    );
+}
+
+#[test]
+fn test_irgen_final_class_static_dispatch() {
+    let code = r#"
+        class Animal {
+            func speak() -> Int32 { return 1 }
+        }
+        final class Dog: Animal {
+            override func speak() -> Int32 { return 2 }
+        }
+        func test() -> Int32 {
+            var d: Dog
+            return d.speak()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    // Final class should still have vtable (for dynamic dispatch through base type)
+    assert!(
+        llvm_ir.contains("vtable.Dog"),
+        "Expected vtable.Dog type:\n{}",
+        llvm_ir
+    );
+    // But call through final class type should be direct, not indirect
+    assert!(
+        llvm_ir.contains("call i32 @Dog.speak"),
+        "Expected direct call to Dog.speak (final class static dispatch):\n{}",
+        llvm_ir
+    );
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected"
+    );
+}
+
+#[test]
+fn test_irgen_final_method_static_dispatch() {
+    let code = r#"
+        class Animal {
+            func speak() -> Int32 { return 1 }
+            final func finalMethod() -> Int32 { return 42 }
+        }
+        class Dog: Animal {
+            override func speak() -> Int32 { return 2 }
+        }
+        func test() -> Int32 {
+            var a: Animal
+            return a.finalMethod()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    // finalMethod is final, so should use direct call
+    assert!(
+        llvm_ir.contains("call i32 @Animal.finalMethod"),
+        "Expected direct call to Animal.finalMethod (final method static dispatch):\n{}",
+        llvm_ir
+    );
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected"
+    );
 }
