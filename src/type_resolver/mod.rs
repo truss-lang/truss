@@ -100,6 +100,7 @@ impl TypeResolver {
                 name,
                 parameters,
                 return_type,
+                throws_types,
                 body,
                 scope,
                 ty,
@@ -159,11 +160,15 @@ impl TypeResolver {
                     }
                 }
 
+                let throws_ty = throws_types.as_ref().map(|types| {
+                    types.iter().filter_map(|t| self.infer_type(t.clone())).collect()
+                });
+
                 let fn_type = Rc::new(RefCell::new(Type::Function(
                     parameter_types,
                     ret_type,
                     is_vararg,
-                    None,
+                    throws_ty,
                 )));
                 *ty = Some(fn_type.clone());
 
@@ -1621,6 +1626,9 @@ impl TypeResolver {
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
             Statement::Defer { body, .. } => {
                 self.resolve_block_expression(body);
+            }
+            Statement::Throw { exception, .. } => {
+                self.infer_type(exception.clone());
             }
             Statement::SubscriptDecl {
                 parameters,
@@ -4138,12 +4146,24 @@ impl TypeResolver {
                 result
             }
             Expression::Do {
-                body, ty, scope, ..
+                body,
+                catch_clauses,
+                finally_body,
+                ty,
+                scope,
+                ..
             } => {
                 if let Some(sc) = scope {
                     self.enter_scope(sc.clone());
                     self.yield_context_depth += 1;
                     self.resolve_block_expression(body);
+                    for clause in catch_clauses {
+                        if let Some(guard) = &clause.guard {
+                            self.infer_type(guard.clone());
+                        }
+                        self.resolve_block_expression(&clause.body);
+                    }
+                    self.resolve_block_expression(finally_body);
                     let block_ty = self.get_block_type(body)?;
                     *ty = Some(block_ty.clone());
                     self.yield_context_depth -= 1;
@@ -4153,6 +4173,13 @@ impl TypeResolver {
                     self.yield_context_depth += 1;
                     let block_ty = self.get_block_type(body)?;
                     *ty = Some(block_ty.clone());
+                    for clause in catch_clauses {
+                        if let Some(guard) = &clause.guard {
+                            self.infer_type(guard.clone());
+                        }
+                        self.resolve_block_expression(&clause.body);
+                    }
+                    self.resolve_block_expression(finally_body);
                     self.yield_context_depth -= 1;
                     block_ty
                 }
