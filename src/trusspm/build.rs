@@ -4,7 +4,7 @@ use crate::{
     ast::{node::Program, statement::Statement},
     condition_eval::TargetTriple,
     diag::TrussDiagnosticEngine,
-    ir_gen::{emit, IRGenerator, IRModules},
+    ir_gen::{IRGenerator, IRModules, emit},
     krate::Package,
     lexer::{CharStream, Lexer},
     parser::Parser,

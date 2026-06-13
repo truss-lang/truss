@@ -2787,7 +2787,16 @@ impl<'ctx> IRGenerator<'ctx> {
 
         self.enter_scope_with_stmts(&accessor.body)?;
         let mut has_return = false;
-        for stmt in &accessor.body {
+        let mut last_expr_value = None;
+        for (i, stmt) in accessor.body.iter().enumerate() {
+            let is_last = i == accessor.body.len() - 1;
+            if is_last && is_getter {
+                if let Statement::ExpressionStatement { expression } = &*stmt.borrow() {
+                    let val = self.resolve_expression(expression.clone())?;
+                    last_expr_value = val;
+                    continue;
+                }
+            }
             let terminates = self.resolve_statement(stmt.clone())?;
             if terminates {
                 has_return = true;
@@ -2795,7 +2804,10 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
         if is_getter && !has_return {
-            if let Some(ptr) = self.lookup_variable(&format!("_{}", backing_var_name)) {
+            if let Some(val) = last_expr_value {
+                self.builder.build_return(Some(&val))?;
+            } else if let Some(ptr) = self.lookup_variable(&format!("_{}", backing_var_name))
+            {
                 let val = self.builder.build_load(llvm_var_type, ptr, "")?;
                 self.builder.build_return(Some(&val))?;
             } else {
@@ -6919,25 +6931,23 @@ impl<'ctx> IRGenerator<'ctx> {
                         let enum_name = enum_name.clone();
                         let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
                         let enum_types = self.enum_types.borrow();
-                        let case_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
-                            anyhow::anyhow!("Enum type '{}' not found", enum_name)
-                        })?;
+                        let case_llvm_type =
+                            enum_types.get(&enum_name).copied().ok_or_else(|| {
+                                anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                            })?;
                         drop(enum_types);
                         let alloca = self
                             .builder
                             .build_alloca(case_llvm_type.as_basic_type_enum(), "")?;
-                        let tag_ptr = self
-                            .builder
-                            .build_struct_gep(case_llvm_type, alloca, 0, "")?;
+                        let tag_ptr =
+                            self.builder
+                                .build_struct_gep(case_llvm_type, alloca, 0, "")?;
                         let tag_val = self.context.i8_type().const_int(case_index as u64, false);
                         self.builder.build_store(tag_ptr, tag_val)?;
                         if !parameters.is_empty() {
-                            let payload_ptr = self.builder.build_struct_gep(
-                                case_llvm_type,
-                                alloca,
-                                1,
-                                "",
-                            )?;
+                            let payload_ptr =
+                                self.builder
+                                    .build_struct_gep(case_llvm_type, alloca, 1, "")?;
                             let enum_payloads = self.enum_payload_types.borrow();
                             if let Some(payload_type) = enum_payloads.get(&enum_name) {
                                 for (i, param) in parameters.iter().enumerate() {
@@ -6947,9 +6957,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                         i as u32,
                                         "",
                                     )?;
-                                    let arg_val = self
-                                        .resolve_expression(param.expression.clone())?
-                                        .unwrap();
+                                    let arg_val =
+                                        self.resolve_expression(param.expression.clone())?.unwrap();
                                     self.builder.build_store(field_ptr, arg_val)?;
                                 }
                             }
@@ -8492,9 +8501,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     let enum_name = enum_name.clone();
                     let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
                     let enum_types = self.enum_types.borrow();
-                    let enum_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
-                        anyhow::anyhow!("Enum type '{}' not found", enum_name)
-                    })?;
+                    let enum_llvm_type = enum_types
+                        .get(&enum_name)
+                        .copied()
+                        .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
                     drop(enum_types);
                     let alloca = self
                         .builder
@@ -8504,19 +8514,23 @@ impl<'ctx> IRGenerator<'ctx> {
                         .build_struct_gep(enum_llvm_type, alloca, 0, "")?;
                     let tag_val = self.context.i8_type().const_int(case_index as u64, false);
                     self.builder.build_store(tag_ptr, tag_val)?;
-                    let val = self.builder.build_load(
-                        enum_llvm_type.as_basic_type_enum(),
-                        alloca,
-                        "",
-                    )?;
+                    let val =
+                        self.builder
+                            .build_load(enum_llvm_type.as_basic_type_enum(), alloca, "")?;
                     Ok(Some(val))
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::UnsupportedFeature,
-                        format!("Implicit member '{}' requires enum type context", member.value),
+                        format!(
+                            "Implicit member '{}' requires enum type context",
+                            member.value
+                        ),
                         Some(member),
                     );
-                    anyhow::bail!("Implicit member '{}' requires enum type context", member.value);
+                    anyhow::bail!(
+                        "Implicit member '{}' requires enum type context",
+                        member.value
+                    );
                 }
             }
             _ => anyhow::bail!("Expression type not implemented"),

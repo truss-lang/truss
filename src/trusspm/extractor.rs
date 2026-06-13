@@ -383,10 +383,7 @@ mod tests {
             targets: [Target(name: "my-app", kind: .Executable)]
         )"#;
         let m = parse_project(code).expect("should parse");
-        assert_eq!(
-            m.target_triple.as_deref(),
-            Some("x86_64-unknown-linux-gnu")
-        );
+        assert_eq!(m.target_triple.as_deref(), Some("x86_64-unknown-linux-gnu"));
     }
 
     #[test]

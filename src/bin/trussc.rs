@@ -67,7 +67,8 @@ fn get_output_path(cli: &Cli, kind: TargetKind) -> String {
         return path.clone();
     }
     let first_file = cli.files.first().map(|s| s.as_str()).unwrap_or("a");
-    let stem = Path::new(first_file).file_stem()
+    let stem = Path::new(first_file)
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("a");
     match kind {
@@ -244,8 +245,7 @@ fn main() {
         println!("{:#?}", combined_prog);
     }
 
-    let mut type_resolver =
-        TypeResolver::new(packages.clone(), "main".to_string(), engine.clone());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "main".to_string(), engine.clone());
     type_resolver.resolve(&combined_prog, module.clone());
 
     if emit_diagnostics(&engine.borrow(), "") {

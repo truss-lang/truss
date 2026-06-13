@@ -14,12 +14,11 @@ pub fn initialize_targets() {
     });
 }
 
-fn create_target_machine(
-    triple: &str,
-) -> Result<inkwell::targets::TargetMachine> {
+fn create_target_machine(triple: &str) -> Result<inkwell::targets::TargetMachine> {
     initialize_targets();
-    let target = inkwell::targets::Target::from_triple(&inkwell::targets::TargetTriple::create(triple))
-        .with_context(|| format!("Failed to get target for triple '{}'", triple))?;
+    let target =
+        inkwell::targets::Target::from_triple(&inkwell::targets::TargetTriple::create(triple))
+            .with_context(|| format!("Failed to get target for triple '{}'", triple))?;
     let tm = target
         .create_target_machine(
             &inkwell::targets::TargetTriple::create(triple),
@@ -57,8 +56,7 @@ pub fn emit_output(
     initialize_targets();
     let target_machine = create_target_machine(triple)?;
     let temp_dir = std::env::temp_dir().join(format!("truss_build_{}", std::process::id()));
-    std::fs::create_dir_all(&temp_dir)
-        .with_context(|| "Failed to create temp build directory")?;
+    std::fs::create_dir_all(&temp_dir).with_context(|| "Failed to create temp build directory")?;
 
     let mut object_files = Vec::new();
 
@@ -142,7 +140,9 @@ fn link_dynamic_library(object_files: &[String], output_path: &str, triple: &str
         for obj in object_files {
             cmd.arg(obj);
         }
-        let status = cmd.status().with_context(|| "Failed to link shared library")?;
+        let status = cmd
+            .status()
+            .with_context(|| "Failed to link shared library")?;
         if !status.success() {
             anyhow::bail!("Linker (shared lib) exited with status: {}", status);
         }
@@ -152,7 +152,9 @@ fn link_dynamic_library(object_files: &[String], output_path: &str, triple: &str
         for obj in object_files {
             cmd.arg(obj);
         }
-        let status = cmd.status().with_context(|| "Failed to link shared library")?;
+        let status = cmd
+            .status()
+            .with_context(|| "Failed to link shared library")?;
         if !status.success() {
             anyhow::bail!("Linker (shared lib) exited with status: {}", status);
         }
