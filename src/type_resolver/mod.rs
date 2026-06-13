@@ -19,7 +19,7 @@ use crate::{
         secondary_label_from_token,
     },
     krate::{Module, Package},
-    lexer::token::{Token, TokenType},
+    lexer::token::{Position, Token, TokenType},
     scope::Scope,
     symbol::{Symbol, WeakSymbol},
     types::Type,
@@ -5957,25 +5957,30 @@ impl TypeResolver {
         is_class: bool,
     ) {
         for conformance in conformances {
-            let expr = conformance.borrow();
-            let protocol_name = match &*expr {
-                Expression::Type { name, ty, .. } => {
-                    if let Some(ty) = ty {
-                        if matches!(&*ty.borrow(), Type::Protocol(..)) {
-                            Some(name.value.clone())
+            let (protocol_name, protocol_type_params) = {
+                let expr = conformance.borrow();
+                match &*expr {
+                    Expression::Type {
+                        name,
+                        type_parameters,
+                        ty,
+                    } => {
+                        if let Some(ty) = ty {
+                            if matches!(&*ty.borrow(), Type::Protocol(..)) {
+                                (Some(name.value.clone()), type_parameters.clone())
+                            } else {
+                                (None, None)
+                            }
                         } else {
-                            None
+                            (None, None)
                         }
-                    } else {
-                        None
                     }
+                    _ => (None, None),
                 }
-                _ => None,
             };
             let Some(ref protocol_name) = protocol_name else {
                 continue;
             };
-            drop(expr);
 
             let Some(protocol_symbol) = self
                 .current_scope
@@ -5985,6 +5990,71 @@ impl TypeResolver {
                 continue;
             };
 
+            let protocol_generic_params: Vec<String> = protocol_symbol
+                .borrow()
+                .get_decl()
+                .ok()
+                .flatten()
+                .map(|d| {
+                    let stmt = d.borrow();
+                    match &*stmt {
+                        Statement::ProtocolDecl {
+                            generic_parameters, ..
+                        } => generic_parameters
+                            .iter()
+                            .filter_map(|gp| match &gp.kind {
+                                GenericParameterKind::Type { .. } => {
+                                    Some(gp.name.value.clone())
+                                }
+                                _ => None,
+                            })
+                            .collect(),
+                        _ => vec![],
+                    }
+                })
+                .unwrap_or_default();
+
+            let inferred_params = if protocol_type_params.is_some() {
+                protocol_type_params.clone()
+            } else if !protocol_generic_params.is_empty() {
+                self.infer_protocol_generic_params(
+                    protocol_name,
+                    &protocol_symbol,
+                    &protocol_generic_params,
+                    type_name,
+                )
+            } else {
+                None
+            };
+
+            // Set the inferred type params on the conformance expression
+            let protocol_name_owned = protocol_name.clone();
+            if let Some(params) = inferred_params.as_ref() {
+                let mut expr = conformance.borrow_mut();
+                if let Expression::Type {
+                    ty,
+                    type_parameters,
+                    ..
+                } = &mut *expr
+                {
+                    *type_parameters = Some(params.clone());
+                    *ty = Some(Rc::new(RefCell::new(Type::Protocol(
+                        protocol_name_owned,
+                        WeakSymbol(Rc::downgrade(&protocol_symbol)),
+                        params.iter().filter_map(|p| {
+                            let pe = p.borrow();
+                            match &*pe {
+                                Expression::Type { ty, .. }
+                                | Expression::Variable { ty, .. } => ty.clone(),
+                                _ => None,
+                            }
+                        }).collect(),
+                    ))));
+                }
+                drop(expr);
+            }
+
+            let protocol_name = protocol_name.clone();
             let required_methods: Vec<String> = {
                 let sym = protocol_symbol.borrow();
                 let Symbol::Protocol { methods, .. } = &*sym else {
@@ -6115,6 +6185,121 @@ impl TypeResolver {
                 }
             }
         }
+    }
+
+    fn infer_protocol_generic_params(
+        &mut self,
+        _protocol_name: &str,
+        protocol_symbol: &Rc<RefCell<Symbol>>,
+        generic_param_names: &[String],
+        type_name: &str,
+    ) -> Option<Vec<Rc<RefCell<Expression>>>> {
+        let sym = protocol_symbol.borrow();
+        let Symbol::Protocol { methods, .. } = &*sym else {
+            return None;
+        };
+
+        let mut mapping: HashMap<String, Rc<RefCell<Type>>> = HashMap::new();
+
+        for method in methods {
+            let Ok(method_name) = method.borrow().name() else {
+                continue;
+            };
+            let Some(decl) = method.borrow().get_decl().ok().flatten() else {
+                continue;
+            };
+            let decl_ref = decl.borrow();
+            let Statement::FunctionDecl {
+                ty: proto_fn_ty, ..
+            } = &*decl_ref
+            else {
+                continue;
+            };
+            let Some(proto_fn_ty) = proto_fn_ty else {
+                continue;
+            };
+            let (proto_param_tys, proto_ret_ty) = {
+                let ty = proto_fn_ty.borrow();
+                let Type::Function(params, ret, _) = &*ty else {
+                    continue;
+                };
+                (params.clone(), ret.clone())
+            };
+            drop(decl_ref);
+
+            let Some(type_sym) = self
+                .current_scope
+                .as_ref()
+                .and_then(|scope| scope.borrow().get_symbol(type_name))
+            else {
+                continue;
+            };
+            let type_methods = match &*type_sym.borrow() {
+                Symbol::Struct { methods, .. }
+                | Symbol::Class { methods, .. } => methods.clone(),
+                _ => continue,
+            };
+            drop(type_sym);
+
+            let type_method = type_methods.iter().find(|m| {
+                m.borrow().name().as_ref().ok() == Some(&method_name)
+            })?;
+
+            let Some(type_decl) = type_method.borrow().get_decl().ok().flatten() else {
+                continue;
+            };
+            let type_decl_ref = type_decl.borrow();
+            let Statement::FunctionDecl {
+                ty: type_fn_ty, ..
+            } = &*type_decl_ref
+            else {
+                continue;
+            };
+            let Some(type_fn_ty) = type_fn_ty else {
+                continue;
+            };
+            let (type_param_tys, type_ret_ty) = {
+                let ty = type_fn_ty.borrow();
+                let Type::Function(params, ret, _) = &*ty else {
+                    continue;
+                };
+                (params.clone(), ret.clone())
+            };
+            drop(type_decl_ref);
+
+            for (proto_ty, type_ty) in proto_param_tys.iter().zip(type_param_tys.iter()) {
+                Self::collect_generic_mappings(proto_ty.clone(), type_ty.clone(), &mut mapping);
+            }
+            Self::collect_generic_mappings(proto_ret_ty.clone(), type_ret_ty.clone(), &mut mapping);
+        }
+
+        // Check that all generic params have been inferred
+        for name in generic_param_names {
+            if !mapping.contains_key(name) {
+                return None;
+            }
+        }
+
+        let params: Vec<Rc<RefCell<Expression>>> = generic_param_names
+            .iter()
+            .filter_map(|name| {
+                let ty = mapping.get(name)?;
+                let token = Token::new(
+                    name.clone(),
+                    TokenType::Identifier,
+                    Position { pos: 0, line: 0, col: 0, len: 0 },
+                    Rc::new("".to_string()),
+                );
+                let expr = Expression::Type {
+                    name: Box::new(token),
+                    type_parameters: None,
+                    ty: Some(ty.clone()),
+                };
+                Some(Rc::new(RefCell::new(expr)))
+            })
+            .collect();
+
+        if params.is_empty() { None } else { Some(params) }
     }
 
     fn find_module_from_expr(&self, expr: &Expression) -> Option<Rc<RefCell<Module>>> {
