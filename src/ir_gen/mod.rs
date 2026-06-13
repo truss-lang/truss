@@ -7162,12 +7162,38 @@ impl<'ctx> IRGenerator<'ctx> {
                                                                 method_name,
                                                             );
                                                         if let Some(fn_type) = method_fn {
+                                                            let is_throwing = self
+                                                                .is_protocol_method_throwing(
+                                                                    pname,
+                                                                    method_name,
+                                                                );
                                                             let mut args: Vec<
                                                             inkwell::values::BasicMetadataValueEnum<
                                                                 'ctx,
                                                             >,
                                                         > = Vec::new();
                                                             args.push(value_ptr.into());
+                                                            let err_alloca =
+                                                                if is_throwing {
+                                                                    let ptr_ty =
+                                                                        self.context.ptr_type(
+                                                                            inkwell::AddressSpace::from(0),
+                                                                        );
+                                                                    let alloca = self.builder.build_alloca(
+                                                                        ptr_ty,
+                                                                        "call_err",
+                                                                    )?;
+                                                                    self.builder.build_store(
+                                                                        alloca,
+                                                                        ptr_ty.const_null(),
+                                                                    )?;
+                                                                    Some(alloca)
+                                                                } else {
+                                                                    None
+                                                                };
+                                                            if let Some(alloca) = err_alloca {
+                                                                args.push(alloca.into());
+                                                            }
                                                             for param in parameters {
                                                                 let arg_val = self
                                                                     .resolve_expression(
@@ -7180,6 +7206,24 @@ impl<'ctx> IRGenerator<'ctx> {
                                                                 self.builder.build_indirect_call(
                                                                     fn_type, fn_ptr_val, &args, "",
                                                                 )?;
+                                                            if is_throwing {
+                                                                let ptr_ty = self.context.ptr_type(
+                                                                    inkwell::AddressSpace::from(0),
+                                                                );
+                                                                let err_val = self.builder.build_load(
+                                                                    ptr_ty,
+                                                                    err_alloca.unwrap(),
+                                                                    "call_err_val",
+                                                                )?;
+                                                                if let Some(outer_err_ptr) =
+                                                                    *self.error_ptr.borrow()
+                                                                {
+                                                                    self.builder.build_store(
+                                                                        outer_err_ptr,
+                                                                        err_val,
+                                                                    )?;
+                                                                }
+                                                            }
                                                             match call_result.try_as_basic_value() {
                                                             inkwell::values::ValueKind::Basic(
                                                                 val,
@@ -7274,10 +7318,35 @@ impl<'ctx> IRGenerator<'ctx> {
                                                 &method_name,
                                             );
                                             if let Some(fn_type) = method_fn {
+                                                let is_throwing = self
+                                                    .is_protocol_method_throwing(
+                                                        &protocol_name,
+                                                        &method_name,
+                                                    );
                                                 let mut args: Vec<
                                                     inkwell::values::BasicMetadataValueEnum<'ctx>,
                                                 > = Vec::new();
                                                 args.push(value_ptr.into());
+                                                let err_alloca =
+                                                    if is_throwing {
+                                                        let ptr_ty = self.context.ptr_type(
+                                                            inkwell::AddressSpace::from(0),
+                                                        );
+                                                        let alloca = self.builder.build_alloca(
+                                                            ptr_ty,
+                                                            "call_err",
+                                                        )?;
+                                                        self.builder.build_store(
+                                                            alloca,
+                                                            ptr_ty.const_null(),
+                                                        )?;
+                                                        Some(alloca)
+                                                    } else {
+                                                        None
+                                                    };
+                                                if let Some(alloca) = err_alloca {
+                                                    args.push(alloca.into());
+                                                }
                                                 for param in parameters {
                                                     let arg_val = self
                                                         .resolve_expression(
@@ -7290,6 +7359,24 @@ impl<'ctx> IRGenerator<'ctx> {
                                                     self.builder.build_indirect_call(
                                                         fn_type, fn_ptr_val, &args, "",
                                                     )?;
+                                                if is_throwing {
+                                                    let ptr_ty = self.context.ptr_type(
+                                                        inkwell::AddressSpace::from(0),
+                                                    );
+                                                    let err_val = self.builder.build_load(
+                                                        ptr_ty,
+                                                        err_alloca.unwrap(),
+                                                        "call_err_val",
+                                                    )?;
+                                                    if let Some(outer_err_ptr) =
+                                                        *self.error_ptr.borrow()
+                                                    {
+                                                        self.builder.build_store(
+                                                            outer_err_ptr,
+                                                            err_val,
+                                                        )?;
+                                                    }
+                                                }
                                                 match call_result.try_as_basic_value() {
                                                     inkwell::values::ValueKind::Basic(val) => {
                                                         return Ok(Some(val));
@@ -8362,16 +8449,63 @@ impl<'ctx> IRGenerator<'ctx> {
                     return None;
                 };
                 let Some(ty) = ty else { return None };
-                let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow() else {
+                let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                    &*ty.borrow()
+                else {
                     return None;
                 };
-                Some((return_type.clone(), param_types.clone(), *is_vararg))
+                Some((
+                    return_type.clone(),
+                    param_types.clone(),
+                    *is_vararg,
+                    throws_types.clone(),
+                ))
             })
             .collect();
 
-        let (return_type, param_types, is_vararg) = method_types.into_iter().next()?;
-        self.get_function_type(return_type, param_types, is_vararg)
+        let (return_type, param_types, is_vararg, throws_types) = method_types.into_iter().next()?;
+        let mut all_params = param_types;
+        if throws_types.is_some() {
+            let err_ty =
+                Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Int8)))));
+            let mut new_params = vec![err_ty];
+            new_params.extend(all_params);
+            all_params = new_params;
+        }
+        self.get_function_type(return_type, all_params, is_vararg)
             .ok()
+    }
+
+    fn is_protocol_method_throwing(&self, protocol_name: &str, method_name: &str) -> bool {
+        let scope = self.program_scope.borrow();
+        let Some(scope_ref) = scope.as_ref() else {
+            return false;
+        };
+        let Some(symbol) = scope_ref.borrow().get_symbol(protocol_name) else {
+            return false;
+        };
+        let Symbol::Protocol { methods, .. } = &*symbol.borrow() else {
+            return false;
+        };
+        methods.iter().any(|m| {
+            let m_borrow = m.borrow();
+            let Ok(name) = m_borrow.name() else {
+                return false;
+            };
+            if name != method_name {
+                return false;
+            }
+            let Ok(Some(decl)) = m_borrow.get_decl() else {
+                return false;
+            };
+            drop(m_borrow);
+            let decl_borrow = decl.borrow();
+            let Statement::FunctionDecl { ty, .. } = &*decl_borrow else {
+                return false;
+            };
+            let Some(ty) = ty else { return false };
+            matches!(&*ty.borrow(), Type::Function(_, _, _, Some(_)))
+        })
     }
 
     fn extract_concrete_type_name(&self, expr: &Rc<RefCell<Expression>>) -> Option<String> {

@@ -778,6 +778,7 @@ impl TypeResolver {
                                 name: _method_name,
                                 parameters,
                                 return_type,
+                                throws_types,
                                 body,
                                 scope: fn_scope,
                                 ty,
@@ -809,11 +810,15 @@ impl TypeResolver {
                                     }
                                 }
 
+                                let throws_ty = throws_types.as_ref().map(|types| {
+                                    types.iter().filter_map(|t| self.infer_type(t.clone())).collect()
+                                });
+
                                 let fn_type = Rc::new(RefCell::new(Type::Function(
                                     parameter_types,
                                     ret_type,
                                     is_vararg,
-                                    None,
+                                    throws_ty,
                                 )));
                                 *ty = Some(fn_type.clone());
 

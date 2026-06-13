@@ -12399,3 +12399,42 @@ fn test_parse_throws_method_in_struct() {
         panic!("Expected StructDecl");
     }
 }
+
+#[test]
+fn test_parse_protocol_throws_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { func foo() throws -> Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ProtocolDecl { name, members, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "P");
+        if let ProtocolMember::Method { decl, .. } = &members[0] {
+            if let Statement::FunctionDecl {
+                name: fn_name,
+                throws_types,
+                ..
+            } = &*decl.borrow()
+            {
+                assert_eq!(fn_name.value, "foo");
+                assert!(throws_types.is_some());
+            } else {
+                panic!("Expected FunctionDecl in protocol method");
+            }
+        } else {
+            panic!("Expected Method protocol member");
+        }
+    } else {
+        panic!("Expected ProtocolDecl");
+    }
+}

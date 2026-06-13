@@ -7161,3 +7161,36 @@ fn test_try_optional_expression_type_check() {
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine);
     type_resolver.resolve(&program, module_id);
 }
+
+#[test]
+fn test_protocol_throws_function_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol P { func foo() throws -> Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    if let Statement::ProtocolDecl { members, .. } = &*program.statements[0].borrow() {
+        if let ProtocolMember::Method { decl, .. } = &members[0] {
+            if let Statement::FunctionDecl { ty, .. } = &*decl.borrow() {
+                let fn_type = ty.as_ref().unwrap().borrow();
+                if let Type::Function(_, _, _, throws) = &*fn_type {
+                    assert!(throws.is_some(), "Protocol throws method should have Some throws");
+                } else {
+                    panic!("Expected Type::Function");
+                }
+            }
+        }
+    }
+}

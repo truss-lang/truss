@@ -6431,3 +6431,39 @@ fn test_irgen_do_catch_finally_no_crash() {
     let _ = module.print_to_string().to_string();
     assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
 }
+
+#[test]
+fn test_irgen_protocol_throws_method() {
+    let code = r#"
+        protocol Error {}
+        protocol Throwable {
+            func canThrow() throws -> Int32
+        }
+        struct MyType: Throwable {
+            func canThrow() throws -> Int32 { return 42 }
+        }
+        func test() throws -> Int32 {
+            let t: any Throwable = MyType()
+            return try t.canThrow()
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let _ = module.print_to_string().to_string();
+    assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
+}
