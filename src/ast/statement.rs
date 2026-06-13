@@ -150,6 +150,7 @@ pub enum Statement {
     ExtensionDecl {
         token: Box<Token>,
         type_name: Box<Token>,
+        type_arguments: Option<Vec<Rc<RefCell<Expression>>>>,
         conformances: Vec<Rc<RefCell<Expression>>>,
         body: Vec<Rc<RefCell<Statement>>>,
         where_clause: Option<Vec<WhereRequirement>>,

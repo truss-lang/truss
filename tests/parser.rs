@@ -2232,6 +2232,157 @@ fn test_parse_extension_instance_method_not_static() {
     }
 }
 
+#[test]
+fn test_parse_extension_with_type_arguments() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Wrapper<T> {} extension Wrapper<Int32>: Computable {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::ExtensionDecl {
+        type_name,
+        type_arguments,
+        conformances,
+        ..
+    } = &*program.statements[1].borrow()
+    {
+        assert_eq!(type_name.value, "Wrapper");
+        assert!(type_arguments.is_some());
+        let args = type_arguments.as_ref().unwrap();
+        assert_eq!(args.len(), 1);
+        if let Expression::Type { name, .. } = &*args[0].borrow() {
+            assert_eq!(name.value, "Int32");
+        } else {
+            panic!("Expected Type expression in type_arguments");
+        }
+        assert_eq!(conformances.len(), 1);
+        if let Expression::Type { name, .. } = &*conformances[0].borrow() {
+            assert_eq!(name.value, "Computable");
+        } else {
+            panic!("Expected Type expression for conformance");
+        }
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_with_multiple_type_arguments() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo<A, B> {} extension Foo<Int32, String>: Bar {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::ExtensionDecl {
+        type_arguments, ..
+    } = &*program.statements[1].borrow()
+    {
+        assert!(type_arguments.is_some());
+        let args = type_arguments.as_ref().unwrap();
+        assert_eq!(args.len(), 2);
+        if let Expression::Type { name, .. } = &*args[0].borrow() {
+            assert_eq!(name.value, "Int32");
+        } else {
+            panic!("Expected Int32");
+        }
+        if let Expression::Type { name, .. } = &*args[1].borrow() {
+            assert_eq!(name.value, "String");
+        } else {
+            panic!("Expected String");
+        }
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_extension_without_type_arguments_still_works() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo {} extension Foo: Bar {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::ExtensionDecl {
+        type_arguments, ..
+    } = &*program.statements[1].borrow()
+    {
+        assert!(type_arguments.is_none());
+    } else {
+        panic!("Expected ExtensionDecl");
+    }
+}
+
+#[test]
+fn test_parse_inline_method_where_clause() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Wrapper<T> { func compute() -> Int32 where T: Equatable { 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        if let Statement::FunctionDecl {
+            name, where_clause, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(name.value, "compute");
+            assert!(where_clause.is_some());
+        } else {
+            panic!("Expected FunctionDecl in struct body");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_inline_method_where_equality() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Wrapper<T> { func compute() -> Int32 where T == Int32 { 42 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        if let Statement::FunctionDecl {
+            name, where_clause, ..
+        } = &*body[0].borrow()
+        {
+            assert_eq!(name.value, "compute");
+            assert!(where_clause.is_some());
+            let requirements = where_clause.as_ref().unwrap();
+            assert!(!requirements.is_empty());
+            assert!(matches!(
+                requirements[0].kind,
+                WhereRequirementKind::Equality { .. }
+            ));
+        }
+    }
+}
+
 fn collect_modifiers(stmt: &Statement) -> Vec<Modifier> {
     match stmt {
         Statement::FunctionDecl { modifiers, .. }

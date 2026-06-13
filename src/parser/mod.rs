@@ -3471,6 +3471,7 @@ impl Parser {
             );
             return Err(());
         }
+        let type_arguments = self.parse_type_parameters()?;
         let mut conformances = Vec::new();
         if let Some(next) = self.peek()
             && SeparatorType::is_separator(&next, SeparatorType::Colon)
@@ -3494,6 +3495,7 @@ impl Parser {
         Ok(Statement::ExtensionDecl {
             token: Box::new(token),
             type_name: Box::new(type_name),
+            type_arguments,
             conformances,
             body,
             where_clause,
