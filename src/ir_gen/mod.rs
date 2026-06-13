@@ -8407,6 +8407,22 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
+            Expression::ImplicitMemberAccess { member, .. } => {
+                if let Some(var_ptr) = self.lookup_variable(&member.value) {
+                    let loaded = self
+                        .builder
+                        .build_load(self.context.i32_type(), var_ptr, "")
+                        .map_err(|_| anyhow::anyhow!("Failed to load implicit member"))?;
+                    Ok(Some(loaded))
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedVariable,
+                        format!("Cannot resolve implicit member '{}'", member.value),
+                        Some(member),
+                    );
+                    anyhow::bail!("Undefined implicit member: {}", member.value);
+                }
+            }
             _ => anyhow::bail!("Expression type not implemented"),
         }
     }
