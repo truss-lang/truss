@@ -3709,8 +3709,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             }
                             if has_return {
                                 self.exit_scope();
+                            } else {
+                                self.emit_class_releases();
                             }
-                            self.emit_class_releases();
                             if is_void && !has_return {
                                 self.exit_scope();
                                 self.builder.build_return(None)?;
@@ -3778,8 +3779,10 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.declare_variable(param_name.clone(), ptr);
                     }
 
-                    let struct_name_clone = struct_name.clone();
-                    self.auto_assign_init_fields(&struct_name_clone, self_ptr, parameters);
+                    let is_class_init = self.class_types.borrow().contains_key(&struct_name);
+                    if !is_class_init {
+                        self.auto_assign_init_fields(&struct_name, self_ptr, parameters);
+                    }
 
                     let is_failable = *is_failable;
                     let optional_ret_ty = if is_failable {
@@ -3880,10 +3883,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     Some(value) if !matches!(&*value.borrow(), Expression::VoidLiteral { .. }) => {
                         let val = self.resolve_expression(value.clone())?.unwrap();
                         self.emit_all_deinit_calls();
+                        self.emit_class_releases();
                         self.builder.build_return(Some(&val))?;
                     }
                     _ => {
                         self.emit_all_deinit_calls();
+                        self.emit_class_releases();
                         self.builder.build_return(None)?;
                     }
                 }
@@ -4662,8 +4667,13 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Expression::SelfKeyword { ty, token, .. } => {
                 if let Some(ptr) = self.lookup_variable("self") {
-                    let llvm_type = if let Some(ty) = ty {
-                        self.resolve_type(ty.clone())?
+                    if let Some(ty) = ty {
+                        if matches!(&*ty.borrow(), Type::Class(..)) {
+                            return Ok(Some(ptr.into()));
+                        }
+                        let llvm_type = self.resolve_type(ty.clone())?;
+                        let val = self.builder.build_load(llvm_type, ptr, "")?;
+                        Ok(Some(val))
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::TypeInferenceFailed,
@@ -4671,9 +4681,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             Some(token),
                         );
                         anyhow::bail!("Cannot infer type for 'self'");
-                    };
-                    let val = self.builder.build_load(llvm_type, ptr, "")?;
-                    Ok(Some(val))
+                    }
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,
