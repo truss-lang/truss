@@ -6885,6 +6885,67 @@ impl<'ctx> IRGenerator<'ctx> {
                 selected_index,
                 ..
             } => {
+                if let Expression::ImplicitMemberAccess { member, .. } = &*callee.borrow() {
+                    let callee_ty = callee.borrow().get_ty_ref()?.clone();
+                    let enum_type = if let Some(t) = &callee_ty
+                        && let Type::Function(_, ret_ty, _, _) = &*t.borrow()
+                    {
+                        Some(ret_ty.clone())
+                    } else if let Some(t) = &callee_ty {
+                        Some(t.clone())
+                    } else {
+                        None
+                    };
+                    if let Some(et) = &enum_type
+                        && let Type::Enum(enum_name, ..) = &*et.borrow()
+                    {
+                        let case_name = member.value.clone();
+                        let enum_name = enum_name.clone();
+                        let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
+                        let enum_types = self.enum_types.borrow();
+                        let case_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
+                            anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                        })?;
+                        drop(enum_types);
+                        let alloca = self
+                            .builder
+                            .build_alloca(case_llvm_type.as_basic_type_enum(), "")?;
+                        let tag_ptr = self
+                            .builder
+                            .build_struct_gep(case_llvm_type, alloca, 0, "")?;
+                        let tag_val = self.context.i8_type().const_int(case_index as u64, false);
+                        self.builder.build_store(tag_ptr, tag_val)?;
+                        if !parameters.is_empty() {
+                            let payload_ptr = self.builder.build_struct_gep(
+                                case_llvm_type,
+                                alloca,
+                                1,
+                                "",
+                            )?;
+                            let enum_payloads = self.enum_payload_types.borrow();
+                            if let Some(payload_type) = enum_payloads.get(&enum_name) {
+                                for (i, param) in parameters.iter().enumerate() {
+                                    let field_ptr = self.builder.build_struct_gep(
+                                        *payload_type,
+                                        payload_ptr,
+                                        i as u32,
+                                        "",
+                                    )?;
+                                    let arg_val = self
+                                        .resolve_expression(param.expression.clone())?
+                                        .unwrap();
+                                    self.builder.build_store(field_ptr, arg_val)?;
+                                }
+                            }
+                        }
+                        let val = self.builder.build_load(
+                            case_llvm_type.as_basic_type_enum(),
+                            alloca,
+                            "",
+                        )?;
+                        return Ok(Some(val));
+                    }
+                }
                 let mut method_self_ptr: Option<PointerValue<'ctx>> = None;
                 let (function_name, is_init_call) = match &*callee.borrow() {
                     Expression::Variable { name, .. } => {
@@ -8407,20 +8468,39 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
-            Expression::ImplicitMemberAccess { member, .. } => {
-                if let Some(var_ptr) = self.lookup_variable(&member.value) {
-                    let loaded = self
+            Expression::ImplicitMemberAccess { member, ty } => {
+                if let Some(t) = ty
+                    && let Type::Enum(enum_name, ..) = &*t.borrow()
+                {
+                    let case_name = member.value.clone();
+                    let enum_name = enum_name.clone();
+                    let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
+                    let enum_types = self.enum_types.borrow();
+                    let enum_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
+                        anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                    })?;
+                    drop(enum_types);
+                    let alloca = self
                         .builder
-                        .build_load(self.context.i32_type(), var_ptr, "")
-                        .map_err(|_| anyhow::anyhow!("Failed to load implicit member"))?;
-                    Ok(Some(loaded))
+                        .build_alloca(enum_llvm_type.as_basic_type_enum(), "")?;
+                    let tag_ptr = self
+                        .builder
+                        .build_struct_gep(enum_llvm_type, alloca, 0, "")?;
+                    let tag_val = self.context.i8_type().const_int(case_index as u64, false);
+                    self.builder.build_store(tag_ptr, tag_val)?;
+                    let val = self.builder.build_load(
+                        enum_llvm_type.as_basic_type_enum(),
+                        alloca,
+                        "",
+                    )?;
+                    Ok(Some(val))
                 } else {
                     self.emit_error(
-                        TrussDiagnosticCode::UndefinedVariable,
-                        format!("Cannot resolve implicit member '{}'", member.value),
+                        TrussDiagnosticCode::UnsupportedFeature,
+                        format!("Implicit member '{}' requires enum type context", member.value),
                         Some(member),
                     );
-                    anyhow::bail!("Undefined implicit member: {}", member.value);
+                    anyhow::bail!("Implicit member '{}' requires enum type context", member.value);
                 }
             }
             _ => anyhow::bail!("Expression type not implemented"),

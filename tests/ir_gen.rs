@@ -6499,3 +6499,65 @@ fn test_irgen_protocol_throws_method() {
         engine.borrow().get_diagnostics()
     );
 }
+
+#[test]
+fn test_irgen_implicit_member_enum_case_no_data() {
+    let code = r#"
+enum TargetKind { case Executable case DynamicLibrary(Int32) }
+func test() -> TargetKind { .Executable }
+"#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let _ = module.print_to_string().to_string();
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected for .Executable: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+}
+
+#[test]
+fn test_irgen_implicit_member_enum_case_with_data() {
+    let code = r#"
+enum TargetKind { case Executable case DynamicLibrary(Int32) }
+func test() -> TargetKind { .DynamicLibrary(42) }
+"#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let _ = module.print_to_string().to_string();
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected for .DynamicLibrary(42): {:?}",
+        engine.borrow().get_diagnostics()
+    );
+}
