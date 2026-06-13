@@ -6055,7 +6055,7 @@ fn test_irgen_optional_type_sugar_in_annotation_no_error() {
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id.clone());
     let engine_ref = engine.borrow();
-    let errors = engine_ref.get_errors();
+    let _errors = engine_ref.get_errors();
     drop(engine_ref);
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
@@ -6084,7 +6084,7 @@ fn test_irgen_array_type_sugar_in_annotation_no_error() {
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id.clone());
     let engine_ref = engine.borrow();
-    let errors = engine_ref.get_errors();
+    let _errors = engine_ref.get_errors();
     drop(engine_ref);
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
@@ -6113,7 +6113,7 @@ fn test_irgen_string_literal_produces_global() {
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id.clone());
     let engine_ref = engine.borrow();
-    let errors = engine_ref.get_errors();
+    let _errors = engine_ref.get_errors();
     drop(engine_ref);
     let context = Context::create();
     let ir_gen = IRGenerator::new(&context, engine.clone());
@@ -6178,10 +6178,7 @@ fn test_irgen_final_class_static_dispatch() {
         "Expected direct call to Dog.speak (final class static dispatch):\n{}",
         llvm_ir
     );
-    assert!(
-        !engine.borrow().has_errors(),
-        "No errors expected"
-    );
+    assert!(!engine.borrow().has_errors(), "No errors expected");
 }
 
 #[test]
@@ -6224,8 +6221,51 @@ fn test_irgen_final_method_static_dispatch() {
         "Expected direct call to Animal.finalMethod (final method static dispatch):\n{}",
         llvm_ir
     );
-    assert!(
-        !engine.borrow().has_errors(),
-        "No errors expected"
+    assert!(!engine.borrow().has_errors(), "No errors expected");
+}
+
+#[test]
+fn test_irgen_extension_with_type_arguments() {
+    let code = r#"
+        struct Wrapper<T> {}
+        protocol Computable {
+            func compute() -> Int32
+        }
+        extension Wrapper<Int32>: Computable {
+            func compute() -> Int32 { return 42 }
+        }
+        extension Wrapper: Computable {
+            func compute() -> Int32 { return 0 }
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
     );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("define i32 @Wrapper.I32.compute"),
+        "Expected specialized function Wrapper.I32.compute:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("define i32 @Wrapper.compute"),
+        "Expected generic function Wrapper.compute:\n{}",
+        llvm_ir
+    );
+    assert!(!engine.borrow().has_errors(), "No errors expected");
 }
