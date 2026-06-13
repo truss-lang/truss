@@ -1226,7 +1226,7 @@ impl TypeResolver {
                     )))
                 };
 
-                let ret_type = if let Type::Function(_, ret, _, None) = &*fn_type.borrow() {
+                let ret_type = if let Type::Function(_, ret, _, _) = &*fn_type.borrow() {
                     ret.clone()
                 } else {
                     Rc::new(RefCell::new(Type::Void))
@@ -1268,7 +1268,7 @@ impl TypeResolver {
                 let saved_return_type = self.current_return_type.clone();
                 if *is_failable {
                     if let Some(fn_ty) = ty
-                        && let Type::Function(_, ret, _, None) = &*fn_ty.borrow()
+                        && let Type::Function(_, ret, _, _) = &*fn_ty.borrow()
                     {
                         self.current_return_type = Some(ret.clone());
                     }
@@ -1481,7 +1481,7 @@ impl TypeResolver {
                                         None,
                                     )))
                                 };
-                                let ret_type = if let Type::Function(_, ret, _, None) = &*fn_type.borrow()
+                                let ret_type = if let Type::Function(_, ret, _, _) = &*fn_type.borrow()
                                 {
                                     ret.clone()
                                 } else {
@@ -2215,7 +2215,7 @@ impl TypeResolver {
                 }
 
                 match &*callee_type.borrow() {
-                    Type::Function(param_tys, ret_ty, is_vararg, None) => {
+                    Type::Function(param_tys, ret_ty, is_vararg, _) => {
                         if let Some(decl) = self
                             .get_function_decl_from_callee(callee.clone())
                             .or_else(|| {
