@@ -5905,8 +5905,8 @@ fn test_parse_generic_protocol_with_sugar() {
         assert_eq!(name.value, "Container");
         assert_eq!(generic_parameters.len(), 1);
         assert_eq!(generic_parameters[0].name.value, "T");
-        assert!(matches!(members[0], ProtocolMember::AssociatedType { .. }));
-        assert_eq!(members.len(), 2);
+        assert!(matches!(members[0], ProtocolMember::Method { .. }));
+        assert_eq!(members.len(), 1);
     } else {
         panic!();
     }
@@ -6296,7 +6296,7 @@ fn test_parse_protocol_with_const_generic() {
             .iter()
             .filter(|m| matches!(m, ProtocolMember::AssociatedType { .. }))
             .count();
-        assert_eq!(associated_count, 1);
+        assert_eq!(associated_count, 0);
     } else {
         panic!();
     }

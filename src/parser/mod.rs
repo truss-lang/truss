@@ -4139,19 +4139,7 @@ impl Parser {
             return Err(());
         }
         let generic_params = self.parse_generic_parameters()?.unwrap_or_default();
-        let mut associated_members: Vec<ProtocolMember> = generic_params
-            .iter()
-            .filter_map(|gp| match &gp.kind {
-                GenericParameterKind::Type { constraints } => {
-                    Some(ProtocolMember::AssociatedType {
-                        token: Box::new(*gp.name.clone()),
-                        name: gp.name.clone(),
-                        constraints: constraints.clone(),
-                    })
-                }
-                GenericParameterKind::Const { .. } => None,
-            })
-            .collect();
+        let mut associated_members: Vec<ProtocolMember> = Vec::new();
         let mut conformances = Vec::new();
         if let Some(next) = self.peek()
             && SeparatorType::is_separator(&next, SeparatorType::Colon)
