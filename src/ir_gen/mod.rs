@@ -5183,6 +5183,14 @@ impl<'ctx> IRGenerator<'ctx> {
                             anyhow::bail!("Invalid type for unary minus");
                         }
                     }
+                    UnaryOperator::Not => {
+                        if let BasicValueEnum::IntValue(v) = expr_val {
+                            let one = self.context.bool_type().const_int(1, false);
+                            Ok(Some(self.builder.build_xor(v, one, "")?.into()))
+                        } else {
+                            anyhow::bail!("Invalid type for logical not");
+                        }
+                    }
                     UnaryOperator::BitNot => {
                         if let BasicValueEnum::IntValue(v) = expr_val {
                             Ok(Some(self.builder.build_not(v, "")?.into()))

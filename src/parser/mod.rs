@@ -529,6 +529,7 @@ impl Parser {
             | OperatorType::Minus
             | OperatorType::Inc
             | OperatorType::Dec
+            | OperatorType::Not
             | OperatorType::BitNot
             | OperatorType::BitAnd
             | OperatorType::Multiply = operator

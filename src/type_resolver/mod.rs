@@ -4860,6 +4860,13 @@ impl TypeResolver {
                 }
                 Some(Rc::new(RefCell::new(op_ty)))
             }
+            UnaryOperator::Not => {
+                let op_ty = operand.borrow().clone();
+                if !matches!(op_ty, Type::Bool) {
+                    return None;
+                }
+                Some(Rc::new(RefCell::new(Type::Bool)))
+            }
             UnaryOperator::Deref => {
                 let op_ty = operand.borrow().clone();
                 if let Type::Pointer(inner_ty) = op_ty {
