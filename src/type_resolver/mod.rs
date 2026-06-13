@@ -10,7 +10,7 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, AccessorKind, FunctionBody, GenericParameterKind, ModifierType,
-            OperatorFixity, Parameter, Pattern, ProtocolMember, SelectiveAlias, Statement,
+            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement,
             VariadicKind,
         },
     },
@@ -993,63 +993,6 @@ impl TypeResolver {
                     }
                 }
             }
-            Statement::UsingDecl {
-                name,
-                path,
-                selective_members,
-                ..
-            } => {
-                if let Some(members) = selective_members {
-                    let module_path = path.join(".");
-                    let module = self
-                        .packages
-                        .get(&self.current_package)
-                        .unwrap()
-                        .borrow()
-                        .modules
-                        .get(&module_path)
-                        .cloned();
-                    if let Some(module) = module {
-                        for member in members {
-                            let alias_name = match &member.alias {
-                                SelectiveAlias::Direct => &member.name,
-                                SelectiveAlias::Named(alias) => alias,
-                                SelectiveAlias::Skip => continue,
-                            };
-                            let resolved_ty = module
-                                .borrow()
-                                .scope
-                                .clone()
-                                .and_then(|scope| scope.borrow().get_type(&member.name));
-                            if let Some(ty) = resolved_ty {
-                                if let Some(scope) = self.current_scope.as_ref() {
-                                    scope.borrow_mut().set_type(alias_name.clone(), ty);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    let resolved_ty = if path.len() == 1 {
-                        self.lookup_primary_type(&path[0])
-                    } else {
-                        let module_path = path[..path.len() - 1].join(".");
-                        let type_name = path.last().unwrap();
-                        self.packages
-                            .get(&self.current_package)
-                            .unwrap()
-                            .borrow()
-                            .modules
-                            .get(&module_path)
-                            .and_then(|m| m.borrow().scope.clone())
-                            .and_then(|scope| scope.borrow().get_type(type_name))
-                    };
-                    if let Some(ty) = resolved_ty {
-                        if let Some(scope) = self.current_scope.as_ref() {
-                            scope.borrow_mut().set_type(name.value.clone(), ty);
-                        }
-                    }
-                }
-            }
             Statement::SubscriptDecl {
                 parameters,
                 return_type_expression,
@@ -1563,63 +1506,6 @@ impl TypeResolver {
                 if let Some(ty) = self.infer_type(type_expression.clone()) {
                     if let Some(scope) = self.current_scope.as_ref() {
                         scope.borrow_mut().set_type(name.value.clone(), ty);
-                    }
-                }
-            }
-            Statement::UsingDecl {
-                name,
-                path,
-                selective_members,
-                ..
-            } => {
-                if let Some(members) = selective_members {
-                    let module_path = path.join(".");
-                    let module = self
-                        .packages
-                        .get(&self.current_package)
-                        .unwrap()
-                        .borrow()
-                        .modules
-                        .get(&module_path)
-                        .cloned();
-                    if let Some(module) = module {
-                        for member in members {
-                            let alias_name = match &member.alias {
-                                SelectiveAlias::Direct => &member.name,
-                                SelectiveAlias::Named(alias) => alias,
-                                SelectiveAlias::Skip => continue,
-                            };
-                            let resolved_ty = module
-                                .borrow()
-                                .scope
-                                .clone()
-                                .and_then(|scope| scope.borrow().get_type(&member.name));
-                            if let Some(ty) = resolved_ty {
-                                if let Some(scope) = self.current_scope.as_ref() {
-                                    scope.borrow_mut().set_type(alias_name.clone(), ty);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    let resolved_ty = if path.len() == 1 {
-                        self.lookup_primary_type(&path[0])
-                    } else {
-                        let module_path = path[..path.len() - 1].join(".");
-                        let type_name = path.last().unwrap();
-                        self.packages
-                            .get(&self.current_package)
-                            .unwrap()
-                            .borrow()
-                            .modules
-                            .get(&module_path)
-                            .and_then(|m| m.borrow().scope.clone())
-                            .and_then(|scope| scope.borrow().get_type(type_name))
-                    };
-                    if let Some(ty) = resolved_ty {
-                        if let Some(scope) = self.current_scope.as_ref() {
-                            scope.borrow_mut().set_type(name.value.clone(), ty);
-                        }
                     }
                 }
             }
