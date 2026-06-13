@@ -6,11 +6,12 @@ use crate::{
     ast::{
         expression::{
             AssignmentOperator, BinaryOperator, CallParameter, CastKind, ClosureParameter,
-            ElseBranch, Expression, MacroDelimiter, UnaryOperator,
+            ElseBranch, Expression, MacroDelimiter, TryKind, UnaryOperator,
         },
         node::Program,
         statement::{
-            AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Attribute, Condition,
+            AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Attribute, CatchClause,
+            Condition,
             ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody, GenericParameter,
             GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType, MacroPatternFragment,
             MatchCase, Modifier, ModifierType, OperatorFixity, Parameter, Pattern,
@@ -729,6 +730,7 @@ impl Parser {
                     })
                 }
                 KeywordType::Do => self.parse_do_expression(),
+                KeywordType::Try => self.parse_try_expression(),
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::UnexpectedToken,
@@ -1905,6 +1907,57 @@ impl Parser {
             );
             return Err(());
         }
+        let throws_types = if let Some(t) = self.peek()
+            && KeywordType::is_keyword(&t, KeywordType::Throws)
+        {
+            self.index += 1;
+            if is_init {
+                self.emit_error(
+                    TrussDiagnosticCode::InvalidFunctionName,
+                    "'init' cannot be declared throws".to_string(),
+                    &t,
+                );
+                return Err(());
+            }
+            if let Some(open_paren) = self.peek()
+                && SeparatorType::is_separator(&open_paren, SeparatorType::OpenParen)
+            {
+                self.index += 1;
+                let mut types = Vec::new();
+                loop {
+                    let ty = self.parse_type_expression()?;
+                    types.push(Rc::new(RefCell::new(ty)));
+                    if let Some(comma) = self.peek()
+                        && SeparatorType::is_separator(&comma, SeparatorType::Comma)
+                    {
+                        self.index += 1;
+                        continue;
+                    }
+                    break;
+                }
+                let Some(close_paren) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        "Expected ')' after throws types".to_string(),
+                        &t,
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&close_paren, SeparatorType::CloseParen) {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        format!("Expected ')' but found '{}'", close_paren.value),
+                        &close_paren,
+                    );
+                    return Err(());
+                }
+                Some(types)
+            } else {
+                Some(vec![])
+            }
+        } else {
+            None
+        };
         let return_type = if is_init {
             None
         } else if let Some(token) = self.peek()
@@ -2011,7 +2064,7 @@ impl Parser {
                 generic_parameters,
                 parameters,
                 return_type: return_type.map(RefCell::new).map(Rc::new),
-                throws_types: None,
+                throws_types,
                 body: Rc::new(RefCell::new(body)),
                 where_clause,
                 scope: None,
@@ -5842,11 +5895,70 @@ impl Parser {
             && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
         {
             let body = self.parse_block()?;
+            let mut catch_clauses = Vec::new();
+            while let Some(t) = self.peek()
+                && KeywordType::is_keyword(&t, KeywordType::Catch)
+            {
+                self.index += 1;
+                let pattern = if let Some(t) = self.peek()
+                    && !SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+                    && !KeywordType::is_keyword(&t, KeywordType::Where)
+                    && !KeywordType::is_keyword(&t, KeywordType::Finally)
+                {
+                    Some(self.parse_pattern()?)
+                } else {
+                    None
+                };
+                let guard = if let Some(t) = self.peek()
+                    && KeywordType::is_keyword(&t, KeywordType::Where)
+                {
+                    self.index += 1;
+                    Some(Rc::new(RefCell::new(self.parse_expression()?)))
+                } else {
+                    None
+                };
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+                {
+                    let catch_body = self.parse_block()?;
+                    catch_clauses.push(CatchClause {
+                        pattern,
+                        guard,
+                        body: catch_body,
+                    });
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        "Expected '{' after 'catch'".to_string(),
+                        &t,
+                    );
+                    return Err(());
+                }
+            }
+            let finally_body = if let Some(t) = self.peek()
+                && KeywordType::is_keyword(&t, KeywordType::Finally)
+            {
+                self.index += 1;
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::OpenBrace)
+                {
+                    self.parse_block()?
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::MissingSeparator,
+                        "Expected '{' after 'finally'".to_string(),
+                        &t,
+                    );
+                    return Err(());
+                }
+            } else {
+                Vec::new()
+            };
             Ok(Expression::Do {
                 token: Box::new(token),
                 body,
-                catch_clauses: Vec::new(),
-                finally_body: Vec::new(),
+                catch_clauses,
+                finally_body,
                 scope: None,
                 ty: None,
             })
@@ -5858,6 +5970,30 @@ impl Parser {
             );
             Err(())
         }
+    }
+
+    fn parse_try_expression(&mut self) -> Result<Expression, ()> {
+        let token = self.next().unwrap();
+        let kind = if let Some(t) = self.peek()
+            && OperatorType::is_operator(&t, OperatorType::Not)
+        {
+            self.index += 1;
+            TryKind::Force
+        } else if let Some(t) = self.peek()
+            && OperatorType::is_operator(&t, OperatorType::QuestionMark)
+        {
+            self.index += 1;
+            TryKind::Optional
+        } else {
+            TryKind::Plain
+        };
+        let expression = Rc::new(RefCell::new(self.parse_expression()?));
+        Ok(Expression::Try {
+            token: Box::new(token),
+            kind,
+            expression,
+            ty: None,
+        })
     }
 
     fn parse_break(&mut self) -> Result<Statement, ()> {

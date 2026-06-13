@@ -4,7 +4,7 @@ use truss::{
     ast::{
         expression::{
             AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression, MacroDelimiter,
-            UnaryOperator,
+            TryKind, UnaryOperator,
         },
         statement::{
             AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
@@ -11992,5 +11992,410 @@ fn test_parse_modifier_abstract_on_function() {
         assert!(modifiers.iter().any(|m| m.ty == ModifierType::Abstract));
     } else {
         panic!("Expected FunctionDecl");
+    }
+}
+
+// --- Exception handling tests ---
+
+#[test]
+fn test_parse_throws_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo() throws -> Int32 { return 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::FunctionDecl {
+        name, throws_types, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "foo");
+        assert!(throws_types.is_some());
+        assert!(throws_types.as_ref().unwrap().is_empty());
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_throws_function_with_types() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func bar() throws(MyError, IOError) -> String { return \"\" }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::FunctionDecl {
+        name, throws_types, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "bar");
+        let types = throws_types.as_ref().unwrap();
+        assert_eq!(types.len(), 2);
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_throws_function_no_return() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func baz() throws { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::FunctionDecl {
+        name, throws_types, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "baz");
+        assert!(throws_types.is_some());
+        assert!(throws_types.as_ref().unwrap().is_empty());
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_throw_statement() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "throw MyError.someCase".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    assert!(matches!(&*program.statements[0].borrow(), Statement::Throw { .. }));
+}
+
+#[test]
+fn test_parse_try_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "try foo()".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        assert!(matches!(&*expr, Expression::Try { kind: TryKind::Plain, .. }));
+    } else {
+        panic!("Expected ExpressionStatement with Try");
+    }
+}
+
+#[test]
+fn test_parse_try_force_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "try! foo()".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        assert!(matches!(&*expr, Expression::Try { kind: TryKind::Force, .. }));
+    } else {
+        panic!("Expected ExpressionStatement with Try!");
+    }
+}
+
+#[test]
+fn test_parse_try_optional_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "try? foo()".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        assert!(matches!(&*expr, Expression::Try { kind: TryKind::Optional, .. }));
+    } else {
+        panic!("Expected ExpressionStatement with Try?");
+    }
+}
+
+#[test]
+fn test_parse_do_catch() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "do { try foo() } catch { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::Do { catch_clauses, finally_body, .. } => {
+                assert_eq!(catch_clauses.len(), 1);
+                assert!(catch_clauses[0].pattern.is_none());
+                assert!(finally_body.is_empty());
+            }
+            _ => panic!("Expected Do expression"),
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_do_catch_finally() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "do { try foo() } catch MyError { } finally { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::Do { catch_clauses, finally_body, .. } => {
+                assert_eq!(catch_clauses.len(), 1);
+                assert!(catch_clauses[0].pattern.is_some());
+                assert_eq!(finally_body.len(), 0);
+            }
+            _ => panic!("Expected Do expression"),
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_do_catch_finally_with_body() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "do { try foo() } catch { } finally { cleanup() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::Do { catch_clauses, finally_body, .. } => {
+                assert_eq!(catch_clauses.len(), 1);
+                assert!(!finally_body.is_empty());
+            }
+            _ => panic!("Expected Do expression"),
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_do_catch_multi_catch() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "do { try foo() } catch IOError { } catch MyError { } catch { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::Do { catch_clauses, .. } => {
+                assert_eq!(catch_clauses.len(), 3);
+                assert!(catch_clauses[0].pattern.is_some());
+                assert!(catch_clauses[1].pattern.is_some());
+                assert!(catch_clauses[2].pattern.is_none());
+            }
+            _ => panic!("Expected Do expression"),
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_do_catch_with_guard() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "do { try foo() } catch MyError where condition { } catch { }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::Do { catch_clauses, .. } => {
+                assert_eq!(catch_clauses.len(), 2);
+                assert!(catch_clauses[0].guard.is_some());
+                assert!(catch_clauses[1].pattern.is_none());
+            }
+            _ => panic!("Expected Do expression"),
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_do_without_catch() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "do { let x = 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::Do { catch_clauses, finally_body, .. } => {
+                assert!(catch_clauses.is_empty());
+                assert!(finally_body.is_empty());
+            }
+            _ => panic!("Expected Do expression"),
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_throws_method_in_struct() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { func bar() throws -> Int32 { return 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Foo");
+        if let Statement::FunctionDecl { name: fn_name, throws_types, .. } = &*body[0].borrow() {
+            assert_eq!(fn_name.value, "bar");
+            assert!(throws_types.is_some());
+        } else {
+            panic!("Expected FunctionDecl in struct");
+        }
+    } else {
+        panic!("Expected StructDecl");
     }
 }
