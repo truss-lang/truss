@@ -4,8 +4,6 @@ use anyhow::{Context, Result};
 
 use crate::trusspm::manifest::TargetKind;
 
-/// Initialize all LLVM targets for code generation.
-/// Safe to call multiple times; only the first call has effect.
 pub fn initialize_targets() {
     use std::sync::Once;
     static INIT: Once = Once::new();
@@ -16,7 +14,6 @@ pub fn initialize_targets() {
     });
 }
 
-/// Create a TargetMachine for the given triple at the default optimization level.
 fn create_target_machine(
     triple: &str,
 ) -> Result<inkwell::targets::TargetMachine> {
@@ -36,7 +33,6 @@ fn create_target_machine(
     Ok(tm)
 }
 
-/// Emit an object file (.o) from a LLVM module.
 fn emit_object_file(
     module: &inkwell::module::Module,
     target_machine: &inkwell::targets::TargetMachine,
@@ -51,7 +47,6 @@ fn emit_object_file(
     Ok(())
 }
 
-/// Emit output (executable, shared library, or static library) based on target kind.
 pub fn emit_output(
     main_module: &inkwell::module::Module,
     stdlib_module: Option<&inkwell::module::Module>,

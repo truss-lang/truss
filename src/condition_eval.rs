@@ -33,7 +33,11 @@ impl TargetTriple {
     }
 
     pub fn to_triple_string(&self) -> String {
-        format!("{}-unknown-{}-unknown", self.arch, self.os)
+        if self.arch == "unknown" || self.os.is_empty() {
+            "x86_64-unknown-linux-gnu".to_string()
+        } else {
+            format!("{}-unknown-{}-gnu", self.arch, self.os)
+        }
     }
 }
 
