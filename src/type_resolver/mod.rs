@@ -11,6 +11,7 @@ use crate::{
         statement::{
             AccessModifier, AccessorKind, FunctionBody, GenericParameterKind, ModifierType,
             OperatorFixity, Parameter, Pattern, ProtocolMember, Statement, VariadicKind,
+            WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{
@@ -866,6 +867,8 @@ impl TypeResolver {
                 type_name,
                 conformances,
                 body,
+                type_arguments,
+                where_clause,
                 ..
             } => {
                 let Some(target_sym) = self
@@ -917,6 +920,34 @@ impl TypeResolver {
                     })
                 };
 
+                let parent_generic_params: Vec<String> = target_sym
+                    .borrow()
+                    .get_decl()
+                    .ok()
+                    .flatten()
+                    .map(|d| {
+                        let stmt = d.borrow();
+                        match &*stmt {
+                            Statement::StructDecl {
+                                generic_parameters,
+                                ..
+                            }
+                            | Statement::ClassDecl {
+                                generic_parameters,
+                                ..
+                            }
+                            | Statement::EnumDecl {
+                                generic_parameters,
+                                ..
+                            } => generic_parameters
+                                .iter()
+                                .map(|gp| gp.name.value.clone())
+                                .collect(),
+                            _ => vec![],
+                        }
+                    })
+                    .unwrap_or_default();
+
                 if let Some(ref scope) = target_scope {
                     self.enter_scope(scope.clone());
                     if let Some(ref target_ty) = target_ty {
@@ -926,6 +957,25 @@ impl TypeResolver {
                             .borrow_mut()
                             .set_type("Self".to_string(), target_ty.clone());
                     }
+
+                    if let Some(type_arguments) = type_arguments {
+                        for (i, ta) in type_arguments.iter().enumerate() {
+                            if i < parent_generic_params.len() {
+                                if let Some(concrete_ty) = self.infer_type(ta.clone()) {
+                                    self.current_scope
+                                        .as_ref()
+                                        .unwrap()
+                                        .borrow_mut()
+                                        .set_type(parent_generic_params[i].clone(), concrete_ty);
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(wc) = where_clause {
+                        self.validate_where_clause(wc);
+                    }
+
                     for stmt in body {
                         let method_info: MethodInfo = {
                             if let Statement::FunctionDecl {
@@ -980,6 +1030,12 @@ impl TypeResolver {
                         self.process_decl(stmt.clone());
                     }
                     self.leave_scope();
+                    self.check_protocol_conformances(
+                        &type_name.value,
+                        type_name.as_ref(),
+                        conformances,
+                        false,
+                    );
                 }
             }
             Statement::TypeAlias {
@@ -5857,6 +5913,37 @@ impl TypeResolver {
                         decl, inline
                     );
                     self.emit_error(TrussDiagnosticCode::ConflictingSetterAccess, msg, &token);
+                }
+            }
+        }
+    }
+
+    fn validate_where_clause(&mut self, where_clause: &[WhereRequirement]) {
+        for req in where_clause {
+            match &req.kind {
+                WhereRequirementKind::Conformance {
+                    type_expr,
+                    constraint,
+                } => {
+                    self.infer_type(type_expr.clone());
+                    let constraint_ty = self.infer_type(constraint.clone());
+                    if let Some(ty) = constraint_ty {
+                        if !matches!(&*ty.borrow(), Type::Protocol(..)) {
+                            let token = constraint.borrow().token();
+                            self.emit_error(
+                                TrussDiagnosticCode::TypeError,
+                                format!(
+                                    "Constraint '{}' is not a protocol type",
+                                    ty.borrow()
+                                ),
+                                &token,
+                            );
+                        }
+                    }
+                }
+                WhereRequirementKind::Equality { left, right } => {
+                    self.infer_type(left.clone());
+                    self.infer_type(right.clone());
                 }
             }
         }

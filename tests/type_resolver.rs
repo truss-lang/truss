@@ -3450,6 +3450,93 @@ fn test_extension_static_method_protocol_type_resolved() {
 }
 
 #[test]
+fn test_extension_with_type_arguments_type_check() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Wrapper<T> {} protocol Computable { func compute() -> Int32 } extension Wrapper<Int32>: Computable { func compute() -> Int32 { 42 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Extension with type arguments should type-check without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_extension_type_arguments_override_generic_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Wrapper<T> { func identity(x: T) -> T { x } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Simple generic struct with method should type-check, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_protocol_conformance_with_type_params() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol From<T> { func from(value: T) -> Self } struct S: From<Int32> { func from(value: Int32) -> S { self } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Protocol conformance with type params should resolve, got: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn test_generic_function_type_param_resolves() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
@@ -6691,9 +6778,11 @@ fn test_override_missing_modifier_error() {
     let (packages, _) = truss::krate::single_package_map("test");
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    let has_error = engine.borrow().get_diagnostics().iter().any(|d| {
-        d.code == TrussDiagnosticCode::MissingOverrideModifier
-    });
+    let has_error = engine
+        .borrow()
+        .get_diagnostics()
+        .iter()
+        .any(|d| d.code == TrussDiagnosticCode::MissingOverrideModifier);
     assert!(has_error, "Should report missing override modifier");
 }
 
@@ -6722,7 +6811,10 @@ fn test_override_correct_modifier_no_error() {
         d.code == TrussDiagnosticCode::MissingOverrideModifier
             || d.code == TrussDiagnosticCode::OverrideWithoutOverride
     });
-    assert!(!has_missing, "Should not report override errors when override modifier is used");
+    assert!(
+        !has_missing,
+        "Should not report override errors when override modifier is used"
+    );
 }
 
 #[test]
@@ -6746,9 +6838,11 @@ fn test_override_without_override_error() {
     let (packages, _) = truss::krate::single_package_map("test");
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    let has_error = engine.borrow().get_diagnostics().iter().any(|d| {
-        d.code == TrussDiagnosticCode::OverrideWithoutOverride
-    });
+    let has_error = engine
+        .borrow()
+        .get_diagnostics()
+        .iter()
+        .any(|d| d.code == TrussDiagnosticCode::OverrideWithoutOverride);
     assert!(has_error, "Should report override without purpose");
 }
 
@@ -6773,9 +6867,11 @@ fn test_override_final_method_error() {
     let (packages, _) = truss::krate::single_package_map("test");
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    let has_error = engine.borrow().get_diagnostics().iter().any(|d| {
-        d.code == TrussDiagnosticCode::CannotOverrideFinal
-    });
+    let has_error = engine
+        .borrow()
+        .get_diagnostics()
+        .iter()
+        .any(|d| d.code == TrussDiagnosticCode::CannotOverrideFinal);
     assert!(has_error, "Should report cannot override final method");
 }
 
@@ -6802,13 +6898,23 @@ fn test_override_in_final_class_no_override_errors() {
     type_resolver.resolve(&program, module_id);
     let errors: Vec<_> = {
         let engine_ref = engine.borrow();
-        engine_ref.get_diagnostics().iter().filter(|d| {
-            d.code == TrussDiagnosticCode::MissingOverrideModifier
-                || d.code == TrussDiagnosticCode::OverrideWithoutOverride
-                || d.code == TrussDiagnosticCode::CannotOverrideFinal
-        }).map(|d| format!("{:?}", d.code)).collect::<Vec<_>>()
+        engine_ref
+            .get_diagnostics()
+            .iter()
+            .filter(|d| {
+                d.code == TrussDiagnosticCode::MissingOverrideModifier
+                    || d.code == TrussDiagnosticCode::OverrideWithoutOverride
+                    || d.code == TrussDiagnosticCode::CannotOverrideFinal
+            })
+            .map(|d| format!("{:?}", d.code))
+            .collect::<Vec<_>>()
     };
-    assert_eq!(errors.len(), 0, "Final class with override should not produce override errors: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Final class with override should not produce override errors: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -6834,12 +6940,22 @@ fn test_override_computed_property_no_error() {
     type_resolver.resolve(&program, module_id);
     let errors: Vec<_> = {
         let engine_ref = engine.borrow();
-        engine_ref.get_diagnostics().iter().filter(|d| {
-            d.code == TrussDiagnosticCode::MissingOverrideModifier
-                || d.code == TrussDiagnosticCode::OverrideWithoutOverride
-        }).map(|d| format!("{:?}", d.code)).collect::<Vec<_>>()
+        engine_ref
+            .get_diagnostics()
+            .iter()
+            .filter(|d| {
+                d.code == TrussDiagnosticCode::MissingOverrideModifier
+                    || d.code == TrussDiagnosticCode::OverrideWithoutOverride
+            })
+            .map(|d| format!("{:?}", d.code))
+            .collect::<Vec<_>>()
     };
-    assert_eq!(errors.len(), 0, "Should not report override errors for correct property override: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should not report override errors for correct property override: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -6859,4 +6975,3 @@ fn test_array_type_sugar_in_type_resolver_no_crash() {
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine);
     type_resolver.resolve(&program, module_id);
 }
-
