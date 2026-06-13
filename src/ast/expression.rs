@@ -85,6 +85,10 @@ pub enum Expression {
         member: Box<Token>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    ImplicitMemberAccess {
+        member: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     AssociatedTypeAccess {
         object: Rc<RefCell<Expression>>,
         member: Box<Token>,
@@ -301,6 +305,7 @@ impl Expression {
             Self::FunctionType { ty, .. } => Ok(ty),
             Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
+            Self::ImplicitMemberAccess { ty, .. } => Ok(ty),
             Self::SubscriptAccess { ty, .. } => Ok(ty),
             Self::MacroInvocation { ty, .. } => Ok(ty),
             Self::SizeOf { ty, .. } => Ok(ty),
@@ -331,6 +336,7 @@ impl Expression {
             Self::FunctionType { ty, .. } => Ok(ty),
             Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
+            Self::ImplicitMemberAccess { ty, .. } => Ok(ty),
             Self::SubscriptAccess { ty, .. } => Ok(ty),
             Self::MacroInvocation { ty, .. } => Ok(ty),
             Self::SizeOf { ty, .. } => Ok(ty),
@@ -390,6 +396,7 @@ impl Expression {
             Expression::SomeType { inner, .. } => inner.borrow().token(),
             Expression::CompoundType { types, .. } => types[0].borrow().token(),
             Expression::AssociatedTypeAccess { object, .. } => object.borrow().token(),
+            Expression::ImplicitMemberAccess { member, .. } => (**member).clone(),
             Expression::Closure { body, .. } => {
                 if let Some(last) = body.last() {
                     match &*last.borrow() {

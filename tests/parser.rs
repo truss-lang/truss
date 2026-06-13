@@ -12459,3 +12459,77 @@ fn test_parse_protocol_throws_method() {
         panic!("Expected ProtocolDecl");
     }
 }
+
+#[test]
+fn test_implicit_member_access() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { .Executable }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Lexer should not have errors for .Executable"
+    );
+    let mut parser = Parser::new(Rc::new("test.truss".to_string()), tokens, engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser should succeed");
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+    {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::ImplicitMemberAccess { member, .. } => {
+                assert_eq!(member.value, "Executable");
+            }
+            other => panic!("Expected ImplicitMemberAccess, got {:?}", other),
+        }
+    } else {
+        panic!("Expected FunctionDecl with ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_implicit_member_access_in_call() {
+    let engine = create_engine();
+    let code = r#"func test() { Target(name: "my-app", kind: .Executable) }"#;
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    assert!(!engine.borrow().has_errors());
+    let mut parser = Parser::new(Rc::new("test.truss".to_string()), tokens, engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+    {
+        let expr = expression.borrow();
+        if let Expression::Call { parameters, .. } = &*expr {
+            let kind_param = parameters
+                .iter()
+                .find(|p| p.label.as_ref().map_or(false, |l| l.value == "kind"));
+            assert!(kind_param.is_some(), "Should have 'kind' parameter");
+            if let Some(param) = kind_param {
+                let param_expr = param.expression.borrow();
+                match &*param_expr {
+                    Expression::ImplicitMemberAccess { member, .. } => {
+                        assert_eq!(member.value, "Executable");
+                    }
+                    other => panic!("Expected ImplicitMemberAccess in kind, got {:?}", other),
+                }
+            }
+        } else {
+            panic!("Expected Call expression, got {:?}", expr);
+        }
+    } else {
+        panic!("Expected FunctionDecl with ExpressionStatement");
+    }
+}

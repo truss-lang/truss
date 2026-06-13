@@ -1,11 +1,44 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, fmt, rc::Rc};
 
 use crate::diag::TrussDiagnosticEngine;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TargetKind {
+    Executable,
+    DynamicLibrary,
+    StaticLibrary,
+}
+
+impl TargetKind {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Executable" => Some(TargetKind::Executable),
+            "DynamicLibrary" => Some(TargetKind::DynamicLibrary),
+            "StaticLibrary" => Some(TargetKind::StaticLibrary),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TargetKind::Executable => "Executable",
+            TargetKind::DynamicLibrary => "DynamicLibrary",
+            TargetKind::StaticLibrary => "StaticLibrary",
+        }
+    }
+}
+
+impl fmt::Display for TargetKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Manifest {
     pub name: String,
     pub version: String,
+    pub target_triple: Option<String>,
     pub targets: Vec<ManifestTarget>,
     pub dependencies: Vec<ManifestDependency>,
 }
@@ -13,7 +46,7 @@ pub struct Manifest {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ManifestTarget {
     pub name: String,
-    pub kind: String,
+    pub kind: TargetKind,
     pub dependencies: Vec<String>,
 }
 

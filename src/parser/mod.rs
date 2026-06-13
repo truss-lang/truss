@@ -907,6 +907,32 @@ impl Parser {
                         Err(())
                     }
                 }
+                OperatorType::Dot => {
+                    self.index += 1;
+                    let Some(member_token) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedExpression,
+                            "Expected member name after '.'",
+                            &self.tokens[self.index.saturating_sub(1)],
+                        );
+                        return Err(());
+                    };
+                    if TokenType::Identifier != member_token.ty {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!(
+                                "Expected identifier after '.' but found '{}'",
+                                member_token.value
+                            ),
+                            &member_token,
+                        );
+                        return Err(());
+                    }
+                    Ok(Expression::ImplicitMemberAccess {
+                        member: Box::new(member_token),
+                        ty: None,
+                    })
+                }
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::ExpectedExpression,

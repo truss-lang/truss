@@ -4273,6 +4273,11 @@ impl TypeResolver {
                     }
                 }
             }
+            Expression::ImplicitMemberAccess { ty, .. } => {
+                let t = Rc::new(RefCell::new(Type::Never));
+                *ty = Some(t.clone());
+                t
+            }
         };
         Some(result)
     }
