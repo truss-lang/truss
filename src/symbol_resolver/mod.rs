@@ -873,8 +873,16 @@ impl SymbolResolver {
                 self.leave_scope();
             }
             Statement::ExtensionDecl {
-                type_name, body, ..
+                type_name,
+                body,
+                type_arguments,
+                ..
             } => {
+                if let Some(type_arguments) = type_arguments {
+                    for ta in type_arguments {
+                        self.resolve_expression(ta.clone());
+                    }
+                }
                 let Some(target_sym) = self
                     .current_scope
                     .as_ref()
@@ -1776,8 +1784,14 @@ impl SymbolResolver {
                 type_name,
                 body,
                 where_clause,
+                type_arguments,
                 ..
             } => {
+                if let Some(type_arguments) = type_arguments {
+                    for ta in type_arguments {
+                        self.resolve_expression(ta.clone());
+                    }
+                }
                 if let Some(where_clause) = where_clause {
                     for req in where_clause {
                         self.resolve_where_requirement(req);

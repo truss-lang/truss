@@ -1414,6 +1414,60 @@ fn test_extension_protocol_method_symbol() {
 }
 
 #[test]
+fn test_extension_with_type_arguments_resolves_expressions() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Wrapper<T> {} extension Wrapper<Int32>: Computable { func compute() -> Int32 { 42 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should resolve extension type arguments without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_protocol_conformance_with_type_parameters_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol From<T> { func from(value: T) -> Self } struct S: From<Int32> { func from(value: Int32) -> S { self } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should resolve protocol conformance with type parameters, got: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn test_extension_static_method_struct() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
@@ -4739,7 +4793,12 @@ fn test_abstract_class_symbol() {
     let root_scope = root_module.borrow().scope.clone().unwrap();
     let class_sym = root_scope.borrow().get_symbol("Shape").unwrap();
     let binding = class_sym.borrow();
-    let Symbol::Class { methods, is_abstract, .. } = &*binding else {
+    let Symbol::Class {
+        methods,
+        is_abstract,
+        ..
+    } = &*binding
+    else {
         panic!("Expected Class symbol");
     };
     assert!(*is_abstract, "Shape should be abstract");
@@ -4822,7 +4881,8 @@ fn test_override_method_symbol() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "class Base { func foo() -> Int32 { return 1 } }
-             class Derived: Base { override func foo() -> Int32 { return 2 } }".to_string(),
+             class Derived: Base { override func foo() -> Int32 { return 2 } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -4869,10 +4929,14 @@ fn test_abstract_method_in_non_abstract_class_error() {
     resolver.resolve(&program, "test".to_string());
 
     let engine_ref = engine.borrow();
-    let has_abstract_error = engine_ref.get_diagnostics().iter().any(|d| {
-        d.code == TrussDiagnosticCode::AbstractMemberInNonAbstractClass
-    });
-    assert!(has_abstract_error, "Should report error for abstract method in non-abstract class");
+    let has_abstract_error = engine_ref
+        .get_diagnostics()
+        .iter()
+        .any(|d| d.code == TrussDiagnosticCode::AbstractMemberInNonAbstractClass);
+    assert!(
+        has_abstract_error,
+        "Should report error for abstract method in non-abstract class"
+    );
 }
 
 #[test]
@@ -4907,5 +4971,8 @@ fn test_final_property_in_final_class_symbol() {
         let pb = p.borrow();
         matches!(&*pb, Symbol::ClassProperty { name, is_final, .. } if name == "value" && *is_final)
     });
-    assert!(has_final_property, "property in final class should be final");
+    assert!(
+        has_final_property,
+        "property in final class should be final"
+    );
 }
