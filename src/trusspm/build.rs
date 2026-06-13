@@ -1,13 +1,15 @@
 use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
 
 use crate::{
+    ast::{node::Program, statement::Statement},
     diag::TrussDiagnosticEngine,
+    ir_gen::IRGenerator,
     krate::Package,
-    trusspm::{
-        lock::LockManager,
-        manifest::Manifest,
-        resolver::DependencyResolver,
-    },
+    lexer::{CharStream, Lexer},
+    parser::Parser,
+    symbol_resolver::SymbolResolver,
+    trusspm::{lock::LockManager, manifest::Manifest, resolver::DependencyResolver},
+    type_resolver::TypeResolver,
 };
 
 pub struct BuildOrchestrator {
@@ -41,9 +43,8 @@ impl BuildOrchestrator {
 
         for (pkg_name, _pkg) in self.packages.clone() {
             let is_main = pkg_name == self.manifest.name;
-            let _src_dir = project_path.join("Sources").join(&pkg_name);
 
-            let mut file_stmts: Vec<Rc<RefCell<crate::ast::statement::Statement>>> = Vec::new();
+            let mut file_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
 
             let files = DependencyResolver::discover_source_files(&pkg_name, project_path);
             for file in &files {
@@ -52,13 +53,13 @@ impl BuildOrchestrator {
                     Err(_) => continue,
                 };
                 let file_rc = Rc::new(file.to_string_lossy().to_string());
-                let char_stream = crate::lexer::CharStream::new(content, file_rc.clone());
-                let mut lexer = crate::lexer::Lexer::new(char_stream, self.engine.clone());
+                let char_stream = CharStream::new(content, file_rc.clone());
+                let mut lexer = Lexer::new(char_stream, self.engine.clone());
                 let tokens = lexer.parse();
                 if self.engine.borrow().has_errors() {
                     return;
                 }
-                let mut parser = crate::parser::Parser::new(file_rc, tokens, self.engine.clone());
+                let mut parser = Parser::new(file_rc, tokens, self.engine.clone());
                 let program = parser.parse();
                 if self.engine.borrow().has_errors() {
                     return;
@@ -72,9 +73,12 @@ impl BuildOrchestrator {
                 continue;
             }
 
-            let mut resolver =
-                crate::symbol_resolver::SymbolResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
-            let dummy_program = crate::ast::node::Program {
+            let mut resolver = SymbolResolver::new(
+                self.packages.clone(),
+                pkg_name.clone(),
+                self.engine.clone(),
+            );
+            let dummy_program = Program {
                 file: Rc::new(String::new()),
                 statements: Vec::new(),
             };
@@ -88,9 +92,12 @@ impl BuildOrchestrator {
                 resolver.register_symbols(stmt.clone());
             }
 
-            let mut type_resolver =
-                crate::type_resolver::TypeResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
-            let empty_prog = crate::ast::node::Program {
+            let mut type_resolver = TypeResolver::new(
+                self.packages.clone(),
+                pkg_name.clone(),
+                self.engine.clone(),
+            );
+            let empty_prog = Program {
                 file: Rc::new(String::new()),
                 statements: vec![],
             };
@@ -104,22 +111,54 @@ impl BuildOrchestrator {
                 continue;
             }
 
-            let mut resolver2 = crate::symbol_resolver::SymbolResolver::new(
+            let mut resolver2 = SymbolResolver::new(
                 self.packages.clone(),
                 pkg_name.clone(),
                 self.engine.clone(),
             );
-            let main_program = crate::ast::node::Program {
+            let prog = Program {
                 file: Rc::new(String::new()),
                 statements: file_stmts.clone(),
             };
-            let main_module = resolver2.resolve(&main_program, pkg_name.clone());
-            let mut type_resolver2 = crate::type_resolver::TypeResolver::new(
+            let main_module = resolver2.resolve(&prog, pkg_name.clone());
+            let mut type_resolver2 = TypeResolver::new(
                 self.packages.clone(),
                 pkg_name.clone(),
                 self.engine.clone(),
             );
-            type_resolver2.resolve(&main_program, main_module);
+            type_resolver2.resolve(&prog, main_module.clone());
+
+            if self.engine.borrow().has_errors() {
+                return;
+            }
+
+            let context = inkwell::context::Context::create();
+            let ir_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+            let ir_generator = IRGenerator::new(&context, ir_engine.clone());
+            let scope = main_module.borrow().scope.clone();
+            let modules = match scope {
+                Some(s) => ir_generator.generate_with_stdlib(&prog, &[], s),
+                None => {
+                    self.engine.borrow_mut().emit(
+                        crate::diag::new_diagnostic(
+                            crate::diag::TrussDiagnosticCode::IRError,
+                            "No scope found for main module",
+                        ),
+                    );
+                    return;
+                }
+            };
+
+            if ir_engine.borrow().has_errors() {
+                let formatted = duck_diagnostic::format_all_smart(&*ir_engine.borrow(), false);
+                if !formatted.is_empty() {
+                    eprintln!("{}", formatted);
+                }
+                return;
+            }
+
+            let ir = modules.main.print_to_string().to_string();
+            println!("{}", ir);
         }
     }
 
