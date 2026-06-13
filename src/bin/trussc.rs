@@ -1,16 +1,17 @@
-use std::{cell::RefCell, collections::HashMap, fs, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
 
 use clap::Parser;
 use truss::{
-    ast::statement::Statement,
+    ast::{node::Program, statement::Statement},
     condition_eval::{TargetTriple, flatten_program},
     diag::TrussDiagnosticEngine,
-    ir_gen::IRGenerator,
+    ir_gen::{IRGenerator, emit},
     krate::Package,
     lexer::{CharStream, Lexer},
     macro_expander::MacroExpander,
     parser::Parser as TrussParser,
     symbol_resolver::SymbolResolver,
+    trusspm::manifest::TargetKind,
     type_resolver::TypeResolver,
 };
 
@@ -20,7 +21,7 @@ use truss::{
 #[command(long_about = None)]
 #[command(infer_long_args = true)]
 struct Cli {
-    file: String,
+    files: Vec<String>,
     #[arg(long, short, default_value_t = false)]
     tokens: bool,
     #[arg(long, short, default_value_t = false)]
@@ -33,6 +34,12 @@ struct Cli {
     target: Option<String>,
     #[arg(long)]
     stdlib_path: Option<String>,
+    #[arg(long)]
+    shared: bool,
+    #[arg(long)]
+    r#static: bool,
+    #[arg(long, short = 'o')]
+    output: Option<String>,
 }
 
 fn emit_diagnostics(engine: &TrussDiagnosticEngine, content: &str) -> bool {
@@ -45,76 +52,126 @@ fn emit_diagnostics(engine: &TrussDiagnosticEngine, content: &str) -> bool {
     }
 }
 
+fn get_target_kind(cli: &Cli) -> TargetKind {
+    if cli.r#static {
+        TargetKind::StaticLibrary
+    } else if cli.shared {
+        TargetKind::DynamicLibrary
+    } else {
+        TargetKind::Executable
+    }
+}
+
+fn get_output_path(cli: &Cli, kind: TargetKind) -> String {
+    if let Some(ref path) = cli.output {
+        return path.clone();
+    }
+    let first_file = cli.files.first().map(|s| s.as_str()).unwrap_or("a");
+    let stem = Path::new(first_file).file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("a");
+    match kind {
+        TargetKind::Executable => format!("{}.out", stem),
+        TargetKind::DynamicLibrary => format!("lib{}.so", stem),
+        TargetKind::StaticLibrary => format!("lib{}.a", stem),
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
-    let content = match fs::read_to_string(&cli.file) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error: Cannot read file '{}': {}", cli.file, e);
-            return;
-        }
-    };
-    let file_rc = Rc::new(cli.file.clone());
-    let char_stream = CharStream::new(content.clone(), file_rc.clone());
-    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-    let mut lexer = Lexer::new(char_stream, engine.clone());
-    let tokens = lexer.parse();
-
-    if emit_diagnostics(&engine.borrow(), &content) {
+    if cli.files.is_empty() {
+        eprintln!("Error: No input files specified");
         return;
     }
 
-    if cli.inspect || cli.tokens {
-        println!("=== Tokens ===");
-        for token in &tokens {
-            println!("{:?}", token);
-        }
-        println!();
-    }
-
-    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-    let mut parser = TrussParser::new(file_rc.clone(), tokens, engine.clone());
-    let mut program = parser.parse();
-
-    if emit_diagnostics(&engine.borrow(), &content) {
-        return;
-    }
-
-    if cli.inspect || cli.ast {
-        println!("=== AST (after parse) ===");
-        println!("{:#?}", program);
-    }
-
-    let mut expander = MacroExpander::new(engine.clone());
-    expander.expand(&mut program);
-
-    if emit_diagnostics(&engine.borrow(), &content) {
-        return;
-    }
-
-    if cli.inspect || cli.ast {
-        println!("=== AST (after macro expansion) ===");
-        println!("{:#?}", program);
-    }
+    let kind = get_target_kind(&cli);
+    let output_path = get_output_path(&cli, kind);
 
     let target_triple = match &cli.target {
-        Some(t) => TargetTriple::parse(t),
-        None => TargetTriple::host(),
+        Some(t) => TargetTriple::parse(t).to_triple_string(),
+        None => TargetTriple::host().to_triple_string(),
     };
-    flatten_program(&mut program.statements, &target_triple);
-
-    if cli.inspect || cli.ast {
-        println!("=== AST (after condition evaluation) ===");
-        println!("{:#?}", program);
-    }
 
     let main_pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
     let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
     packages.insert("main".to_string(), main_pkg.clone());
 
-    let mut stdlib_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+    let mut all_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+    let mut source_contents: Vec<(String, String)> = Vec::new();
 
+    for file_path in &cli.files {
+        let content = match std::fs::read_to_string(file_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Error: Cannot read file '{}': {}", file_path, e);
+                return;
+            }
+        };
+        source_contents.push((file_path.clone(), content));
+    }
+
+    for (file_path, content) in &source_contents {
+        let file_rc = Rc::new(file_path.clone());
+        let char_stream = CharStream::new(content.clone(), file_rc.clone());
+        let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let mut lexer = Lexer::new(char_stream, engine.clone());
+        let tokens = lexer.parse();
+
+        if emit_diagnostics(&engine.borrow(), content) {
+            return;
+        }
+
+        if cli.inspect || cli.tokens {
+            println!("=== Tokens ({}) ===", file_path);
+            for token in &tokens {
+                println!("{:?}", token);
+            }
+            println!();
+        }
+
+        let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let mut parser = TrussParser::new(file_rc.clone(), tokens, engine.clone());
+        let mut program = parser.parse();
+
+        if emit_diagnostics(&engine.borrow(), content) {
+            return;
+        }
+
+        if cli.inspect || cli.ast {
+            println!("=== AST (after parse) ({}) ===", file_path);
+            println!("{:#?}", program);
+        }
+
+        let mut expander = MacroExpander::new(engine.clone());
+        expander.expand(&mut program);
+
+        if emit_diagnostics(&engine.borrow(), content) {
+            return;
+        }
+
+        if cli.inspect || cli.ast {
+            println!("=== AST (after macro expansion) ({}) ===", file_path);
+            println!("{:#?}", program);
+        }
+
+        let cond_triple = match &cli.target {
+            Some(t) => TargetTriple::parse(t),
+            None => TargetTriple::host(),
+        };
+        flatten_program(&mut program.statements, &cond_triple);
+
+        if cli.inspect || cli.ast {
+            println!("=== AST (after condition evaluation) ({}) ===", file_path);
+            println!("{:#?}", program);
+        }
+
+        all_stmts.extend(program.statements);
+    }
+
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+
+    let mut stdlib_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
     if let Some(ref stdlib_path) = cli.stdlib_path {
         let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
         packages.insert("Truss".to_string(), truss_pkg.clone());
@@ -142,12 +199,12 @@ fn main() {
         }
 
         if !has_std_errors {
-            let mut std_resolver =
-                SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
-            let dummy_program = truss::ast::node::Program {
+            let dummy_program = Program {
                 file: Rc::new("".to_string()),
                 statements: Vec::new(),
             };
+            let mut std_resolver =
+                SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
             let std_module = std_resolver.resolve(&dummy_program, "Truss".to_string());
 
             if let Some(scope) = std_module.borrow().scope.clone() {
@@ -160,7 +217,7 @@ fn main() {
 
             let mut std_type_resolver =
                 TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
-            let empty_prog = truss::ast::node::Program {
+            let empty_prog = Program {
                 file: Rc::new("".to_string()),
                 statements: vec![],
             };
@@ -168,41 +225,48 @@ fn main() {
         }
     }
 
+    let first_file = cli.files.first().cloned().unwrap_or_default();
+    let combined_prog = Program {
+        file: Rc::new(first_file),
+        statements: all_stmts.clone(),
+    };
+
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "main".to_string(), engine.clone());
-    let module = symbol_resolver.resolve(&program, file_rc.to_string());
+    let module = symbol_resolver.resolve(&combined_prog, "main".to_string());
 
-    if emit_diagnostics(&engine.borrow(), &content) {
+    if emit_diagnostics(&engine.borrow(), "") {
         return;
     }
 
     if cli.inspect || cli.ast {
         println!("=== AST (after symbol resolve) ===");
-        println!("{:#?}", program);
+        println!("{:#?}", combined_prog);
     }
 
-    let mut type_resolver = TypeResolver::new(packages.clone(), "main".to_string(), engine.clone());
-    type_resolver.resolve(&program, module.clone());
+    let mut type_resolver =
+        TypeResolver::new(packages.clone(), "main".to_string(), engine.clone());
+    type_resolver.resolve(&combined_prog, module.clone());
 
-    if emit_diagnostics(&engine.borrow(), &content) {
+    if emit_diagnostics(&engine.borrow(), "") {
         return;
     }
 
     if cli.inspect || cli.ast {
         println!("=== AST (after type resolve) ===");
-        println!("{:#?}", program);
+        println!("{:#?}", combined_prog);
     }
 
     let context = inkwell::context::Context::create();
-    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-    let ir_generator = IRGenerator::new(&context, engine.clone());
+    let ir_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let ir_generator = IRGenerator::new(&context, ir_engine.clone());
     let modules = ir_generator.generate_with_stdlib(
-        &program,
+        &combined_prog,
         &stdlib_stmts,
         module.borrow().scope.clone().unwrap(),
     );
 
-    if emit_diagnostics(&engine.borrow(), &content) {
+    if emit_diagnostics(&ir_engine.borrow(), "") {
         return;
     }
 
@@ -215,6 +279,23 @@ fn main() {
         let ir = modules.main.print_to_string().to_string();
         println!("=== LLVM IR (main) ===");
         println!("{}", ir);
+    }
+
+    match emit::emit_output(
+        &modules.main,
+        modules.stdlib.as_deref(),
+        &target_triple,
+        &output_path,
+        kind,
+    ) {
+        Ok(()) => {
+            if !cli.ir && !cli.inspect && !cli.tokens && !cli.ast {
+                println!("Emitted: {}", output_path);
+            }
+        }
+        Err(e) => {
+            eprintln!("Emit failed: {}", e);
+        }
     }
 }
 
