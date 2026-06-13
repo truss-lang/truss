@@ -239,7 +239,6 @@ impl Parser {
                 KeywordType::Typealias => self.parse_typealias(modifiers),
                 KeywordType::Module => self.parse_module_decl(modifiers),
                 KeywordType::Import => self.parse_import(),
-                KeywordType::Using => self.parse_using_decl(),
                 KeywordType::Subscript => self.parse_subscript_decl(modifiers),
                 KeywordType::Macro => {
                     if !modifiers.is_empty() {
@@ -2773,7 +2772,11 @@ impl Parser {
         })
     }
 
-    fn parse_extern(&mut self, _attributes: Vec<Attribute>, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+    fn parse_extern(
+        &mut self,
+        _attributes: Vec<Attribute>,
+        modifiers: Vec<Modifier>,
+    ) -> Result<Statement, ()> {
         let Some(extern_token) = self.next() else {
             return Err(());
         };
@@ -3939,199 +3942,6 @@ impl Parser {
             token: Box::new(token),
             path,
             kind,
-            selective_members,
-            is_current_package,
-        })
-    }
-
-    fn parse_using_decl(&mut self) -> Result<Statement, ()> {
-        let Some(token) = self.next() else {
-            return Err(());
-        };
-        let Some(next) = self.peek() else {
-            self.emit_error(
-                TrussDiagnosticCode::ExpectedIdentifier,
-                "Expected alias name or dotted path after 'using'",
-                &token,
-            );
-            return Err(());
-        };
-        let is_package_prefix = KeywordType::is_keyword(&next, KeywordType::Package)
-            && self
-                .peek2()
-                .is_some_and(|t| OperatorType::is_operator(&t, OperatorType::Dot));
-        if !matches!(next.ty, TokenType::Identifier) && !is_package_prefix {
-            self.emit_error(
-                TrussDiagnosticCode::ExpectedIdentifier,
-                format!("Expected identifier but found '{}'", next.value),
-                &next,
-            );
-            return Err(());
-        }
-        let name = if !is_package_prefix {
-            if let Some(eq) = self.peek2() {
-                if OperatorType::is_operator(&eq, OperatorType::Assign) {
-                    let name = self.next().unwrap();
-                    self.index += 1;
-                    Some(name)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        let Some(start) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::ExpectedIdentifier,
-                "Expected identifier in dotted path",
-                &token,
-            );
-            return Err(());
-        };
-        let mut path: Vec<String> = Vec::new();
-        let mut is_current_package = false;
-        if KeywordType::is_keyword(&start, KeywordType::Package) {
-            match self.peek() {
-                Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
-                    self.index += 1;
-                    let Some(name) = self.next() else {
-                        self.emit_error(
-                            TrussDiagnosticCode::ExpectedIdentifier,
-                            "Expected module or member name after 'package.'",
-                            &token,
-                        );
-                        return Err(());
-                    };
-                    if !matches!(name.ty, TokenType::Identifier) {
-                        self.emit_error(
-                            TrussDiagnosticCode::ExpectedIdentifier,
-                            format!(
-                                "Expected identifier after 'package.' but found '{}'",
-                                name.value
-                            ),
-                            &name,
-                        );
-                        return Err(());
-                    }
-                    is_current_package = true;
-                    path.push(name.value);
-                }
-                _ => {
-                    self.emit_error(
-                        TrussDiagnosticCode::ExpectedIdentifier,
-                        format!("Expected identifier but found '{}'", start.value),
-                        &start,
-                    );
-                    return Err(());
-                }
-            }
-        } else if !matches!(start.ty, TokenType::Identifier) {
-            self.emit_error(
-                TrussDiagnosticCode::ExpectedIdentifier,
-                format!("Expected identifier but found '{}'", start.value),
-                &start,
-            );
-            return Err(());
-        } else {
-            path.push(start.value.clone());
-        }
-        loop {
-            match self.peek() {
-                Some(ref dot) if OperatorType::is_operator(dot, OperatorType::Dot) => {
-                    if let Some(next) = self.peek2() {
-                        if SeparatorType::is_separator(&next, SeparatorType::OpenBrace) {
-                            break;
-                        }
-                    }
-                    self.index += 1;
-                    let Some(name) = self.next() else {
-                        self.emit_error(
-                            TrussDiagnosticCode::ExpectedIdentifier,
-                            "Expected identifier after '.'",
-                            &token,
-                        );
-                        return Err(());
-                    };
-                    if !matches!(name.ty, TokenType::Identifier) {
-                        self.emit_error(
-                            TrussDiagnosticCode::ExpectedIdentifier,
-                            format!("Expected identifier but found '{}'", name.value),
-                            &name,
-                        );
-                        return Err(());
-                    }
-                    path.push(name.value);
-                }
-                _ => break,
-            }
-        }
-        let selective_members = if let Some(ref brace_or_dot) = self.peek() {
-            if SeparatorType::is_separator(brace_or_dot, SeparatorType::OpenBrace) {
-                if name.is_some() {
-                    self.emit_error(
-                        TrussDiagnosticCode::ParserError,
-                        "'{...}' syntax is not allowed with explicit alias using '='",
-                        brace_or_dot,
-                    );
-                    return Err(());
-                }
-                self.index += 1;
-                let members = self.parse_selective_members()?;
-                Some(members)
-            } else if OperatorType::is_operator(brace_or_dot, OperatorType::Dot) {
-                if let Some(ref brace) = self.peek2() {
-                    if SeparatorType::is_separator(brace, SeparatorType::OpenBrace) {
-                        if name.is_some() {
-                            self.emit_error(
-                                TrussDiagnosticCode::ParserError,
-                                "'{...}' syntax is not allowed with explicit alias using '='",
-                                brace_or_dot,
-                            );
-                            return Err(());
-                        }
-                        self.index += 1;
-                        self.index += 1;
-                        let members = self.parse_selective_members()?;
-                        Some(members)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        let name = if selective_members.is_some() {
-            let last = path.last().cloned().unwrap_or_default();
-            Box::new(Token::new(
-                last.clone(),
-                TokenType::Identifier,
-                token.position.clone(),
-                token.file.clone(),
-            ))
-        } else {
-            let inner = name.unwrap_or_else(|| {
-                let last = path.last().unwrap();
-                Token::new(
-                    last.clone(),
-                    TokenType::Identifier,
-                    token.position.clone(),
-                    token.file.clone(),
-                )
-            });
-            Box::new(inner)
-        };
-        Ok(Statement::UsingDecl {
-            token: Box::new(token),
-            name,
-            path,
             selective_members,
             is_current_package,
         })
@@ -5449,10 +5259,7 @@ impl Parser {
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::ParserError,
-                            format!(
-                                "Expected string literal but found '{}'",
-                                val_tok.value
-                            ),
+                            format!("Expected string literal but found '{}'", val_tok.value),
                             &val_tok,
                         );
                         return Err(());
