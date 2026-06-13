@@ -2,13 +2,18 @@ use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
 
 use crate::{
     ast::{node::Program, statement::Statement},
+    condition_eval::TargetTriple,
     diag::TrussDiagnosticEngine,
-    ir_gen::IRGenerator,
+    ir_gen::{emit, IRGenerator, IRModules},
     krate::Package,
     lexer::{CharStream, Lexer},
     parser::Parser,
     symbol_resolver::SymbolResolver,
-    trusspm::{lock::LockManager, manifest::Manifest, resolver::DependencyResolver},
+    trusspm::{
+        lock::LockManager,
+        manifest::{Manifest, TargetKind},
+        resolver::DependencyResolver,
+    },
     type_resolver::TypeResolver,
 };
 
@@ -16,6 +21,7 @@ pub struct BuildOrchestrator {
     pub packages: HashMap<String, Rc<RefCell<Package>>>,
     pub manifest: Manifest,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
+    pub output_path: Option<String>,
 }
 
 impl BuildOrchestrator {
@@ -35,6 +41,7 @@ impl BuildOrchestrator {
             packages,
             manifest,
             engine,
+            output_path: None,
         })
     }
 
@@ -175,7 +182,7 @@ impl BuildOrchestrator {
                 return;
             }
 
-            if file_modules.is_empty() {
+            let combined_module = if file_modules.is_empty() {
                 let single_ir_gen = IRGenerator::new(&context, ir_engine.clone());
                 let modules = single_ir_gen.generate_with_stdlib(&prog, &[], main_scope);
                 if ir_engine.borrow().has_errors() {
@@ -185,28 +192,71 @@ impl BuildOrchestrator {
                     }
                     return;
                 }
-                let ir = modules.main.print_to_string().to_string();
-                println!("{}", ir);
+                modules
             } else if file_modules.len() == 1 {
-                let ir = file_modules[0].1.print_to_string().to_string();
-                println!("{}", ir);
+                IRModules {
+                    main: Rc::new(file_modules[0].1.clone()),
+                    stdlib: None,
+                }
             } else {
-                let target = file_modules.remove(0);
-                for (file_name, module) in &file_modules {
+                let target_module = file_modules.remove(0);
+                for (_, module) in &file_modules {
                     for func in module.get_functions() {
                         let name = func.get_name().to_str().unwrap_or("").to_string();
-                        if !name.is_empty() && target.1.get_function(&name).is_none() {
+                        if !name.is_empty() && target_module.1.get_function(&name).is_none() {
                             let fn_type = func.get_type();
-                            target.1.add_function(&name, fn_type, None);
+                            target_module.1.add_function(&name, fn_type, None);
                         }
                     }
-                    println!("; LLVM Module: {}", file_name);
-                    let ir = module.print_to_string().to_string();
-                    println!("{}", ir);
                 }
-                println!("; LLVM Module: {} (linked)", target.0);
-                let ir = target.1.print_to_string().to_string();
-                println!("{}", ir);
+                IRModules {
+                    main: Rc::new(target_module.1),
+                    stdlib: None,
+                }
+            };
+
+            let triple = self
+                .manifest
+                .target_triple
+                .clone()
+                .unwrap_or_else(|| TargetTriple::host().to_triple_string());
+
+            let kind = self
+                .manifest
+                .targets
+                .first()
+                .map(|t| t.kind)
+                .unwrap_or(TargetKind::Executable);
+
+            let build_dir = project_path.join("build");
+            std::fs::create_dir_all(&build_dir).ok();
+
+            let output_name = match kind {
+                TargetKind::Executable => self.manifest.name.clone(),
+                TargetKind::DynamicLibrary => format!("lib{}.so", self.manifest.name),
+                TargetKind::StaticLibrary => format!("lib{}.a", self.manifest.name),
+            };
+            let output_path = build_dir.join(&output_name);
+            let output_str = output_path.to_string_lossy().to_string();
+
+            match emit::emit_output(
+                &combined_module.main,
+                combined_module.stdlib.as_deref(),
+                &triple,
+                &output_str,
+                kind,
+            ) {
+                Ok(()) => {
+                    self.output_path = Some(output_str);
+                    println!("Build succeeded: {}", output_path.display());
+                }
+                Err(e) => {
+                    eprintln!("Emit failed: {}", e);
+                    self.engine.borrow_mut().emit(crate::diag::new_diagnostic(
+                        crate::diag::TrussDiagnosticCode::IRError,
+                        format!("Failed to emit output: {}", e),
+                    ));
+                }
             }
         }
     }

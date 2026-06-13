@@ -31,6 +31,10 @@ impl TargetTriple {
             None => TargetTriple::parse("unknown-unknown-unknown"),
         }
     }
+
+    pub fn to_triple_string(&self) -> String {
+        format!("{}-unknown-{}-unknown", self.arch, self.os)
+    }
 }
 
 fn evaluate_condition(cond: &Condition, triple: &TargetTriple) -> bool {

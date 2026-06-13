@@ -85,11 +85,45 @@ fn cmd_build() {
         eprintln!("Build failed");
         std::process::exit(1);
     }
-
-    println!("Build succeeded");
 }
 
 fn cmd_run() {
-    cmd_build();
-    println!("Running...");
+    let mut orchestrator = match truss::trusspm::build::BuildOrchestrator::new(".") {
+        Some(o) => o,
+        None => {
+            eprintln!("Error: Project.truss not found");
+            std::process::exit(1);
+        }
+    };
+
+    println!(
+        "Building project '{}' v{}",
+        orchestrator.manifest.name, orchestrator.manifest.version
+    );
+
+    orchestrator.run_all_passes(".");
+
+    if orchestrator.has_errors() {
+        eprintln!("Build failed");
+        std::process::exit(1);
+    }
+
+    let output_path = match orchestrator.output_path {
+        Some(ref p) => p.clone(),
+        None => {
+            eprintln!("Error: No output path from build");
+            std::process::exit(1);
+        }
+    };
+
+    println!("Running '{}'...", output_path);
+
+    let status = std::process::Command::new(&output_path)
+        .status()
+        .unwrap_or_else(|e| {
+            eprintln!("Error: Failed to run '{}': {}", output_path, e);
+            std::process::exit(1);
+        });
+
+    std::process::exit(status.code().unwrap_or(0));
 }

@@ -35,6 +35,8 @@ use crate::{
     types::Type,
 };
 
+pub mod emit;
+
 struct Scope<'ctx> {
     variables: HashMap<String, PointerValue<'ctx>>,
     deferred_vars: Vec<(PointerValue<'ctx>, String)>,
