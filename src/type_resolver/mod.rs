@@ -4273,10 +4273,16 @@ impl TypeResolver {
                     }
                 }
             }
-            Expression::ImplicitMemberAccess { ty, .. } => {
-                let t = Rc::new(RefCell::new(Type::Never));
-                *ty = Some(t.clone());
-                t
+            Expression::ImplicitMemberAccess { member, ty } => {
+                let result = self.resolve_implicit_member_access(member, ty);
+                match result {
+                    Some(t) => t,
+                    None => {
+                        let t = Rc::new(RefCell::new(Type::Never));
+                        *ty = Some(t.clone());
+                        t
+                    }
+                }
             }
         };
         Some(result)
@@ -5625,6 +5631,64 @@ impl TypeResolver {
                     }
                 }
             }
+        }
+        None
+    }
+
+    fn resolve_implicit_member_access(
+        &self,
+        member: &Token,
+        ty: &mut Option<Rc<RefCell<Type>>>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let scope = self.current_scope.as_ref()?;
+        let mut current = Some(scope.clone());
+        while let Some(s) = current {
+            let scope_ref = s.borrow();
+            let all_symbols: Vec<_> = scope_ref
+                .name_table
+                .iter()
+                .filter_map(|(name, sym)| {
+                    let binding = sym.borrow();
+                    if matches!(&*binding, Symbol::Enum { .. }) {
+                        Some((name.clone(), sym.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for (_, enum_sym) in &all_symbols {
+                if let Symbol::Enum { cases, .. } = &*enum_sym.borrow() {
+                    for case in cases {
+                        if case.borrow().name().as_ref().ok() == Some(&member.value) {
+                            let enum_name = enum_sym.borrow().name().ok()?;
+                            let enum_type = Rc::new(RefCell::new(Type::Enum(
+                                enum_name.clone(),
+                                WeakSymbol(Rc::downgrade(enum_sym)),
+                                vec![],
+                            )));
+                            if let Symbol::EnumCase {
+                                parameter_types, ..
+                            } = &*case.borrow()
+                            {
+                                if parameter_types.is_empty() {
+                                    *ty = Some(enum_type.clone());
+                                    return Some(enum_type);
+                                } else {
+                                    let case_fn = Rc::new(RefCell::new(Type::Function(
+                                        parameter_types.clone(),
+                                        enum_type.clone(),
+                                        false,
+                                        None,
+                                    )));
+                                    *ty = Some(case_fn.clone());
+                                    return Some(case_fn);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            current = scope_ref.parent.clone();
         }
         None
     }
