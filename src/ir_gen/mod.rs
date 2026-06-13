@@ -306,6 +306,7 @@ impl<'ctx> IRGenerator<'ctx> {
             let all_stmts: Vec<Rc<RefCell<Statement>>> =
                 program.statements.iter().cloned().collect();
             self.run_all_passes(&all_stmts);
+            self.generate_main_wrapper(program);
             return IRModules {
                 main: Rc::new(self.module),
                 stdlib: None,
@@ -342,6 +343,8 @@ impl<'ctx> IRGenerator<'ctx> {
         *self.program_scope.borrow_mut() = Some(scope);
         let all_main: Vec<Rc<RefCell<Statement>>> = program.statements.iter().cloned().collect();
         self.run_all_passes(&all_main);
+
+        self.generate_main_wrapper(program);
 
         IRModules {
             main: Rc::new(std::mem::replace(
@@ -8366,5 +8369,74 @@ impl<'ctx> IRGenerator<'ctx> {
             new_diagnostic(code, msg)
         };
         self.engine.borrow_mut().emit(diag);
+    }
+
+    fn generate_main_wrapper(&self, program: &Program) {
+        let main_fn_name = self.find_main_function(program);
+        if let Some(name) = main_fn_name {
+            if self.module.get_function("main").is_some() {
+                return;
+            }
+            if let Some(main_fn) = self.module.get_function(&name) {
+                let i32_type = self.context.i32_type();
+                let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+                let main_type = i32_type.fn_type(
+                    &[i32_type.into(), ptr_type.into()],
+                    false,
+                );
+                let c_main = self.module.add_function("main", main_type, None);
+                let entry = self.context.append_basic_block(c_main, "entry");
+                self.builder.position_at_end(entry);
+                let fn_type = main_fn.get_type();
+                let ret_type = fn_type.get_return_type();
+                if ret_type.is_none() {
+                    self.builder.build_call(main_fn, &[], "call_main").ok();
+                    let _ = self.builder.build_return(Some(&i32_type.const_zero()));
+                } else {
+                    let result = self.builder.build_call(main_fn, &[], "call_main");
+                    if let Ok(call_val) = result {
+                        match call_val.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => {
+                                let _ = self.builder.build_return(Some(&val));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn find_main_function(&self, program: &Program) -> Option<String> {
+        for stmt in &program.statements {
+            let result = self.find_main_in_stmt(stmt);
+            if result.is_some() {
+                return result;
+            }
+        }
+        None
+    }
+
+    fn find_main_in_stmt(&self, stmt: &Rc<RefCell<Statement>>) -> Option<String> {
+        let s = stmt.borrow();
+        match &*s {
+            Statement::FunctionDecl { attributes, name, .. } => {
+                if attributes.iter().any(|a| a.name == "main") {
+                    Some(name.value.clone())
+                } else {
+                    None
+                }
+            }
+            Statement::ModuleDecl { body, .. } => {
+                for child in body {
+                    let result = self.find_main_in_stmt(child);
+                    if result.is_some() {
+                        return result;
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
     }
 }
