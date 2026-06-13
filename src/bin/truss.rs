@@ -1,7 +1,6 @@
-use std::{cell::RefCell, fs, path::Path, rc::Rc};
+use std::{fs, path::Path};
 
 use clap::{Parser, Subcommand};
-use truss::diag::TrussDiagnosticEngine;
 
 #[derive(Parser)]
 #[command(name = "truss")]
@@ -67,15 +66,24 @@ fn cmd_init(name: &str) {
 }
 
 fn cmd_build() {
-    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-    let manifest = match truss::trusspm::manifest::Manifest::from_project_dir(".", engine) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Error: {}", e);
+    let mut orchestrator = match truss::trusspm::build::BuildOrchestrator::new(".") {
+        Some(o) => o,
+        None => {
+            eprintln!("Error: Project.truss not found");
             std::process::exit(1);
         }
     };
-    println!("Building project '{}' v{}", manifest.name, manifest.version);
+
+    println!("Building project '{}' v{}", orchestrator.manifest.name, orchestrator.manifest.version);
+
+    orchestrator.run_all_passes(".");
+
+    if orchestrator.has_errors() {
+        eprintln!("Build failed");
+        std::process::exit(1);
+    }
+
+    println!("Build succeeded");
 }
 
 fn cmd_run() {
