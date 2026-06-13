@@ -1068,11 +1068,23 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             Statement::ExtensionDecl {
-                type_name, body, ..
+                type_name,
+                body,
+                type_arguments,
+                ..
             } => {
+                let prefix = if !Self::type_args_to_abbreviation(type_arguments.as_ref()).is_empty() {
+                    format!(
+                        "{}.{}",
+                        type_name.value,
+                        Self::type_args_to_abbreviation(type_arguments.as_ref())
+                    )
+                } else {
+                    type_name.value.clone()
+                };
                 for s in body {
                     if let Statement::FunctionDecl { name: mname, .. } = &*s.borrow() {
-                        let key = format!("{}.{}", type_name.value, mname.value);
+                        let key = format!("{}.{}", prefix, mname.value);
                         *counts.entry(key).or_insert(0) += 1;
                     }
                     Self::count_fn_name_frequencies(s, counts);
@@ -1122,6 +1134,38 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::Inline(inner, _) => {
                 format!("inline{}", Self::type_to_abbreviation(&inner.borrow()))
             }
+        }
+    }
+
+    fn type_args_to_abbreviation(
+        type_arguments: Option<&Vec<Rc<RefCell<Expression>>>>,
+    ) -> String {
+        match type_arguments {
+            Some(args) => {
+                let parts: Vec<String> = args
+                    .iter()
+                    .filter_map(|ta| {
+                        let expr = ta.borrow();
+                        let ty = match &*expr {
+                            Expression::Type { ty, .. } => ty.clone(),
+                            Expression::Variable { ty, .. } => ty.clone(),
+                            _ => None,
+                        };
+                        drop(expr);
+                        ty.and_then(|t| {
+                            let ty = t.borrow();
+                            let s = Self::type_to_abbreviation(&ty);
+                            if s.is_empty() { None } else { Some(s) }
+                        })
+                    })
+                    .collect();
+                if parts.is_empty() {
+                    String::new()
+                } else {
+                    parts.join(".")
+                }
+            }
+            None => String::new(),
         }
     }
 
@@ -1619,9 +1663,21 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
         if let Statement::ExtensionDecl {
-            type_name, body, ..
+            type_name,
+            body,
+            type_arguments,
+            ..
         } = &*statement.borrow()
         {
+            let type_prefix = if !Self::type_args_to_abbreviation(type_arguments.as_ref()).is_empty() {
+                format!(
+                    "{}.{}",
+                    type_name.value,
+                    Self::type_args_to_abbreviation(type_arguments.as_ref())
+                )
+            } else {
+                type_name.value.clone()
+            };
             for stmt in body {
                 if let Statement::FunctionDecl {
                     name: method_name,
@@ -1645,7 +1701,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Ok(function_type) =
                         self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
                     {
-                        let llvm_name = format!("{}.{}", type_name.value, method_name.value);
+                        let llvm_name =
+                            format!("{}.{}", type_prefix, method_name.value);
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
@@ -1660,7 +1717,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Ok(function_type) =
                         self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
                     {
-                        let llvm_name = format!("{}.{}", type_name.value, "init");
+                        let llvm_name = format!("{}.{}", type_prefix, "init");
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
@@ -1673,7 +1730,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Ok(function_type) =
                         self.get_function_type(return_type.clone(), vec![self_param], false)
                     {
-                        let llvm_name = format!("{}.deinit", type_name.value);
+                        let llvm_name = format!("{}.deinit", type_prefix);
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
@@ -2304,14 +2361,14 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_protocol_witness_tables(&self, statement: Rc<RefCell<Statement>>) {
-        let type_name = if let Statement::ClassDecl {
+        let (type_name, type_arguments_opt) = if let Statement::ClassDecl {
             name, conformances, ..
         } = &*statement.borrow()
         {
             if conformances.is_empty() {
                 return;
             }
-            name.value.clone()
+            (name.value.clone(), None)
         } else if let Statement::StructDecl {
             name, conformances, ..
         } = &*statement.borrow()
@@ -2319,21 +2376,34 @@ impl<'ctx> IRGenerator<'ctx> {
             if conformances.is_empty() {
                 return;
             }
-            name.value.clone()
+            (name.value.clone(), None)
         } else if let Statement::ExtensionDecl {
             type_name,
             conformances,
+            type_arguments,
             ..
         } = &*statement.borrow()
         {
             if conformances.is_empty() {
                 return;
             }
-            type_name.value.clone()
+            (type_name.value.clone(), type_arguments.clone())
         } else {
             return;
         };
-        let type_name = &type_name;
+
+        let type_suffix = if type_arguments_opt.is_some()
+            && !Self::type_args_to_abbreviation(type_arguments_opt.as_ref()).is_empty()
+        {
+            format!(
+                "{}.{}",
+                type_name,
+                Self::type_args_to_abbreviation(type_arguments_opt.as_ref())
+            )
+        } else {
+            type_name.clone()
+        };
+
         let conformances: Vec<Rc<RefCell<Expression>>> =
             if let Statement::ClassDecl { conformances, .. } = &*statement.borrow() {
                 conformances.clone()
@@ -2360,12 +2430,26 @@ impl<'ctx> IRGenerator<'ctx> {
             };
             drop(conformance_expr);
 
-            let Some(wt_type) = self
-                .protocol_witness_table_types
-                .borrow()
-                .get(&protocol_name)
-                .copied()
-            else {
+            let wt_lookup_key = if type_suffix != type_name {
+                let key = format!("{}.{}", protocol_name, type_suffix);
+                if let Some(wt_type) = self
+                    .protocol_witness_table_types
+                    .borrow()
+                    .get(&key)
+                    .copied()
+                {
+                    Some(wt_type)
+                } else {
+                    None
+                }
+            } else {
+                self.protocol_witness_table_types
+                    .borrow()
+                    .get(&protocol_name)
+                    .copied()
+            };
+
+            let Some(wt_type) = wt_lookup_key else {
                 continue;
             };
             let entries = self.compute_protocol_witness_table_entries(&protocol_name);
@@ -2373,8 +2457,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 continue;
             }
 
-            let key = (protocol_name.clone(), type_name.clone());
-            let wt_global_name = format!("__protocol_wt.{}.{}", protocol_name, type_name);
+            let key = (protocol_name.clone(), type_suffix.clone());
+            let wt_global_name = format!("__protocol_wt.{}.{}", protocol_name, type_suffix);
             if self.module.get_global(&wt_global_name).is_some() {
                 continue;
             }
@@ -2382,17 +2466,32 @@ impl<'ctx> IRGenerator<'ctx> {
             let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
             let mut const_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
             for (entry_name, entry_kind) in &entries {
-                let base_name = format!("{}.{}", type_name, entry_name);
+                let base_name = format!("{}.{}", type_suffix, entry_name);
                 let fn_name = if self.overloaded_fn_names.borrow().contains(&base_name) {
                     self.find_overloaded_witness_fn(
-                        type_name,
+                        &type_suffix,
                         entry_name,
                         entry_kind,
                         &protocol_name,
                     )
-                    .unwrap_or(base_name)
-                } else {
+                    .unwrap_or_else(|| {
+                        let generic_base = format!("{}.{}", type_name, entry_name);
+                        if self.overloaded_fn_names.borrow().contains(&generic_base) {
+                            self.find_overloaded_witness_fn(
+                                &type_name,
+                                entry_name,
+                                entry_kind,
+                                &protocol_name,
+                            )
+                            .unwrap_or(generic_base)
+                        } else {
+                            generic_base
+                        }
+                    })
+                } else if self.module.get_function(&base_name).is_some() {
                     base_name
+                } else {
+                    format!("{}.{}", type_name, entry_name)
                 };
                 if let Some(func) = self.module.get_function(&fn_name) {
                     const_vals.push(
@@ -3748,12 +3847,21 @@ impl<'ctx> IRGenerator<'ctx> {
                 result
             }
             Statement::ExtensionDecl {
-                type_name, body, ..
+                type_name, body, type_arguments, ..
             } => {
                 let prev = self.current_struct.borrow_mut().take();
-                self.current_struct
-                    .borrow_mut()
-                    .replace(type_name.value.clone());
+                let struct_name = if type_arguments.is_some()
+                    && !Self::type_args_to_abbreviation(type_arguments.as_ref()).is_empty()
+                {
+                    format!(
+                        "{}.{}",
+                        type_name.value,
+                        Self::type_args_to_abbreviation(type_arguments.as_ref())
+                    )
+                } else {
+                    type_name.value.clone()
+                };
+                self.current_struct.borrow_mut().replace(struct_name);
                 let result = (|| -> Result<bool> {
                     for stmt in body {
                         self.resolve_statement(stmt.clone())?;
