@@ -4976,3 +4976,143 @@ fn test_final_property_in_final_class_symbol() {
         "property in final class should be final"
     );
 }
+
+// --- Exception handling symbol resolver tests ---
+
+#[test]
+fn test_throw_resolves_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() throws { throw MyError.someCase }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        assert!(matches!(&*statements[0].borrow(), Statement::Throw { .. }));
+    } else {
+        panic!("Expected FunctionDecl with Throw");
+    }
+}
+
+#[test]
+fn test_do_expression_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { do { let x = 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+}
+
+#[test]
+fn test_do_catch_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() throws { do { let x = 1 } catch { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+}
+
+#[test]
+fn test_try_expression_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() throws { do { try foo() } catch { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    assert!(
+        engine.borrow().has_errors(),
+        "Should have errors (foo is undefined)"
+    );
+}
+
+#[test]
+fn test_do_catch_finally_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() throws { do { let x = 1 } catch { } finally { } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Should have no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
+}
+
+#[test]
+fn test_throws_function_has_throws_types() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() throws(MyError) -> Int32 { return 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl {
+        name, throws_types, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "test");
+        assert!(throws_types.is_some());
+        assert_eq!(throws_types.as_ref().unwrap().len(), 1);
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}

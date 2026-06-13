@@ -1867,6 +1867,9 @@ impl SymbolResolver {
                     self.resolve_statement(stmt.clone());
                 }
             }
+            Statement::Throw { exception, .. } => {
+                self.resolve_expression(exception.clone());
+            }
             Statement::ModuleDecl { body, scope, .. } => {
                 self.enter_scope(scope.clone());
                 for stmt in body {
@@ -2045,12 +2048,35 @@ impl SymbolResolver {
             Expression::Case { expression, .. } => {
                 self.resolve_expression(expression.clone());
             }
-            Expression::Do { body, scope, .. } => {
+            Expression::Do {
+                body,
+                catch_clauses,
+                finally_body,
+                scope,
+                ..
+            } => {
                 *scope = Some(self.enter_scope(None));
                 for stmt in body.iter() {
                     self.resolve_statement(stmt.clone());
                 }
+                for clause in catch_clauses {
+                    if let Some(pattern) = &clause.pattern {
+                        Self::resolve_pattern_bindings_ref(pattern, self);
+                    }
+                    for stmt in &clause.body {
+                        self.resolve_statement(stmt.clone());
+                    }
+                    if let Some(guard) = &clause.guard {
+                        self.resolve_expression(guard.clone());
+                    }
+                }
+                for stmt in finally_body.iter() {
+                    self.resolve_statement(stmt.clone());
+                }
                 self.leave_scope();
+            }
+            Expression::Try { expression, .. } => {
+                self.resolve_expression(expression.clone());
             }
             Expression::Match { value, cases, .. } => {
                 self.resolve_expression(value.clone());
