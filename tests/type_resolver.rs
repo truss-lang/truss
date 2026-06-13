@@ -7199,3 +7199,117 @@ fn test_protocol_throws_function_type() {
         }
     }
 }
+
+#[test]
+fn test_implicit_member_dot_enum_case_no_data() {
+    let engine = create_engine();
+    let code = r#"
+enum TargetKind {
+    case Executable
+    case DynamicLibrary(Int32)
+}
+
+func getKind() -> TargetKind {
+    .Executable
+}
+"#;
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors(), "Symbol resolver errors: {:?}", engine.borrow().get_errors());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    assert!(!engine_ref.has_errors(), "Type resolver errors: {:?}", engine_ref.get_errors());
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+    {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::ImplicitMemberAccess { member, ty } => {
+                assert_eq!(member.value, "Executable");
+                assert!(ty.is_some(), "ImplicitMemberAccess should have a type");
+                if let Some(t) = ty {
+                    assert_eq!(
+                        t.borrow().to_string(),
+                        "TargetKind",
+                        "Type should be TargetKind enum"
+                    );
+                }
+            }
+            other => panic!("Expected ImplicitMemberAccess, got {:?}", other),
+        }
+    } else {
+        panic!("Expected FunctionDecl with ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_implicit_member_dot_enum_case_with_data() {
+    let engine = create_engine();
+    let code = r#"
+enum TargetKind {
+    case Executable
+    case DynamicLibrary(Int32)
+}
+
+func getLib() -> TargetKind {
+    .DynamicLibrary(42)
+}
+"#;
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors(), "Symbol resolver errors: {:?}", engine.borrow().get_errors());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    let engine_ref = engine.borrow();
+    assert!(!engine_ref.has_errors(), "Type resolver errors for .DynamicLibrary(\"test\"): {:?}", engine_ref.get_errors());
+
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::ExpressionStatement { expression } = &*statements[0].borrow()
+    {
+        let expr = expression.borrow();
+        match &*expr {
+            Expression::Call { callee, parameters, .. } => {
+                let callee_expr = callee.borrow();
+                match &*callee_expr {
+                    Expression::ImplicitMemberAccess { member, ty } => {
+                        assert_eq!(member.value, "DynamicLibrary");
+                        assert!(ty.is_some(), "ImplicitMemberAccess callee should have a type");
+                        if let Some(t) = ty {
+                            assert!(
+                                t.borrow().to_string().contains("Function"),
+                                "Callee with data should have Function type, got: {}",
+                                t.borrow()
+                            );
+                        }
+                    }
+                    other => panic!("Expected ImplicitMemberAccess as callee, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Call expression with ImplicitMemberAccess callee, got {:?}", other),
+        }
+    } else {
+        panic!("Expected FunctionDecl with ExpressionStatement");
+    }
+}
