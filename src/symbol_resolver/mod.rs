@@ -110,6 +110,8 @@ impl SymbolResolver {
             self.register_symbols(stmt.clone());
         }
 
+        self.validate_main_attribute(&program.statements);
+
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
         }
@@ -1604,7 +1606,6 @@ impl SymbolResolver {
                                 self.resolve_expression(tp.clone());
                             }
                         }
-                        // Fill Symbol::Class.superclass WeakSymbol
                         if let Some(super_sym) = self
                             .current_scope
                             .as_ref()
@@ -2357,5 +2358,44 @@ impl SymbolResolver {
         let msg = message.into();
         let diag = new_diagnostic(code, &msg).with_label(primary_label_from_token(token, &msg));
         self.engine.borrow_mut().emit(diag);
+    }
+
+    fn validate_main_attribute(&self, stmts: &[Rc<RefCell<Statement>>]) {
+        let mut main_count = 0u32;
+        for stmt in stmts {
+            self.count_main_in_stmts(stmt, false, &mut main_count);
+        }
+    }
+
+    fn count_main_in_stmts(&self, stmt: &Rc<RefCell<Statement>>, inside_module: bool, count: &mut u32) {
+        let s = stmt.borrow();
+        match &*s {
+            Statement::FunctionDecl { attributes, name, .. } => {
+                if attributes.iter().any(|a| a.name == "main") {
+                    if inside_module {
+                        self.emit_error(
+                            TrussDiagnosticCode::MainInsideModule,
+                            "'#[main]' attribute is not allowed inside a module",
+                            name,
+                        );
+                    } else {
+                        *count += 1;
+                        if *count > 1 {
+                            self.emit_error(
+                                TrussDiagnosticCode::DuplicateMainAttribute,
+                                "Multiple functions with '#[main]' attribute",
+                                name,
+                            );
+                        }
+                    }
+                }
+            }
+            Statement::ModuleDecl { body, .. } => {
+                for child in body {
+                    self.count_main_in_stmts(child, true, count);
+                }
+            }
+            _ => {}
+        }
     }
 }

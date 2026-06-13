@@ -42,6 +42,8 @@ pub enum TrussDiagnosticCode {
     CannotOverrideFinal,
     AbstractClassInstantiation,
     AbstractMethodNotImplemented,
+    DuplicateMainAttribute,
+    MainInsideModule,
 
     TypeError,
     TypeMismatch,
@@ -117,6 +119,8 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::CannotOverrideFinal => "E0210",
             Self::AbstractClassInstantiation => "E0211",
             Self::AbstractMethodNotImplemented => "E0212",
+            Self::DuplicateMainAttribute => "E0213",
+            Self::MainInsideModule => "E0214",
 
             Self::TypeError => "E0301",
             Self::TypeMismatch => "E0302",

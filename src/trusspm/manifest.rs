@@ -25,20 +25,6 @@ pub struct ManifestDependency {
     pub version: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Lock {
-    pub version: u32,
-    pub dependencies: Vec<LockedDep>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LockedDep {
-    pub name: String,
-    pub url: Option<String>,
-    pub path: Option<String>,
-    pub version: Option<String>,
-}
-
 impl Manifest {
     pub fn from_project_dir(
         project_dir: &str,
