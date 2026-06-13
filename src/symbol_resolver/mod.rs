@@ -1558,6 +1558,7 @@ impl SymbolResolver {
                             generic_parameters: vec![],
                             parameters: vec![],
                             return_type: Some(Rc::new(RefCell::new(self_type_expr))),
+                            throws_types: None,
                             body: Rc::new(RefCell::new(FunctionBody::Statements(vec![Rc::new(
                                 RefCell::new(return_stmt),
                             )]))),

@@ -9,7 +9,7 @@ use crate::{
     types::Type,
 };
 
-use super::statement::{MatchCase, Statement};
+use super::statement::{CatchClause, MatchCase, Statement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallParameter {
@@ -220,7 +220,15 @@ pub enum Expression {
     Do {
         token: Box<Token>,
         body: Vec<Rc<RefCell<Statement>>>,
+        catch_clauses: Vec<CatchClause>,
+        finally_body: Vec<Rc<RefCell<Statement>>>,
         scope: Option<Rc<RefCell<Scope>>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+    Try {
+        token: Box<Token>,
+        kind: TryKind,
+        expression: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
     InlineType {
@@ -271,6 +279,7 @@ impl Expression {
             Self::Do { ty, .. } => Ok(ty.clone()),
             Self::InlineType { ty, .. } => Ok(ty.clone()),
             Self::StringLiteral { ty, .. } => Ok(ty.clone()),
+            Self::Try { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
         }
     }
@@ -300,6 +309,7 @@ impl Expression {
             Self::OptionalType { ty, .. } => Ok(ty),
             Self::ArrayType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
+            Self::Try { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -329,6 +339,7 @@ impl Expression {
             Self::OptionalType { ty, .. } => Ok(ty),
             Self::ArrayType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
+            Self::Try { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -427,6 +438,7 @@ impl Expression {
             Expression::MacroInvocation { name, .. } => (**name).clone(),
             Expression::SizeOf { token, .. } => (**token).clone(),
             Expression::Do { token, .. } => (**token).clone(),
+            Expression::Try { token, .. } => (**token).clone(),
             Expression::InlineType { base, .. } => base.borrow().token(),
             Expression::OptionalType { inner, .. } => inner.borrow().token(),
             Expression::ArrayType { inner, .. } => inner.borrow().token(),
@@ -438,6 +450,13 @@ impl Expression {
 pub enum ElseBranch {
     Block(Vec<Rc<RefCell<Statement>>>),
     If(Rc<RefCell<Expression>>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TryKind {
+    Plain,
+    Force,
+    Optional,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

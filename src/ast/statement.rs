@@ -21,6 +21,7 @@ pub enum Statement {
         generic_parameters: Vec<GenericParameter>,
         parameters: Vec<Rc<RefCell<Parameter>>>,
         return_type: Option<Rc<RefCell<Expression>>>,
+        throws_types: Option<Vec<Rc<RefCell<Expression>>>>,
         body: Rc<RefCell<FunctionBody>>,
         where_clause: Option<Vec<WhereRequirement>>,
         scope: Option<Rc<RefCell<Scope>>>,
@@ -425,6 +426,13 @@ pub enum Pattern {
 pub struct MatchCase {
     pub token: Box<Token>,
     pub patterns: Vec<Rc<Pattern>>,
+    pub guard: Option<Rc<RefCell<Expression>>>,
+    pub body: Vec<Rc<RefCell<Statement>>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatchClause {
+    pub pattern: Option<Pattern>,
     pub guard: Option<Rc<RefCell<Expression>>>,
     pub body: Vec<Rc<RefCell<Statement>>>,
 }

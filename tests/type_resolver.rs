@@ -1726,7 +1726,7 @@ fn test_struct_init_deinit_type() {
         if let Statement::InitDecl { ty, .. } = &*body[1].borrow() {
             assert!(ty.is_some());
             let fn_type = ty.as_ref().unwrap().borrow().clone();
-            if let Type::Function(param_tys, ret_ty, is_vararg) = &fn_type {
+            if let Type::Function(param_tys, ret_ty, is_vararg, None) = &fn_type {
                 assert_eq!(param_tys.len(), 1);
                 assert_eq!(*ret_ty.borrow(), Type::Void);
                 assert!(!is_vararg);
@@ -1739,7 +1739,7 @@ fn test_struct_init_deinit_type() {
         if let Statement::DeinitDecl { ty, .. } = &*body[2].borrow() {
             assert!(ty.is_some());
             let fn_type = ty.as_ref().unwrap().borrow().clone();
-            if let Type::Function(param_tys, ret_ty, is_vararg) = &fn_type {
+            if let Type::Function(param_tys, ret_ty, is_vararg, None) = &fn_type {
                 assert_eq!(param_tys.len(), 0);
                 assert_eq!(*ret_ty.borrow(), Type::Void);
                 assert!(!is_vararg);
@@ -2556,7 +2556,7 @@ fn test_protocol_type_with_method() {
         if let ProtocolMember::Method { decl, .. } = &members[0] {
             if let Statement::FunctionDecl { ty, .. } = &*decl.borrow() {
                 assert!(ty.is_some());
-                if let Type::Function(params, ret, _) = &*ty.as_ref().unwrap().borrow() {
+                if let Type::Function(params, ret, _, None) = &*ty.as_ref().unwrap().borrow() {
                     assert!(params.is_empty());
                     assert_eq!(*ret.borrow(), Type::Void);
                 } else {
@@ -2624,7 +2624,7 @@ fn test_protocol_type_with_method_params() {
         if let ProtocolMember::Method { decl, .. } = &members[0] {
             if let Statement::FunctionDecl { ty, .. } = &*decl.borrow() {
                 assert!(ty.is_some());
-                if let Type::Function(params, ret, _) = &*ty.as_ref().unwrap().borrow() {
+                if let Type::Function(params, ret, _, None) = &*ty.as_ref().unwrap().borrow() {
                     assert_eq!(params.len(), 1);
                     assert_eq!(*params[0].borrow(), Type::Int32);
                     assert_eq!(*ret.borrow(), Type::Int64);
@@ -3179,7 +3179,7 @@ fn test_extension_method_type_resolved() {
     {
         assert_eq!(
             ty.borrow().clone(),
-            Type::Function(vec![], Rc::new(RefCell::new(Type::Int32)), false)
+            Type::Function(vec![], Rc::new(RefCell::new(Type::Int32)), false, None)
         );
     } else {
         panic!("Extension method should have function type");
@@ -3352,7 +3352,7 @@ fn test_extension_static_method_struct_type_resolved() {
         assert!(static_method);
         assert_eq!(
             ty.borrow().clone(),
-            Type::Function(vec![], Rc::new(RefCell::new(Type::Int32)), false)
+            Type::Function(vec![], Rc::new(RefCell::new(Type::Int32)), false, None)
         );
     } else {
         panic!("Static method should have function type");
@@ -4949,7 +4949,7 @@ fn test_closure_type_resolved() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg) = t {
+        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*param_types[0].borrow(), Type::Int32);
             assert_eq!(*param_types[1].borrow(), Type::Int32);
@@ -4991,7 +4991,7 @@ fn test_closure_no_params_no_return_type() {
     {
         assert!(ty.is_some(), "Empty closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg) = t {
+        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
             assert_eq!(param_types.len(), 0);
             assert_eq!(*ret_type.borrow(), Type::Void);
             assert!(!is_vararg);
@@ -5083,7 +5083,7 @@ fn test_function_type_expression_resolved() {
     {
         assert!(ty.is_some(), "FunctionType should have a resolved type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg) = t {
+        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
             assert_eq!(param_types.len(), 1);
             assert_eq!(*param_types[0].borrow(), Type::Int32);
             assert_eq!(*ret_type.borrow(), Type::Bool);
@@ -5123,7 +5123,7 @@ fn test_closure_untyped_params_inferred() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg) = t {
+        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*ret_type.borrow(), Type::Void);
             assert!(!is_vararg);
@@ -5217,7 +5217,7 @@ fn test_closure_shorthand_with_context() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, _) = t {
+        if let Type::Function(param_types, ret_type, _, None) = t {
             assert_eq!(param_types.len(), 1);
             assert_eq!(*param_types[0].borrow(), Type::Int32);
             assert_eq!(*ret_type.borrow(), Type::Int32);
@@ -5255,7 +5255,7 @@ fn test_closure_shorthand_binary_with_context() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, _) = t {
+        if let Type::Function(param_types, ret_type, _, None) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*param_types[0].borrow(), Type::Int32);
             assert_eq!(*param_types[1].borrow(), Type::Int32);

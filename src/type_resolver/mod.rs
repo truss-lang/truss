@@ -5,7 +5,8 @@ use std::collections::HashSet;
 use crate::{
     ast::{
         expression::{
-            BinaryOperator, CallParameter, CastKind, ElseBranch, Expression, UnaryOperator,
+            BinaryOperator, CallParameter, CastKind, ElseBranch, Expression, TryKind,
+            UnaryOperator,
         },
         node::Program,
         statement::{
@@ -162,6 +163,7 @@ impl TypeResolver {
                     parameter_types,
                     ret_type,
                     is_vararg,
+                    None,
                 )));
                 *ty = Some(fn_type.clone());
 
@@ -289,6 +291,7 @@ impl TypeResolver {
                                 parameter_types.clone(),
                                 ret_type,
                                 is_vararg,
+                                None,
                             )));
                             Some((method_name.value.clone(), fn_type, parameter_types))
                         } else {
@@ -437,6 +440,7 @@ impl TypeResolver {
                                 parameter_types.clone(),
                                 ret_type,
                                 is_vararg,
+                                None,
                             )));
                             Some((method_name.value.clone(), fn_type, parameter_types))
                         } else {
@@ -572,6 +576,7 @@ impl TypeResolver {
                                 parameter_types.clone(),
                                 ret_type,
                                 is_vararg,
+                                None,
                             )));
                             Some((method_name.value.clone(), fn_type, parameter_types))
                         } else {
@@ -620,6 +625,7 @@ impl TypeResolver {
                     parameter_types,
                     ret_type,
                     false,
+                    None,
                 )));
                 *ty = Some(fn_type.clone());
 
@@ -640,6 +646,7 @@ impl TypeResolver {
                     vec![],
                     Rc::new(RefCell::new(Type::Void)),
                     false,
+                    None,
                 )));
                 *ty = Some(fn_type.clone());
 
@@ -801,6 +808,7 @@ impl TypeResolver {
                                     parameter_types,
                                     ret_type,
                                     is_vararg,
+                                    None,
                                 )));
                                 *ty = Some(fn_type.clone());
 
@@ -1014,6 +1022,7 @@ impl TypeResolver {
                                     parameter_types.clone(),
                                     ret_type,
                                     is_vararg,
+                                    None,
                                 )));
                                 Some((method_name.value.clone(), fn_type, parameter_types))
                             } else {
@@ -1067,7 +1076,7 @@ impl TypeResolver {
                         param_types.push(pt.clone());
                     }
                 }
-                let fn_type = Rc::new(RefCell::new(Type::Function(param_types, ret_type, false)));
+                let fn_type = Rc::new(RefCell::new(Type::Function(param_types, ret_type, false, None)));
                 *ty = Some(fn_type);
                 for accessor in accessors {
                     for s in &accessor.body {
@@ -1208,10 +1217,11 @@ impl TypeResolver {
                         vec![],
                         Rc::new(RefCell::new(Type::Void)),
                         false,
+                        None,
                     )))
                 };
 
-                let ret_type = if let Type::Function(_, ret, _) = &*fn_type.borrow() {
+                let ret_type = if let Type::Function(_, ret, _, None) = &*fn_type.borrow() {
                     ret.clone()
                 } else {
                     Rc::new(RefCell::new(Type::Void))
@@ -1253,7 +1263,7 @@ impl TypeResolver {
                 let saved_return_type = self.current_return_type.clone();
                 if *is_failable {
                     if let Some(fn_ty) = ty
-                        && let Type::Function(_, ret, _) = &*fn_ty.borrow()
+                        && let Type::Function(_, ret, _, None) = &*fn_ty.borrow()
                     {
                         self.current_return_type = Some(ret.clone());
                     }
@@ -1463,9 +1473,10 @@ impl TypeResolver {
                                         vec![],
                                         Rc::new(RefCell::new(Type::Void)),
                                         false,
+                                        None,
                                     )))
                                 };
-                                let ret_type = if let Type::Function(_, ret, _) = &*fn_type.borrow()
+                                let ret_type = if let Type::Function(_, ret, _, None) = &*fn_type.borrow()
                                 {
                                     ret.clone()
                                 } else {
@@ -2196,7 +2207,7 @@ impl TypeResolver {
                 }
 
                 match &*callee_type.borrow() {
-                    Type::Function(param_tys, ret_ty, is_vararg) => {
+                    Type::Function(param_tys, ret_ty, is_vararg, None) => {
                         if let Some(decl) = self
                             .get_function_decl_from_callee(callee.clone())
                             .or_else(|| {
@@ -2359,7 +2370,7 @@ impl TypeResolver {
                                             is_failable,
                                             ..
                                         } = &*decl.borrow()
-                                        && let Type::Function(param_tys, _, is_vararg) =
+                                        && let Type::Function(param_tys, _, is_vararg, None) =
                                             &*init_ty.borrow()
                                     {
                                         found_failable = *is_failable;
@@ -2444,7 +2455,7 @@ impl TypeResolver {
                                             is_failable,
                                             ..
                                         } = &*decl.borrow()
-                                        && let Type::Function(param_tys, _, is_vararg) =
+                                        && let Type::Function(param_tys, _, is_vararg, None) =
                                             &*init_ty.borrow()
                                     {
                                         found_failable = *is_failable;
@@ -3206,6 +3217,7 @@ impl TypeResolver {
                                                     parameter_types.clone(),
                                                     object_ty.clone(),
                                                     false,
+                                                    None,
                                                 )));
                                             *ty = Some(case_fn_type.clone());
                                             return Some(case_fn_type);
@@ -3896,7 +3908,7 @@ impl TypeResolver {
                         }
                     } else if shorthand_start == 0 {
                         if let Some(expected_ty) = &self.closure_expected_type {
-                            if let Type::Function(expected_params, expected_ret, _) =
+                            if let Type::Function(expected_params, expected_ret, _, None) =
                                 &*expected_ty.borrow()
                             {
                                 for idx in 0..required_params {
@@ -3924,6 +3936,7 @@ impl TypeResolver {
                     param_types.clone(),
                     ret_type,
                     false,
+                    None,
                 )));
                 *ty = Some(fn_type.clone());
 
@@ -3988,7 +4001,7 @@ impl TypeResolver {
                 let ret = self
                     .infer_type(return_type.clone())
                     .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
-                let fn_type = Rc::new(RefCell::new(Type::Function(params, ret, false)));
+                let fn_type = Rc::new(RefCell::new(Type::Function(params, ret, false, None)));
                 *ty = Some(fn_type.clone());
                 fn_type
             }
@@ -4090,7 +4103,7 @@ impl TypeResolver {
                                                 );
                                                 return None;
                                             }
-                                            if let Type::Function(_, ret_type, _) = &*t.borrow() {
+                                            if let Type::Function(_, ret_type, _, None) = &*t.borrow() {
                                                 return Some(ret_type.clone());
                                             }
                                         }
@@ -4200,6 +4213,23 @@ impl TypeResolver {
                 let inner_ty = self.infer_type(inner.clone())?;
                 *ty = self.create_parameterized_type_from_truss("Array", inner_ty.clone());
                 ty.clone().unwrap()
+            }
+            Expression::Try {
+                kind, expression, ty, ..
+            } => {
+                let inner_ty = self.infer_type(expression.clone())?;
+                match kind {
+                    TryKind::Optional => {
+                        let opt_ty =
+                            self.create_parameterized_type_from_truss("Optional", inner_ty)?;
+                        *ty = Some(opt_ty.clone());
+                        opt_ty
+                    }
+                    _ => {
+                        *ty = Some(inner_ty.clone());
+                        inner_ty
+                    }
+                }
             }
         };
         Some(result)
@@ -4452,14 +4482,14 @@ impl TypeResolver {
                     ty.clone()
                 }
             }
-            Type::Function(param_tys, ret_ty, is_vararg) => {
+            Type::Function(param_tys, ret_ty, is_vararg, None) => {
                 drop(borrowed);
                 let new_params: Vec<Rc<RefCell<Type>>> = param_tys
                     .iter()
                     .map(|p| Self::substitute_generic_params(p.clone(), mapping))
                     .collect();
                 let new_ret = Self::substitute_generic_params(ret_ty.clone(), mapping);
-                Rc::new(RefCell::new(Type::Function(new_params, new_ret, is_vararg)))
+                Rc::new(RefCell::new(Type::Function(new_params, new_ret, is_vararg, None)))
             }
             Type::Pointer(base) => {
                 drop(borrowed);
@@ -4561,7 +4591,7 @@ impl TypeResolver {
                     mapping.insert(name.clone(), arg_ty.clone());
                 }
             }
-            (Type::Function(p1, r1, _), Type::Function(p2, r2, _)) => {
+            (Type::Function(p1, r1, _, None), Type::Function(p2, r2, _, None)) => {
                 for (pt, at) in p1.iter().zip(p2.iter()) {
                     Self::collect_generic_mappings(pt.clone(), at.clone(), mapping);
                 }
@@ -5072,7 +5102,7 @@ impl TypeResolver {
         } = &*decl_borrow
         {
             let fn_borrow = fn_type.borrow();
-            if let Type::Function(param_tys, ret_ty, is_vararg) = &*fn_borrow {
+            if let Type::Function(param_tys, ret_ty, is_vararg, None) = &*fn_borrow {
                 return Some((param_tys.clone(), ret_ty.clone(), *is_vararg, decl.clone()));
             }
         }
@@ -5202,7 +5232,7 @@ impl TypeResolver {
                         Self::types_are_type_compatible(&t1.borrow(), &t2.borrow())
                     })
             }
-            (Type::Function(p1, r1, v1), Type::Function(p2, r2, v2)) => {
+            (Type::Function(p1, r1, v1, None), Type::Function(p2, r2, v2, None)) => {
                 v1 == v2
                     && p1.len() == p2.len()
                     && p1
@@ -6220,7 +6250,7 @@ impl TypeResolver {
             };
             let (proto_param_tys, proto_ret_ty) = {
                 let ty = proto_fn_ty.borrow();
-                let Type::Function(params, ret, _) = &*ty else {
+                let Type::Function(params, ret, _, None) = &*ty else {
                     continue;
                 };
                 (params.clone(), ret.clone())
@@ -6260,7 +6290,7 @@ impl TypeResolver {
             };
             let (type_param_tys, type_ret_ty) = {
                 let ty = type_fn_ty.borrow();
-                let Type::Function(params, ret, _) = &*ty else {
+                let Type::Function(params, ret, _, None) = &*ty else {
                     continue;
                 };
                 (params.clone(), ret.clone())

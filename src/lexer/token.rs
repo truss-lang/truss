@@ -84,6 +84,10 @@ pub enum KeywordType {
     Override,
     Abstract,
     Final,
+    Try,
+    Catch,
+    Throws,
+    Finally,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -204,6 +208,10 @@ impl KeywordType {
             KeywordType::Override => "override",
             KeywordType::Abstract => "abstract",
             KeywordType::Final => "final",
+            KeywordType::Try => "try",
+            KeywordType::Catch => "catch",
+            KeywordType::Throws => "throws",
+            KeywordType::Finally => "finally",
         }
         .to_string()
     }

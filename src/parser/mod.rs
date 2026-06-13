@@ -2011,6 +2011,7 @@ impl Parser {
                 generic_parameters,
                 parameters,
                 return_type: return_type.map(RefCell::new).map(Rc::new),
+                throws_types: None,
                 body: Rc::new(RefCell::new(body)),
                 where_clause,
                 scope: None,
@@ -5844,6 +5845,8 @@ impl Parser {
             Ok(Expression::Do {
                 token: Box::new(token),
                 body,
+                catch_clauses: Vec::new(),
+                finally_body: Vec::new(),
                 scope: None,
                 ty: None,
             })

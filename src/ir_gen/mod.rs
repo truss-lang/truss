@@ -1130,7 +1130,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::ConstGeneric(name, _) => format!("cg{}", name),
             Type::AssociatedType(_, name) => name.clone(),
             Type::Compound(_) => "C".into(),
-            Type::Function(_, _, _) => "F".into(),
+            Type::Function(_, _, _, _) => "F".into(),
             Type::Inline(inner, _) => {
                 format!("inline{}", Self::type_to_abbreviation(&inner.borrow()))
             }
@@ -1327,7 +1327,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1347,7 +1347,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1362,7 +1362,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 if let Statement::DeinitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(_, return_type, _) = &*ty.borrow()
+                    && let Type::Function(_, return_type, _, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1379,7 +1379,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     ty: Some(ty),
                     ..
                 } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, _) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, _, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1443,7 +1443,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1463,7 +1463,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1519,7 +1519,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 if let Statement::DeinitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(_, return_type, _) = &*ty.borrow()
+                    && let Type::Function(_, return_type, _, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1536,7 +1536,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     ty: Some(ty),
                     ..
                 } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, _) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, _, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1582,7 +1582,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
                     && let Ok(function_type) =
                         self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
                 {
@@ -1590,7 +1590,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.module.add_function(&llvm_name, function_type, None);
                 }
                 if let Statement::DeinitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(_, return_type, _) = &*ty.borrow()
+                    && let Type::Function(_, return_type, _, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1607,7 +1607,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     ty: Some(ty),
                     ..
                 } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, _) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, _, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1686,7 +1686,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
                 {
                     let all_param_types: Vec<Rc<RefCell<Type>>> = if *static_method {
                         param_types.clone()
@@ -1707,7 +1707,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1722,7 +1722,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 if let Statement::DeinitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(_, return_type, _) = &*ty.borrow()
+                    && let Type::Function(_, return_type, _, None) = &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1746,7 +1746,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         ..
                     } = &*decl.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
                     && !matches!(&*body.borrow(), FunctionBody::None)
                 {
                     if let Ok(function_type) =
@@ -1780,7 +1780,7 @@ impl<'ctx> IRGenerator<'ctx> {
             ..
         } = &*statement.borrow()
             && let Some(ty) = ty
-            && let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow()
+            && let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow()
         {
             let llvm_name = attributes
                 .iter()
@@ -1809,7 +1809,7 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_function_declaration(&self, name: &Token, ty: &Rc<RefCell<Type>>) -> Result<()> {
-        if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
+        if let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow() {
             let function_type =
                 self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)?;
             self.module.add_function(&name.value, function_type, None);
@@ -1823,7 +1823,7 @@ impl<'ctx> IRGenerator<'ctx> {
         parameters: &[Rc<RefCell<Parameter>>],
         ty: &Rc<RefCell<Type>>,
     ) {
-        if let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() {
+        if let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow() {
             if let Ok(function_type) =
                 self.get_function_type(return_type.clone(), param_types.clone(), *is_vararg)
             {
@@ -2222,7 +2222,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Statement::FunctionDecl { parameters, ty, .. } = &*decl_ref {
                     let fn_ty = ty.as_ref()?;
                     let fn_borrow = fn_ty.borrow();
-                    if let Type::Function(param_tys, _, _) = &*fn_borrow {
+                    if let Type::Function(param_tys, _, _, None) = &*fn_borrow {
                         Some((parameters.clone(), param_tys.clone()))
                     } else {
                         None
@@ -2242,7 +2242,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Statement::FunctionDecl { parameters, ty, .. } = &*decl_ref {
                     let fn_ty = ty.as_ref()?;
                     let fn_borrow = fn_ty.borrow();
-                    if let Type::Function(param_tys, _, _) = &*fn_borrow {
+                    if let Type::Function(param_tys, _, _, None) = &*fn_borrow {
                         if param_tys.len() == proto_param_tys.len()
                             && param_tys
                                 .iter()
@@ -3343,7 +3343,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 .unwrap_or_else(|| "newValue".to_string());
                             if let Some(new_val) = function.get_nth_param(param_idx) {
                                 let (_, return_type, _) = match &*ty.borrow() {
-                                    Type::Function(_, ret, _) => ((), ret.clone(), false),
+                                    Type::Function(_, ret, _, None) => ((), ret.clone(), false),
                                     _ => continue,
                                 };
                                 if let Ok(ret_ty) = self.resolve_type(return_type) {
@@ -3471,7 +3471,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 static_method,
                 ..
             } => {
-                if let Type::Function(_parameter_types, return_type, _) = &*ty.borrow() {
+                if let Type::Function(_parameter_types, return_type, _, None) = &*ty.borrow() {
                     let saved_struct = self.current_struct.borrow_mut().take();
                     self.class_refs.borrow_mut().clear();
                     self.container_refs.borrow_mut().clear();
@@ -3613,7 +3613,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 is_failable,
                 ..
             } => {
-                if let Type::Function(_parameter_types, return_type, _) = &*ty.borrow() {
+                if let Type::Function(_parameter_types, return_type, _, None) = &*ty.borrow() {
                     let struct_name = self.current_struct.borrow().clone().unwrap();
                     let fn_name = format!("{}.init", struct_name);
                     let function = self.module.get_function(&fn_name).unwrap();
@@ -3692,7 +3692,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::DeinitDecl {
                 ty: Some(ty), body, ..
             } => {
-                if let Type::Function(_, _return_type, _) = &*ty.borrow() {
+                if let Type::Function(_, _return_type, _, None) = &*ty.borrow() {
                     let struct_name = self.current_struct.borrow().clone().unwrap();
                     let fn_name = format!("{}.deinit", struct_name);
                     let function = self.module.get_function(&fn_name).unwrap();
@@ -7141,7 +7141,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     _ => None,
                 };
                 if let Some(ty) = callee_ty
-                    && let Type::Function(param_tys, ret_ty, is_vararg) = &*ty.borrow()
+                    && let Type::Function(param_tys, ret_ty, is_vararg, None) = &*ty.borrow()
                     && self.module.get_function(&function_name).is_none()
                 {
                     let fn_ptr_val = self.resolve_expression(callee.clone())?.unwrap();
@@ -7654,7 +7654,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     })
                     .or_else(|| {
                         ty.as_ref().and_then(|t| {
-                            if let Type::Function(_, ret_ty, _) = &*t.borrow() {
+                            if let Type::Function(_, ret_ty, _, None) = &*t.borrow() {
                                 Some(ret_ty.clone())
                             } else {
                                 None
@@ -7677,7 +7677,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 let all_param_types: Vec<Rc<RefCell<Type>>> = ty
                     .as_ref()
                     .and_then(|t| {
-                        if let Type::Function(pts, _, _) = &*t.borrow() {
+                        if let Type::Function(pts, _, _, None) = &*t.borrow() {
                             Some(pts.clone())
                         } else {
                             None
@@ -7897,7 +7897,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     return None;
                 };
                 let Some(ty) = ty else { return None };
-                let Type::Function(param_types, return_type, is_vararg) = &*ty.borrow() else {
+                let Type::Function(param_types, return_type, is_vararg, None) = &*ty.borrow() else {
                     return None;
                 };
                 Some((return_type.clone(), param_types.clone(), *is_vararg))
@@ -8219,7 +8219,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
                 anyhow::bail!("Void type is handled specially as void return type");
             }
-            Type::Function(_, _, _) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
+            Type::Function(_, _, _, _) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
             Type::Pointer(_) | Type::NonNullPointer(_) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }

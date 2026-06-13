@@ -20,7 +20,7 @@ pub enum Type {
     Float64,
     Char,
     Bool,
-    Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool),
+    Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool, Option<Vec<Rc<RefCell<Type>>>>),
     Pointer(Rc<RefCell<Type>>),
     NonNullPointer(Rc<RefCell<Type>>),
     Tuple(Vec<(Option<String>, Rc<RefCell<Type>>)>),
@@ -54,7 +54,7 @@ impl fmt::Display for Type {
             Type::Float64 => write!(f, "Float64"),
             Type::Char => write!(f, "Char"),
             Type::Bool => write!(f, "Bool"),
-            Type::Function(params, ret, is_vararg) => {
+            Type::Function(params, ret, is_vararg, throws) => {
                 write!(f, "Function(")?;
                 for (i, param) in params.iter().enumerate() {
                     if i > 0 {
@@ -65,7 +65,22 @@ impl fmt::Display for Type {
                 if *is_vararg {
                     write!(f, ", ...")?;
                 }
-                write!(f, ") -> {}", ret.borrow())
+                write!(f, ")")?;
+                if let Some(throws_types) = throws {
+                    if throws_types.is_empty() {
+                        write!(f, " throws")?;
+                    } else {
+                        write!(f, " throws(")?;
+                        for (i, th) in throws_types.iter().enumerate() {
+                            if i > 0 {
+                                write!(f, ", ")?;
+                            }
+                            write!(f, "{}", th.borrow())?;
+                        }
+                        write!(f, ")")?;
+                    }
+                }
+                write!(f, " -> {}", ret.borrow())
             }
             Type::Pointer(inner) => write!(f, "{}*", inner.borrow()),
             Type::NonNullPointer(inner) => write!(f, "{}*!", inner.borrow()),
