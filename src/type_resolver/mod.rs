@@ -5,8 +5,7 @@ use std::collections::HashSet;
 use crate::{
     ast::{
         expression::{
-            BinaryOperator, CallParameter, CastKind, ElseBranch, Expression, TryKind,
-            UnaryOperator,
+            BinaryOperator, CallParameter, CastKind, ElseBranch, Expression, TryKind, UnaryOperator,
         },
         node::Program,
         statement::{
@@ -161,7 +160,10 @@ impl TypeResolver {
                 }
 
                 let throws_ty = throws_types.as_ref().map(|types| {
-                    types.iter().filter_map(|t| self.infer_type(t.clone())).collect()
+                    types
+                        .iter()
+                        .filter_map(|t| self.infer_type(t.clone()))
+                        .collect()
                 });
 
                 let fn_type = Rc::new(RefCell::new(Type::Function(
@@ -811,7 +813,10 @@ impl TypeResolver {
                                 }
 
                                 let throws_ty = throws_types.as_ref().map(|types| {
-                                    types.iter().filter_map(|t| self.infer_type(t.clone())).collect()
+                                    types
+                                        .iter()
+                                        .filter_map(|t| self.infer_type(t.clone()))
+                                        .collect()
                                 });
 
                                 let fn_type = Rc::new(RefCell::new(Type::Function(
@@ -947,16 +952,13 @@ impl TypeResolver {
                         let stmt = d.borrow();
                         match &*stmt {
                             Statement::StructDecl {
-                                generic_parameters,
-                                ..
+                                generic_parameters, ..
                             }
                             | Statement::ClassDecl {
-                                generic_parameters,
-                                ..
+                                generic_parameters, ..
                             }
                             | Statement::EnumDecl {
-                                generic_parameters,
-                                ..
+                                generic_parameters, ..
                             } => generic_parameters
                                 .iter()
                                 .map(|gp| gp.name.value.clone())
@@ -1086,7 +1088,12 @@ impl TypeResolver {
                         param_types.push(pt.clone());
                     }
                 }
-                let fn_type = Rc::new(RefCell::new(Type::Function(param_types, ret_type, false, None)));
+                let fn_type = Rc::new(RefCell::new(Type::Function(
+                    param_types,
+                    ret_type,
+                    false,
+                    None,
+                )));
                 *ty = Some(fn_type);
                 for accessor in accessors {
                     for s in &accessor.body {
@@ -1486,12 +1493,12 @@ impl TypeResolver {
                                         None,
                                     )))
                                 };
-                                let ret_type = if let Type::Function(_, ret, _, _) = &*fn_type.borrow()
-                                {
-                                    ret.clone()
-                                } else {
-                                    Rc::new(RefCell::new(Type::Void))
-                                };
+                                let ret_type =
+                                    if let Type::Function(_, ret, _, _) = &*fn_type.borrow() {
+                                        ret.clone()
+                                    } else {
+                                        Rc::new(RefCell::new(Type::Void))
+                                    };
                                 self.current_return_type = Some(ret_type.clone());
                                 self.enter_scope(fn_scope.as_ref().unwrap().clone());
                                 self.initialized_lets.push(HashSet::new());
@@ -4247,7 +4254,10 @@ impl TypeResolver {
                 ty.clone().unwrap()
             }
             Expression::Try {
-                kind, expression, ty, ..
+                kind,
+                expression,
+                ty,
+                ..
             } => {
                 let inner_ty = self.infer_type(expression.clone())?;
                 match kind {
@@ -4521,7 +4531,9 @@ impl TypeResolver {
                     .map(|p| Self::substitute_generic_params(p.clone(), mapping))
                     .collect();
                 let new_ret = Self::substitute_generic_params(ret_ty.clone(), mapping);
-                Rc::new(RefCell::new(Type::Function(new_params, new_ret, is_vararg, None)))
+                Rc::new(RefCell::new(Type::Function(
+                    new_params, new_ret, is_vararg, None,
+                )))
             }
             Type::Pointer(base) => {
                 drop(borrowed);
@@ -5994,10 +6006,7 @@ impl TypeResolver {
                             let token = constraint.borrow().token();
                             self.emit_error(
                                 TrussDiagnosticCode::TypeError,
-                                format!(
-                                    "Constraint '{}' is not a protocol type",
-                                    ty.borrow()
-                                ),
+                                format!("Constraint '{}' is not a protocol type", ty.borrow()),
                                 &token,
                             );
                         }
@@ -6065,9 +6074,7 @@ impl TypeResolver {
                         } => generic_parameters
                             .iter()
                             .filter_map(|gp| match &gp.kind {
-                                GenericParameterKind::Type { .. } => {
-                                    Some(gp.name.value.clone())
-                                }
+                                GenericParameterKind::Type { .. } => Some(gp.name.value.clone()),
                                 _ => None,
                             })
                             .collect(),
@@ -6103,14 +6110,17 @@ impl TypeResolver {
                     *ty = Some(Rc::new(RefCell::new(Type::Protocol(
                         protocol_name_owned,
                         WeakSymbol(Rc::downgrade(&protocol_symbol)),
-                        params.iter().filter_map(|p| {
-                            let pe = p.borrow();
-                            match &*pe {
-                                Expression::Type { ty, .. }
-                                | Expression::Variable { ty, .. } => ty.clone(),
-                                _ => None,
-                            }
-                        }).collect(),
+                        params
+                            .iter()
+                            .filter_map(|p| {
+                                let pe = p.borrow();
+                                match &*pe {
+                                    Expression::Type { ty, .. }
+                                    | Expression::Variable { ty, .. } => ty.clone(),
+                                    _ => None,
+                                }
+                            })
+                            .collect(),
                     ))));
                 }
                 drop(expr);
@@ -6297,24 +6307,20 @@ impl TypeResolver {
                 continue;
             };
             let type_methods = match &*type_sym.borrow() {
-                Symbol::Struct { methods, .. }
-                | Symbol::Class { methods, .. } => methods.clone(),
+                Symbol::Struct { methods, .. } | Symbol::Class { methods, .. } => methods.clone(),
                 _ => continue,
             };
             drop(type_sym);
 
-            let type_method = type_methods.iter().find(|m| {
-                m.borrow().name().as_ref().ok() == Some(&method_name)
-            })?;
+            let type_method = type_methods
+                .iter()
+                .find(|m| m.borrow().name().as_ref().ok() == Some(&method_name))?;
 
             let Some(type_decl) = type_method.borrow().get_decl().ok().flatten() else {
                 continue;
             };
             let type_decl_ref = type_decl.borrow();
-            let Statement::FunctionDecl {
-                ty: type_fn_ty, ..
-            } = &*type_decl_ref
-            else {
+            let Statement::FunctionDecl { ty: type_fn_ty, .. } = &*type_decl_ref else {
                 continue;
             };
             let Some(type_fn_ty) = type_fn_ty else {
@@ -6349,7 +6355,12 @@ impl TypeResolver {
                 let token = Token::new(
                     name.clone(),
                     TokenType::Identifier,
-                    Position { pos: 0, line: 0, col: 0, len: 0 },
+                    Position {
+                        pos: 0,
+                        line: 0,
+                        col: 0,
+                        len: 0,
+                    },
                     Rc::new("".to_string()),
                 );
                 let expr = Expression::Type {
@@ -6361,7 +6372,11 @@ impl TypeResolver {
             })
             .collect();
 
-        if params.is_empty() { None } else { Some(params) }
+        if params.is_empty() {
+            None
+        } else {
+            Some(params)
+        }
     }
 
     fn find_module_from_expr(&self, expr: &Expression) -> Option<Rc<RefCell<Module>>> {

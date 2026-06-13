@@ -3483,8 +3483,7 @@ fn test_extension_type_arguments_override_generic_param() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct Wrapper<T> { func identity(x: T) -> T { x } }"
-                .to_string(),
+            "struct Wrapper<T> { func identity(x: T) -> T { x } }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7050,7 +7049,10 @@ fn test_non_throws_function_type_no_throws() {
     if let Statement::FunctionDecl { ty, .. } = &*program.statements[0].borrow() {
         let fn_type = ty.as_ref().unwrap().borrow();
         if let Type::Function(_, _, _, throws) = &*fn_type {
-            assert!(throws.is_none(), "non-throws function should have None throws");
+            assert!(
+                throws.is_none(),
+                "non-throws function should have None throws"
+            );
         } else {
             panic!("Expected Type::Function");
         }
@@ -7186,7 +7188,10 @@ fn test_protocol_throws_function_type() {
             if let Statement::FunctionDecl { ty, .. } = &*decl.borrow() {
                 let fn_type = ty.as_ref().unwrap().borrow();
                 if let Type::Function(_, _, _, throws) = &*fn_type {
-                    assert!(throws.is_some(), "Protocol throws method should have Some throws");
+                    assert!(
+                        throws.is_some(),
+                        "Protocol throws method should have Some throws"
+                    );
                 } else {
                     panic!("Expected Type::Function");
                 }

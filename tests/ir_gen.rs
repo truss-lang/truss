@@ -6293,8 +6293,16 @@ fn test_irgen_throws_function_no_crash() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
-    assert!(llvm_ir.contains("define i32 @foo"), "Expected function foo:\n{}", llvm_ir);
-    assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        llvm_ir.contains("define i32 @foo"),
+        "Expected function foo:\n{}",
+        llvm_ir
+    );
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -6321,7 +6329,11 @@ fn test_irgen_throw_no_crash() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let _ = module.print_to_string().to_string();
-    assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -6348,7 +6360,11 @@ fn test_irgen_try_expression_no_crash() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let _ = module.print_to_string().to_string();
-    assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -6375,7 +6391,11 @@ fn test_irgen_try_force_no_crash() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let _ = module.print_to_string().to_string();
-    assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -6402,7 +6422,11 @@ fn test_irgen_do_catch_no_crash() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let _ = module.print_to_string().to_string();
-    assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -6429,7 +6453,11 @@ fn test_irgen_do_catch_finally_no_crash() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let _ = module.print_to_string().to_string();
-    assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -6465,5 +6493,9 @@ fn test_irgen_protocol_throws_method() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let _ = module.print_to_string().to_string();
-    assert!(!engine.borrow().has_errors(), "No errors expected: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "No errors expected: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }

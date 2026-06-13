@@ -2283,10 +2283,7 @@ fn test_parse_extension_with_multiple_type_arguments() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    if let Statement::ExtensionDecl {
-        type_arguments, ..
-    } = &*program.statements[1].borrow()
-    {
+    if let Statement::ExtensionDecl { type_arguments, .. } = &*program.statements[1].borrow() {
         assert!(type_arguments.is_some());
         let args = type_arguments.as_ref().unwrap();
         assert_eq!(args.len(), 2);
@@ -2317,10 +2314,7 @@ fn test_parse_extension_without_type_arguments_still_works() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    if let Statement::ExtensionDecl {
-        type_arguments, ..
-    } = &*program.statements[1].borrow()
-    {
+    if let Statement::ExtensionDecl { type_arguments, .. } = &*program.statements[1].borrow() {
         assert!(type_arguments.is_none());
     } else {
         panic!("Expected ExtensionDecl");
@@ -12059,10 +12053,7 @@ fn test_parse_throws_function_with_types() {
 fn test_parse_throws_function_no_return() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "func baz() throws { }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("func baz() throws { }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -12101,17 +12092,17 @@ fn test_parse_throw_statement() {
         "Parser should have no errors: {:?}",
         engine.borrow().get_diagnostics()
     );
-    assert!(matches!(&*program.statements[0].borrow(), Statement::Throw { .. }));
+    assert!(matches!(
+        &*program.statements[0].borrow(),
+        Statement::Throw { .. }
+    ));
 }
 
 #[test]
 fn test_parse_try_expression() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "try foo()".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("try foo()".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -12123,7 +12114,13 @@ fn test_parse_try_expression() {
     );
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         let expr = expression.borrow();
-        assert!(matches!(&*expr, Expression::Try { kind: TryKind::Plain, .. }));
+        assert!(matches!(
+            &*expr,
+            Expression::Try {
+                kind: TryKind::Plain,
+                ..
+            }
+        ));
     } else {
         panic!("Expected ExpressionStatement with Try");
     }
@@ -12133,10 +12130,7 @@ fn test_parse_try_expression() {
 fn test_parse_try_force_expression() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "try! foo()".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("try! foo()".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -12148,7 +12142,13 @@ fn test_parse_try_force_expression() {
     );
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         let expr = expression.borrow();
-        assert!(matches!(&*expr, Expression::Try { kind: TryKind::Force, .. }));
+        assert!(matches!(
+            &*expr,
+            Expression::Try {
+                kind: TryKind::Force,
+                ..
+            }
+        ));
     } else {
         panic!("Expected ExpressionStatement with Try!");
     }
@@ -12158,10 +12158,7 @@ fn test_parse_try_force_expression() {
 fn test_parse_try_optional_expression() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "try? foo()".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("try? foo()".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -12173,7 +12170,13 @@ fn test_parse_try_optional_expression() {
     );
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         let expr = expression.borrow();
-        assert!(matches!(&*expr, Expression::Try { kind: TryKind::Optional, .. }));
+        assert!(matches!(
+            &*expr,
+            Expression::Try {
+                kind: TryKind::Optional,
+                ..
+            }
+        ));
     } else {
         panic!("Expected ExpressionStatement with Try?");
     }
@@ -12199,7 +12202,11 @@ fn test_parse_do_catch() {
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         let expr = expression.borrow();
         match &*expr {
-            Expression::Do { catch_clauses, finally_body, .. } => {
+            Expression::Do {
+                catch_clauses,
+                finally_body,
+                ..
+            } => {
                 assert_eq!(catch_clauses.len(), 1);
                 assert!(catch_clauses[0].pattern.is_none());
                 assert!(finally_body.is_empty());
@@ -12231,7 +12238,11 @@ fn test_parse_do_catch_finally() {
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         let expr = expression.borrow();
         match &*expr {
-            Expression::Do { catch_clauses, finally_body, .. } => {
+            Expression::Do {
+                catch_clauses,
+                finally_body,
+                ..
+            } => {
                 assert_eq!(catch_clauses.len(), 1);
                 assert!(catch_clauses[0].pattern.is_some());
                 assert_eq!(finally_body.len(), 0);
@@ -12263,7 +12274,11 @@ fn test_parse_do_catch_finally_with_body() {
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         let expr = expression.borrow();
         match &*expr {
-            Expression::Do { catch_clauses, finally_body, .. } => {
+            Expression::Do {
+                catch_clauses,
+                finally_body,
+                ..
+            } => {
                 assert_eq!(catch_clauses.len(), 1);
                 assert!(!finally_body.is_empty());
             }
@@ -12343,10 +12358,7 @@ fn test_parse_do_catch_with_guard() {
 fn test_parse_do_without_catch() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "do { let x = 1 }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("do { let x = 1 }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -12359,7 +12371,11 @@ fn test_parse_do_without_catch() {
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         let expr = expression.borrow();
         match &*expr {
-            Expression::Do { catch_clauses, finally_body, .. } => {
+            Expression::Do {
+                catch_clauses,
+                finally_body,
+                ..
+            } => {
                 assert!(catch_clauses.is_empty());
                 assert!(finally_body.is_empty());
             }
@@ -12389,7 +12405,12 @@ fn test_parse_throws_method_in_struct() {
     );
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Foo");
-        if let Statement::FunctionDecl { name: fn_name, throws_types, .. } = &*body[0].borrow() {
+        if let Statement::FunctionDecl {
+            name: fn_name,
+            throws_types,
+            ..
+        } = &*body[0].borrow()
+        {
             assert_eq!(fn_name.value, "bar");
             assert!(throws_types.is_some());
         } else {

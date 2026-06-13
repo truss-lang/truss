@@ -1075,7 +1075,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 type_arguments,
                 ..
             } => {
-                let prefix = if !Self::type_args_to_abbreviation(type_arguments.as_ref()).is_empty() {
+                let prefix = if !Self::type_args_to_abbreviation(type_arguments.as_ref()).is_empty()
+                {
                     format!(
                         "{}.{}",
                         type_name.value,
@@ -1139,9 +1140,7 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
-    fn type_args_to_abbreviation(
-        type_arguments: Option<&Vec<Rc<RefCell<Expression>>>>,
-    ) -> String {
+    fn type_args_to_abbreviation(type_arguments: Option<&Vec<Rc<RefCell<Expression>>>>) -> String {
         match type_arguments {
             Some(args) => {
                 let parts: Vec<String> = args
@@ -1329,7 +1328,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1355,7 +1355,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1457,7 +1458,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1483,7 +1485,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1608,7 +1611,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
                 {
                     let mut all_params = param_types.clone();
                     if throws_types.is_some() {
@@ -1704,15 +1708,16 @@ impl<'ctx> IRGenerator<'ctx> {
             ..
         } = &*statement.borrow()
         {
-            let type_prefix = if !Self::type_args_to_abbreviation(type_arguments.as_ref()).is_empty() {
-                format!(
-                    "{}.{}",
-                    type_name.value,
-                    Self::type_args_to_abbreviation(type_arguments.as_ref())
-                )
-            } else {
-                type_name.value.clone()
-            };
+            let type_prefix =
+                if !Self::type_args_to_abbreviation(type_arguments.as_ref()).is_empty() {
+                    format!(
+                        "{}.{}",
+                        type_name.value,
+                        Self::type_args_to_abbreviation(type_arguments.as_ref())
+                    )
+                } else {
+                    type_name.value.clone()
+                };
             for stmt in body {
                 if let Statement::FunctionDecl {
                     name: method_name,
@@ -1721,7 +1726,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
                 {
                     let all_param_types: Vec<Rc<RefCell<Type>>> = if *static_method {
                         let mut params = param_types.clone();
@@ -1749,13 +1755,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Ok(function_type) =
                         self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
                     {
-                        let llvm_name =
-                            format!("{}.{}", type_prefix, method_name.value);
+                        let llvm_name = format!("{}.{}", type_prefix, method_name.value);
                         self.module.add_function(&llvm_name, function_type, None);
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
-                    && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
                 {
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
@@ -1800,7 +1806,8 @@ impl<'ctx> IRGenerator<'ctx> {
                         ..
                     } = &*decl.borrow()
                     && let Some(ty) = ty
-                    && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
                     && !matches!(&*body.borrow(), FunctionBody::None)
                 {
                     let mut all_params = param_types.clone();
@@ -2443,36 +2450,37 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_protocol_witness_tables(&self, statement: Rc<RefCell<Statement>>) {
-        let (type_name, type_arguments_opt) = if let Statement::ClassDecl {
-            name, conformances, ..
-        } = &*statement.borrow()
-        {
-            if conformances.is_empty() {
+        let (type_name, type_arguments_opt) =
+            if let Statement::ClassDecl {
+                name, conformances, ..
+            } = &*statement.borrow()
+            {
+                if conformances.is_empty() {
+                    return;
+                }
+                (name.value.clone(), None)
+            } else if let Statement::StructDecl {
+                name, conformances, ..
+            } = &*statement.borrow()
+            {
+                if conformances.is_empty() {
+                    return;
+                }
+                (name.value.clone(), None)
+            } else if let Statement::ExtensionDecl {
+                type_name,
+                conformances,
+                type_arguments,
+                ..
+            } = &*statement.borrow()
+            {
+                if conformances.is_empty() {
+                    return;
+                }
+                (type_name.value.clone(), type_arguments.clone())
+            } else {
                 return;
-            }
-            (name.value.clone(), None)
-        } else if let Statement::StructDecl {
-            name, conformances, ..
-        } = &*statement.borrow()
-        {
-            if conformances.is_empty() {
-                return;
-            }
-            (name.value.clone(), None)
-        } else if let Statement::ExtensionDecl {
-            type_name,
-            conformances,
-            type_arguments,
-            ..
-        } = &*statement.borrow()
-        {
-            if conformances.is_empty() {
-                return;
-            }
-            (type_name.value.clone(), type_arguments.clone())
-        } else {
-            return;
-        };
+            };
 
         let type_suffix = if type_arguments_opt.is_some()
             && !Self::type_args_to_abbreviation(type_arguments_opt.as_ref()).is_empty()
@@ -3553,7 +3561,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 static_method,
                 ..
             } => {
-                if let Type::Function(_parameter_types, return_type, _, throws_types) = &*ty.borrow() {
+                if let Type::Function(_parameter_types, return_type, _, throws_types) =
+                    &*ty.borrow()
+                {
                     let is_throwing = throws_types.is_some();
                     let saved_struct = self.current_struct.borrow_mut().take();
                     self.class_refs.borrow_mut().clear();
@@ -3594,7 +3604,10 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.declare_variable("self".to_string(), self_ptr);
                             let mut param_offset = 1u32;
                             if is_throwing {
-                                let err_ptr = function.get_nth_param(param_offset).unwrap().into_pointer_value();
+                                let err_ptr = function
+                                    .get_nth_param(param_offset)
+                                    .unwrap()
+                                    .into_pointer_value();
                                 *self.error_ptr.borrow_mut() = Some(err_ptr);
                                 param_offset += 1;
                             }
@@ -3615,7 +3628,10 @@ impl<'ctx> IRGenerator<'ctx> {
                         } else {
                             let mut param_offset = 0u32;
                             if is_throwing {
-                                let err_ptr = function.get_nth_param(param_offset).unwrap().into_pointer_value();
+                                let err_ptr = function
+                                    .get_nth_param(param_offset)
+                                    .unwrap()
+                                    .into_pointer_value();
                                 *self.error_ptr.borrow_mut() = Some(err_ptr);
                                 param_offset += 1;
                             }
@@ -3628,7 +3644,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                     self.resolve_type(param.borrow().ty.clone().unwrap())?;
                                 let alloca_name = self.unique_alloca_name(param_name);
                                 let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
-                                let param_value = function.get_nth_param(i as u32 + param_offset).unwrap();
+                                let param_value =
+                                    function.get_nth_param(i as u32 + param_offset).unwrap();
                                 self.builder.build_store(ptr, param_value)?;
                                 self.declare_variable(param_name.clone(), ptr);
                             }
@@ -3636,7 +3653,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     } else {
                         let mut param_offset = 0u32;
                         if is_throwing {
-                            let err_ptr = function.get_nth_param(param_offset).unwrap().into_pointer_value();
+                            let err_ptr = function
+                                .get_nth_param(param_offset)
+                                .unwrap()
+                                .into_pointer_value();
                             *self.error_ptr.borrow_mut() = Some(err_ptr);
                             param_offset += 1;
                         }
@@ -3649,7 +3669,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                 self.resolve_type(param.borrow().ty.clone().unwrap())?;
                             let alloca_name = self.unique_alloca_name(param_name);
                             let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
-                            let param_value = function.get_nth_param(i as u32 + param_offset).unwrap();
+                            let param_value =
+                                function.get_nth_param(i as u32 + param_offset).unwrap();
                             self.builder.build_store(ptr, param_value)?;
                             self.declare_variable(param_name.clone(), ptr);
                         }
@@ -3720,7 +3741,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 is_failable,
                 ..
             } => {
-                if let Type::Function(_parameter_types, return_type, _, throws_types) = &*ty.borrow() {
+                if let Type::Function(_parameter_types, return_type, _, throws_types) =
+                    &*ty.borrow()
+                {
                     let is_throwing = throws_types.is_some();
                     let struct_name = self.current_struct.borrow().clone().unwrap();
                     let fn_name = format!("{}.init", struct_name);
@@ -3736,7 +3759,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.declare_variable("self".to_string(), self_ptr);
                     let mut param_offset = 1u32;
                     if is_throwing {
-                        let err_ptr = function.get_nth_param(param_offset).unwrap().into_pointer_value();
+                        let err_ptr = function
+                            .get_nth_param(param_offset)
+                            .unwrap()
+                            .into_pointer_value();
                         *self.error_ptr.borrow_mut() = Some(err_ptr);
                         param_offset += 1;
                     }
@@ -3867,7 +3893,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Some(err_ptr) = *self.error_ptr.borrow() {
                     let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                     let err_obj_ptr = match val {
-                        BasicValueEnum::PointerValue(p) => self.builder.build_pointer_cast(p, ptr_ty, "")?,
+                        BasicValueEnum::PointerValue(p) => {
+                            self.builder.build_pointer_cast(p, ptr_ty, "")?
+                        }
                         _ => {
                             let alloca = self.builder.build_alloca(val.get_type(), "")?;
                             self.builder.build_store(alloca, val)?;
@@ -3876,7 +3904,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     };
                     self.builder.build_store(err_ptr, err_obj_ptr)?;
                 }
-                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
                 let ret_type = fn_val.get_type().get_return_type();
                 if let Some(ret_ty) = ret_type {
                     let zero_val = ret_ty.const_zero();
@@ -3986,7 +4019,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 result
             }
             Statement::ExtensionDecl {
-                type_name, body, type_arguments, ..
+                type_name,
+                body,
+                type_arguments,
+                ..
             } => {
                 let prev = self.current_struct.borrow_mut().take();
                 let struct_name = if type_arguments.is_some()
@@ -6063,7 +6099,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
             }
-            Expression::Do { body, catch_clauses, finally_body, ty, .. } => {
+            Expression::Do {
+                body,
+                catch_clauses,
+                finally_body,
+                ty,
+                ..
+            } => {
                 let saved_error_ptr = *self.error_ptr.borrow();
                 let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                 let do_error = self.builder.build_alloca(ptr_ty, "do_err")?;
@@ -6180,7 +6222,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                         "guard_bool",
                                     )?,
                                 };
-                                let clause_cont = self.context.append_basic_block(fn_val, "catch_clause_cont");
+                                let clause_cont =
+                                    self.context.append_basic_block(fn_val, "catch_clause_cont");
                                 let clause_body_bb =
                                     self.context.append_basic_block(fn_val, "catch_clause_body");
                                 self.builder.build_conditional_branch(
@@ -6216,7 +6259,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             let _ = self.resolve_statement(s.clone());
                         }
                         if has_catch {
-                            let finally_err_val = self.builder.build_load(ptr_ty, do_error, "finally_err_val")?;
+                            let finally_err_val =
+                                self.builder
+                                    .build_load(ptr_ty, do_error, "finally_err_val")?;
                             let fin_err_int = self.builder.build_ptr_to_int(
                                 finally_err_val.into_pointer_value(),
                                 self.context.i64_type(),
@@ -6255,7 +6300,12 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 *self.error_ptr.borrow_mut() = saved_error_ptr;
 
-                if !terminated_by_return && !terminated_by_yield && !has_yield_target && !has_catch && !has_finally {
+                if !terminated_by_return
+                    && !terminated_by_yield
+                    && !has_yield_target
+                    && !has_catch
+                    && !has_finally
+                {
                     self.exit_scope();
                     return Ok(None);
                 }
@@ -7173,24 +7223,22 @@ impl<'ctx> IRGenerator<'ctx> {
                                                             >,
                                                         > = Vec::new();
                                                             args.push(value_ptr.into());
-                                                            let err_alloca =
-                                                                if is_throwing {
-                                                                    let ptr_ty =
-                                                                        self.context.ptr_type(
-                                                                            inkwell::AddressSpace::from(0),
-                                                                        );
-                                                                    let alloca = self.builder.build_alloca(
-                                                                        ptr_ty,
-                                                                        "call_err",
+                                                            let err_alloca = if is_throwing {
+                                                                let ptr_ty = self.context.ptr_type(
+                                                                    inkwell::AddressSpace::from(0),
+                                                                );
+                                                                let alloca =
+                                                                    self.builder.build_alloca(
+                                                                        ptr_ty, "call_err",
                                                                     )?;
-                                                                    self.builder.build_store(
-                                                                        alloca,
-                                                                        ptr_ty.const_null(),
-                                                                    )?;
-                                                                    Some(alloca)
-                                                                } else {
-                                                                    None
-                                                                };
+                                                                self.builder.build_store(
+                                                                    alloca,
+                                                                    ptr_ty.const_null(),
+                                                                )?;
+                                                                Some(alloca)
+                                                            } else {
+                                                                None
+                                                            };
                                                             if let Some(alloca) = err_alloca {
                                                                 args.push(alloca.into());
                                                             }
@@ -7210,11 +7258,12 @@ impl<'ctx> IRGenerator<'ctx> {
                                                                 let ptr_ty = self.context.ptr_type(
                                                                     inkwell::AddressSpace::from(0),
                                                                 );
-                                                                let err_val = self.builder.build_load(
-                                                                    ptr_ty,
-                                                                    err_alloca.unwrap(),
-                                                                    "call_err_val",
-                                                                )?;
+                                                                let err_val =
+                                                                    self.builder.build_load(
+                                                                        ptr_ty,
+                                                                        err_alloca.unwrap(),
+                                                                        "call_err_val",
+                                                                    )?;
                                                                 if let Some(outer_err_ptr) =
                                                                     *self.error_ptr.borrow()
                                                                 {
@@ -7318,32 +7367,27 @@ impl<'ctx> IRGenerator<'ctx> {
                                                 &method_name,
                                             );
                                             if let Some(fn_type) = method_fn {
-                                                let is_throwing = self
-                                                    .is_protocol_method_throwing(
-                                                        &protocol_name,
-                                                        &method_name,
-                                                    );
+                                                let is_throwing = self.is_protocol_method_throwing(
+                                                    &protocol_name,
+                                                    &method_name,
+                                                );
                                                 let mut args: Vec<
                                                     inkwell::values::BasicMetadataValueEnum<'ctx>,
                                                 > = Vec::new();
                                                 args.push(value_ptr.into());
-                                                let err_alloca =
-                                                    if is_throwing {
-                                                        let ptr_ty = self.context.ptr_type(
-                                                            inkwell::AddressSpace::from(0),
-                                                        );
-                                                        let alloca = self.builder.build_alloca(
-                                                            ptr_ty,
-                                                            "call_err",
-                                                        )?;
-                                                        self.builder.build_store(
-                                                            alloca,
-                                                            ptr_ty.const_null(),
-                                                        )?;
-                                                        Some(alloca)
-                                                    } else {
-                                                        None
-                                                    };
+                                                let err_alloca = if is_throwing {
+                                                    let ptr_ty = self
+                                                        .context
+                                                        .ptr_type(inkwell::AddressSpace::from(0));
+                                                    let alloca = self
+                                                        .builder
+                                                        .build_alloca(ptr_ty, "call_err")?;
+                                                    self.builder
+                                                        .build_store(alloca, ptr_ty.const_null())?;
+                                                    Some(alloca)
+                                                } else {
+                                                    None
+                                                };
                                                 if let Some(alloca) = err_alloca {
                                                     args.push(alloca.into());
                                                 }
@@ -7360,9 +7404,9 @@ impl<'ctx> IRGenerator<'ctx> {
                                                         fn_type, fn_ptr_val, &args, "",
                                                     )?;
                                                 if is_throwing {
-                                                    let ptr_ty = self.context.ptr_type(
-                                                        inkwell::AddressSpace::from(0),
-                                                    );
+                                                    let ptr_ty = self
+                                                        .context
+                                                        .ptr_type(inkwell::AddressSpace::from(0));
                                                     let err_val = self.builder.build_load(
                                                         ptr_ty,
                                                         err_alloca.unwrap(),
@@ -7371,10 +7415,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                                     if let Some(outer_err_ptr) =
                                                         *self.error_ptr.borrow()
                                                     {
-                                                        self.builder.build_store(
-                                                            outer_err_ptr,
-                                                            err_val,
-                                                        )?;
+                                                        self.builder
+                                                            .build_store(outer_err_ptr, err_val)?;
                                                     }
                                                 }
                                                 match call_result.try_as_basic_value() {
@@ -7506,7 +7548,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     matches!(&*t.borrow(), Type::Function(_, _, _, Some(_)))
                 });
                 if let Some(ty) = callee_ty
-                    && let Type::Function(param_tys, ret_ty, is_vararg, throws_types) = &*ty.borrow()
+                    && let Type::Function(param_tys, ret_ty, is_vararg, throws_types) =
+                        &*ty.borrow()
                     && self.module.get_function(&function_name).is_none()
                 {
                     let fn_ptr_val = self.resolve_expression(callee.clone())?.unwrap();
@@ -7542,7 +7585,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Some(err_slot) = err_slot_ptr {
                         if let Some(err_ptr) = *self.error_ptr.borrow() {
                             let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
-                            let err_val = self.builder.build_load(ptr_ty, err_slot, "call_err_val")?;
+                            let err_val =
+                                self.builder.build_load(ptr_ty, err_slot, "call_err_val")?;
                             self.builder.build_store(err_ptr, err_val)?;
                         }
                     }
@@ -8196,7 +8240,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     name.value
                 )
             }
-            Expression::Try { kind, expression: try_expr, ty, .. } => {
+            Expression::Try {
+                kind,
+                expression: try_expr,
+                ty,
+                ..
+            } => {
                 let saved_error_ptr = *self.error_ptr.borrow();
 
                 let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
@@ -8208,10 +8257,17 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 *self.error_ptr.borrow_mut() = saved_error_ptr;
 
-                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
                 let continue_bb = self.context.append_basic_block(fn_val, "try_cont");
 
-                let err_val = self.builder.build_load(ptr_ty, local_error, "try_err_val")?;
+                let err_val = self
+                    .builder
+                    .build_load(ptr_ty, local_error, "try_err_val")?;
                 let err_int = self.builder.build_ptr_to_int(
                     err_val.into_pointer_value(),
                     self.context.i64_type(),
@@ -8227,7 +8283,11 @@ impl<'ctx> IRGenerator<'ctx> {
                 match kind {
                     TryKind::Plain => {
                         let throw_bb = self.context.append_basic_block(fn_val, "try_throw");
-                        self.builder.build_conditional_branch(err_is_null, continue_bb, throw_bb)?;
+                        self.builder.build_conditional_branch(
+                            err_is_null,
+                            continue_bb,
+                            throw_bb,
+                        )?;
 
                         self.builder.position_at_end(throw_bb);
                         if let Some(outer_err) = saved_error_ptr {
@@ -8249,7 +8309,11 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                     TryKind::Force => {
                         let panic_bb = self.context.append_basic_block(fn_val, "try_panic");
-                        self.builder.build_conditional_branch(err_is_null, continue_bb, panic_bb)?;
+                        self.builder.build_conditional_branch(
+                            err_is_null,
+                            continue_bb,
+                            panic_bb,
+                        )?;
 
                         self.builder.position_at_end(panic_bb);
                         let panic_fn = self.module.get_function("panic").unwrap_or_else(|| {
@@ -8257,11 +8321,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             let fn_ty = void_ty.fn_type(&[ptr_ty.into()], false);
                             self.module.add_function("panic", fn_ty, None)
                         });
-                        let err_str = self.builder.build_pointer_cast(
-                            local_error,
-                            ptr_ty,
-                            "",
-                        )?;
+                        let err_str = self.builder.build_pointer_cast(local_error, ptr_ty, "")?;
                         let _ = self.builder.build_call(panic_fn, &[err_str.into()], "");
                         self.builder.build_unreachable()?;
 
@@ -8274,7 +8334,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                     TryKind::Optional => {
                         let none_bb = self.context.append_basic_block(fn_val, "try_none");
-                        self.builder.build_conditional_branch(err_is_null, continue_bb, none_bb)?;
+                        self.builder
+                            .build_conditional_branch(err_is_null, continue_bb, none_bb)?;
 
                         self.builder.position_at_end(none_bb);
                         if let Some(t) = ty.as_ref()
@@ -8285,7 +8346,9 @@ impl<'ctx> IRGenerator<'ctx> {
                                 .borrow()
                                 .get(enum_name)
                                 .cloned()
-                                .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                                })?;
                             let payloads_type = self
                                 .enum_payload_types
                                 .borrow()
@@ -8301,38 +8364,31 @@ impl<'ctx> IRGenerator<'ctx> {
                             let tag = self.context.i8_type().const_zero();
                             let none_val =
                                 enum_type.const_named_struct(&[tag.into(), none_payload.into()]);
-                            self.builder
-                                .build_unconditional_branch(continue_bb)?;
+                            self.builder.build_unconditional_branch(continue_bb)?;
                             self.builder.position_at_end(continue_bb);
-                            let phi = self.builder.build_phi(
-                                enum_type.as_basic_type_enum(),
-                                "try_opt_phi",
-                            )?;
+                            let phi = self
+                                .builder
+                                .build_phi(enum_type.as_basic_type_enum(), "try_opt_phi")?;
                             phi.add_incoming(&[(&none_val as &dyn BasicValue, none_bb)]);
                             if let Some(val) = result {
                                 let result_alloca =
                                     self.builder.build_alloca(val.get_type(), "")?;
                                 self.builder.build_store(result_alloca, val)?;
-                                let payload_type = payloads_type
-                                    .get_field_type_at_index(1)
-                                    .ok_or_else(|| anyhow::anyhow!("Some payload slot not found"))?;
+                                let payload_type =
+                                    payloads_type.get_field_type_at_index(1).ok_or_else(|| {
+                                        anyhow::anyhow!("Some payload slot not found")
+                                    })?;
                                 let payload_struct = payload_type.into_struct_type();
-                                let loaded = self.builder.build_load(
-                                    val.get_type(),
-                                    result_alloca,
-                                    "",
-                                )?;
+                                let loaded =
+                                    self.builder.build_load(val.get_type(), result_alloca, "")?;
                                 let some_payload =
                                     payload_struct.const_named_struct(&[loaded.into()]);
                                 let some_tag = self.context.i8_type().const_int(1, false);
-                                let some_val = enum_type.const_named_struct(&[
-                                    some_tag.into(),
-                                    some_payload.into(),
-                                ]);
+                                let some_val = enum_type
+                                    .const_named_struct(&[some_tag.into(), some_payload.into()]);
                                 phi.add_incoming(&[(&some_val as &dyn BasicValue, continue_bb)]);
                             } else {
-                                self.builder
-                                    .build_unconditional_branch(continue_bb)?;
+                                self.builder.build_unconditional_branch(continue_bb)?;
                                 self.builder.position_at_end(continue_bb);
                             }
                             let phi_val = phi.as_basic_value();
@@ -8463,11 +8519,13 @@ impl<'ctx> IRGenerator<'ctx> {
             })
             .collect();
 
-        let (return_type, param_types, is_vararg, throws_types) = method_types.into_iter().next()?;
+        let (return_type, param_types, is_vararg, throws_types) =
+            method_types.into_iter().next()?;
         let mut all_params = param_types;
         if throws_types.is_some() {
-            let err_ty =
-                Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(Type::Int8)))));
+            let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                Type::Int8,
+            )))));
             let mut new_params = vec![err_ty];
             new_params.extend(all_params);
             all_params = new_params;
@@ -8818,7 +8876,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
                 anyhow::bail!("Void type is handled specially as void return type");
             }
-            Type::Function(_, _, _, _) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
+            Type::Function(_, _, _, _) => {
+                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+            }
             Type::Pointer(_) | Type::NonNullPointer(_) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }

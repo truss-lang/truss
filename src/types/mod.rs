@@ -20,7 +20,12 @@ pub enum Type {
     Float64,
     Char,
     Bool,
-    Function(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, bool, Option<Vec<Rc<RefCell<Type>>>>),
+    Function(
+        Vec<Rc<RefCell<Type>>>,
+        Rc<RefCell<Type>>,
+        bool,
+        Option<Vec<Rc<RefCell<Type>>>>,
+    ),
     Pointer(Rc<RefCell<Type>>),
     NonNullPointer(Rc<RefCell<Type>>),
     Tuple(Vec<(Option<String>, Rc<RefCell<Type>>)>),
