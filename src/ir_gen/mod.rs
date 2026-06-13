@@ -1995,10 +1995,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Symbol::Class { methods, .. } = &*binding {
                     for m in methods {
                         let mb = m.borrow();
-                        if let Symbol::ClassMethod {
-                            name, is_final, ..
-                        } = &*mb
-                        {
+                        if let Symbol::ClassMethod { name, is_final, .. } = &*mb {
                             if name == method_name {
                                 return *is_final;
                             }
@@ -6569,9 +6566,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                         .map(|(_, owner)| owner.clone())
                                         .unwrap_or_else(|| class_name.clone());
                                     let fn_name = format!("{}.{}", owner, method_name);
-                                    if let Some(declared_fn) =
-                                        self.module.get_function(&fn_name)
-                                    {
+                                    if let Some(declared_fn) = self.module.get_function(&fn_name) {
                                         let mut args: Vec<
                                             inkwell::values::BasicMetadataValueEnum<'ctx>,
                                         > = Vec::new();
@@ -6582,9 +6577,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                                 .unwrap();
                                             args.push(arg_val.into());
                                         }
-                                        let call_result = self
-                                            .builder
-                                            .build_call(declared_fn, &args, "")?;
+                                        let call_result =
+                                            self.builder.build_call(declared_fn, &args, "")?;
                                         match call_result.try_as_basic_value() {
                                             inkwell::values::ValueKind::Basic(val) => {
                                                 return Ok(Some(val));
@@ -8380,10 +8374,7 @@ impl<'ctx> IRGenerator<'ctx> {
             if let Some(main_fn) = self.module.get_function(&name) {
                 let i32_type = self.context.i32_type();
                 let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
-                let main_type = i32_type.fn_type(
-                    &[i32_type.into(), ptr_type.into()],
-                    false,
-                );
+                let main_type = i32_type.fn_type(&[i32_type.into(), ptr_type.into()], false);
                 let c_main = self.module.add_function("main", main_type, None);
                 let entry = self.context.append_basic_block(c_main, "entry");
                 self.builder.position_at_end(entry);
@@ -8420,7 +8411,9 @@ impl<'ctx> IRGenerator<'ctx> {
     fn find_main_in_stmt(&self, stmt: &Rc<RefCell<Statement>>) -> Option<String> {
         let s = stmt.borrow();
         match &*s {
-            Statement::FunctionDecl { attributes, name, .. } => {
+            Statement::FunctionDecl {
+                attributes, name, ..
+            } => {
                 if attributes.iter().any(|a| a.name == "main") {
                     Some(name.value.clone())
                 } else {

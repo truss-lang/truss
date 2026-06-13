@@ -488,7 +488,10 @@ impl SymbolResolver {
                         if is_method_abstract && !is_abstract {
                             self.emit_error(
                                 TrussDiagnosticCode::AbstractMemberInNonAbstractClass,
-                                format!("Abstract method '{}' can only be defined in an abstract class", method_name.value),
+                                format!(
+                                    "Abstract method '{}' can only be defined in an abstract class",
+                                    method_name.value
+                                ),
                                 method_name,
                             );
                         }
@@ -1617,10 +1620,7 @@ impl SymbolResolver {
                                 .and_then(|scope| scope.borrow().get_symbol(&name.value))
                             {
                                 let mut class_binding = class_sym.borrow_mut();
-                                if let Symbol::Class {
-                                    superclass: sc, ..
-                                } = &mut *class_binding
-                                {
+                                if let Symbol::Class { superclass: sc, .. } = &mut *class_binding {
                                     *sc = Some(WeakSymbol(Rc::downgrade(&super_sym)));
                                 }
                             }
@@ -2367,10 +2367,17 @@ impl SymbolResolver {
         }
     }
 
-    fn count_main_in_stmts(&self, stmt: &Rc<RefCell<Statement>>, inside_module: bool, count: &mut u32) {
+    fn count_main_in_stmts(
+        &self,
+        stmt: &Rc<RefCell<Statement>>,
+        inside_module: bool,
+        count: &mut u32,
+    ) {
         let s = stmt.borrow();
         match &*s {
-            Statement::FunctionDecl { attributes, name, .. } => {
+            Statement::FunctionDecl {
+                attributes, name, ..
+            } => {
                 if attributes.iter().any(|a| a.name == "main") {
                     if inside_module {
                         self.emit_error(

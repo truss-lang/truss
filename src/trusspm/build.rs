@@ -41,6 +41,9 @@ impl BuildOrchestrator {
     pub fn run_all_passes(&mut self, project_dir: &str) {
         let project_path = Path::new(project_dir);
 
+        let _build_directives =
+            crate::trusspm::cli::process_build_truss(project_path, &self.packages);
+
         for (pkg_name, _pkg) in self.packages.clone() {
             let is_main = pkg_name == self.manifest.name;
 
@@ -73,11 +76,8 @@ impl BuildOrchestrator {
                 continue;
             }
 
-            let mut resolver = SymbolResolver::new(
-                self.packages.clone(),
-                pkg_name.clone(),
-                self.engine.clone(),
-            );
+            let mut resolver =
+                SymbolResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
             let dummy_program = Program {
                 file: Rc::new(String::new()),
                 statements: Vec::new(),
@@ -92,11 +92,8 @@ impl BuildOrchestrator {
                 resolver.register_symbols(stmt.clone());
             }
 
-            let mut type_resolver = TypeResolver::new(
-                self.packages.clone(),
-                pkg_name.clone(),
-                self.engine.clone(),
-            );
+            let mut type_resolver =
+                TypeResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
             let empty_prog = Program {
                 file: Rc::new(String::new()),
                 statements: vec![],
@@ -111,21 +108,15 @@ impl BuildOrchestrator {
                 continue;
             }
 
-            let mut resolver2 = SymbolResolver::new(
-                self.packages.clone(),
-                pkg_name.clone(),
-                self.engine.clone(),
-            );
+            let mut resolver2 =
+                SymbolResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
             let prog = Program {
                 file: Rc::new(String::new()),
                 statements: file_stmts.clone(),
             };
             let main_module = resolver2.resolve(&prog, pkg_name.clone());
-            let mut type_resolver2 = TypeResolver::new(
-                self.packages.clone(),
-                pkg_name.clone(),
-                self.engine.clone(),
-            );
+            let mut type_resolver2 =
+                TypeResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
             type_resolver2.resolve(&prog, main_module.clone());
 
             if self.engine.borrow().has_errors() {
@@ -134,20 +125,47 @@ impl BuildOrchestrator {
 
             let context = inkwell::context::Context::create();
             let ir_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-            let ir_generator = IRGenerator::new(&context, ir_engine.clone());
             let scope = main_module.borrow().scope.clone();
-            let modules = match scope {
-                Some(s) => ir_generator.generate_with_stdlib(&prog, &[], s),
+            let main_scope = match scope {
+                Some(s) => s,
                 None => {
-                    self.engine.borrow_mut().emit(
-                        crate::diag::new_diagnostic(
-                            crate::diag::TrussDiagnosticCode::IRError,
-                            "No scope found for main module",
-                        ),
-                    );
+                    self.engine.borrow_mut().emit(crate::diag::new_diagnostic(
+                        crate::diag::TrussDiagnosticCode::IRError,
+                        "No scope found for main module",
+                    ));
                     return;
                 }
             };
+
+            let files = DependencyResolver::discover_source_files(&pkg_name, project_path);
+            let mut file_modules: Vec<(String, inkwell::module::Module<'_>)> = Vec::new();
+
+            for file in &files {
+                let content = match std::fs::read_to_string(file) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let file_rc = Rc::new(file.to_string_lossy().to_string());
+                let char_stream = CharStream::new(content, file_rc.clone());
+                let mut lexer = Lexer::new(char_stream, self.engine.clone());
+                let tokens = lexer.parse();
+                if self.engine.borrow().has_errors() {
+                    return;
+                }
+                let mut parser = Parser::new(file_rc, tokens, self.engine.clone());
+                let program = parser.parse();
+                if self.engine.borrow().has_errors() {
+                    return;
+                }
+
+                let file_ir_gen = IRGenerator::new(&context, ir_engine.clone());
+                let file_modules_result =
+                    file_ir_gen.generate_with_stdlib(&program, &[], main_scope.clone());
+                file_modules.push((
+                    file.to_string_lossy().to_string(),
+                    (*file_modules_result.main).clone(),
+                ));
+            }
 
             if ir_engine.borrow().has_errors() {
                 let formatted = duck_diagnostic::format_all_smart(&*ir_engine.borrow(), false);
@@ -157,8 +175,39 @@ impl BuildOrchestrator {
                 return;
             }
 
-            let ir = modules.main.print_to_string().to_string();
-            println!("{}", ir);
+            if file_modules.is_empty() {
+                let single_ir_gen = IRGenerator::new(&context, ir_engine.clone());
+                let modules = single_ir_gen.generate_with_stdlib(&prog, &[], main_scope);
+                if ir_engine.borrow().has_errors() {
+                    let formatted = duck_diagnostic::format_all_smart(&*ir_engine.borrow(), false);
+                    if !formatted.is_empty() {
+                        eprintln!("{}", formatted);
+                    }
+                    return;
+                }
+                let ir = modules.main.print_to_string().to_string();
+                println!("{}", ir);
+            } else if file_modules.len() == 1 {
+                let ir = file_modules[0].1.print_to_string().to_string();
+                println!("{}", ir);
+            } else {
+                let target = file_modules.remove(0);
+                for (file_name, module) in &file_modules {
+                    for func in module.get_functions() {
+                        let name = func.get_name().to_str().unwrap_or("").to_string();
+                        if !name.is_empty() && target.1.get_function(&name).is_none() {
+                            let fn_type = func.get_type();
+                            target.1.add_function(&name, fn_type, None);
+                        }
+                    }
+                    println!("; LLVM Module: {}", file_name);
+                    let ir = module.print_to_string().to_string();
+                    println!("{}", ir);
+                }
+                println!("; LLVM Module: {} (linked)", target.0);
+                let ir = target.1.print_to_string().to_string();
+                println!("{}", ir);
+            }
         }
     }
 

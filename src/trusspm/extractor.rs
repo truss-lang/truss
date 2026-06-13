@@ -1,25 +1,29 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::{
-        expression::Expression,
-        node::Program,
-        statement::Statement,
-    },
-    trusspm::manifest::{Manifest, ManifestTarget, ManifestDependency},
+    ast::{expression::Expression, node::Program, statement::Statement},
+    trusspm::manifest::{Manifest, ManifestDependency, ManifestTarget},
 };
 
 pub fn extract_manifest(program: &Program) -> Option<Manifest> {
     let stmt = program.statements.iter().find_map(|s| {
         let s_borrow = s.borrow();
         match &*s_borrow {
-            Statement::VariableDecl { name, initializer, .. } => {
+            Statement::VariableDecl {
+                name, initializer, ..
+            } => {
                 if name.value == "project" {
                     if let Some(init) = initializer {
                         let init_borrow = init.borrow();
-                        if let Expression::Call { callee, parameters, .. } = &*init_borrow {
+                        if let Expression::Call {
+                            callee, parameters, ..
+                        } = &*init_borrow
+                        {
                             let callee_borrow = callee.borrow();
-                            if let Expression::Variable { name: callee_name, .. } = &*callee_borrow {
+                            if let Expression::Variable {
+                                name: callee_name, ..
+                            } = &*callee_borrow
+                            {
                                 if callee_name.value == "Project" {
                                     return Some(parameters.clone());
                                 }
@@ -93,7 +97,9 @@ fn extract_string(param: &crate::ast::expression::CallParameter) -> Option<Strin
     }
 }
 
-fn extract_array(param: &crate::ast::expression::CallParameter) -> Option<Vec<Rc<RefCell<Expression>>>> {
+fn extract_array(
+    param: &crate::ast::expression::CallParameter,
+) -> Option<Vec<Rc<RefCell<Expression>>>> {
     let expr = param.expression.borrow();
     if let Expression::ArrayLiteral { elements, .. } = &*expr {
         Some(elements.clone())
@@ -104,7 +110,10 @@ fn extract_array(param: &crate::ast::expression::CallParameter) -> Option<Vec<Rc
 
 fn extract_target(expr: &Rc<RefCell<Expression>>) -> Option<ManifestTarget> {
     let e = expr.borrow();
-    if let Expression::Call { callee, parameters, .. } = &*e {
+    if let Expression::Call {
+        callee, parameters, ..
+    } = &*e
+    {
         let callee_borrow = callee.borrow();
         if let Expression::Variable { name, .. } = &*callee_borrow {
             if name.value == "Target" {
@@ -115,7 +124,9 @@ fn extract_target(expr: &Rc<RefCell<Expression>>) -> Option<ManifestTarget> {
     None
 }
 
-fn extract_target_call(parameters: &[crate::ast::expression::CallParameter]) -> Option<ManifestTarget> {
+fn extract_target_call(
+    parameters: &[crate::ast::expression::CallParameter],
+) -> Option<ManifestTarget> {
     let mut name = None;
     let mut kind = None;
     let mut deps = Vec::new();
@@ -152,7 +163,10 @@ fn extract_target_call(parameters: &[crate::ast::expression::CallParameter]) -> 
 
 fn extract_dependency(expr: &Rc<RefCell<Expression>>) -> Option<ManifestDependency> {
     let e = expr.borrow();
-    if let Expression::Call { callee, parameters, .. } = &*e {
+    if let Expression::Call {
+        callee, parameters, ..
+    } = &*e
+    {
         let callee_borrow = callee.borrow();
         if let Expression::Variable { name, .. } = &*callee_borrow {
             if name.value == "Dependency" {

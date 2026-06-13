@@ -1,8 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc, fs};
+use std::{cell::RefCell, collections::HashMap, fs, path::Path, rc::Rc};
 
 use crate::{
     diag::TrussDiagnosticEngine,
-    krate::{Package, Module},
+    krate::{Module, Package},
     trusspm::manifest::{Manifest, ManifestDependency},
 };
 
@@ -22,7 +22,10 @@ impl DependencyResolver {
         let src_dir = project_dir.join("Sources").join(&manifest.name);
         if src_dir.exists() {
             let root_module = Rc::new(RefCell::new(Module::new(manifest.name.clone())));
-            main_pkg.borrow_mut().modules.insert(manifest.name.clone(), root_module.clone());
+            main_pkg
+                .borrow_mut()
+                .modules
+                .insert(manifest.name.clone(), root_module.clone());
             let scope = Rc::new(RefCell::new(crate::scope::Scope::new(None)));
             root_module.borrow_mut().scope = Some(scope);
         }
@@ -45,7 +48,10 @@ impl DependencyResolver {
                 match status {
                     Ok(s) if s.success() => {}
                     Ok(s) => {
-                        eprintln!("Warning: git clone failed for '{}' (exit: {}), using cached if available", dep.name, s);
+                        eprintln!(
+                            "Warning: git clone failed for '{}' (exit: {}), using cached if available",
+                            dep.name, s
+                        );
                     }
                     Err(e) => {
                         eprintln!("Warning: git not available for '{}': {}", dep.name, e);
@@ -71,7 +77,10 @@ impl DependencyResolver {
         pkg
     }
 
-    pub fn discover_source_files(package_name: &str, project_dir: &Path) -> Vec<std::path::PathBuf> {
+    pub fn discover_source_files(
+        package_name: &str,
+        project_dir: &Path,
+    ) -> Vec<std::path::PathBuf> {
         let src_dir = project_dir.join("Sources").join(package_name);
         if !src_dir.exists() {
             return Vec::new();

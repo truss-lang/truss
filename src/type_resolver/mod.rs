@@ -10,8 +10,7 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, AccessorKind, FunctionBody, GenericParameterKind, ModifierType,
-            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement,
-            VariadicKind,
+            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement, VariadicKind,
         },
     },
     diag::{
@@ -30,6 +29,7 @@ type MethodInfo = Option<(String, Rc<RefCell<Type>>, Vec<Rc<RefCell<Type>>>)>;
 #[derive(Debug)]
 pub struct TypeResolver {
     pub packages: HashMap<String, Rc<RefCell<Package>>>,
+    #[allow(dead_code)]
     current_package: String,
     current_module: Option<Rc<RefCell<Module>>>,
     current_return_type: Option<Rc<RefCell<Type>>>,
@@ -1753,6 +1753,7 @@ impl TypeResolver {
         }
     }
 
+    #[allow(dead_code)]
     fn lookup_primary_type(&self, name: &str) -> Option<Rc<RefCell<Type>>> {
         match name {
             "Int8" => Some(Rc::new(RefCell::new(Type::Int8))),
@@ -5621,56 +5622,53 @@ impl TypeResolver {
                 name: super_name, ..
             } = &*super_expr.borrow()
             {
-                self.current_scope.as_ref().and_then(|scope| {
-                    scope
-                        .borrow()
-                        .get_symbol(&super_name.value)
-                })
+                self.current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().get_symbol(&super_name.value))
             } else {
                 None
             }
         });
 
-        let (super_method_names, super_property_names, _is_super_abstract) =
-            superclass_symbol
-                .as_ref()
-                .map(|sym| {
-                    let binding = sym.borrow();
-                    if let Symbol::Class {
-                        methods,
-                        properties,
-                        is_abstract,
-                        ..
-                    } = &*binding
-                    {
-                        let method_names: Vec<String> = methods
-                            .iter()
-                            .filter_map(|m| {
-                                let mb = m.borrow();
-                                if let Symbol::ClassMethod { name, .. } = &*mb {
-                                    Some(name.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        let property_names: Vec<String> = properties
-                            .iter()
-                            .filter_map(|p| {
-                                let pb = p.borrow();
-                                if let Symbol::ClassProperty { name, .. } = &*pb {
-                                    Some(name.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        (method_names, property_names, *is_abstract)
-                    } else {
-                        (vec![], vec![], false)
-                    }
-                })
-                .unwrap_or_default();
+        let (super_method_names, super_property_names, _is_super_abstract) = superclass_symbol
+            .as_ref()
+            .map(|sym| {
+                let binding = sym.borrow();
+                if let Symbol::Class {
+                    methods,
+                    properties,
+                    is_abstract,
+                    ..
+                } = &*binding
+                {
+                    let method_names: Vec<String> = methods
+                        .iter()
+                        .filter_map(|m| {
+                            let mb = m.borrow();
+                            if let Symbol::ClassMethod { name, .. } = &*mb {
+                                Some(name.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    let property_names: Vec<String> = properties
+                        .iter()
+                        .filter_map(|p| {
+                            let pb = p.borrow();
+                            if let Symbol::ClassProperty { name, .. } = &*pb {
+                                Some(name.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    (method_names, property_names, *is_abstract)
+                } else {
+                    (vec![], vec![], false)
+                }
+            })
+            .unwrap_or_default();
 
         for member in body {
             let member_ref = member.borrow();
@@ -5680,10 +5678,8 @@ impl TypeResolver {
                     modifiers,
                     ..
                 } => {
-                    let is_override =
-                        modifiers.iter().any(|m| m.ty == ModifierType::Override);
-                    let exists_in_super =
-                        super_method_names.contains(&method_name.value);
+                    let is_override = modifiers.iter().any(|m| m.ty == ModifierType::Override);
+                    let exists_in_super = super_method_names.contains(&method_name.value);
 
                     if exists_in_super {
                         if let Some(ref super_sym) = superclass_symbol {
@@ -5745,14 +5741,12 @@ impl TypeResolver {
                     accessors,
                     ..
                 } => {
-                    let has_override =
-                        modifiers.iter().any(|m| m.ty == ModifierType::Override);
+                    let has_override = modifiers.iter().any(|m| m.ty == ModifierType::Override);
                     let is_computed = accessors
                         .iter()
                         .any(|a| matches!(a.kind, AccessorKind::Get | AccessorKind::Set));
                     if is_computed {
-                        let exists_in_super =
-                            super_property_names.contains(&var_name.value);
+                        let exists_in_super = super_property_names.contains(&var_name.value);
 
                         if exists_in_super {
                             if !has_override {

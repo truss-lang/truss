@@ -90,7 +90,12 @@ fn parse_dep_obj(obj: &str) -> Option<LockedDepJson> {
     let url = extract_json_str(obj, "url");
     let path = extract_json_str(obj, "path");
     let version = extract_json_str(obj, "version");
-    Some(LockedDepJson { name, url, path, version })
+    Some(LockedDepJson {
+        name,
+        url,
+        path,
+        version,
+    })
 }
 
 fn extract_json_str(content: &str, key: &str) -> Option<String> {
@@ -124,7 +129,10 @@ mod tests {
         let deps = parse_lock_json(json).expect("should parse");
         assert_eq!(deps.len(), 2);
         assert_eq!(deps[0].name, "http");
-        assert_eq!(deps[0].url.as_deref(), Some("https://github.com/truss-lang/http"));
+        assert_eq!(
+            deps[0].url.as_deref(),
+            Some("https://github.com/truss-lang/http")
+        );
         assert_eq!(deps[1].name, "json");
         assert_eq!(deps[1].path.as_deref(), Some("../json"));
     }

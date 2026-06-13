@@ -13,9 +13,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Init {
-        name: String,
-    },
+    Init { name: String },
     Build,
     Run,
 }
@@ -55,12 +53,14 @@ fn cmd_init(name: &str) {
     });
 
     let main_content = "#[main]\nfunc main() {\n    \n}\n";
-    fs::write(root.join("Sources").join(name).join("main.truss"), main_content).unwrap_or_else(
-        |e| {
-            eprintln!("Error: Failed to write main.truss: {}", e);
-            std::process::exit(1);
-        },
-    );
+    fs::write(
+        root.join("Sources").join(name).join("main.truss"),
+        main_content,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("Error: Failed to write main.truss: {}", e);
+        std::process::exit(1);
+    });
 
     println!("Created project '{}'", name);
 }
@@ -74,7 +74,10 @@ fn cmd_build() {
         }
     };
 
-    println!("Building project '{}' v{}", orchestrator.manifest.name, orchestrator.manifest.version);
+    println!(
+        "Building project '{}' v{}",
+        orchestrator.manifest.name, orchestrator.manifest.version
+    );
 
     orchestrator.run_all_passes(".");
 

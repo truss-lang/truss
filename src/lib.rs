@@ -8,7 +8,7 @@ pub mod macro_expander;
 pub mod parser;
 pub mod scope;
 pub mod symbol;
-pub mod trusspm;
 pub mod symbol_resolver;
+pub mod trusspm;
 pub mod type_resolver;
 pub mod types;

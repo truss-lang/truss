@@ -41,8 +41,7 @@ pub fn process_build_truss(
     let build_pkg = Rc::new(RefCell::new(Package::new("Build".to_string())));
     packages.insert("Build".to_string(), build_pkg.clone());
 
-    let mut resolver =
-        SymbolResolver::new(packages.clone(), "Build".to_string(), engine.clone());
+    let mut resolver = SymbolResolver::new(packages.clone(), "Build".to_string(), engine.clone());
     let dummy_prog = Program {
         file: Rc::new(String::new()),
         statements: Vec::new(),
@@ -69,8 +68,7 @@ pub fn process_build_truss(
         return None;
     }
 
-    let mut resolver2 =
-        SymbolResolver::new(packages.clone(), "Build".to_string(), engine.clone());
+    let mut resolver2 = SymbolResolver::new(packages.clone(), "Build".to_string(), engine.clone());
     let main_module = resolver2.resolve(&program, "Build".to_string());
     let mut type_resolver2 =
         TypeResolver::new(packages.clone(), "Build".to_string(), engine.clone());
@@ -90,8 +88,15 @@ pub fn process_build_truss(
             return None;
         }
 
-        if let Some(_func) = modules.main.get_function("main") {
-            println!("Build.truss compiled successfully (JIT execution pending)");
+        if let Some(func) = modules.main.get_function("main") {
+            let engine = modules
+                .main
+                .create_jit_execution_engine(inkwell::OptimizationLevel::None);
+            if let Ok(exec_engine) = engine {
+                unsafe {
+                    let _ = exec_engine.run_function(func, &[]);
+                }
+            }
         }
     }
 
