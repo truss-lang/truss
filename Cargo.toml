@@ -3,6 +3,14 @@ name = "truss"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "truss"
+path = "src/bin/truss.rs"
+
+[[bin]]
+name = "trussc"
+path = "src/bin/trussc.rs"
+
 [dependencies]
 strum = { version = "0.28.0", features = ["derive"] }
 anyhow = "1.0.102"
