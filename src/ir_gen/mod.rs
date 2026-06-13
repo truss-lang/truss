@@ -4668,6 +4668,19 @@ impl<'ctx> IRGenerator<'ctx> {
                     Ok(Some(
                         self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?.into(),
                     ))
+                } else if let Some(struct_type) = self.struct_types.borrow().get(&name.value).copied() {
+                    let zero = struct_type.const_zero();
+                    let ptr = self.builder.build_alloca(struct_type, "")?;
+                    self.builder.build_store(ptr, zero)?;
+                    Ok(Some(self.builder.build_load(struct_type, ptr, "")?))
+                } else if let Some(enum_type) = self.enum_types.borrow().get(&name.value).copied() {
+                    let zero = enum_type.const_zero();
+                    let ptr = self.builder.build_alloca(enum_type, "")?;
+                    self.builder.build_store(ptr, zero)?;
+                    Ok(Some(self.builder.build_load(enum_type, ptr, "")?))
+                } else if self.class_types.borrow().contains_key(&name.value) {
+                    let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                    Ok(Some(ptr_ty.const_null().into()))
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,

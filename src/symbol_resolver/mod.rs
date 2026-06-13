@@ -1910,7 +1910,25 @@ impl SymbolResolver {
 
     fn resolve_expression(&mut self, expr: Rc<RefCell<Expression>>) {
         match &mut *expr.borrow_mut() {
-            Expression::Variable { name, symbol, .. } => match self.resolve_symbol(name) {
+            Expression::Variable { name, symbol, .. } => {
+                let is_type_name = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().get_symbol(&name.value))
+                    .map(|sym| {
+                        matches!(
+                            &*sym.borrow(),
+                            Symbol::Struct { .. }
+                                | Symbol::Class { .. }
+                                | Symbol::Enum { .. }
+                                | Symbol::Protocol { .. }
+                        )
+                    })
+                    .unwrap_or(false);
+                if is_type_name {
+                    return;
+                }
+                match self.resolve_symbol(name) {
                 Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
                 Err(_) => {
                     self.emit_error(
@@ -1919,7 +1937,7 @@ impl SymbolResolver {
                         name.as_ref(),
                     );
                 }
-            },
+            }},
             Expression::Call {
                 callee,
                 type_parameters,
@@ -1946,7 +1964,30 @@ impl SymbolResolver {
                 }
             }
             Expression::MemberAccess { object, .. } => {
-                self.resolve_expression(object.clone());
+                let is_static_call = {
+                    let obj = object.borrow();
+                    if let Expression::Variable { name, .. } = &*obj {
+                        self
+                            .current_scope
+                            .as_ref()
+                            .and_then(|scope| scope.borrow().get_symbol(&name.value))
+                            .map(|sym| {
+                                matches!(
+                                    &*sym.borrow(),
+                                    Symbol::Struct { .. }
+                                        | Symbol::Class { .. }
+                                        | Symbol::Enum { .. }
+                                        | Symbol::Protocol { .. }
+                                )
+                            })
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    }
+                };
+                if !is_static_call {
+                    self.resolve_expression(object.clone());
+                }
             }
             Expression::AssociatedTypeAccess { object, .. } => {
                 self.resolve_expression(object.clone());

@@ -2062,11 +2062,40 @@ impl TypeResolver {
                     .get_type(&name.value);
                 let t = t.or_else(|| {
                     let scope = self.current_scope.as_ref()?;
-                    let sym = scope.borrow().get_symbol(&name.value)?;
+                    let scope_ref = scope.borrow();
+                    let sym = scope_ref.get_symbol(&name.value)?;
                     let binding = sym.borrow();
-                    let decl = binding.get_decl().ok().flatten()?;
+                    let type_ref = match &*binding {
+                        Symbol::Struct { .. } => {
+                            Some(Rc::new(RefCell::new(Type::Struct(
+                                name.value.clone(),
+                                WeakSymbol(Rc::downgrade(&sym)),
+                                vec![],
+                            ))))
+                        }
+                        Symbol::Class { .. } => {
+                            Some(Rc::new(RefCell::new(Type::Class(
+                                name.value.clone(),
+                                WeakSymbol(Rc::downgrade(&sym)),
+                                vec![],
+                            ))))
+                        }
+                        Symbol::Enum { .. } => {
+                            Some(Rc::new(RefCell::new(Type::Enum(
+                                name.value.clone(),
+                                WeakSymbol(Rc::downgrade(&sym)),
+                                vec![],
+                            ))))
+                        }
+                        _ => None,
+                    };
+                    if type_ref.is_some() {
+                        return type_ref;
+                    }
+                    let decl_opt = binding.get_decl().ok().flatten()?;
                     drop(binding);
-                    let decl_ref = decl.borrow();
+                    drop(scope_ref);
+                    let decl_ref = decl_opt.borrow();
                     match &*decl_ref {
                         Statement::FunctionDecl { ty: fn_ty, .. } => fn_ty.clone(),
                         Statement::VariableDecl { ty: var_ty, .. } => var_ty.clone(),
@@ -2877,7 +2906,43 @@ impl TypeResolver {
                 if let Some(result) = self.try_module_member_access(object.clone(), member, ty) {
                     return Some(result);
                 }
-                let object_ty = self.infer_type(object.clone())?;
+                let object_ty = match self.infer_type(object.clone()) {
+                    Some(ty) => ty,
+                    None => {
+                        if let Expression::Variable { name, .. } = &*object.borrow() {
+                            let scope = self.current_scope.as_ref()?.borrow();
+                            let sym = scope.get_symbol(&name.value)?;
+                            let sym_binding = sym.borrow();
+                            let (_type_name, methods) = match &*sym_binding {
+                                Symbol::Struct { name, methods, .. }
+                                | Symbol::Class { name, methods, .. }
+                                | Symbol::Enum { name, methods, .. } => {
+                                    (name.clone(), methods.clone())
+                                }
+                                _ => return None,
+                            };
+                            drop(sym_binding);
+                            drop(scope);
+                            for m in &methods {
+                                if m.borrow().name().as_ref().ok() != Some(&member.value) {
+                                    continue;
+                                }
+                                if let Some(decl) = m.borrow().get_decl().ok().flatten() {
+                                    if let Statement::FunctionDecl {
+                                        static_method: true,
+                                        ty: Some(method_ty),
+                                        ..
+                                    } = &*decl.borrow()
+                                    {
+                                        *ty = Some(method_ty.clone());
+                                        return Some(method_ty.clone());
+                                    }
+                                }
+                            }
+                        }
+                        return None;
+                    }
+                };
                 match &*object_ty.borrow() {
                     Type::Struct(struct_name, ..) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
