@@ -2082,6 +2082,7 @@ impl Parser {
                     None
                 }
             });
+            let mutating = modifiers.iter().any(|m| m.ty == ModifierType::Mutating);
             Ok(Statement::FunctionDecl {
                 attributes,
                 modifiers,
@@ -2096,6 +2097,7 @@ impl Parser {
                 scope: None,
                 ty: None,
                 static_method,
+                mutating,
                 operator_fixity,
             })
         }
@@ -5417,6 +5419,7 @@ impl Parser {
                     KeywordType::Private => ModifierType::Access(AccessModifier::Private),
                     KeywordType::Package => ModifierType::Access(AccessModifier::Package),
                     KeywordType::Static => ModifierType::Static,
+                    KeywordType::Mutating => ModifierType::Mutating,
                     KeywordType::Prefix => ModifierType::OperatorFixity(OperatorFixity::Prefix),
                     KeywordType::Postfix => ModifierType::OperatorFixity(OperatorFixity::Postfix),
                     KeywordType::Override => ModifierType::Override,

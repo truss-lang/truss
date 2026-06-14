@@ -12533,3 +12533,106 @@ fn test_implicit_member_access_in_call() {
         panic!("Expected FunctionDecl with ExpressionStatement");
     }
 }
+
+#[test]
+fn test_parse_mutating_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { mutating func foo() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Expected no errors");
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        let mutating_func = body.iter().find(|s| {
+            if let Statement::FunctionDecl { name, .. } = &*s.borrow() {
+                name.value == "foo"
+            } else {
+                false
+            }
+        });
+        assert!(mutating_func.is_some(), "Should find func foo");
+        if let Statement::FunctionDecl { mutating, .. } = &*mutating_func.unwrap().borrow() {
+            assert!(*mutating, "Expected mutating to be true");
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_mutating_function_with_modifiers() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { public mutating func foo() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Expected no errors");
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        let mutating_func = body.iter().find(|s| {
+            if let Statement::FunctionDecl { name, .. } = &*s.borrow() {
+                name.value == "foo"
+            } else {
+                false
+            }
+        });
+        assert!(mutating_func.is_some(), "Should find func foo");
+        if let Statement::FunctionDecl {
+            modifiers, mutating, ..
+        } = &*mutating_func.unwrap().borrow()
+        {
+            assert!(*mutating, "Expected mutating to be true");
+            assert!(
+                modifiers.iter().any(|m| matches!(m.ty, ModifierType::Access(_))),
+                "Expected access modifier"
+            );
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_non_mutating_function() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { func foo() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Expected no errors");
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        let non_mutating_func = body.iter().find(|s| {
+            if let Statement::FunctionDecl { name, .. } = &*s.borrow() {
+                name.value == "foo"
+            } else {
+                false
+            }
+        });
+        assert!(non_mutating_func.is_some(), "Should find func foo");
+        if let Statement::FunctionDecl { mutating, .. } = &*non_mutating_func.unwrap().borrow() {
+            assert!(!*mutating, "Expected mutating to be false");
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}

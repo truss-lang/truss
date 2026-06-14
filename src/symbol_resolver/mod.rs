@@ -1585,6 +1585,7 @@ impl SymbolResolver {
                             scope: None,
                             ty: None,
                             static_method: false,
+                            mutating: false,
                             operator_fixity: None,
                         };
                         let func_stmt = Rc::new(RefCell::new(copy_func));

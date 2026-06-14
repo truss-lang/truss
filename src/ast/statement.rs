@@ -27,6 +27,7 @@ pub enum Statement {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
         static_method: bool,
+        mutating: bool,
         operator_fixity: Option<OperatorFixity>,
     },
     VariableDecl {
@@ -319,6 +320,7 @@ pub enum ModifierType {
     Access(AccessModifier),
     AccessSet(AccessModifier),
     Static,
+    Mutating,
     OperatorFixity(OperatorFixity),
     Override,
     Abstract,
