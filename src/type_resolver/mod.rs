@@ -2098,6 +2098,62 @@ impl TypeResolver {
                         _ => None,
                     }
                 });
+                let t = t.or_else(|| {
+                    let self_ty = self.current_scope.as_ref()?.borrow().get_type("self")?;
+                    let struct_name = match &*self_ty.borrow() {
+                        Type::Struct(n, _, _) | Type::Class(n, _, _) | Type::Enum(n, _, _) => n.clone(),
+                        _ => return None,
+                    };
+                    let scope = self.current_scope.as_ref()?;
+                    let scope_ref = scope.borrow();
+                    let sym = scope_ref.get_symbol(&struct_name)?;
+                    let binding = sym.borrow();
+                    let (properties, methods, constructors) = match &*binding {
+                        Symbol::Struct { properties, methods, constructors, .. }
+                        | Symbol::Class { properties, methods, constructors, .. } =>
+                            (properties.clone(), methods.clone(), constructors.clone()),
+                        Symbol::Enum { methods, .. } =>
+                            (vec![], methods.clone(), vec![]),
+                        _ => return None,
+                    };
+                    drop(binding);
+                    drop(scope_ref);
+                    drop(scope);
+                    for field in &properties {
+                        if field.borrow().name().ok()? != name.value { continue; }
+                        if let Some(decl) = field.borrow().get_decl().ok().flatten() {
+                            if let Statement::VariableDecl { ty: Some(field_ty), .. } = &*decl.borrow() {
+                                return Some(field_ty.clone());
+                            }
+                        }
+                    }
+                    for method in &methods {
+                        if method.borrow().name().ok()? != name.value { continue; }
+                        if let Some(decl) = method.borrow().get_decl().ok().flatten() {
+                            if let Statement::FunctionDecl { ty: Some(method_ty), .. } = &*decl.borrow() {
+                                return Some(method_ty.clone());
+                            }
+                        }
+                    }
+                    for ctor in &constructors {
+                        if ctor.borrow().name().ok()? != name.value { continue; }
+                        if let Some(decl) = ctor.borrow().get_decl().ok().flatten() {
+                            if let Statement::InitDecl { ty: Some(ctor_ty), .. } = &*decl.borrow() {
+                                return Some(ctor_ty.clone());
+                            }
+                        }
+                    }
+                    None
+                });
+                let t = t?;
+                *ty = Some(t.clone());
+                t
+            }
+            Expression::SelfKeyword { ty, token, .. } => {
+                let t = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().get_type("self"));
                 let t = t?;
                 *ty = Some(t.clone());
                 t

@@ -3655,7 +3655,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.enter_scope();
                     let is_class_method;
                     let is_struct_method;
-                    if let Some(struct_name) = &*self.current_struct.borrow() {
+                    if let Some(struct_name) = &saved_struct {
                         is_class_method = self.class_types.borrow().contains_key(struct_name);
                         is_struct_method = self.struct_types.borrow().contains_key(struct_name);
                     } else {
@@ -4730,6 +4730,27 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.builder.build_store(ptr, zero)?;
                     Ok(Some(self.builder.build_load(enum_type, ptr, "")?))
                 } else if self.class_types.borrow().contains_key(&name.value) {
+                    let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                    Ok(Some(ptr_ty.const_null().into()))
+                } else if let Some(self_ptr) = self.lookup_variable("self") {
+                    let struct_names: Vec<String> = self.struct_types.borrow().keys().cloned().collect();
+                    let mut found_sname = None;
+                    for n in &struct_names {
+                        if self.get_stored_struct_field_index(n, &name.value).is_ok() {
+                            found_sname = Some(n.clone());
+                            break;
+                        }
+                    }
+                    if let Some(ref sname) = found_sname {
+                        if let Ok(idx) = self.get_stored_struct_field_index(sname, &name.value) {
+                            let stype = *self.struct_types.borrow().get(sname).unwrap();
+                            let field_ptr = self.builder.build_struct_gep(stype, self_ptr, idx as u32, "")?;
+                            self.declare_variable(name.value.clone(), field_ptr);
+                            let field_ty = self.get_struct_field_type(sname, &name.value)?;
+                            let val = self.builder.build_load(field_ty, field_ptr, "")?;
+                            return Ok(Some(val));
+                        }
+                    }
                     let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                     Ok(Some(ptr_ty.const_null().into()))
                 } else {

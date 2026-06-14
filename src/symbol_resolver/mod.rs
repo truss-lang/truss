@@ -1940,6 +1940,14 @@ impl SymbolResolver {
                 match self.resolve_symbol(name) {
                 Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
                 Err(_) => {
+                    let has_self = self
+                        .current_scope
+                        .as_ref()
+                        .and_then(|scope| scope.borrow().get_type("self"))
+                        .is_some();
+                    if has_self {
+                        return;
+                    }
                     self.emit_error(
                         TrussDiagnosticCode::UndefinedVariable,
                         format!("Undefined variable '{}'", name.value),
@@ -2019,16 +2027,15 @@ impl SymbolResolver {
             Expression::TupleIndexAccess { object, .. } => {
                 self.resolve_expression(object.clone());
             }
-            Expression::SelfKeyword { token, symbol, .. } => match self.resolve_symbol(token) {
-                Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
-                Err(_) => {
-                    self.emit_error(
-                        TrussDiagnosticCode::UndefinedVariable,
-                        format!("'self' is only available inside methods"),
-                        token.as_ref(),
-                    );
+            Expression::SelfKeyword { token, symbol, .. } => {
+                match self.resolve_symbol(token) {
+                Ok(sym) => {
+                    *symbol = Some(WeakSymbol(Rc::downgrade(&sym)));
                 }
-            },
+                Err(_) => {
+                    // self is not in scope; skip silently for implicit self support
+                }
+            }},
             Expression::SuperKeyword { token, .. } => {
                 let in_method = self
                     .current_scope
