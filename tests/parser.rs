@@ -12636,3 +12636,29 @@ fn test_parse_non_mutating_function() {
         panic!("Expected StructDecl");
     }
 }
+
+#[test]
+fn test_parse_self_init_call_in_struct_init() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { let x: Int32; init(x: Int32) { self.x = x } init() { self.init(x: 0) } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(
+        !engine.borrow().has_errors(),
+        "Expected no errors, got: {:?}",
+        engine.borrow().get_errors()
+    );
+    if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
+        let init_stmt = body.iter().find(|s| matches!(&*s.borrow(), Statement::InitDecl { .. }));
+        assert!(init_stmt.is_some(), "Should find init");
+    } else {
+        panic!("Expected StructDecl");
+    }
+}

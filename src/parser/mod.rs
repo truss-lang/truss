@@ -1130,6 +1130,12 @@ impl Parser {
                                     keyword: KeywordType::Deinit
                                 }
                             )
+                            || matches!(
+                                member_token.ty,
+                                TokenType::Keyword {
+                                    keyword: KeywordType::Init
+                                }
+                            )
                         {
                             expression = Expression::MemberAccess {
                                 object: Rc::new(RefCell::new(expression)),
