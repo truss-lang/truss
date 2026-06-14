@@ -3562,9 +3562,74 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.builder.position_at_end(exit_bb);
                 Ok(false)
             }
-            Statement::For { iterator, body, .. } => {
-                let _ = self.resolve_expression(iterator.clone());
-                self.resolve_block_expression(body)?;
+            Statement::For { pattern, iterator, body, .. } => {
+                let iter_val = self.resolve_expression(iterator.clone())?.unwrap();
+                let iter_ptr = if let BasicValueEnum::PointerValue(p) = iter_val {
+                    p
+                } else {
+                    let p = self.builder.build_alloca(iter_val.get_type(), "")?;
+                    self.builder.build_store(p, iter_val)?;
+                    p
+                };
+
+                let function = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+
+                let cond_bb = self.context.append_basic_block(function, "for_cond");
+                let body_bb = self.context.append_basic_block(function, "for_body");
+                let exit_bb = self.context.append_basic_block(function, "for_exit");
+
+                self.builder.build_unconditional_branch(cond_bb);
+                self.builder.position_at_end(cond_bb);
+
+                let iter_ty = iterator.borrow().get_ty().ok().flatten();
+                let next_fn = iter_ty.as_ref().and_then(|ty| {
+                    let type_name = match &*ty.borrow() {
+                        Type::Struct(n, _, _) | Type::Class(n, _, _) | Type::Enum(n, _, _) => n.clone(),
+                        _ => return None,
+                    };
+                    self.module.get_function(&format!("{}.next", type_name))
+                });
+
+                if let Some(next_fn) = next_fn {
+                    let result = self.builder.build_call(next_fn, &[iter_ptr.into()], "")?;
+                    let result_val = match result.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(val) => val,
+                        _ => return Ok(false),
+                    };
+                    let enum_llvm_type = result_val.get_type();
+                    let alloca = self.builder.build_alloca(enum_llvm_type, "")?;
+                    self.builder.build_store(alloca, result_val)?;
+                    let tag_ptr = self.builder.build_struct_gep(enum_llvm_type.into_struct_type(), alloca, 0, "")?;
+                    let tag = self.builder.build_load(self.context.i8_type(), tag_ptr, "")?;
+                    let some_tag = self.context.i8_type().const_int(1, false);
+                    let cond = self.builder.build_int_compare(inkwell::IntPredicate::EQ, tag.into_int_value(), some_tag, "")?;
+                    self.builder.build_conditional_branch(cond, body_bb, exit_bb)?;
+
+                    self.builder.position_at_end(body_bb);
+                    let payload_ptr = self.builder.build_struct_gep(enum_llvm_type.into_struct_type(), alloca, 1, "")?;
+                    let payload_ty = enum_llvm_type.into_struct_type().get_field_type_at_index(1).unwrap();
+                    let payload_val = self.builder.build_load(payload_ty, payload_ptr, "")?;
+                    if let Pattern::Identifier(name) = pattern.as_ref() {
+                        if name.value != "_" {
+                            let var_ptr = self.builder.build_alloca(payload_ty, &name.value)?;
+                            self.builder.build_store(var_ptr, payload_val)?;
+                            self.declare_variable(name.value.clone(), var_ptr);
+                        }
+                    } else if let Pattern::ValueBinding(inner) = pattern.as_ref() {
+                        if let Pattern::Identifier(name) = inner.as_ref() {
+                            if name.value != "_" {
+                                let var_ptr = self.builder.build_alloca(payload_ty, &name.value)?;
+                                self.builder.build_store(var_ptr, payload_val)?;
+                                self.declare_variable(name.value.clone(), var_ptr);
+                            }
+                        }
+                    }
+                    self.resolve_block_expression(body)?;
+                    self.builder.build_unconditional_branch(cond_bb)?;
+                    self.builder.position_at_end(exit_bb);
+                } else {
+                    self.resolve_block_expression(body)?;
+                }
                 Ok(false)
             }
             Statement::FunctionDecl {

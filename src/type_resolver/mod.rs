@@ -1415,9 +1415,15 @@ impl TypeResolver {
                     );
                 }
             }
-            Statement::For { iterator, body, .. } => {
-                let _ = self.infer_type(iterator.clone());
+            Statement::For { pattern, iterator, body, .. } => {
+                let iter_ty = self.infer_type(iterator.clone());
+                let for_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
+                self.enter_scope(for_scope.clone());
+                if let Some(ref iter_ty) = iter_ty {
+                    self.resolve_for_pattern(pattern, iter_ty, &for_scope);
+                }
                 self.resolve_block_expression(body);
+                self.leave_scope();
             }
             Statement::ExternBlock { items, .. } => {
                 for item in items {
@@ -5779,6 +5785,82 @@ impl TypeResolver {
         } else {
             None
         }
+    }
+
+    fn resolve_for_pattern(
+        &mut self,
+        pattern: &Pattern,
+        iter_ty: &Rc<RefCell<Type>>,
+        scope: &Rc<RefCell<Scope>>,
+    ) {
+        let item_ty = {
+            let ty_ref = iter_ty.borrow();
+            match &*ty_ref {
+                Type::Protocol(_, _, params) => params.first().cloned(),
+                Type::Struct(struct_name, _, params)
+                | Type::Class(struct_name, _, params) => {
+                    if !params.is_empty() {
+                        Some(params[0].clone())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        };
+        let item_ty = item_ty.or_else(|| {
+            let struct_name = {
+                let ty_ref = iter_ty.borrow();
+                match &*ty_ref {
+                    Type::Struct(n, _, _) | Type::Class(n, _, _) => n.clone(),
+                    _ => return None,
+                }
+            };
+            Self::find_iterator_item_type(self, &struct_name)
+        });
+        let Some(item_ty) = item_ty else { return };
+        match pattern {
+            Pattern::Identifier(name) => {
+                if name.value != "_" {
+                    scope.borrow_mut().set_type(name.value.clone(), item_ty);
+                }
+            }
+            Pattern::ValueBinding(inner) => {
+                if let Pattern::Identifier(name) = inner.as_ref() {
+                    if name.value != "_" {
+                        scope.borrow_mut().set_type(name.value.clone(), item_ty);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn find_iterator_item_type(&mut self, type_name: &str) -> Option<Rc<RefCell<Type>>> {
+        let scope_ref = self.current_scope.as_ref()?.borrow();
+        let sym = scope_ref.get_symbol(type_name)?;
+        let binding = sym.borrow();
+        let decl = binding.get_decl().ok().flatten()?;
+        drop(binding);
+        drop(scope_ref);
+        let conformances = match &*decl.borrow() {
+            Statement::StructDecl { conformances, .. }
+            | Statement::ClassDecl { conformances, .. } => conformances.clone(),
+            _ => return None,
+        };
+        for conf in &conformances {
+            if let Expression::Type { name, type_parameters, .. } = &*conf.borrow() {
+                if name.value == "Iterator" {
+                    if let Some(params) = type_parameters {
+                        if let Some(first_param) = params.first() {
+                            return self.infer_type(first_param.clone());
+                        }
+                    }
+                    return None;
+                }
+            }
+        }
+        None
     }
 
     fn set_binding_types(

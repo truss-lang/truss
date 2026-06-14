@@ -1862,6 +1862,15 @@ impl SymbolResolver {
                 }
             }
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
+            Statement::For { pattern, iterator, body, .. } => {
+                self.enter_scope(None);
+                Self::resolve_pattern_bindings_ref(pattern.as_ref(), self);
+                self.resolve_expression(iterator.clone());
+                for stmt in body {
+                    self.resolve_statement(stmt.clone());
+                }
+                self.leave_scope();
+            }
             Statement::Defer { body, .. } => {
                 for stmt in body {
                     self.resolve_statement(stmt.clone());
