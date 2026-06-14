@@ -10,7 +10,7 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, AccessorKind, FunctionBody, GenericParameterKind, ModifierType,
-            OperatorFixity, Parameter, Pattern, ProtocolMember, Statement, VariadicKind,
+            OperatorFixity, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind,
             WhereRequirement, WhereRequirementKind,
         },
     },
@@ -6406,16 +6406,30 @@ impl TypeResolver {
                     .collect()
             };
 
-            let required_properties: Vec<String> = {
+            let required_prop_accessors: Vec<(String, ProtocolAccessorSet)> = {
                 let sym = protocol_symbol.borrow();
                 let Symbol::Protocol { properties, .. } = &*sym else {
                     continue;
                 };
                 properties
                     .iter()
-                    .filter_map(|p| p.borrow().name().ok())
+                    .filter_map(|p| {
+                        let pb = p.borrow();
+                        if let Symbol::ProtocolProperty {
+                            name,
+                            accessors,
+                            ..
+                        } = &*pb
+                        {
+                            Some((name.clone(), *accessors))
+                        } else {
+                            None
+                        }
+                    })
                     .collect()
             };
+            let required_properties: Vec<String> =
+                required_prop_accessors.iter().map(|(n, _)| n.clone()).collect();
 
             let Some(type_symbol) = self
                 .current_scope
@@ -6448,6 +6462,29 @@ impl TypeResolver {
                             .collect(),
                     ),
                     _ => (vec![], vec![]),
+                }
+            };
+
+            let type_prop_symbols: Vec<(String, Option<Rc<RefCell<Statement>>>)> = {
+                let type_sym = type_symbol.borrow();
+                match &*type_sym {
+                    Symbol::Struct {
+                        properties, ..
+                    } | Symbol::Class {
+                        properties, ..
+                    } => properties
+                        .iter()
+                        .filter_map(|p| {
+                            let pb = p.borrow();
+                            if let Ok(name) = pb.name() {
+                                let decl = pb.get_decl().ok().flatten();
+                                Some((name, decl))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect(),
+                    _ => vec![],
                 }
             };
 
@@ -6506,6 +6543,48 @@ impl TypeResolver {
                         ),
                         type_token,
                     );
+                } else if let Some((_, accessors)) =
+                    required_prop_accessors.iter().find(|(n, _)| n == req_prop)
+                {
+                    if accessors.set {
+                        let has_setter = type_prop_symbols
+                            .iter()
+                            .find(|(n, _)| n == req_prop)
+                            .and_then(|(_, decl)| {
+                                decl.as_ref().and_then(|d| {
+                                    let stmt = d.borrow();
+                                    match &*stmt {
+                                        Statement::VariableDecl {
+                                            token,
+                                            accessors,
+                                            ..
+                                        } => {
+                                            if token.value == "var" {
+                                                Some(true)
+                                            } else {
+                                                Some(
+                                                    accessors
+                                                        .iter()
+                                                        .any(|a| a.kind == AccessorKind::Set),
+                                                )
+                                            }
+                                        }
+                                        _ => None,
+                                    }
+                                })
+                            })
+                            .unwrap_or(false);
+                        if !has_setter {
+                            self.emit_error(
+                                TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+                                format!(
+                                    "Type '{}' does not implement protocol '{}' requirement: 'var {{ get set }} {}' — property is not settable",
+                                    type_name, protocol_name, req_prop
+                                ),
+                                type_token,
+                            );
+                        }
+                    }
                 }
             }
         }

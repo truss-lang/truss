@@ -6,7 +6,7 @@ use std::{
 use anyhow::{Ok, Result};
 
 use crate::{
-    ast::statement::{Parameter, Statement},
+    ast::statement::{Parameter, ProtocolAccessorSet, Statement},
     krate::Module as PackageModule,
     types::Type,
 };
@@ -112,11 +112,13 @@ pub enum Symbol {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
+        accessors: ProtocolAccessorSet,
     },
     ProtocolSubscript {
         name: String,
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
+        accessors: ProtocolAccessorSet,
     },
     Module {
         name: String,

@@ -7321,3 +7321,86 @@ func getLib() -> TargetKind {
         panic!("Expected FunctionDecl with ExpressionStatement");
     }
 }
+
+#[test]
+fn test_protocol_get_set_accessor_var_passes() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Settable { var value: Int32 { get set } }
+             struct MyStruct: Settable { var value: Int32 }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "var property should satisfy {{ get set }}, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_get_set_accessor_let_fails() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Settable { var value: Int32 { get set } }
+             struct MyStruct: Settable { let value: Int32 }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty(), "let property should NOT satisfy {{ get set }}");
+    let found = errors.iter().any(|e| {
+        e.code == TrussDiagnosticCode::ProtocolRequirementNotImplemented
+            && e.message.contains("get set")
+    });
+    assert!(found, "Expected ProtocolRequirementNotImplemented about {{ get set }}, got: {:?}", errors);
+}
+
+#[test]
+fn test_protocol_get_accessor_let_passes() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "protocol Readable { var value: Int32 { get } }
+             struct MyStruct: Readable { let value: Int32 }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "{{ get }} should be satisfied by let property, got: {:?}", errors);
+}

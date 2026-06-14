@@ -6,7 +6,7 @@ use crate::{
         node::Program,
         statement::{
             AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Modifier, ModifierType,
-            Pattern, ProtocolMember, SelectiveAlias, Statement, WhereRequirement,
+            Pattern, ProtocolAccessorSet, ProtocolMember, SelectiveAlias, Statement, WhereRequirement,
             WhereRequirementKind,
         },
     },
@@ -773,7 +773,7 @@ impl SymbolResolver {
                 let Symbol::Protocol {
                     methods,
                     properties,
-                    subscripts: _subscripts,
+                    subscripts,
                     ..
                 } = &mut *protocol_symbol.borrow_mut()
                 else {
@@ -843,12 +843,15 @@ impl SymbolResolver {
                             }
                         }
                         ProtocolMember::Property {
-                            name: prop_name, ..
+                            name: prop_name,
+                            accessors,
+                            ..
                         } => {
                             let prop_symbol = Rc::new(RefCell::new(Symbol::ProtocolProperty {
                                 name: prop_name.value.clone(),
                                 parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
                                 decl: None,
+                                accessors: *accessors,
                             }));
                             properties.push(prop_symbol.clone());
                             self.enter(prop_symbol, prop_name);
@@ -867,7 +870,18 @@ impl SymbolResolver {
                         } => {
                             self.resolve_expression(type_expression.clone());
                         }
-                        ProtocolMember::Subscript { .. } => {}
+                        ProtocolMember::Subscript {
+                            accessors,
+                            ..
+                        } => {
+                            let sub = Rc::new(RefCell::new(Symbol::ProtocolSubscript {
+                                name: "subscript".to_string(),
+                                parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
+                                decl: None,
+                                accessors: *accessors,
+                            }));
+                            subscripts.push(sub);
+                        }
                     }
                 }
                 self.leave_scope();
@@ -1090,11 +1104,16 @@ impl SymbolResolver {
                                         FunctionBody::None => {}
                                     }
                                 }
-                            } else if let Statement::SubscriptDecl { .. } = &*field_stmt.borrow() {
+                            } else if let Statement::SubscriptDecl { accessors: sub_accessors, .. } = &*field_stmt.borrow() {
+                                let req_accessors = ProtocolAccessorSet {
+                                    get: sub_accessors.iter().any(|a| a.kind == AccessorKind::Get),
+                                    set: sub_accessors.iter().any(|a| a.kind == AccessorKind::Set),
+                                };
                                 let sub_sym = Rc::new(RefCell::new(Symbol::ProtocolSubscript {
                                     name: "subscript".to_string(),
                                     parent: WeakSymbol(Rc::downgrade(&target_sym)),
                                     decl: Some(field_stmt.clone()),
+                                    accessors: req_accessors,
                                 }));
                                 _subscripts.push(sub_sym.clone());
                             } else {
