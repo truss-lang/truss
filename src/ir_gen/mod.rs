@@ -2888,51 +2888,59 @@ impl<'ctx> IRGenerator<'ctx> {
         let ptr_param = function.get_nth_param(0).unwrap();
         let class_ptr = ptr_param.into_pointer_value();
 
-        let field_index = self.get_stored_class_field_index(struct_name, field_name)?;
-        let class_type = *self.class_types.borrow().get(struct_name).unwrap();
-        let field_ptr =
-            self.builder
-                .build_struct_gep(class_type, class_ptr, field_index as u32, "")?;
+        let body_result = (|| -> Result<()> {
+            let field_index = self.get_stored_class_field_index(struct_name, field_name)?;
+            let class_type = *self.class_types.borrow().get(struct_name).unwrap();
+            let field_ptr =
+                self.builder
+                    .build_struct_gep(class_type, class_ptr, field_index as u32, "")?;
 
-        if is_getter {
-            let val = self.builder.build_load(llvm_var_type, field_ptr, "")?;
-            self.builder.build_return(Some(&val))?;
-        } else {
-            let new_val = function.get_nth_param(1).unwrap();
-
-            let has_willset = accessors
-                .iter()
-                .any(|a| matches!(a.kind, AccessorKind::WillSet));
-            let has_didset = accessors
-                .iter()
-                .any(|a| matches!(a.kind, AccessorKind::DidSet));
-
-            let old_val = if has_didset {
-                Some(self.builder.build_load(llvm_var_type, field_ptr, "")?)
+            if is_getter {
+                let val = self.builder.build_load(llvm_var_type, field_ptr, "")?;
+                self.builder.build_return(Some(&val))?;
             } else {
-                None
-            };
+                let new_val = function.get_nth_param(1).unwrap();
 
-            if has_willset {
-                let willset_name = format!("{}.willSet", fn_prefix);
-                if let Some(willset_fn) = self.module.get_function(&willset_name) {
-                    self.builder
-                        .build_call(willset_fn, &[class_ptr.into(), new_val.into()], "")?;
+                let has_willset = accessors
+                    .iter()
+                    .any(|a| matches!(a.kind, AccessorKind::WillSet));
+                let has_didset = accessors
+                    .iter()
+                    .any(|a| matches!(a.kind, AccessorKind::DidSet));
+
+                let old_val = if has_didset {
+                    Some(self.builder.build_load(llvm_var_type, field_ptr, "")?)
+                } else {
+                    None
+                };
+
+                if has_willset {
+                    let willset_name = format!("{}.willSet", fn_prefix);
+                    if let Some(willset_fn) = self.module.get_function(&willset_name) {
+                        self.builder
+                            .build_call(willset_fn, &[class_ptr.into(), new_val.into()], "")?;
+                    }
                 }
-            }
 
-            self.builder.build_store(field_ptr, new_val)?;
+                self.builder.build_store(field_ptr, new_val)?;
 
-            if let Some(old) = old_val {
-                let didset_name = format!("{}.didSet", fn_prefix);
-                if let Some(didset_fn) = self.module.get_function(&didset_name) {
-                    self.builder
-                        .build_call(didset_fn, &[class_ptr.into(), old.into()], "")?;
+                if let Some(old) = old_val {
+                    let didset_name = format!("{}.didSet", fn_prefix);
+                    if let Some(didset_fn) = self.module.get_function(&didset_name) {
+                        self.builder
+                            .build_call(didset_fn, &[class_ptr.into(), old.into()], "")?;
+                    }
                 }
-            }
 
-            self.builder.build_return(None)?;
+                self.builder.build_return(None)?;
+            }
+            Ok(())
+        })();
+
+        if body_result.is_err() {
+            self.builder.build_unreachable()?;
         }
+        body_result?;
 
         if let Some(block) = current_block {
             self.builder.position_at_end(block);
