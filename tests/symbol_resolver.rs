@@ -5116,3 +5116,37 @@ fn test_throws_function_has_throws_types() {
         panic!("Expected FunctionDecl");
     }
 }
+
+#[test]
+fn test_mutating_method_registered_as_struct_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { mutating func foo() {} }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "Foo");
+        let method_stmt = body.iter().find(|s| {
+            matches!(&*s.borrow(), Statement::FunctionDecl { name: n, .. } if n.value == "foo")
+        });
+        assert!(
+            method_stmt.is_some(),
+            "Should find func foo in struct body"
+        );
+        if let Statement::FunctionDecl { mutating, .. } = &*method_stmt.unwrap().borrow() {
+            assert!(*mutating, "Expected mutating to be true");
+        } else {
+            panic!("Expected FunctionDecl");
+        }
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
