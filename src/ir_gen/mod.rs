@@ -3604,7 +3604,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 let body_bb = self.context.append_basic_block(function, "for_body");
                 let exit_bb = self.context.append_basic_block(function, "for_exit");
 
-                self.builder.build_unconditional_branch(cond_bb);
+                let _ = self.builder.build_unconditional_branch(cond_bb);
                 self.builder.position_at_end(cond_bb);
 
                 let iter_ty = iterator.borrow().get_ty().ok().flatten();

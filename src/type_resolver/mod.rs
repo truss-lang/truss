@@ -2118,7 +2118,7 @@ impl TypeResolver {
                     };
                     drop(binding);
                     drop(scope_ref);
-                    drop(scope);
+                    let _ = scope;
                     for field in &properties {
                         if field.borrow().name().ok()? != name.value { continue; }
                         if let Some(decl) = field.borrow().get_decl().ok().flatten() {
@@ -2149,7 +2149,7 @@ impl TypeResolver {
                 *ty = Some(t.clone());
                 t
             }
-            Expression::SelfKeyword { ty, token, .. } => {
+            Expression::SelfKeyword { ty, token: _, .. } => {
                 let t = self
                     .current_scope
                     .as_ref()
@@ -3706,24 +3706,6 @@ impl TypeResolver {
                         return None;
                     }
                 }
-            }
-            Expression::SelfKeyword { token, ty, .. } => {
-                let t = self
-                    .current_scope
-                    .as_ref()
-                    .ok_or_else(|| {
-                        self.emit_error(
-                            TrussDiagnosticCode::TypeError,
-                            "No type environment available",
-                            token.as_ref(),
-                        );
-                    })
-                    .ok()?
-                    .borrow()
-                    .get_type("self");
-                let t = t?;
-                *ty = Some(t.clone());
-                t
             }
             Expression::SuperKeyword { token, ty, .. } => {
                 let self_ty = self
@@ -5826,8 +5808,8 @@ impl TypeResolver {
             let ty_ref = iter_ty.borrow();
             match &*ty_ref {
                 Type::Protocol(_, _, params) => params.first().cloned(),
-                Type::Struct(struct_name, _, params)
-                | Type::Class(struct_name, _, params) => {
+                Type::Struct(_, _, params)
+                | Type::Class(_, _, params) => {
                     if !params.is_empty() {
                         Some(params[0].clone())
                     } else {
