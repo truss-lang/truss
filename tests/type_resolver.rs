@@ -7531,3 +7531,90 @@ fn test_mutating_on_free_function_errors() {
         errors
     );
 }
+
+#[test]
+fn test_self_init_delegation_in_init() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { let x: Int32; let y: Int32; init(x: Int32, y: Int32) { self.x = x; self.y = y } init(x: Int32) { self.init(x: x, y: 0) } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        0,
+        errors.len(),
+        "Expected no errors for self.init() delegation, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_self_init_delegation_overload_resolution() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { let x: Int32; let y: Int32; init(x: Int32, y: Int32) { self.x = x; self.y = y } init(x: Int32) { self.init(x: x, y: 0) } init() { self.init(x: 10, y: 20) } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        0,
+        errors.len(),
+        "Expected no errors for overloaded self.init(), got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_init_call_with_param_count_overload() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { let x: Int32; let y: Int32; init(x: Int32, y: Int32) { self.x = x; self.y = y } init(x: Int32) { self.x = x; self.y = 0 } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        0,
+        errors.len(),
+        "Expected no errors for Foo(x: 10) overload resolution, got: {:?}",
+        errors
+    );
+}

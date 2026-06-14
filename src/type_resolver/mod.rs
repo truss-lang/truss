@@ -41,6 +41,7 @@ pub struct TypeResolver {
     initialized_lets: Vec<HashSet<String>>,
     initialized_properties: HashSet<String>,
     is_in_init: bool,
+    init_delegated: bool,
     is_mutating: Vec<bool>,
     yield_context_depth: usize,
     superclass_map: HashMap<String, Rc<RefCell<Type>>>,
@@ -64,6 +65,7 @@ impl TypeResolver {
             initialized_lets: Vec::new(),
             initialized_properties: HashSet::new(),
             is_in_init: false,
+            init_delegated: false,
             is_mutating: Vec::new(),
             yield_context_depth: 0,
             superclass_map: HashMap::new(),
@@ -1303,6 +1305,7 @@ impl TypeResolver {
                 let saved_in_init = self.is_in_init;
                 self.is_in_init = true;
                 self.initialized_properties.clear();
+                self.init_delegated = false;
 
                 let saved_return_type = self.current_return_type.clone();
                 if *is_failable {
@@ -2336,8 +2339,50 @@ impl TypeResolver {
 
                 match &*callee_type.borrow() {
                     Type::Function(param_tys, ret_ty, is_vararg, _) => {
-                        if let Some(decl) = self
-                            .get_function_decl_from_callee(callee.clone())
+                        if self.is_in_init
+                            && !self.init_delegated
+                            && let Expression::MemberAccess { object, member, .. } =
+                                &*callee.borrow()
+                            && matches!(&*object.borrow(), Expression::SelfKeyword { .. })
+                            && member.value == "init"
+                        {
+                            self.init_delegated = true;
+                        }
+                        let init_matched_decl: Option<Rc<RefCell<Statement>>> = if self.is_in_init
+                            && let Expression::MemberAccess { member, .. } = &*callee.borrow()
+                            && member.value == "init"
+                            && let Type::Function(call_param_tys, ..) = &*callee_type.borrow()
+                        {
+                            let call_param_count = call_param_tys.len();
+                            let struct_scope = self.current_scope.as_ref()?.borrow();
+                            let self_ty = struct_scope.get_type("self")?;
+                            let struct_name = match &*self_ty.borrow() {
+                                Type::Struct(n, ..) => n.clone(),
+                                _ => return None,
+                            };
+                            let struct_sym = struct_scope.get_symbol(&struct_name)?;
+                            drop(struct_scope);
+                            let constructors = match &*struct_sym.borrow() {
+                                Symbol::Struct { constructors, .. } => constructors.clone(),
+                                _ => vec![],
+                            };
+                            let best = constructors.iter().find(|c| {
+                                if let Ok(Some(decl)) = c.borrow().get_decl()
+                                    && let Statement::InitDecl { ty: Some(init_ty), .. } =
+                                        &*decl.borrow()
+                                    && let Type::Function(cp, _, _, _) = &*init_ty.borrow()
+                                {
+                                    cp.len() == call_param_count
+                                } else {
+                                    false
+                                }
+                            });
+                            best.and_then(|c| c.borrow().get_decl().ok().flatten())
+                        } else {
+                            None
+                        };
+                        if let Some(decl) = init_matched_decl
+                            .or_else(|| self.get_function_decl_from_callee(callee.clone()))
                             .or_else(|| {
                                 if let Expression::Variable { name, .. } = &*callee.borrow() {
                                     let scope_ref = self.current_scope.as_ref()?.borrow();
@@ -2360,6 +2405,7 @@ impl TypeResolver {
                             let callee_token = callee.borrow().token();
                             let decl_params = match &*decl.borrow() {
                                 Statement::FunctionDecl { parameters, .. } => parameters.clone(),
+                                Statement::InitDecl { parameters, .. } => parameters.clone(),
                                 _ => vec![],
                             };
                             if !decl_params.is_empty() {
@@ -2491,6 +2537,7 @@ impl TypeResolver {
                                 && let Symbol::Struct { constructors, .. } = &*symbol.borrow()
                             {
                                 let mut found_failable = false;
+                                let param_count = parameters.len();
                                 let result = constructors.iter().find_map(|constructor| {
                                     if let Ok(Some(decl)) = constructor.borrow().get_decl()
                                         && let Statement::InitDecl {
@@ -2501,8 +2548,12 @@ impl TypeResolver {
                                         && let Type::Function(param_tys, _, is_vararg, None) =
                                             &*init_ty.borrow()
                                     {
-                                        found_failable = *is_failable;
-                                        Some((decl.clone(), param_tys.clone(), *is_vararg))
+                                        if param_tys.len() == param_count || *is_vararg {
+                                            found_failable = *is_failable;
+                                            Some((decl.clone(), param_tys.clone(), *is_vararg))
+                                        } else {
+                                            None
+                                        }
                                     } else {
                                         None
                                     }
@@ -2512,6 +2563,7 @@ impl TypeResolver {
                                 (None, false)
                             }
                         };
+                        let has_match = init_params_info.is_some();
                         if let Some((decl, param_tys, is_vararg)) = init_params_info {
                             let callee_token = callee.borrow().token();
                             let decl_params = match &*decl.borrow() {
@@ -2557,6 +2609,18 @@ impl TypeResolver {
                                 }
                             }
                         }
+                        if !has_match {
+                            let callee_token = callee.borrow().token();
+                            self.emit_error(
+                                TrussDiagnosticCode::ArgumentCountMismatch,
+                                format!(
+                                    "No matching init for '{}' with {} arguments",
+                                    struct_name,
+                                    parameters.len()
+                                ),
+                                &callee_token,
+                            );
+                        }
                         if is_failable_init {
                             self.current_scope
                                 .as_ref()
@@ -2576,6 +2640,7 @@ impl TypeResolver {
                                     _ => return Some(callee_type.clone()),
                                 };
                                 let mut found_failable = false;
+                                let param_count = parameters.len();
                                 let result = constructors.iter().find_map(|constructor| {
                                     if let Ok(Some(decl)) = constructor.borrow().get_decl()
                                         && let Statement::InitDecl {
@@ -2586,8 +2651,12 @@ impl TypeResolver {
                                         && let Type::Function(param_tys, _, is_vararg, None) =
                                             &*init_ty.borrow()
                                     {
-                                        found_failable = *is_failable;
-                                        Some((decl.clone(), param_tys.clone(), *is_vararg))
+                                        if param_tys.len() == param_count || *is_vararg {
+                                            found_failable = *is_failable;
+                                            Some((decl.clone(), param_tys.clone(), *is_vararg))
+                                        } else {
+                                            None
+                                        }
                                     } else {
                                         None
                                     }
@@ -3154,6 +3223,27 @@ impl TypeResolver {
                                 if let Some(t) = method_ty {
                                     *ty = Some(t.clone());
                                     return Some(t.clone());
+                                }
+                            }
+                        }
+                        if member.value == "init" {
+                            if let Symbol::Struct { constructors, .. } = &*binding {
+                                for constructor in constructors {
+                                    if let Some(decl) = constructor.borrow().get_decl().ok().flatten()
+                                    {
+                                        let method_ty = {
+                                            let decl_ref = decl.borrow();
+                                            if let Statement::InitDecl { ty, .. } = &*decl_ref {
+                                                ty.clone()
+                                            } else {
+                                                None
+                                            }
+                                        };
+                                        if let Some(t) = method_ty {
+                                            *ty = Some(t.clone());
+                                            return Some(t.clone());
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -5441,6 +5531,22 @@ impl TypeResolver {
             && let Some(sym) = sym.0.upgrade()
         {
             sym.borrow().get_decl().unwrap()
+        } else if let Expression::MemberAccess { object, member, .. } = &*callee.borrow()
+            && matches!(&*object.borrow(), Expression::SelfKeyword { .. })
+            && member.value == "init"
+        {
+            let object_ty = self.current_scope.as_ref()?.borrow().get_type("self")?;
+            let struct_name = match &*object_ty.borrow() {
+                Type::Struct(name, ..) => name.clone(),
+                _ => return None,
+            };
+            let scope = self.current_scope.as_ref()?.borrow();
+            let symbol = scope.get_symbol(&struct_name)?;
+            if let Symbol::Struct { constructors, .. } = &*symbol.borrow() {
+                constructors.first()?.borrow().get_decl().ok()?
+            } else {
+                None
+            }
         } else {
             None
         }
