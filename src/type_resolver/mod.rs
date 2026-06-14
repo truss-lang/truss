@@ -41,6 +41,7 @@ pub struct TypeResolver {
     initialized_lets: Vec<HashSet<String>>,
     initialized_properties: HashSet<String>,
     is_in_init: bool,
+    is_mutating: Vec<bool>,
     yield_context_depth: usize,
     superclass_map: HashMap<String, Rc<RefCell<Type>>>,
 }
@@ -63,6 +64,7 @@ impl TypeResolver {
             initialized_lets: Vec::new(),
             initialized_properties: HashSet::new(),
             is_in_init: false,
+            is_mutating: Vec::new(),
             yield_context_depth: 0,
             superclass_map: HashMap::new(),
         }
@@ -104,6 +106,7 @@ impl TypeResolver {
                 scope,
                 ty,
                 generic_parameters,
+                mutating,
                 ..
             } => {
                 self.enter_scope(scope.as_ref().unwrap().clone());
@@ -178,6 +181,26 @@ impl TypeResolver {
                     parent.borrow_mut().set_type(name.value.clone(), fn_type);
                 }
 
+                if *mutating {
+                    let is_struct_method = self.current_owner.as_ref().is_some_and(|owner| {
+                        matches!(&*owner.borrow(), Symbol::Struct { .. })
+                    });
+                    if is_struct_method {
+                        self.is_mutating.push(true);
+                    } else {
+                        let err_msg = "'mutating' can only be used on struct instance methods";
+                        let diag = new_diagnostic(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            err_msg,
+                        )
+                        .with_label(primary_label_from_token(name.as_ref(), err_msg));
+                        self.engine.borrow_mut().emit(diag);
+                        self.is_mutating.push(false);
+                    }
+                } else {
+                    self.is_mutating.push(false);
+                }
+
                 match &*body.borrow() {
                     FunctionBody::Statements(stmts) => {
                         for s in stmts {
@@ -190,6 +213,7 @@ impl TypeResolver {
                     FunctionBody::None => {}
                 }
 
+                self.is_mutating.pop();
                 self.leave_scope();
             }
             Statement::StructDecl {
@@ -1223,6 +1247,7 @@ impl TypeResolver {
                 body,
                 scope,
                 ty,
+                mutating,
                 ..
             } => {
                 let last_return_type = self.current_return_type.clone();
@@ -1257,7 +1282,9 @@ impl TypeResolver {
                     }
                 }
 
+                self.is_mutating.push(*mutating);
                 self.resolve_function_body(body.clone());
+                self.is_mutating.pop();
 
                 self.initialized_lets.pop();
                 self.leave_scope();
@@ -6758,6 +6785,7 @@ impl TypeResolver {
 
     fn check_writable(&mut self, expr: Rc<RefCell<Expression>>) {
         let token = expr.borrow().token();
+        let is_enclosing_mutating = self.is_mutating.last().copied().unwrap_or(false);
         match &*expr.borrow() {
             Expression::Variable { symbol, name, .. } => {
                 if let Some(ws) = symbol {
@@ -6879,6 +6907,17 @@ impl TypeResolver {
                                                         );
                                                         return;
                                                     }
+                                                }
+                                                if !self.is_in_init
+                                                    && !is_enclosing_mutating
+                                                    && matches!(&*object.borrow(), Expression::SelfKeyword { .. })
+                                                {
+                                                    self.emit_error(
+                                                        TrussDiagnosticCode::AssignToSelfInNonMutating,
+                                                        format!("Cannot assign to property '{}' of 'self' in a non-mutating method", name),
+                                                        &token,
+                                                    );
+                                                    return;
                                                 }
                                                 return;
                                             }

@@ -7404,3 +7404,130 @@ fn test_protocol_get_accessor_let_passes() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "{{ get }} should be satisfied by let property, got: {:?}", errors);
 }
+
+#[test]
+fn test_mutating_method_can_assign_to_self_var_property() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { var x: Int32; mutating func foo() { self.x = 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors(), "SymbolRes errors: {:?}", engine.borrow().get_errors());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    let mutating_errors: Vec<_> = errors
+        .iter()
+        .filter(|d| d.code == TrussDiagnosticCode::AssignToSelfInNonMutating)
+        .collect();
+    assert_eq!(
+        mutating_errors.len(),
+        0,
+        "Expected 0 AssignToSelfInNonMutating errors for mutating method, got ALL errors: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_nonmutating_method_cannot_assign_to_self_var_property() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { var x: Int32; func foo() { self.x = 1 } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    let mutating_errors: Vec<_> = errors
+        .iter()
+        .filter(|d| d.code == TrussDiagnosticCode::AssignToSelfInNonMutating)
+        .collect();
+    assert_eq!(
+        mutating_errors.len(),
+        1,
+        "Expected 1 AssignToSelfInNonMutating error for non-mutating method, got {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_nonmutating_method_can_assign_to_other_var_property() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Foo { var x: Int32 }
+             func test() { let f = Foo(x: 1); f.x = 2 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    let mutating_errors: Vec<_> = errors
+        .iter()
+        .filter(|d| d.code == TrussDiagnosticCode::AssignToSelfInNonMutating)
+        .collect();
+    assert_eq!(
+        mutating_errors.len(),
+        0,
+        "Expected 0 AssignToSelfInNonMutating errors for non-self var property, got {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_mutating_on_free_function_errors() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "mutating func foo() {}".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module = resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module);
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    let modifier_errors: Vec<_> = errors
+        .iter()
+        .filter(|d| d.code == TrussDiagnosticCode::ModifierNotAllowedHere)
+        .collect();
+    assert_eq!(
+        modifier_errors.len(),
+        1,
+        "Expected 1 ModifierNotAllowedHere error for mutating on free function, got {:?}",
+        errors
+    );
+}

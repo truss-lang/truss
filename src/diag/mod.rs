@@ -71,6 +71,8 @@ pub enum TrussDiagnosticCode {
     YieldNotAllowedHere,
     InternalUsedReferenced,
 
+    AssignToSelfInNonMutating,
+
     IRError,
     UnsupportedFeature,
     NeverTypeConversion,
@@ -148,6 +150,8 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::ConflictingSetterAccess => "E0323",
             Self::YieldNotAllowedHere => "E0324",
             Self::InternalUsedReferenced => "W0325",
+
+            Self::AssignToSelfInNonMutating => "E0326",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",
