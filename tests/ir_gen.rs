@@ -6561,3 +6561,14 @@ func test() -> TargetKind { .DynamicLibrary(42) }
         engine.borrow().get_diagnostics()
     );
 }
+
+#[test]
+fn test_ir_gen_mutating_method() {
+    let code = "struct Counter { var count: Int32; mutating func increment() { self.count = self.count + 1 } func get() -> Int32 { return self.count } }";
+    let (_, engine) = run_ir_gen(code);
+    assert!(
+        !engine.borrow().has_errors(),
+        "Expected no errors for mutating method, got: {:?}",
+        engine.borrow().get_errors()
+    );
+}
