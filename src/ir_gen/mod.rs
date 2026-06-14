@@ -329,18 +329,50 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.module.add_function(&name, func.get_type(), None);
             }
         }
-        for name in self
-            .vtable_types
+
+        // Forward-declare vtable globals from stdlib in the main module
+        let vtable_globals_snapshot: Vec<(String, inkwell::values::GlobalValue<'ctx>)> = self
+            .vtable_globals
             .borrow()
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>()
-        {
-            if let Some(t) = self.vtable_types.borrow().get(&name) {
-                if self.module.get_global(&name).is_none() {
-                    let gv = self.module.add_global(t.as_basic_type_enum(), None, &name);
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
+        for (class_name, _) in &vtable_globals_snapshot {
+            let vtable_global_name = format!("__vtable.{}", class_name);
+            if self.module.get_global(&vtable_global_name).is_none() {
+                if let Some(t) = self.vtable_types.borrow().get(class_name).copied() {
+                    let gv = self
+                        .module
+                        .add_global(t.as_basic_type_enum(), None, &vtable_global_name);
                     gv.set_linkage(inkwell::module::Linkage::External);
+                    self.vtable_globals
+                        .borrow_mut()
+                        .insert(class_name.clone(), gv);
                 }
+            }
+        }
+
+        // Forward-declare protocol witness tables from stdlib in the main module
+        let wt_snapshot: Vec<(
+            (String, String),
+            inkwell::values::GlobalValue<'ctx>,
+        )> = self
+            .protocol_witness_tables
+            .borrow()
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
+        for ((protocol_name, type_suffix), old_gv) in &wt_snapshot {
+            let wt_global_name = format!("__protocol_wt.{}.{}", protocol_name, type_suffix);
+            if self.module.get_global(&wt_global_name).is_none() {
+                let wt_type = old_gv.get_value_type().into_struct_type();
+                let gv = self
+                    .module
+                    .add_global(wt_type, None, &wt_global_name);
+                gv.set_linkage(inkwell::module::Linkage::External);
+                self.protocol_witness_tables
+                    .borrow_mut()
+                    .insert((protocol_name.clone(), type_suffix.clone()), gv);
             }
         }
 
