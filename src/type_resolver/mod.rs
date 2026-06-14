@@ -1384,7 +1384,7 @@ impl TypeResolver {
             } => {
                 let cond_ty = self.infer_type(condition.clone());
                 if let Some(cond_ty) = cond_ty
-                    && *cond_ty.borrow() != Type::Bool
+                    && !matches!(&*cond_ty.borrow(), Type::Struct(name, _, _) if name == "Bool")
                 {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
@@ -1403,7 +1403,7 @@ impl TypeResolver {
                 self.resolve_block_expression(body);
                 let cond_ty = self.infer_type(condition.clone());
                 if let Some(cond_ty) = cond_ty
-                    && *cond_ty.borrow() != Type::Bool
+                    && !matches!(&*cond_ty.borrow(), Type::Struct(name, _, _) if name == "Bool")
                 {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidConditionType,
@@ -1811,25 +1811,20 @@ impl TypeResolver {
 
     fn resolve_type_name(&self, name: &str, token: &Token) -> Option<Rc<RefCell<Type>>> {
         match name {
-            "Int8" => Some(Rc::new(RefCell::new(Type::Int8))),
-            "Int16" => Some(Rc::new(RefCell::new(Type::Int16))),
-            "Int32" => Some(Rc::new(RefCell::new(Type::Int32))),
-            "Int64" => Some(Rc::new(RefCell::new(Type::Int64))),
-            "Int128" => Some(Rc::new(RefCell::new(Type::Int128))),
-            "UInt8" => Some(Rc::new(RefCell::new(Type::UInt8))),
-            "UInt16" => Some(Rc::new(RefCell::new(Type::UInt16))),
-            "UInt32" => Some(Rc::new(RefCell::new(Type::UInt32))),
-            "UInt64" => Some(Rc::new(RefCell::new(Type::UInt64))),
-            "UInt128" => Some(Rc::new(RefCell::new(Type::UInt128))),
-            "Float32" => Some(Rc::new(RefCell::new(Type::Float32))),
-            "Float64" => Some(Rc::new(RefCell::new(Type::Float64))),
-            "Bool" => Some(Rc::new(RefCell::new(Type::Bool))),
             "Void" => Some(Rc::new(RefCell::new(Type::Void))),
-            "Char" => Some(Rc::new(RefCell::new(Type::Char))),
             "Never" => Some(Rc::new(RefCell::new(Type::Never))),
             "Pointer" => Some(Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                 Type::Void,
             )))))),
+            "Int8" | "Int16" | "Int32" | "Int64" | "Int128"
+            | "UInt8" | "UInt16" | "UInt32" | "UInt64" | "UInt128"
+            | "Float32" | "Float64" | "Bool" | "Char" => {
+                Some(Rc::new(RefCell::new(Type::Struct(
+                    name.to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                    vec![],
+                ))))
+            }
             _ => {
                 if let Some(current_scope) = &self.current_scope
                     && let Some(ty) = current_scope.borrow().get_type(name)
@@ -1849,25 +1844,20 @@ impl TypeResolver {
     #[allow(dead_code)]
     fn lookup_primary_type(&self, name: &str) -> Option<Rc<RefCell<Type>>> {
         match name {
-            "Int8" => Some(Rc::new(RefCell::new(Type::Int8))),
-            "Int16" => Some(Rc::new(RefCell::new(Type::Int16))),
-            "Int32" => Some(Rc::new(RefCell::new(Type::Int32))),
-            "Int64" => Some(Rc::new(RefCell::new(Type::Int64))),
-            "Int128" => Some(Rc::new(RefCell::new(Type::Int128))),
-            "UInt8" => Some(Rc::new(RefCell::new(Type::UInt8))),
-            "UInt16" => Some(Rc::new(RefCell::new(Type::UInt16))),
-            "UInt32" => Some(Rc::new(RefCell::new(Type::UInt32))),
-            "UInt64" => Some(Rc::new(RefCell::new(Type::UInt64))),
-            "UInt128" => Some(Rc::new(RefCell::new(Type::UInt128))),
-            "Float32" => Some(Rc::new(RefCell::new(Type::Float32))),
-            "Float64" => Some(Rc::new(RefCell::new(Type::Float64))),
-            "Bool" => Some(Rc::new(RefCell::new(Type::Bool))),
             "Void" => Some(Rc::new(RefCell::new(Type::Void))),
-            "Char" => Some(Rc::new(RefCell::new(Type::Char))),
             "Never" => Some(Rc::new(RefCell::new(Type::Never))),
             "Pointer" => Some(Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                 Type::Void,
             )))))),
+            "Int8" | "Int16" | "Int32" | "Int64" | "Int128"
+            | "UInt8" | "UInt16" | "UInt32" | "UInt64" | "UInt128"
+            | "Float32" | "Float64" | "Bool" | "Char" => {
+                Some(Rc::new(RefCell::new(Type::Struct(
+                    name.to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                    vec![],
+                ))))
+            }
             _ => self
                 .current_scope
                 .as_ref()
@@ -1969,7 +1959,7 @@ impl TypeResolver {
             }
         }
 
-        if *cond_ty.borrow() != Type::Bool && binding_types.is_none() {
+        if !matches!(&*cond_ty.borrow(), Type::Struct(name, _, _) if name == "Bool") && binding_types.is_none() {
             self.emit_error(
                 TrussDiagnosticCode::InvalidConditionType,
                 format!("If condition must be Bool, found {}", cond_ty.borrow()),
@@ -2015,17 +2005,17 @@ impl TypeResolver {
         let result = match &mut *expression.borrow_mut() {
             Expression::IntegerLiteral { ty, .. } => {
                 if ty.is_none() {
-                    *ty = Some(Rc::new(RefCell::new(Type::Int32)));
+                    *ty = Some(Rc::new(RefCell::new(crate::types::builtin_type("Int32"))));
                 }
                 ty.clone().unwrap()
             }
             Expression::DecimalLiteral { ty, .. } => {
                 if ty.is_none() {
-                    *ty = Some(Rc::new(RefCell::new(Type::Float64)));
+                    *ty = Some(Rc::new(RefCell::new(crate::types::builtin_type("Float64"))));
                 }
                 ty.clone().unwrap()
             }
-            Expression::BooleanLiteral { .. } => Rc::new(RefCell::new(Type::Bool)),
+            Expression::BooleanLiteral { .. } => Rc::new(RefCell::new(crate::types::builtin_type("Bool"))),
             Expression::StringLiteral { ty, .. } => {
                 if let Some(t) = ty.as_ref() {
                     t.clone()
@@ -2680,7 +2670,7 @@ impl TypeResolver {
                     }
                 }
 
-                let case_ty = Rc::new(RefCell::new(Type::Bool));
+                let case_ty = Rc::new(RefCell::new(Type::Struct("Bool".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])));
                 *ty = Some(case_ty.clone());
                 case_ty
             }
@@ -2703,7 +2693,7 @@ impl TypeResolver {
                     ptr_ty
                 }
             }
-            Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Char)),
+            Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Struct("Char".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))),
             Expression::PointerType { base, ty, non_null } => {
                 if let Some(existing_ty) = ty.as_ref() {
                     return Some(existing_ty.clone());
@@ -4006,7 +3996,7 @@ impl TypeResolver {
                                     let pt = expected_params
                                         .get(idx)
                                         .cloned()
-                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
+                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))));
                                     param_types.push(pt);
                                 }
                                 if ret_type_from_expected {
@@ -4018,7 +4008,7 @@ impl TypeResolver {
                         }
                     } else if required_params > shorthand_start {
                         for _ in shorthand_start..required_params {
-                            param_types.push(Rc::new(RefCell::new(Type::Int32)));
+                            param_types.push(Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))));
                         }
                     }
                 }
@@ -4052,7 +4042,7 @@ impl TypeResolver {
                             let param_type = param_types
                                 .get(idx as usize)
                                 .cloned()
-                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
+                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))));
                             self.current_scope
                                 .as_ref()
                                 .unwrap()
@@ -4103,7 +4093,7 @@ impl TypeResolver {
                         .current_scope
                         .as_ref()
                         .and_then(|s| s.borrow().get_type(&name));
-                    *ty = Some(found.unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32))));
+                    *ty = Some(found.unwrap_or_else(|| Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])))));
                 }
                 ty.clone().unwrap()
             }
@@ -4224,7 +4214,7 @@ impl TypeResolver {
                 .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void))),
             Expression::SizeOf { argument, ty, .. } => {
                 self.infer_type(argument.clone());
-                let result = Rc::new(RefCell::new(Type::UInt64));
+                let result = Rc::new(RefCell::new(Type::Struct("UInt64".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])));
                 *ty = Some(result.clone());
                 result
             }
@@ -4557,38 +4547,28 @@ impl TypeResolver {
     fn is_integer_type(ty: &Type) -> bool {
         matches!(
             ty,
-            Type::Int8
-                | Type::Int16
-                | Type::Int32
-                | Type::Int64
-                | Type::Int128
-                | Type::UInt8
-                | Type::UInt16
-                | Type::UInt32
-                | Type::UInt64
-                | Type::UInt128
+            Type::Struct(name, _, _) if matches!(name.as_str(),
+                "Int8" | "Int16" | "Int32" | "Int64" | "Int128"
+                | "UInt8" | "UInt16" | "UInt32" | "UInt64" | "UInt128"
+            )
         )
     }
 
     fn is_float_type(ty: &Type) -> bool {
-        matches!(ty, Type::Float32 | Type::Float64)
+        matches!(
+            ty,
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Float32" | "Float64")
+        )
     }
 
     fn is_numeric_type(ty: &Type) -> bool {
         matches!(
             ty,
-            Type::Int8
-                | Type::Int16
-                | Type::Int32
-                | Type::Int64
-                | Type::Int128
-                | Type::UInt8
-                | Type::UInt16
-                | Type::UInt32
-                | Type::UInt64
-                | Type::UInt128
-                | Type::Float32
-                | Type::Float64
+            Type::Struct(name, _, _) if matches!(name.as_str(),
+                "Int8" | "Int16" | "Int32" | "Int64" | "Int128"
+                | "UInt8" | "UInt16" | "UInt32" | "UInt64" | "UInt128"
+                | "Float32" | "Float64"
+            )
         )
     }
 
@@ -4840,16 +4820,24 @@ impl TypeResolver {
                 if left.borrow().clone() != right.borrow().clone() {
                     return None;
                 }
-                Some(Rc::new(RefCell::new(Type::Bool)))
+                Some(Rc::new(RefCell::new(Type::Struct(
+                    "Bool".to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                    vec![],
+                ))))
             }
             BinaryOperator::And | BinaryOperator::Or => {
-                if *left.borrow() != Type::Bool {
+                if !matches!(&*left.borrow(), Type::Struct(name, _, _) if name == "Bool") {
                     return None;
                 }
-                if *right.borrow() != Type::Bool {
+                if !matches!(&*right.borrow(), Type::Struct(name, _, _) if name == "Bool") {
                     return None;
                 }
-                Some(Rc::new(RefCell::new(Type::Bool)))
+                Some(Rc::new(RefCell::new(Type::Struct(
+                    "Bool".to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                    vec![],
+                ))))
             }
             _ => None,
         }
@@ -4865,24 +4853,23 @@ impl TypeResolver {
             (Type::NonNullPointer(_), Type::Pointer(_)) => true,
             (Type::NonNullPointer(_), Type::NonNullPointer(_)) => true,
             (s, t) if Self::is_numeric_type(s) && Self::is_numeric_type(t) => true,
-            (Type::Bool, t) if Self::is_integer_type(t) => true,
-            (s, Type::Bool) if Self::is_integer_type(s) => true,
-            (Type::Bool, t) if Self::is_float_type(t) => false,
-            (s, Type::Bool) if Self::is_float_type(s) => false,
-            (Type::Char, t) if Self::is_integer_type(t) => true,
-            (s, Type::Char) if Self::is_integer_type(s) => true,
+            (Type::Struct(n1, _, _), t) if n1 == "Bool" && Self::is_integer_type(t) => true,
+            (s, Type::Struct(n2, _, _)) if n2 == "Bool" && Self::is_integer_type(s) => true,
+            (Type::Struct(n1, _, _), t) if n1 == "Bool" && Self::is_float_type(t) => false,
+            (s, Type::Struct(n2, _, _)) if n2 == "Bool" && Self::is_float_type(s) => false,
+            (Type::Struct(n1, _, _), t) if n1 == "Char" && Self::is_integer_type(t) => true,
+            (s, Type::Struct(n2, _, _)) if n2 == "Char" && Self::is_integer_type(s) => true,
             _ => false,
         }
     }
 
     fn get_type_size_bits(ty: &Type) -> Option<u32> {
         match ty {
-            Type::Int8 | Type::UInt8 => Some(8),
-            Type::Int16 | Type::UInt16 => Some(16),
-            Type::Int32 | Type::UInt32 | Type::Float32 => Some(32),
-            Type::Int64 | Type::UInt64 | Type::Float64 => Some(64),
-            Type::Int128 | Type::UInt128 => Some(128),
-            Type::Bool | Type::Char => Some(8),
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int8" | "UInt8" | "Bool" | "Char") => Some(8),
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int16" | "UInt16") => Some(16),
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int32" | "UInt32" | "Float32") => Some(32),
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int64" | "UInt64" | "Float64") => Some(64),
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int128" | "UInt128") => Some(128),
             Type::Pointer(_) => Some(64),
             Type::NonNullPointer(_) => Some(64),
             _ => None,
@@ -4933,10 +4920,10 @@ impl TypeResolver {
             }
             UnaryOperator::Not => {
                 let op_ty = operand.borrow().clone();
-                if !matches!(op_ty, Type::Bool) {
+                if !matches!(op_ty, Type::Struct(name, _, _) if name == "Bool") {
                     return None;
                 }
-                Some(Rc::new(RefCell::new(Type::Bool)))
+                Some(Rc::new(RefCell::new(Type::Struct("Bool".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))))
             }
             UnaryOperator::Deref => {
                 let op_ty = operand.borrow().clone();
@@ -5333,21 +5320,7 @@ impl TypeResolver {
 
     fn types_are_type_compatible(a: &Type, b: &Type) -> bool {
         match (a, b) {
-            (Type::Int8, Type::Int8)
-            | (Type::Int16, Type::Int16)
-            | (Type::Int32, Type::Int32)
-            | (Type::Int64, Type::Int64)
-            | (Type::Int128, Type::Int128)
-            | (Type::UInt8, Type::UInt8)
-            | (Type::UInt16, Type::UInt16)
-            | (Type::UInt32, Type::UInt32)
-            | (Type::UInt64, Type::UInt64)
-            | (Type::UInt128, Type::UInt128)
-            | (Type::Float32, Type::Float32)
-            | (Type::Float64, Type::Float64)
-            | (Type::Bool, Type::Bool)
-            | (Type::Char, Type::Char)
-            | (Type::Void, Type::Void)
+            (Type::Void, Type::Void)
             | (Type::Never, Type::Never) => true,
             (Type::Struct(n1, ..), Type::Struct(n2, ..))
             | (Type::Class(n1, ..), Type::Class(n2, ..))

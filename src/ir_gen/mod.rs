@@ -31,7 +31,7 @@ use crate::{
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
     lexer::token::{KeywordType, Token, TokenType},
     scope::Scope as TrussScope,
-    symbol::Symbol,
+    symbol::{Symbol, WeakSymbol},
     types::Type,
 };
 
@@ -1108,20 +1108,20 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn type_to_abbreviation(ty: &Type) -> String {
         match ty {
-            Type::Int8 => "I8".into(),
-            Type::Int16 => "I16".into(),
-            Type::Int32 => "I32".into(),
-            Type::Int64 => "I64".into(),
-            Type::Int128 => "I128".into(),
-            Type::UInt8 => "U8".into(),
-            Type::UInt16 => "U16".into(),
-            Type::UInt32 => "U32".into(),
-            Type::UInt64 => "U64".into(),
-            Type::UInt128 => "U128".into(),
-            Type::Float32 => "F32".into(),
-            Type::Float64 => "F64".into(),
-            Type::Bool => "B".into(),
-            Type::Char => "C".into(),
+            Type::Struct(name, _, _) if name == "Int8" => "I8".into(),
+            Type::Struct(name, _, _) if name == "Int16" => "I16".into(),
+            Type::Struct(name, _, _) if name == "Int32" => "I32".into(),
+            Type::Struct(name, _, _) if name == "Int64" => "I64".into(),
+            Type::Struct(name, _, _) if name == "Int128" => "I128".into(),
+            Type::Struct(name, _, _) if name == "UInt8" => "U8".into(),
+            Type::Struct(name, _, _) if name == "UInt16" => "U16".into(),
+            Type::Struct(name, _, _) if name == "UInt32" => "U32".into(),
+            Type::Struct(name, _, _) if name == "UInt64" => "U64".into(),
+            Type::Struct(name, _, _) if name == "UInt128" => "U128".into(),
+            Type::Struct(name, _, _) if name == "Float32" => "F32".into(),
+            Type::Struct(name, _, _) if name == "Float64" => "F64".into(),
+            Type::Struct(name, _, _) if name == "Bool" => "B".into(),
+            Type::Struct(name, _, _) if name == "Char" => "C".into(),
             Type::Void => "V".into(),
             Type::Never => "N".into(),
             Type::Struct(name, ..)
@@ -1199,24 +1199,10 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn types_compatible(a: &Type, b: &Type) -> bool {
         match (a, b) {
-            (Type::Int8, Type::Int8)
-            | (Type::Int16, Type::Int16)
-            | (Type::Int32, Type::Int32)
-            | (Type::Int64, Type::Int64)
-            | (Type::Int128, Type::Int128)
-            | (Type::UInt8, Type::UInt8)
-            | (Type::UInt16, Type::UInt16)
-            | (Type::UInt32, Type::UInt32)
-            | (Type::UInt64, Type::UInt64)
-            | (Type::UInt128, Type::UInt128)
-            | (Type::Float32, Type::Float32)
-            | (Type::Float64, Type::Float64)
-            | (Type::Bool, Type::Bool)
-            | (Type::Char, Type::Char)
-            | (Type::Void, Type::Void)
+            (Type::Void, Type::Void)
             | (Type::Never, Type::Never) => true,
-            (Type::Struct(n1, ..), Type::Struct(n2, ..))
-            | (Type::Class(n1, ..), Type::Class(n2, ..))
+            (Type::Struct(n1, _, _), Type::Struct(n2, _, _)) if n1 == n2 => true,
+            (Type::Class(n1, ..), Type::Class(n2, ..))
             | (Type::Enum(n1, ..), Type::Enum(n2, ..))
             | (Type::Protocol(n1, ..), Type::Protocol(n2, ..)) => n1 == n2,
             (Type::Pointer(t1), Type::Pointer(t2)) => {
@@ -1339,7 +1325,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mut all_param_types = vec![self_param];
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Int8,
+                            Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                         )))));
                         all_param_types.push(err_ty);
                     }
@@ -1366,7 +1352,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mut all_param_types = vec![self_param];
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Int8,
+                            Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                         )))));
                         all_param_types.push(err_ty);
                     }
@@ -1469,7 +1455,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mut all_param_types = vec![self_param];
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Int8,
+                            Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                         )))));
                         all_param_types.push(err_ty);
                     }
@@ -1496,7 +1482,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mut all_param_types = vec![self_param];
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Int8,
+                            Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                         )))));
                         all_param_types.push(err_ty);
                     }
@@ -1619,7 +1605,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mut all_params = param_types.clone();
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Int8,
+                            Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                         )))));
                         all_params.insert(0, err_ty);
                     }
@@ -1735,7 +1721,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         let mut params = param_types.clone();
                         if throws_types.is_some() {
                             let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(
-                                RefCell::new(Type::Int8),
+                                RefCell::new(Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])),
                             ))));
                             params.insert(0, err_ty);
                         }
@@ -1747,7 +1733,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         let mut all_param_types = vec![self_param];
                         if throws_types.is_some() {
                             let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(
-                                RefCell::new(Type::Int8),
+                                RefCell::new(Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])),
                             ))));
                             all_param_types.push(err_ty);
                         }
@@ -1771,7 +1757,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mut all_param_types = vec![self_param];
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Int8,
+                            Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                         )))));
                         all_param_types.push(err_ty);
                     }
@@ -1815,7 +1801,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mut all_params = param_types.clone();
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Int8,
+                            Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                         )))));
                         all_params.insert(0, err_ty);
                     }
@@ -1860,7 +1846,7 @@ impl<'ctx> IRGenerator<'ctx> {
             let mut all_params = param_types.clone();
             if throws_types.is_some() {
                 let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                    Type::Int8,
+                    Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                 )))));
                 all_params.insert(0, err_ty);
             }
@@ -1890,7 +1876,7 @@ impl<'ctx> IRGenerator<'ctx> {
             let mut all_params = param_types.clone();
             if throws_types.is_some() {
                 let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                    Type::Int8,
+                    Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                 )))));
                 all_params.insert(0, err_ty);
             }
@@ -1911,7 +1897,7 @@ impl<'ctx> IRGenerator<'ctx> {
             let mut all_params = param_types.clone();
             if throws_types.is_some() {
                 let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                    Type::Int8,
+                    Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                 )))));
                 all_params.insert(0, err_ty);
             }
@@ -4885,7 +4871,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 let left_val = self.resolve_expression(left.clone())?.unwrap();
                 let right_val = self.resolve_expression(right.clone())?.unwrap();
                 let left_ty = left.borrow().get_ty().ok().flatten();
-                let is_unsigned = matches!(left_ty, Some(ty) if matches!(&*ty.borrow(), Type::UInt8 | Type::UInt16 | Type::UInt32 | Type::UInt64 | Type::UInt128));
+                let is_unsigned = matches!(left_ty, Some(ty) if matches!(&*ty.borrow(), Type::Struct(name, _, _) if name == "UInt8" || name == "UInt16" || name == "UInt32" || name == "UInt64" || name == "UInt128"));
 
                 match operator {
                     BinaryOperator::Plus => {
@@ -7722,7 +7708,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mut all_param_tys = param_tys.clone();
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Int8,
+                            Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
                         )))));
                         all_param_tys.insert(0, err_ty);
                     }
@@ -8279,7 +8265,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         .type_annotation
                         .as_ref()
                         .and_then(|ta| ta.borrow().get_ty().ok().flatten())
-                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
+                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))));
                     param_types.push(pt);
                 }
 
@@ -8322,7 +8308,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         let param_ty = all_param_types
                             .get(idx as usize)
                             .cloned()
-                            .unwrap_or_else(|| Rc::new(RefCell::new(Type::Int32)));
+                            .unwrap_or_else(|| Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))));
                         let llvm_type = self.resolve_type(param_ty)?;
                         let alloca_name = self.unique_alloca_name(&shorthand_name);
                         let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
@@ -8730,7 +8716,7 @@ impl<'ctx> IRGenerator<'ctx> {
         let mut all_params = param_types;
         if throws_types.is_some() {
             let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                Type::Int8,
+                Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
             )))));
             let mut new_params = vec![err_ty];
             new_params.extend(all_params);
@@ -9052,20 +9038,20 @@ impl<'ctx> IRGenerator<'ctx> {
 
     fn resolve_type(&self, ty: Rc<RefCell<Type>>) -> Result<BasicTypeEnum<'ctx>> {
         let resolved = match &*ty.borrow() {
-            Type::Int8 => self.context.i8_type().into(),
-            Type::Int16 => self.context.i16_type().into(),
-            Type::Int32 => self.context.i32_type().into(),
-            Type::Int64 => self.context.i64_type().into(),
-            Type::Int128 => self.context.i128_type().into(),
-            Type::UInt8 => self.context.i8_type().into(),
-            Type::UInt16 => self.context.i16_type().into(),
-            Type::UInt32 => self.context.i32_type().into(),
-            Type::UInt64 => self.context.i64_type().into(),
-            Type::UInt128 => self.context.i128_type().into(),
-            Type::Float32 => self.context.f32_type().into(),
-            Type::Float64 => self.context.f64_type().into(),
-            Type::Bool => self.context.bool_type().into(),
-            Type::Char => self.context.i8_type().into(),
+            Type::Struct(name, _, _) if name == "Int8" => self.context.i8_type().into(),
+            Type::Struct(name, _, _) if name == "Int16" => self.context.i16_type().into(),
+            Type::Struct(name, _, _) if name == "Int32" => self.context.i32_type().into(),
+            Type::Struct(name, _, _) if name == "Int64" => self.context.i64_type().into(),
+            Type::Struct(name, _, _) if name == "Int128" => self.context.i128_type().into(),
+            Type::Struct(name, _, _) if name == "UInt8" => self.context.i8_type().into(),
+            Type::Struct(name, _, _) if name == "UInt16" => self.context.i16_type().into(),
+            Type::Struct(name, _, _) if name == "UInt32" => self.context.i32_type().into(),
+            Type::Struct(name, _, _) if name == "UInt64" => self.context.i64_type().into(),
+            Type::Struct(name, _, _) if name == "UInt128" => self.context.i128_type().into(),
+            Type::Struct(name, _, _) if name == "Float32" => self.context.f32_type().into(),
+            Type::Struct(name, _, _) if name == "Float64" => self.context.f64_type().into(),
+            Type::Struct(name, _, _) if name == "Bool" => self.context.bool_type().into(),
+            Type::Struct(name, _, _) if name == "Char" => self.context.i8_type().into(),
             Type::Never => {
                 self.emit_error(
                     TrussDiagnosticCode::NeverTypeConversion,
@@ -9299,7 +9285,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::Binary { left, right, .. } => self
                 .infer_type_from_expression(left.clone())
                 .or_else(|_| self.infer_type_from_expression(right.clone())),
-            Expression::SizeOf { .. } => self.resolve_type(Rc::new(RefCell::new(Type::UInt64))),
+            Expression::SizeOf { .. } => self.resolve_type(Rc::new(RefCell::new(Type::Struct("UInt64".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])))),
             _ => {
                 self.emit_error(
                     TrussDiagnosticCode::TypeInferenceFailed,

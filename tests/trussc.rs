@@ -18,9 +18,25 @@ fn test_trussc_single_file() {
     std::fs::write(&src, "#[main]\nfunc main() -> Int32 { 0 }\n").unwrap();
 
     let out = dir.join("hello.out");
-    let (ok, stdout, stderr) = compile(&[&src.to_string_lossy(), "-o", &out.to_string_lossy(), "--target", "x86_64-unknown-linux-gnu"]);
-    assert!(ok, "trussc should succeed\nstdout:{}\nstderr:{}", stdout, stderr);
-    assert!(out.exists(), "Output file should exist: {:?}\nstdout:{}\nstderr:{}", out, stdout, stderr);
+    let (ok, stdout, stderr) = compile(&[
+        &src.to_string_lossy(),
+        "-o",
+        &out.to_string_lossy(),
+        "--target",
+        "x86_64-unknown-linux-gnu",
+    ]);
+    assert!(
+        ok,
+        "trussc should succeed\nstdout:{}\nstderr:{}",
+        stdout, stderr
+    );
+    assert!(
+        out.exists(),
+        "Output file should exist: {:?}\nstdout:{}\nstderr:{}",
+        out,
+        stdout,
+        stderr
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -34,8 +50,16 @@ fn test_trussc_single_file_ir_only() {
 
     let (ok, stdout, stderr) = compile(&[&src.to_string_lossy(), "--ir"]);
     // IR output is valid even without cc
-    assert!(ok, "trussc --ir should succeed\nstdout:{}\nstderr:{}", stdout, stderr);
-    assert!(stdout.contains("LLVM IR"), "Should contain LLVM IR output: {}", stdout);
+    assert!(
+        ok,
+        "trussc --ir should succeed\nstdout:{}\nstderr:{}",
+        stdout, stderr
+    );
+    assert!(
+        stdout.contains("LLVM IR"),
+        "Should contain LLVM IR output: {}",
+        stdout
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

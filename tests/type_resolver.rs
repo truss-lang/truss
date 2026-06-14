@@ -15,6 +15,14 @@ use truss::{
     types::Type,
 };
 
+fn type_of(name: &str) -> Type {
+    Type::Struct(
+        name.to_string(),
+        truss::symbol::WeakSymbol(std::rc::Weak::new()),
+        vec![],
+    )
+}
+
 fn create_engine() -> Rc<RefCell<TrussDiagnosticEngine>> {
     Rc::new(RefCell::new(TrussDiagnosticEngine::new()))
 }
@@ -44,7 +52,7 @@ fn test_infer_variable_decl() {
         if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Int32);
+            assert_eq!(ty.borrow().clone(), type_of("Int32"));
         } else {
             panic!("VariableDecl should have Int32 type");
         }
@@ -53,7 +61,7 @@ fn test_infer_variable_decl() {
             && let Expression::Variable { ty, .. } = &*value.borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Int32);
+            assert_eq!(ty.borrow().clone(), type_of("Int32"));
         } else {
             panic!("Return should have Int32 typed variable");
         }
@@ -87,7 +95,7 @@ fn test_check_variable_decl_with_annotation() {
         if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Int32);
+            assert_eq!(ty.borrow().clone(), type_of("Int32"));
         } else {
             panic!("VariableDecl should have Int32 type");
         }
@@ -155,7 +163,7 @@ fn test_binary_expression_infer() {
         if let Statement::VariableDecl { ty, .. } = &*statements[1].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Int32);
+            assert_eq!(ty.borrow().clone(), type_of("Int32"));
         } else {
             panic!("Second variable should be Int32");
         }
@@ -188,7 +196,7 @@ fn test_expression_body_function() {
         && let Expression::IntegerLiteral { ty, .. } = &*expr.borrow()
         && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().clone(), Type::Int32);
+        assert_eq!(ty.borrow().clone(), type_of("Int32"));
     } else {
         panic!("Expected expression body function returning Int32");
     }
@@ -219,7 +227,7 @@ fn test_variable_decl_with_bool_annotation() {
         if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Bool);
+            assert_eq!(ty.borrow().clone(), type_of("Bool"));
         } else {
             panic!("VariableDecl should have Bool type");
         }
@@ -228,7 +236,7 @@ fn test_variable_decl_with_bool_annotation() {
             && let Expression::Variable { ty, .. } = &*value.borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Bool);
+            assert_eq!(ty.borrow().clone(), type_of("Bool"));
         } else {
             panic!("Return should have Bool typed variable");
         }
@@ -318,7 +326,7 @@ fn test_annotated_param_type() {
     } = &*program.statements[0].borrow()
     {
         if let Some(ty) = &parameters[0].borrow().ty {
-            assert_eq!(ty.borrow().clone(), Type::Int32);
+            assert_eq!(ty.borrow().clone(), type_of("Int32"));
         } else {
             panic!("Parameter should have Int32 type");
         }
@@ -328,7 +336,7 @@ fn test_annotated_param_type() {
             && let Expression::Variable { ty, .. } = &*value.borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Int32);
+            assert_eq!(ty.borrow().clone(), type_of("Int32"));
         } else {
             panic!("Return should have Int32 typed variable");
         }
@@ -377,7 +385,7 @@ fn run_type_check_with_return(code: &str) -> Type {
                         }
                         _ => {}
                     },
-                    Expression::BooleanLiteral { .. } => return Type::Bool,
+                    Expression::BooleanLiteral { .. } => return type_of("Bool"),
                     _ => {}
                 }
             }
@@ -419,145 +427,145 @@ fn run_type_check_var(code: &str, var_name: &str) -> Type {
 #[test]
 fn test_small_positive_integer() {
     let ty = run_type_check_with_return("func test() -> Int32 { return 42 }");
-    assert_eq!(ty, Type::Int32);
+    assert_eq!(ty, type_of("Int32"));
 }
 
 #[test]
 fn test_zero() {
     let ty = run_type_check_with_return("func test() -> Int32 { return 0 }");
-    assert_eq!(ty, Type::Int32);
+    assert_eq!(ty, type_of("Int32"));
 }
 
 #[test]
 fn test_negative_integer() {
     let ty = run_type_check_with_return("func test() -> Int32 { return -100 }");
-    assert_eq!(ty, Type::Int32);
+    assert_eq!(ty, type_of("Int32"));
 }
 
 #[test]
 fn test_large_positive_integer() {
     let ty = run_type_check_with_return("func test() -> Int64 { return 5000000000 }");
-    assert_eq!(ty, Type::Int64);
+    assert_eq!(ty, type_of("Int64"));
 }
 
 #[test]
 fn test_very_large_integer() {
     let ty = run_type_check_with_return("func test() -> Int128 { return 20000000000000000000 }");
-    assert_eq!(ty, Type::Int128);
+    assert_eq!(ty, type_of("Int128"));
 }
 
 #[test]
 fn test_int8_annotation() {
     let ty = run_type_check_var("func test() { let a: Int8 = 100 }", "a");
-    assert_eq!(ty, Type::Int8);
+    assert_eq!(ty, type_of("Int8"));
 }
 
 #[test]
 fn test_int16_annotation() {
     let ty = run_type_check_var("func test() { let a: Int16 = 10000 }", "a");
-    assert_eq!(ty, Type::Int16);
+    assert_eq!(ty, type_of("Int16"));
 }
 
 #[test]
 fn test_int32_annotation() {
     let ty = run_type_check_var("func test() { let a: Int32 = 100000 }", "a");
-    assert_eq!(ty, Type::Int32);
+    assert_eq!(ty, type_of("Int32"));
 }
 
 #[test]
 fn test_int64_annotation() {
     let ty = run_type_check_var("func test() { let a: Int64 = 10000000000 }", "a");
-    assert_eq!(ty, Type::Int64);
+    assert_eq!(ty, type_of("Int64"));
 }
 
 #[test]
 fn test_int128_annotation() {
     let ty = run_type_check_var("func test() { let a: Int128 = 10000000000000000000 }", "a");
-    assert_eq!(ty, Type::Int128);
+    assert_eq!(ty, type_of("Int128"));
 }
 
 #[test]
 fn test_uint8_annotation() {
     let ty = run_type_check_var("func test() { let a: UInt8 = 200 }", "a");
-    assert_eq!(ty, Type::UInt8);
+    assert_eq!(ty, type_of("UInt8"));
 }
 
 #[test]
 fn test_uint16_annotation() {
     let ty = run_type_check_var("func test() { let a: UInt16 = 50000 }", "a");
-    assert_eq!(ty, Type::UInt16);
+    assert_eq!(ty, type_of("UInt16"));
 }
 
 #[test]
 fn test_uint32_annotation() {
     let ty = run_type_check_var("func test() { let a: UInt32 = 3000000000 }", "a");
-    assert_eq!(ty, Type::UInt32);
+    assert_eq!(ty, type_of("UInt32"));
 }
 
 #[test]
 fn test_uint64_annotation() {
     let ty = run_type_check_var("func test() { let a: UInt64 = 100000000000000 }", "a");
-    assert_eq!(ty, Type::UInt64);
+    assert_eq!(ty, type_of("UInt64"));
 }
 
 #[test]
 fn test_uint128_annotation() {
     let ty = run_type_check_var("func test() { let a: UInt128 = 10000000000000000000 }", "a");
-    assert_eq!(ty, Type::UInt128);
+    assert_eq!(ty, type_of("UInt128"));
 }
 
 #[test]
 fn test_float_literal_default() {
     let ty = run_type_check_with_return("func test() -> Float64 { return 3.14 }");
-    assert_eq!(ty, Type::Float64);
+    assert_eq!(ty, type_of("Float64"));
 }
 
 #[test]
 fn test_float_with_exponent() {
     let ty = run_type_check_with_return("func test() -> Float64 { return 1.5e10 }");
-    assert_eq!(ty, Type::Float64);
+    assert_eq!(ty, type_of("Float64"));
 }
 
 #[test]
 fn test_float32_annotation() {
     let ty = run_type_check_var("func test() { let a: Float32 = 3.14 }", "a");
-    assert_eq!(ty, Type::Float32);
+    assert_eq!(ty, type_of("Float32"));
 }
 
 #[test]
 fn test_float64_annotation() {
     let ty = run_type_check_var("func test() { let a: Float64 = 3.14159265358979 }", "a");
-    assert_eq!(ty, Type::Float64);
+    assert_eq!(ty, type_of("Float64"));
 }
 
 #[test]
 fn test_return_type_context_int32() {
     let ty = run_type_check_with_return("func test() -> Int32 { return 42 }");
-    assert_eq!(ty, Type::Int32);
+    assert_eq!(ty, type_of("Int32"));
 }
 
 #[test]
 fn test_return_type_context_int64() {
     let ty = run_type_check_with_return("func test() -> Int64 { return 42 }");
-    assert_eq!(ty, Type::Int64);
+    assert_eq!(ty, type_of("Int64"));
 }
 
 #[test]
 fn test_return_type_context_uint32() {
     let ty = run_type_check_with_return("func test() -> UInt32 { return 42 }");
-    assert_eq!(ty, Type::UInt32);
+    assert_eq!(ty, type_of("UInt32"));
 }
 
 #[test]
 fn test_return_type_context_float32() {
     let ty = run_type_check_with_return("func test() -> Float32 { return 3.14 }");
-    assert_eq!(ty, Type::Float32);
+    assert_eq!(ty, type_of("Float32"));
 }
 
 #[test]
 fn test_return_type_context_float64() {
     let ty = run_type_check_with_return("func test() -> Float64 { return 3.14 }");
-    assert_eq!(ty, Type::Float64);
+    assert_eq!(ty, type_of("Float64"));
 }
 
 #[test]
@@ -580,7 +588,7 @@ fn test_parameter_type_context() {
 
     if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
         let param_ty = parameters[0].borrow().ty.as_ref().unwrap().borrow().clone();
-        assert_eq!(param_ty, Type::Int64);
+        assert_eq!(param_ty, type_of("Int64"));
     } else {
         panic!("Expected FunctionDecl");
     }
@@ -589,49 +597,49 @@ fn test_parameter_type_context() {
 #[test]
 fn test_binary_expression_same_type() {
     let ty = run_type_check_with_return("func test() -> Int32 { let a = 10 + 20 return a }");
-    assert_eq!(ty, Type::Int32);
+    assert_eq!(ty, type_of("Int32"));
 }
 
 #[test]
 fn test_unary_expression() {
     let ty = run_type_check_with_return("func test() -> Int32 { let a = -42 return a }");
-    assert_eq!(ty, Type::Int32);
+    assert_eq!(ty, type_of("Int32"));
 }
 
 #[test]
 fn test_variable_propagation() {
     let ty = run_type_check_with_return("func test() -> Int32 { let a = 42 return a }");
-    assert_eq!(ty, Type::Int32);
+    assert_eq!(ty, type_of("Int32"));
 }
 
 #[test]
 fn test_i8_max() {
     let ty = run_type_check_var("func test() { let a: Int8 = 127 }", "a");
-    assert_eq!(ty, Type::Int8);
+    assert_eq!(ty, type_of("Int8"));
 }
 
 #[test]
 fn test_i8_min() {
     let ty = run_type_check_var("func test() { let a: Int8 = -128 }", "a");
-    assert_eq!(ty, Type::Int8);
+    assert_eq!(ty, type_of("Int8"));
 }
 
 #[test]
 fn test_u8_max() {
     let ty = run_type_check_var("func test() { let a: UInt8 = 255 }", "a");
-    assert_eq!(ty, Type::UInt8);
+    assert_eq!(ty, type_of("UInt8"));
 }
 
 #[test]
 fn test_u16_max() {
     let ty = run_type_check_var("func test() { let a: UInt16 = 65535 }", "a");
-    assert_eq!(ty, Type::UInt16);
+    assert_eq!(ty, type_of("UInt16"));
 }
 
 #[test]
 fn test_u32_max() {
     let ty = run_type_check_var("func test() { let a: UInt32 = 4294967295 }", "a");
-    assert_eq!(ty, Type::UInt32);
+    assert_eq!(ty, type_of("UInt32"));
 }
 
 #[test]
@@ -710,7 +718,7 @@ fn test_function_call_parameter_type_inference_int8() {
         if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Int8);
+            assert_eq!(ty.borrow().clone(), type_of("Int8"));
         } else {
             panic!("Variable should have Int8 type inferred from function parameter");
         }
@@ -743,7 +751,7 @@ fn test_function_call_parameter_type_inference_int64() {
         if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Int64);
+            assert_eq!(ty.borrow().clone(), type_of("Int64"));
         } else {
             panic!("Variable should have Int64 type inferred from function parameter");
         }
@@ -776,7 +784,7 @@ fn test_function_call_parameter_type_inference_float32() {
         if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Float32);
+            assert_eq!(ty.borrow().clone(), type_of("Float32"));
         } else {
             panic!("Variable should have Float32 type inferred from function parameter");
         }
@@ -809,7 +817,7 @@ fn test_function_call_multiple_parameters_type_inference() {
         if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), Type::Int32);
+            assert_eq!(ty.borrow().clone(), type_of("Int32"));
         } else {
             panic!("Variable should have Int32 type inferred from function return type");
         }
@@ -1052,7 +1060,7 @@ fn test_pointer_type_annotation() {
         && let Some(ty) = ty
     {
         assert!(
-            matches!(ty.borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Int32))
+            matches!(ty.borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Struct(ref n, _, _) if n == "Int32"))
         );
     } else {
         panic!("Expected variable declaration with pointer type");
@@ -1085,7 +1093,7 @@ fn test_deref_expression() {
         && let Expression::Type { ty, .. } = &*return_type.borrow()
         && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().clone(), Type::Int32);
+        assert_eq!(ty.borrow().clone(), type_of("Int32"));
     } else {
         panic!("Expected function with Int32 return type");
     }
@@ -1117,7 +1125,7 @@ fn test_nested_deref_expression() {
         && let Expression::Type { ty, .. } = &*return_type.borrow()
         && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().clone(), Type::Int64);
+        assert_eq!(ty.borrow().clone(), type_of("Int64"));
     } else {
         panic!("Expected function with Int64 return type");
     }
@@ -1198,12 +1206,12 @@ fn test_nullptr_type_inference_with_annotation() {
         && let Some(init) = initializer
     {
         assert!(
-            matches!(ty.borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Int32))
+            matches!(ty.borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Struct(ref n, _, _) if n == "Int32"))
         );
         if let Expression::NullptrLiteral { ty: init_ty, .. } = &*init.borrow() {
             assert!(init_ty.is_some());
             assert!(
-                matches!(init_ty.as_ref().unwrap().borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Int32))
+                matches!(init_ty.as_ref().unwrap().borrow().clone(), Type::Pointer(inner) if matches!(*inner.borrow(), Type::Struct(ref n, _, _) if n == "Int32"))
             );
         } else {
             panic!("Expected nullptr literal");
@@ -1305,10 +1313,10 @@ fn test_cast_int_to_float() {
         && let Some(ty) = ty
         && let Some(init) = initializer
     {
-        assert_eq!(ty.borrow().clone(), Type::Float64);
+        assert_eq!(ty.borrow().clone(), type_of("Float64"));
         if let Expression::Cast { ty: cast_ty, .. } = &*init.borrow() {
             assert!(cast_ty.is_some());
-            assert_eq!(cast_ty.as_ref().unwrap().borrow().clone(), Type::Float64);
+            assert_eq!(cast_ty.as_ref().unwrap().borrow().clone(), type_of("Float64"));
         } else {
             panic!("Expected Cast expression");
         }
@@ -1343,7 +1351,7 @@ fn test_cast_bool_to_int() {
         && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
         && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().clone(), Type::Int32);
+        assert_eq!(ty.borrow().clone(), type_of("Int32"));
     } else {
         panic!();
     }
@@ -1398,7 +1406,7 @@ fn test_cast_int32_to_int64() {
         && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
         && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().clone(), Type::Int64);
+        assert_eq!(ty.borrow().clone(), type_of("Int64"));
     } else {
         panic!();
     }
@@ -1430,7 +1438,7 @@ fn test_cast_force_no_type_error() {
         && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
         && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().clone(), Type::Int32);
+        assert_eq!(ty.borrow().clone(), type_of("Int32"));
     } else {
         panic!();
     }
@@ -1462,7 +1470,7 @@ fn test_cast_conditional_no_type_error() {
         && let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
         && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().clone(), Type::Int32);
+        assert_eq!(ty.borrow().clone(), type_of("Int32"));
     } else {
         panic!();
     }
@@ -2626,8 +2634,8 @@ fn test_protocol_type_with_method_params() {
                 assert!(ty.is_some());
                 if let Type::Function(params, ret, _, None) = &*ty.as_ref().unwrap().borrow() {
                     assert_eq!(params.len(), 1);
-                    assert_eq!(*params[0].borrow(), Type::Int32);
-                    assert_eq!(*ret.borrow(), Type::Int64);
+                    assert_eq!(*params[0].borrow(), type_of("Int32"));
+                    assert_eq!(*ret.borrow(), type_of("Int64"));
                 } else {
                     panic!("Expected Function type");
                 }
@@ -3179,7 +3187,7 @@ fn test_extension_method_type_resolved() {
     {
         assert_eq!(
             ty.borrow().clone(),
-            Type::Function(vec![], Rc::new(RefCell::new(Type::Int32)), false, None)
+            Type::Function(vec![], Rc::new(RefCell::new(type_of("Int32"))), false, None)
         );
     } else {
         panic!("Extension method should have function type");
@@ -3352,7 +3360,7 @@ fn test_extension_static_method_struct_type_resolved() {
         assert!(static_method);
         assert_eq!(
             ty.borrow().clone(),
-            Type::Function(vec![], Rc::new(RefCell::new(Type::Int32)), false, None)
+            Type::Function(vec![], Rc::new(RefCell::new(type_of("Int32"))), false, None)
         );
     } else {
         panic!("Static method should have function type");
@@ -4198,7 +4206,7 @@ fn test_implicit_return_int_literal_context() {
         && let Expression::IntegerLiteral { ty, .. } = &*expression.borrow()
         && let Some(ty) = ty
     {
-        assert_eq!(ty.borrow().clone(), Type::Int64);
+        assert_eq!(ty.borrow().clone(), type_of("Int64"));
     } else {
         panic!("Expected integer literal with Int64 type");
     }
@@ -4792,7 +4800,7 @@ fn test_generic_function_infer_from_arg() {
     );
     assert_eq!(
         ty,
-        Type::Int32,
+        type_of("Int32"),
         "Variable 'a' = identity(42) should be Int32, got {}",
         ty
     );
@@ -4808,7 +4816,7 @@ fn test_generic_function_infer_from_bool_arg() {
     );
     assert_eq!(
         ty,
-        Type::Bool,
+        type_of("Bool"),
         "Variable 'a' = identity(true) should be Bool, got {}",
         ty
     );
@@ -4824,7 +4832,7 @@ fn test_generic_function_explicit_type_arg() {
     );
     assert_eq!(
         ty,
-        Type::Int32,
+        type_of("Int32"),
         "Variable 'a' = identity<Int32>(42) should be Int32, got {}",
         ty
     );
@@ -4852,7 +4860,7 @@ fn test_generic_function_variable_decl_annotation() {
     );
     assert_eq!(
         ty,
-        Type::Int32,
+        type_of("Int32"),
         "Variable 'a' from identity(42) annotated as Int32 should be Int32, got {}",
         ty
     );
@@ -4950,9 +4958,9 @@ fn test_closure_type_resolved() {
         let t = ty.as_ref().unwrap().borrow().clone();
         if let Type::Function(param_types, ret_type, is_vararg, None) = t {
             assert_eq!(param_types.len(), 2);
-            assert_eq!(*param_types[0].borrow(), Type::Int32);
-            assert_eq!(*param_types[1].borrow(), Type::Int32);
-            assert_eq!(*ret_type.borrow(), Type::Int32);
+            assert_eq!(*param_types[0].borrow(), type_of("Int32"));
+            assert_eq!(*param_types[1].borrow(), type_of("Int32"));
+            assert_eq!(*ret_type.borrow(), type_of("Int32"));
             assert!(!is_vararg);
         } else {
             panic!("Expected Type::Function for closure, got {:?}", t);
@@ -5044,7 +5052,7 @@ fn test_closure_body_variable_type_resolved() {
                 "Variable 'x' should have its type set by TypeResolver"
             );
             let t = ty.as_ref().unwrap().borrow().clone();
-            assert_eq!(t, Type::Int32);
+            assert_eq!(t, type_of("Int32"));
         } else {
             panic!("Expected closure body variable with type");
         }
@@ -5084,8 +5092,8 @@ fn test_function_type_expression_resolved() {
         let t = ty.as_ref().unwrap().borrow().clone();
         if let Type::Function(param_types, ret_type, is_vararg, None) = t {
             assert_eq!(param_types.len(), 1);
-            assert_eq!(*param_types[0].borrow(), Type::Int32);
-            assert_eq!(*ret_type.borrow(), Type::Bool);
+            assert_eq!(*param_types[0].borrow(), type_of("Int32"));
+            assert_eq!(*ret_type.borrow(), type_of("Bool"));
             assert!(!is_vararg);
         } else {
             panic!("Expected Type::Function for function type, got {:?}", t);
@@ -5218,8 +5226,8 @@ fn test_closure_shorthand_with_context() {
         let t = ty.as_ref().unwrap().borrow().clone();
         if let Type::Function(param_types, ret_type, _, None) = t {
             assert_eq!(param_types.len(), 1);
-            assert_eq!(*param_types[0].borrow(), Type::Int32);
-            assert_eq!(*ret_type.borrow(), Type::Int32);
+            assert_eq!(*param_types[0].borrow(), type_of("Int32"));
+            assert_eq!(*ret_type.borrow(), type_of("Int32"));
         } else {
             panic!("Expected Type::Function for closure, got {:?}", t);
         }
@@ -5256,9 +5264,9 @@ fn test_closure_shorthand_binary_with_context() {
         let t = ty.as_ref().unwrap().borrow().clone();
         if let Type::Function(param_types, ret_type, _, None) = t {
             assert_eq!(param_types.len(), 2);
-            assert_eq!(*param_types[0].borrow(), Type::Int32);
-            assert_eq!(*param_types[1].borrow(), Type::Int32);
-            assert_eq!(*ret_type.borrow(), Type::Int32);
+            assert_eq!(*param_types[0].borrow(), type_of("Int32"));
+            assert_eq!(*param_types[1].borrow(), type_of("Int32"));
+            assert_eq!(*ret_type.borrow(), type_of("Int32"));
         } else {
             panic!("Expected Type::Function for closure, got {:?}", t);
         }
@@ -5649,7 +5657,7 @@ fn test_struct_subscript_return_type() {
     {
         assert_eq!(
             *ref_ty.borrow(),
-            Type::Int32,
+            type_of("Int32"),
             "Subscript should return Int32"
         );
     } else {
@@ -5727,7 +5735,7 @@ fn test_class_subscript_return_type() {
     {
         assert_eq!(
             *ref_ty.borrow(),
-            Type::Int32,
+            type_of("Int32"),
             "Class subscript should return Int32"
         );
     } else {
@@ -5967,14 +5975,14 @@ fn test_sizeof_expression_type_resolved() {
         assert!(matches!(*value.borrow(), Expression::SizeOf { .. }));
         if let Expression::SizeOf { argument, ty, .. } = &*value.borrow() {
             let resolved_ty = ty.clone().unwrap();
-            assert_eq!(*resolved_ty.borrow(), Type::UInt64);
+            assert_eq!(*resolved_ty.borrow(), type_of("UInt64"));
             if let Expression::Type {
                 name, ty: arg_ty, ..
             } = &*argument.borrow()
             {
                 assert_eq!(name.value, "Int32");
                 let arg_resolved = arg_ty.clone().unwrap();
-                assert_eq!(*arg_resolved.borrow(), Type::Int32);
+                assert_eq!(*arg_resolved.borrow(), type_of("Int32"));
             } else {
                 panic!("Expected Type expression as sizeof argument");
             }
@@ -6081,7 +6089,7 @@ fn test_do_expression_variable_scope_type() {
     let ty = run_type_check_do("func test() { let x = do { let a = 1; a } }");
     assert_eq!(
         ty,
-        Type::Int32,
+        type_of("Int32"),
         "do expression should infer Int32 from its body's last expression"
     );
 }
@@ -6091,7 +6099,7 @@ fn test_nested_do_expression_type() {
     let ty = run_type_check_do("func test() { let x = do { do { 1 } } }");
     assert_eq!(
         ty,
-        Type::Int32,
+        type_of("Int32"),
         "nested do expressions should both resolve to Int32"
     );
 }
@@ -6137,7 +6145,7 @@ fn test_non_null_pointer_type_annotation() {
         && let Some(ty) = ty
     {
         assert!(
-            matches!(ty.borrow().clone(), Type::NonNullPointer(inner) if matches!(*inner.borrow(), Type::Int32))
+            matches!(ty.borrow().clone(), Type::NonNullPointer(inner) if matches!(*inner.borrow(), Type::Struct(ref n, _, _) if n == "Int32"))
         );
     } else {
         panic!("Expected variable declaration with non-null pointer type");
@@ -6713,7 +6721,7 @@ fn test_optional_type_display_shows_generic_params() {
     let ty = Type::Enum(
         "Optional".to_string(),
         WeakSymbol(std::rc::Weak::new()),
-        vec![Rc::new(RefCell::new(Type::Int32))],
+        vec![Rc::new(RefCell::new(type_of("Int32")))],
     );
     assert_eq!(format!("{}", ty), "Optional<Int32>");
 }
@@ -6723,7 +6731,7 @@ fn test_array_type_display_shows_generic_params() {
     let ty = Type::Struct(
         "Array".to_string(),
         WeakSymbol(std::rc::Weak::new()),
-        vec![Rc::new(RefCell::new(Type::Int32))],
+        vec![Rc::new(RefCell::new(type_of("Int32")))],
     );
     assert_eq!(format!("{}", ty), "Array<Int32>");
 }

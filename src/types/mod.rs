@@ -2,24 +2,10 @@ use std::{cell::RefCell, fmt, rc::Rc};
 
 use crate::symbol::WeakSymbol;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Never,
     Void,
-    Int8,
-    Int16,
-    Int32,
-    Int64,
-    Int128,
-    UInt8,
-    UInt16,
-    UInt32,
-    UInt64,
-    UInt128,
-    Float32,
-    Float64,
-    Char,
-    Bool,
     Function(
         Vec<Rc<RefCell<Type>>>,
         Rc<RefCell<Type>>,
@@ -45,20 +31,6 @@ impl fmt::Display for Type {
         match self {
             Type::Never => write!(f, "Never"),
             Type::Void => write!(f, "Void"),
-            Type::Int8 => write!(f, "Int8"),
-            Type::Int16 => write!(f, "Int16"),
-            Type::Int32 => write!(f, "Int32"),
-            Type::Int64 => write!(f, "Int64"),
-            Type::Int128 => write!(f, "Int128"),
-            Type::UInt8 => write!(f, "UInt8"),
-            Type::UInt16 => write!(f, "UInt16"),
-            Type::UInt32 => write!(f, "UInt32"),
-            Type::UInt64 => write!(f, "UInt64"),
-            Type::UInt128 => write!(f, "UInt128"),
-            Type::Float32 => write!(f, "Float32"),
-            Type::Float64 => write!(f, "Float64"),
-            Type::Char => write!(f, "Char"),
-            Type::Bool => write!(f, "Bool"),
             Type::Function(params, ret, is_vararg, throws) => {
                 write!(f, "Function(")?;
                 for (i, param) in params.iter().enumerate() {
@@ -179,4 +151,35 @@ impl fmt::Display for Type {
             Type::AssociatedType(base, name) => write!(f, "{}.{}", base.borrow(), name),
         }
     }
+}
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Type::Never, Type::Never) => true,
+            (Type::Void, Type::Void) => true,
+            (Type::Struct(n1, _, p1), Type::Struct(n2, _, p2))
+            | (Type::Class(n1, _, p1), Type::Class(n2, _, p2))
+            | (Type::Enum(n1, _, p1), Type::Enum(n2, _, p2))
+            | (Type::Protocol(n1, _, p1), Type::Protocol(n2, _, p2)) => {
+                n1 == n2 && p1 == p2
+            }
+            (Type::Function(p1, r1, v1, t1), Type::Function(p2, r2, v2, t2)) => {
+                p1 == p2 && r1 == r2 && v1 == v2 && t1 == t2
+            }
+            (Type::Pointer(p1), Type::Pointer(p2)) => p1 == p2,
+            (Type::NonNullPointer(p1), Type::NonNullPointer(p2)) => p1 == p2,
+            (Type::Tuple(t1), Type::Tuple(t2)) => t1 == t2,
+            (Type::Inline(i1, s1), Type::Inline(i2, s2)) => i1 == i2 && s1 == s2,
+            (Type::Compound(c1), Type::Compound(c2)) => c1 == c2,
+            (Type::ConstGeneric(n1, t1), Type::ConstGeneric(n2, t2)) => n1 == n2 && t1 == t2,
+            (Type::GenericParam(n1), Type::GenericParam(n2)) => n1 == n2,
+            (Type::AssociatedType(b1, n1), Type::AssociatedType(b2, n2)) => b1 == b2 && n1 == n2,
+            _ => false,
+        }
+    }
+}
+
+pub fn builtin_type(name: &str) -> Type {
+    Type::Struct(name.to_string(), WeakSymbol(std::rc::Weak::new()), vec![])
 }
