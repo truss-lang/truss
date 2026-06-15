@@ -205,3 +205,39 @@ fn test_parse_yield_keyword() {
     );
     assert_eq!(tokens[0].value, "yield");
 }
+
+#[test]
+fn test_parse_weak_keyword() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new("weak".to_string(), Rc::new("".to_string())),
+        engine,
+    );
+    let tokens = lexer.parse();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(
+        tokens[0].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::Weak
+        }
+    );
+    assert_eq!(tokens[0].value, "weak");
+}
+
+#[test]
+fn test_parse_unowned_keyword() {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new("unowned".to_string(), Rc::new("".to_string())),
+        engine,
+    );
+    let tokens = lexer.parse();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(
+        tokens[0].ty,
+        TokenType::Keyword {
+            keyword: KeywordType::Unowned
+        }
+    );
+    assert_eq!(tokens[0].value, "unowned");
+}
