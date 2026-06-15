@@ -4495,7 +4495,8 @@ fn test_irgen_fn_ref_call_through_variable() {
 
 #[test]
 fn test_irgen_closure_capture_outer_variable() {
-    let code = "func test() -> Int32 { let x = 42; let f = { (y: Int32) -> Int32 in x + y }; return 0 }";
+    let code =
+        "func test() -> Int32 { let x = 42; let f = { (y: Int32) -> Int32 in x + y }; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4794,7 +4795,7 @@ fn test_irgen_closure_shorthand_argument() {
 
 #[test]
 fn test_irgen_closure_shorthand_binary() {
-    let code = "func test() -> Int32 { let f = { (a: Int32, b: Int32) in a + b }; return 0 }";
+    let code = "func test() -> Int32 { let f = { (a: Int32, b: Int32) -> Int32 in a + b }; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -6817,9 +6818,8 @@ fn test_irgen_closure_explicit_capture() {
 
 #[test]
 fn test_irgen_strong_class_ref_has_release() {
-    let (llvm_ir, engine) = run_ir_gen(
-        "class C { init() {} } func test() -> Int32 { let c = C(); return 0 }",
-    );
+    let (llvm_ir, engine) =
+        run_ir_gen("class C { init() {} } func test() -> Int32 { let c = C(); return 0 }");
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
     assert!(
         llvm_ir.contains("call void @truss_release"),

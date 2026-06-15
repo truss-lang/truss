@@ -99,7 +99,10 @@ impl TypeResolver {
         };
         let var_ownership = {
             let stmt_ref = statement.borrow();
-            if let Statement::VariableDecl { ownership, token, .. } = &*stmt_ref {
+            if let Statement::VariableDecl {
+                ownership, token, ..
+            } = &*stmt_ref
+            {
                 Some((*ownership, token.clone()))
             } else {
                 None
@@ -192,18 +195,17 @@ impl TypeResolver {
                 }
 
                 if *mutating {
-                    let is_struct_method = self.current_owner.as_ref().is_some_and(|owner| {
-                        matches!(&*owner.borrow(), Symbol::Struct { .. })
-                    });
+                    let is_struct_method = self
+                        .current_owner
+                        .as_ref()
+                        .is_some_and(|owner| matches!(&*owner.borrow(), Symbol::Struct { .. }));
                     if is_struct_method {
                         self.is_mutating.push(true);
                     } else {
                         let err_msg = "'mutating' can only be used on struct instance methods";
-                        let diag = new_diagnostic(
-                            TrussDiagnosticCode::ModifierNotAllowedHere,
-                            err_msg,
-                        )
-                        .with_label(primary_label_from_token(name.as_ref(), err_msg));
+                        let diag =
+                            new_diagnostic(TrussDiagnosticCode::ModifierNotAllowedHere, err_msg)
+                                .with_label(primary_label_from_token(name.as_ref(), err_msg));
                         self.engine.borrow_mut().emit(diag);
                         self.is_mutating.push(false);
                     }
@@ -573,10 +575,12 @@ impl TypeResolver {
                                     TrussDiagnosticCode::TypeError,
                                     "Multiple raw value types specified for enum",
                                 )
-                                .with_label(primary_label_from_token(
-                                    name,
-                                    "Only one raw value type is allowed",
-                                ));
+                                .with_label(
+                                    primary_label_from_token(
+                                        name,
+                                        "Only one raw value type is allowed",
+                                    ),
+                                );
                                 self.engine.borrow_mut().emit(diag);
                             } else {
                                 *raw_value_type = Some(ty.clone());
@@ -614,7 +618,12 @@ impl TypeResolver {
                 }
 
                 if !protocol_conformances.is_empty() {
-                    self.check_protocol_conformances(&name.value, name.as_ref(), &protocol_conformances, false);
+                    self.check_protocol_conformances(
+                        &name.value,
+                        name.as_ref(),
+                        &protocol_conformances,
+                        false,
+                    );
                 }
                 if let Symbol::Enum { cases, .. } = &mut *symbol.borrow_mut() {
                     for (case_symbol, ast_case) in cases.iter().zip(ast_cases.iter()) {
@@ -1219,7 +1228,12 @@ impl TypeResolver {
             _ => {}
         }
         if let Some((ownership, token)) = var_ownership {
-            if let Statement::VariableDecl { ty: Some(var_ty), name, .. } = &*statement.borrow() {
+            if let Statement::VariableDecl {
+                ty: Some(var_ty),
+                name,
+                ..
+            } = &*statement.borrow()
+            {
                 self.validate_ownership_type(ownership, &*var_ty.borrow(), &token, name);
             }
         }
@@ -1536,7 +1550,12 @@ impl TypeResolver {
                     );
                 }
             }
-            Statement::For { pattern, iterator, body, .. } => {
+            Statement::For {
+                pattern,
+                iterator,
+                body,
+                ..
+            } => {
                 let iter_ty = self.infer_type(iterator.clone());
                 let for_scope = Rc::new(RefCell::new(Scope::new(self.current_scope.clone())));
                 self.enter_scope(for_scope.clone());
@@ -1937,9 +1956,8 @@ impl TypeResolver {
             "Pointer" => Some(Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                 Type::Void,
             )))))),
-            "Int8" | "Int16" | "Int32" | "Int64" | "Int128"
-            | "UInt8" | "UInt16" | "UInt32" | "UInt64" | "UInt128"
-            | "Float32" | "Float64" | "Bool" | "Char" => {
+            "Int8" | "Int16" | "Int32" | "Int64" | "Int128" | "UInt8" | "UInt16" | "UInt32"
+            | "UInt64" | "UInt128" | "Float32" | "Float64" | "Bool" | "Char" => {
                 Some(Rc::new(RefCell::new(Type::Struct(
                     name.to_string(),
                     WeakSymbol(std::rc::Weak::new()),
@@ -1970,9 +1988,8 @@ impl TypeResolver {
             "Pointer" => Some(Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                 Type::Void,
             )))))),
-            "Int8" | "Int16" | "Int32" | "Int64" | "Int128"
-            | "UInt8" | "UInt16" | "UInt32" | "UInt64" | "UInt128"
-            | "Float32" | "Float64" | "Bool" | "Char" => {
+            "Int8" | "Int16" | "Int32" | "Int64" | "Int128" | "UInt8" | "UInt16" | "UInt32"
+            | "UInt64" | "UInt128" | "Float32" | "Float64" | "Bool" | "Char" => {
                 Some(Rc::new(RefCell::new(Type::Struct(
                     name.to_string(),
                     WeakSymbol(std::rc::Weak::new()),
@@ -2080,7 +2097,9 @@ impl TypeResolver {
             }
         }
 
-        if !matches!(&*cond_ty.borrow(), Type::Struct(name, _, _) if name == "Bool") && binding_types.is_none() {
+        if !matches!(&*cond_ty.borrow(), Type::Struct(name, _, _) if name == "Bool")
+            && binding_types.is_none()
+        {
             self.emit_error(
                 TrussDiagnosticCode::InvalidConditionType,
                 format!("If condition must be Bool, found {}", cond_ty.borrow()),
@@ -2136,7 +2155,9 @@ impl TypeResolver {
                 }
                 ty.clone().unwrap()
             }
-            Expression::BooleanLiteral { .. } => Rc::new(RefCell::new(crate::types::builtin_type("Bool"))),
+            Expression::BooleanLiteral { .. } => {
+                Rc::new(RefCell::new(crate::types::builtin_type("Bool")))
+            }
             Expression::StringLiteral { ty, .. } => {
                 if let Some(t) = ty.as_ref() {
                     t.clone()
@@ -2183,27 +2204,21 @@ impl TypeResolver {
                     let sym = scope_ref.get_symbol(&name.value)?;
                     let binding = sym.borrow();
                     let type_ref = match &*binding {
-                        Symbol::Struct { .. } => {
-                            Some(Rc::new(RefCell::new(Type::Struct(
-                                name.value.clone(),
-                                WeakSymbol(Rc::downgrade(&sym)),
-                                vec![],
-                            ))))
-                        }
-                        Symbol::Class { .. } => {
-                            Some(Rc::new(RefCell::new(Type::Class(
-                                name.value.clone(),
-                                WeakSymbol(Rc::downgrade(&sym)),
-                                vec![],
-                            ))))
-                        }
-                        Symbol::Enum { .. } => {
-                            Some(Rc::new(RefCell::new(Type::Enum(
-                                name.value.clone(),
-                                WeakSymbol(Rc::downgrade(&sym)),
-                                vec![],
-                            ))))
-                        }
+                        Symbol::Struct { .. } => Some(Rc::new(RefCell::new(Type::Struct(
+                            name.value.clone(),
+                            WeakSymbol(Rc::downgrade(&sym)),
+                            vec![],
+                        )))),
+                        Symbol::Class { .. } => Some(Rc::new(RefCell::new(Type::Class(
+                            name.value.clone(),
+                            WeakSymbol(Rc::downgrade(&sym)),
+                            vec![],
+                        )))),
+                        Symbol::Enum { .. } => Some(Rc::new(RefCell::new(Type::Enum(
+                            name.value.clone(),
+                            WeakSymbol(Rc::downgrade(&sym)),
+                            vec![],
+                        )))),
                         _ => None,
                     };
                     if type_ref.is_some() {
@@ -2222,7 +2237,9 @@ impl TypeResolver {
                 let t = t.or_else(|| {
                     let self_ty = self.current_scope.as_ref()?.borrow().get_type("self")?;
                     let struct_name = match &*self_ty.borrow() {
-                        Type::Struct(n, _, _) | Type::Class(n, _, _) | Type::Enum(n, _, _) => n.clone(),
+                        Type::Struct(n, _, _) | Type::Class(n, _, _) | Type::Enum(n, _, _) => {
+                            n.clone()
+                        }
                         _ => return None,
                     };
                     let scope = self.current_scope.as_ref()?;
@@ -2230,36 +2247,60 @@ impl TypeResolver {
                     let sym = scope_ref.get_symbol(&struct_name)?;
                     let binding = sym.borrow();
                     let (properties, methods, constructors) = match &*binding {
-                        Symbol::Struct { properties, methods, constructors, .. }
-                        | Symbol::Class { properties, methods, constructors, .. } =>
-                            (properties.clone(), methods.clone(), constructors.clone()),
-                        Symbol::Enum { methods, .. } =>
-                            (vec![], methods.clone(), vec![]),
+                        Symbol::Struct {
+                            properties,
+                            methods,
+                            constructors,
+                            ..
+                        }
+                        | Symbol::Class {
+                            properties,
+                            methods,
+                            constructors,
+                            ..
+                        } => (properties.clone(), methods.clone(), constructors.clone()),
+                        Symbol::Enum { methods, .. } => (vec![], methods.clone(), vec![]),
                         _ => return None,
                     };
                     drop(binding);
                     drop(scope_ref);
                     let _ = scope;
                     for field in &properties {
-                        if field.borrow().name().ok()? != name.value { continue; }
+                        if field.borrow().name().ok()? != name.value {
+                            continue;
+                        }
                         if let Some(decl) = field.borrow().get_decl().ok().flatten() {
-                            if let Statement::VariableDecl { ty: Some(field_ty), .. } = &*decl.borrow() {
+                            if let Statement::VariableDecl {
+                                ty: Some(field_ty), ..
+                            } = &*decl.borrow()
+                            {
                                 return Some(field_ty.clone());
                             }
                         }
                     }
                     for method in &methods {
-                        if method.borrow().name().ok()? != name.value { continue; }
+                        if method.borrow().name().ok()? != name.value {
+                            continue;
+                        }
                         if let Some(decl) = method.borrow().get_decl().ok().flatten() {
-                            if let Statement::FunctionDecl { ty: Some(method_ty), .. } = &*decl.borrow() {
+                            if let Statement::FunctionDecl {
+                                ty: Some(method_ty),
+                                ..
+                            } = &*decl.borrow()
+                            {
                                 return Some(method_ty.clone());
                             }
                         }
                     }
                     for ctor in &constructors {
-                        if ctor.borrow().name().ok()? != name.value { continue; }
+                        if ctor.borrow().name().ok()? != name.value {
+                            continue;
+                        }
                         if let Some(decl) = ctor.borrow().get_decl().ok().flatten() {
-                            if let Statement::InitDecl { ty: Some(ctor_ty), .. } = &*decl.borrow() {
+                            if let Statement::InitDecl {
+                                ty: Some(ctor_ty), ..
+                            } = &*decl.borrow()
+                            {
                                 return Some(ctor_ty.clone());
                             }
                         }
@@ -2463,8 +2504,9 @@ impl TypeResolver {
                             };
                             let best = constructors.iter().find(|c| {
                                 if let Ok(Some(decl)) = c.borrow().get_decl()
-                                    && let Statement::InitDecl { ty: Some(init_ty), .. } =
-                                        &*decl.borrow()
+                                    && let Statement::InitDecl {
+                                        ty: Some(init_ty), ..
+                                    } = &*decl.borrow()
                                     && let Type::Function(cp, _, _, _) = &*init_ty.borrow()
                                 {
                                     cp.len() == call_param_count
@@ -2936,7 +2978,11 @@ impl TypeResolver {
                     }
                 }
 
-                let case_ty = Rc::new(RefCell::new(Type::Struct("Bool".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])));
+                let case_ty = Rc::new(RefCell::new(Type::Struct(
+                    "Bool".to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                    vec![],
+                )));
                 *ty = Some(case_ty.clone());
                 case_ty
             }
@@ -2959,7 +3005,11 @@ impl TypeResolver {
                     ptr_ty
                 }
             }
-            Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Struct("Char".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))),
+            Expression::CharLiteral { .. } => Rc::new(RefCell::new(Type::Struct(
+                "Char".to_string(),
+                WeakSymbol(std::rc::Weak::new()),
+                vec![],
+            ))),
             Expression::PointerType { base, ty, non_null } => {
                 if let Some(existing_ty) = ty.as_ref() {
                     return Some(existing_ty.clone());
@@ -3095,7 +3145,11 @@ impl TypeResolver {
                                 if let Type::Tuple(elements) = &*subject_ty.borrow() {
                                     for (i, item) in items.iter().enumerate() {
                                         if i < elements.len() {
-                                            Self::set_match_pattern_type(item, &elements[i].1, &case_scope);
+                                            Self::set_match_pattern_type(
+                                                item,
+                                                &elements[i].1,
+                                                &case_scope,
+                                            );
                                         }
                                     }
                                 }
@@ -3354,7 +3408,8 @@ impl TypeResolver {
                         if member.value == "init" {
                             if let Symbol::Struct { constructors, .. } = &*binding {
                                 for constructor in constructors {
-                                    if let Some(decl) = constructor.borrow().get_decl().ok().flatten()
+                                    if let Some(decl) =
+                                        constructor.borrow().get_decl().ok().flatten()
                                     {
                                         let method_ty = {
                                             let decl_ref = decl.borrow();
@@ -4274,10 +4329,14 @@ impl TypeResolver {
                                 &*expected_ty.borrow()
                             {
                                 for idx in 0..required_params {
-                                    let pt = expected_params
-                                        .get(idx)
-                                        .cloned()
-                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))));
+                                    let pt =
+                                        expected_params.get(idx).cloned().unwrap_or_else(|| {
+                                            Rc::new(RefCell::new(Type::Struct(
+                                                "Int32".to_string(),
+                                                WeakSymbol(std::rc::Weak::new()),
+                                                vec![],
+                                            )))
+                                        });
                                     param_types.push(pt);
                                 }
                                 if ret_type_from_expected {
@@ -4289,16 +4348,14 @@ impl TypeResolver {
                         }
                     } else if required_params > shorthand_start {
                         for _ in shorthand_start..required_params {
-                            param_types.push(Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))));
+                            param_types.push(Rc::new(RefCell::new(Type::Struct(
+                                "Int32".to_string(),
+                                WeakSymbol(std::rc::Weak::new()),
+                                vec![],
+                            ))));
                         }
                     }
                 }
-
-                let fn_type = Rc::new(RefCell::new(Type::Closure(
-                    param_types.clone(),
-                    ret_type,
-                )));
-                *ty = Some(fn_type.clone());
 
                 if let Some(sc) = scope {
                     self.enter_scope(sc.clone());
@@ -4310,14 +4367,13 @@ impl TypeResolver {
                             continue;
                         }
                         let cap_type = if let Some(cap_expr) = &cap.expression {
-                            // Explicit capture with expression: resolve the expression type
                             self.infer_type(cap_expr.clone())
                         } else {
-                            // Explicit (variable name) or implicit capture: look up from enclosing scope
                             self.current_scope.as_ref().and_then(|s| {
-                                s.borrow().parent.as_ref().and_then(|parent| {
-                                    parent.borrow().get_type(&cap_name)
-                                })
+                                s.borrow()
+                                    .parent
+                                    .as_ref()
+                                    .and_then(|parent| parent.borrow().get_type(&cap_name))
                             })
                         };
                         if let Some(cap_type) = cap_type {
@@ -4345,10 +4401,14 @@ impl TypeResolver {
                     if let Some(max_idx) = max_shorthand {
                         for idx in 0..=max_idx {
                             let name = format!("${}", idx);
-                            let param_type = param_types
-                                .get(idx as usize)
-                                .cloned()
-                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))));
+                            let param_type =
+                                param_types.get(idx as usize).cloned().unwrap_or_else(|| {
+                                    Rc::new(RefCell::new(Type::Struct(
+                                        "Int32".to_string(),
+                                        WeakSymbol(std::rc::Weak::new()),
+                                        vec![],
+                                    )))
+                                });
                             self.current_scope
                                 .as_ref()
                                 .unwrap()
@@ -4370,9 +4430,26 @@ impl TypeResolver {
                             self.process_decl(stmt.clone());
                         }
                     }
+
+                    if ret_type_from_expected && matches!(&*ret_type.borrow(), Type::Void) {
+                        if let Some(last_stmt) = body.last()
+                            && let Statement::ExpressionStatement { expression } =
+                                &*last_stmt.borrow()
+                            && let Some(last_expr_ty) = expression.borrow().get_ty().ok().flatten()
+                            && !matches!(&*last_expr_ty.borrow(), Type::Void)
+                        {
+                            ret_type = last_expr_ty;
+                        }
+                    }
+
                     self.leave_scope();
                 }
 
+                let fn_type = Rc::new(RefCell::new(Type::Closure(
+                    param_types.clone(),
+                    ret_type.clone(),
+                )));
+                *ty = Some(fn_type.clone());
                 fn_type
             }
             Expression::ClosureType {
@@ -4416,7 +4493,13 @@ impl TypeResolver {
                         .current_scope
                         .as_ref()
                         .and_then(|s| s.borrow().get_type(&name));
-                    *ty = Some(found.unwrap_or_else(|| Rc::new(RefCell::new(Type::Struct("Int32".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])))));
+                    *ty = Some(found.unwrap_or_else(|| {
+                        Rc::new(RefCell::new(Type::Struct(
+                            "Int32".to_string(),
+                            WeakSymbol(std::rc::Weak::new()),
+                            vec![],
+                        )))
+                    }));
                 }
                 ty.clone().unwrap()
             }
@@ -4537,7 +4620,11 @@ impl TypeResolver {
                 .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void))),
             Expression::SizeOf { argument, ty, .. } => {
                 self.infer_type(argument.clone());
-                let result = Rc::new(RefCell::new(Type::Struct("UInt64".to_string(), WeakSymbol(std::rc::Weak::new()), vec![])));
+                let result = Rc::new(RefCell::new(Type::Struct(
+                    "UInt64".to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                    vec![],
+                )));
                 *ty = Some(result.clone());
                 result
             }
@@ -5222,10 +5309,18 @@ impl TypeResolver {
 
     fn get_type_size_bits(ty: &Type) -> Option<u32> {
         match ty {
-            Type::Struct(name, _, _) if matches!(name.as_str(), "Int8" | "UInt8" | "Bool" | "Char") => Some(8),
+            Type::Struct(name, _, _)
+                if matches!(name.as_str(), "Int8" | "UInt8" | "Bool" | "Char") =>
+            {
+                Some(8)
+            }
             Type::Struct(name, _, _) if matches!(name.as_str(), "Int16" | "UInt16") => Some(16),
-            Type::Struct(name, _, _) if matches!(name.as_str(), "Int32" | "UInt32" | "Float32") => Some(32),
-            Type::Struct(name, _, _) if matches!(name.as_str(), "Int64" | "UInt64" | "Float64") => Some(64),
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int32" | "UInt32" | "Float32") => {
+                Some(32)
+            }
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int64" | "UInt64" | "Float64") => {
+                Some(64)
+            }
             Type::Struct(name, _, _) if matches!(name.as_str(), "Int128" | "UInt128") => Some(128),
             Type::Pointer(_) => Some(64),
             Type::NonNullPointer(_) => Some(64),
@@ -5280,7 +5375,11 @@ impl TypeResolver {
                 if !matches!(op_ty, Type::Struct(name, _, _) if name == "Bool") {
                     return None;
                 }
-                Some(Rc::new(RefCell::new(Type::Struct("Bool".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]))))
+                Some(Rc::new(RefCell::new(Type::Struct(
+                    "Bool".to_string(),
+                    WeakSymbol(std::rc::Weak::new()),
+                    vec![],
+                ))))
             }
             UnaryOperator::Deref => {
                 let op_ty = operand.borrow().clone();
@@ -5360,8 +5459,7 @@ impl TypeResolver {
                     for method in methods {
                         if method.borrow().name().as_ref().ok() == Some(&member.value) {
                             if let Some(decl) = method.borrow().get_decl().ok().flatten() {
-                                if let Statement::FunctionDecl { ty: Some(t), .. } =
-                                    &*decl.borrow()
+                                if let Statement::FunctionDecl { ty: Some(t), .. } = &*decl.borrow()
                                 {
                                     return Some(t.clone());
                                 }
@@ -5380,8 +5478,7 @@ impl TypeResolver {
                                     if !accessors.is_empty() {
                                         self.emit_error(
                                             TrussDiagnosticCode::InvalidOperand,
-                                            "Cannot take address of computed property"
-                                                .to_string(),
+                                            "Cannot take address of computed property".to_string(),
                                             member,
                                         );
                                         return None;
@@ -5405,8 +5502,7 @@ impl TypeResolver {
                     if member.value == "deinit" {
                         if let Some(dtor) = &destrcutor {
                             if let Some(decl) = dtor.borrow().get_decl().ok().flatten() {
-                                if let Statement::DeinitDecl { ty: Some(t), .. } = &*decl.borrow()
-                                {
+                                if let Statement::DeinitDecl { ty: Some(t), .. } = &*decl.borrow() {
                                     return Some(t.clone());
                                 }
                             }
@@ -5452,8 +5548,7 @@ impl TypeResolver {
                     for method in &methods {
                         if method.borrow().name().as_ref().ok() == Some(&member.value) {
                             if let Some(decl) = method.borrow().get_decl().ok().flatten() {
-                                if let Statement::FunctionDecl { ty: Some(t), .. } =
-                                    &*decl.borrow()
+                                if let Statement::FunctionDecl { ty: Some(t), .. } = &*decl.borrow()
                                 {
                                     return Some(t.clone());
                                 }
@@ -5472,8 +5567,7 @@ impl TypeResolver {
                     if member.value == "deinit" {
                         if let Some(dtor) = &destrcutor {
                             if let Some(decl) = dtor.borrow().get_decl().ok().flatten() {
-                                if let Statement::DeinitDecl { ty: Some(t), .. } = &*decl.borrow()
-                                {
+                                if let Statement::DeinitDecl { ty: Some(t), .. } = &*decl.borrow() {
                                     return Some(t.clone());
                                 }
                             }
@@ -5866,8 +5960,7 @@ impl TypeResolver {
 
     fn types_are_type_compatible(a: &Type, b: &Type) -> bool {
         match (a, b) {
-            (Type::Void, Type::Void)
-            | (Type::Never, Type::Never) => true,
+            (Type::Void, Type::Void) | (Type::Never, Type::Never) => true,
             (Type::Struct(n1, ..), Type::Struct(n2, ..))
             | (Type::Class(n1, ..), Type::Class(n2, ..))
             | (Type::Enum(n1, ..), Type::Enum(n2, ..))
@@ -6332,8 +6425,7 @@ impl TypeResolver {
             let ty_ref = iter_ty.borrow();
             match &*ty_ref {
                 Type::Protocol(_, _, params) => params.first().cloned(),
-                Type::Struct(_, _, params)
-                | Type::Class(_, _, params) => {
+                Type::Struct(_, _, params) | Type::Class(_, _, params) => {
                     if !params.is_empty() {
                         Some(params[0].clone())
                     } else {
@@ -6384,7 +6476,12 @@ impl TypeResolver {
             _ => return None,
         };
         for conf in &conformances {
-            if let Expression::Type { name, type_parameters, .. } = &*conf.borrow() {
+            if let Expression::Type {
+                name,
+                type_parameters,
+                ..
+            } = &*conf.borrow()
+            {
                 if name.value == "Iterator" {
                     if let Some(params) = type_parameters {
                         if let Some(first_param) = params.first() {
@@ -6450,9 +6547,13 @@ impl TypeResolver {
             Pattern::ValueBinding(inner) => {
                 self.set_pattern_types(inner.as_ref(), ty);
             }
-            Pattern::EnumCase { case_name, bindings } => {
+            Pattern::EnumCase {
+                case_name,
+                bindings,
+            } => {
                 if let Type::Enum(enum_name, ..) = &*ty.borrow() {
-                    let param_types = self.get_enum_case_parameter_types(enum_name, &case_name.value);
+                    let param_types =
+                        self.get_enum_case_parameter_types(enum_name, &case_name.value);
                     if let Some(param_types) = param_types {
                         for (i, binding) in bindings.iter().enumerate() {
                             if i < param_types.len() {
@@ -6985,9 +7086,7 @@ impl TypeResolver {
                     .filter_map(|p| {
                         let pb = p.borrow();
                         if let Symbol::ProtocolProperty {
-                            name,
-                            accessors,
-                            ..
+                            name, accessors, ..
                         } = &*pb
                         {
                             Some((name.clone(), *accessors))
@@ -6997,8 +7096,10 @@ impl TypeResolver {
                     })
                     .collect()
             };
-            let required_properties: Vec<String> =
-                required_prop_accessors.iter().map(|(n, _)| n.clone()).collect();
+            let required_properties: Vec<String> = required_prop_accessors
+                .iter()
+                .map(|(n, _)| n.clone())
+                .collect();
 
             let Some(type_symbol) = self
                 .current_scope
@@ -7044,22 +7145,20 @@ impl TypeResolver {
             let type_prop_symbols: Vec<(String, Option<Rc<RefCell<Statement>>>)> = {
                 let type_sym = type_symbol.borrow();
                 match &*type_sym {
-                    Symbol::Struct {
-                        properties, ..
-                    } | Symbol::Class {
-                        properties, ..
-                    } => properties
-                        .iter()
-                        .filter_map(|p| {
-                            let pb = p.borrow();
-                            if let Ok(name) = pb.name() {
-                                let decl = pb.get_decl().ok().flatten();
-                                Some((name, decl))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
+                    Symbol::Struct { properties, .. } | Symbol::Class { properties, .. } => {
+                        properties
+                            .iter()
+                            .filter_map(|p| {
+                                let pb = p.borrow();
+                                if let Ok(name) = pb.name() {
+                                    let decl = pb.get_decl().ok().flatten();
+                                    Some((name, decl))
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect()
+                    }
                     _ => vec![],
                 }
             };
@@ -7131,9 +7230,7 @@ impl TypeResolver {
                                     let stmt = d.borrow();
                                     match &*stmt {
                                         Statement::VariableDecl {
-                                            token,
-                                            accessors,
-                                            ..
+                                            token, accessors, ..
                                         } => {
                                             if token.value == "var" {
                                                 Some(true)
@@ -7477,7 +7574,10 @@ impl TypeResolver {
                                                 }
                                                 if !self.is_in_init
                                                     && !is_enclosing_mutating
-                                                    && matches!(&*object.borrow(), Expression::SelfKeyword { .. })
+                                                    && matches!(
+                                                        &*object.borrow(),
+                                                        Expression::SelfKeyword { .. }
+                                                    )
                                                 {
                                                     self.emit_error(
                                                         TrussDiagnosticCode::AssignToSelfInNonMutating,

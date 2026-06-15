@@ -263,7 +263,11 @@ fn test_tuple_pattern_let_type_check() {
     let (packages, _) = truss::krate::single_package_map("test");
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    assert!(!engine.borrow().has_errors(), "Expected no errors, got: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Expected no errors, got: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -284,7 +288,11 @@ fn test_tuple_pattern_partial_ignore_type_check() {
     let (packages, _) = truss::krate::single_package_map("test");
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    assert!(!engine.borrow().has_errors(), "Expected no errors, got: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Expected no errors, got: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -293,7 +301,8 @@ fn test_match_tuple_pattern_type_check() {
     let (packages, _krate) = truss::krate::single_package_map("test");
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func test(t: (Int32, Int32)) { match t { case (0, 0): 1 case (x, y): x } }".to_string(),
+            "func test(t: (Int32, Int32)) { match t { case (0, 0): 1 case (x, y): x } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -305,7 +314,11 @@ fn test_match_tuple_pattern_type_check() {
     let (packages, _) = truss::krate::single_package_map("test");
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
-    assert!(!engine.borrow().has_errors(), "Expected no errors, got: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Expected no errors, got: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -1379,7 +1392,10 @@ fn test_cast_int_to_float() {
         assert_eq!(ty.borrow().clone(), type_of("Float64"));
         if let Expression::Cast { ty: cast_ty, .. } = &*init.borrow() {
             assert!(cast_ty.is_some());
-            assert_eq!(cast_ty.as_ref().unwrap().borrow().clone(), type_of("Float64"));
+            assert_eq!(
+                cast_ty.as_ref().unwrap().borrow().clone(),
+                type_of("Float64")
+            );
         } else {
             panic!("Expected Cast expression");
         }
@@ -2819,7 +2835,8 @@ fn test_enum_raw_value_type_integer() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct UInt8 {}
-             enum E: UInt8 { case a, b }".to_string(),
+             enum E: UInt8 { case a, b }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2887,7 +2904,10 @@ fn test_enum_raw_value_with_associated_values_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "Should have error for associated values with raw value type");
+    assert!(
+        !errors.is_empty(),
+        "Should have error for associated values with raw value type"
+    );
 }
 
 #[test]
@@ -2896,7 +2916,8 @@ fn test_enum_non_integer_raw_value_type_error() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct S {}
-             enum E: S { case a }".to_string(),
+             enum E: S { case a }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2912,7 +2933,10 @@ fn test_enum_non_integer_raw_value_type_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "Should have error for non-integer raw value type");
+    assert!(
+        !errors.is_empty(),
+        "Should have error for non-integer raw value type"
+    );
 }
 
 #[test]
@@ -2922,7 +2946,7 @@ fn test_enum_missing_protocol_method_error() {
         CharStream::new(
             "protocol Drawable { func draw() -> Void }
              enum E: Drawable { case a }"
-            .to_string(),
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2938,7 +2962,10 @@ fn test_enum_missing_protocol_method_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "Should have error for missing protocol method");
+    assert!(
+        !errors.is_empty(),
+        "Should have error for missing protocol method"
+    );
 }
 
 #[test]
@@ -5147,14 +5174,13 @@ fn test_closure_type_resolved() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
+        if let Type::Closure(param_types, ret_type) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*param_types[1].borrow(), type_of("Int32"));
             assert_eq!(*ret_type.borrow(), type_of("Int32"));
-            assert!(!is_vararg);
         } else {
-            panic!("Expected Type::Function for closure, got {:?}", t);
+            panic!("Expected Type::Closure for closure, got {:?}", t);
         }
         assert_eq!(parameters.len(), 2);
     } else {
@@ -5189,12 +5215,11 @@ fn test_closure_no_params_no_return_type() {
     {
         assert!(ty.is_some(), "Empty closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
+        if let Type::Closure(param_types, ret_type) = t {
             assert_eq!(param_types.len(), 0);
             assert_eq!(*ret_type.borrow(), Type::Void);
-            assert!(!is_vararg);
         } else {
-            panic!("Expected Type::Function for closure, got {:?}", t);
+            panic!("Expected Type::Closure for closure, got {:?}", t);
         }
     } else {
         panic!("Expected closure with type");
@@ -5361,12 +5386,11 @@ fn test_closure_untyped_params_inferred() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
+        if let Type::Closure(param_types, ret_type) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*ret_type.borrow(), Type::Void);
-            assert!(!is_vararg);
         } else {
-            panic!("Expected Type::Function for closure, got {:?}", t);
+            panic!("Expected Type::Closure for closure, got {:?}", t);
         }
     } else {
         panic!("Expected closure with type");
@@ -5455,12 +5479,12 @@ fn test_closure_shorthand_with_context() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, _, None) = t {
+        if let Type::Closure(param_types, ret_type) = t {
             assert_eq!(param_types.len(), 1);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*ret_type.borrow(), type_of("Int32"));
         } else {
-            panic!("Expected Type::Function for closure, got {:?}", t);
+            panic!("Expected Type::Closure for closure, got {:?}", t);
         }
     }
 }
@@ -5493,13 +5517,13 @@ fn test_closure_shorthand_binary_with_context() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, _, None) = t {
+        if let Type::Closure(param_types, ret_type) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*param_types[1].borrow(), type_of("Int32"));
             assert_eq!(*ret_type.borrow(), type_of("Int32"));
         } else {
-            panic!("Expected Type::Function for closure, got {:?}", t);
+            panic!("Expected Type::Closure for closure, got {:?}", t);
         }
     }
 }
@@ -7652,16 +7676,28 @@ func getKind() -> TargetKind {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
-    assert!(!engine.borrow().has_errors(), "Symbol resolver errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Symbol resolver errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
-    assert!(!engine_ref.has_errors(), "Type resolver errors: {:?}", engine_ref.get_errors());
+    assert!(
+        !engine_ref.has_errors(),
+        "Type resolver errors: {:?}",
+        engine_ref.get_errors()
+    );
 
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7706,16 +7742,28 @@ func getLib() -> TargetKind {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let (packages, _krate) = truss::krate::single_package_map("test");
     let mut symbol_resolver =
         SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module_id = symbol_resolver.resolve(&program, "test".to_string());
-    assert!(!engine.borrow().has_errors(), "Symbol resolver errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Symbol resolver errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
     let engine_ref = engine.borrow();
-    assert!(!engine_ref.has_errors(), "Type resolver errors for .DynamicLibrary(\"test\"): {:?}", engine_ref.get_errors());
+    assert!(
+        !engine_ref.has_errors(),
+        "Type resolver errors for .DynamicLibrary(\"test\"): {:?}",
+        engine_ref.get_errors()
+    );
 
     if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
@@ -7723,15 +7771,20 @@ func getLib() -> TargetKind {
     {
         let expr = expression.borrow();
         match &*expr {
-            Expression::Call { callee, parameters, .. } => {
+            Expression::Call {
+                callee, parameters, ..
+            } => {
                 let callee_expr = callee.borrow();
                 match &*callee_expr {
                     Expression::ImplicitMemberAccess { member, ty } => {
                         assert_eq!(member.value, "DynamicLibrary");
-                        assert!(ty.is_some(), "ImplicitMemberAccess callee should have a type");
+                        assert!(
+                            ty.is_some(),
+                            "ImplicitMemberAccess callee should have a type"
+                        );
                         if let Some(t) = ty {
                             assert!(
-                                t.borrow().to_string().contains("Function"),
+                                t.borrow().to_string().contains("func"),
                                 "Callee with data should have Function type, got: {}",
                                 t.borrow()
                             );
@@ -7740,7 +7793,10 @@ func getLib() -> TargetKind {
                     other => panic!("Expected ImplicitMemberAccess as callee, got {:?}", other),
                 }
             }
-            other => panic!("Expected Call expression with ImplicitMemberAccess callee, got {:?}", other),
+            other => panic!(
+                "Expected Call expression with ImplicitMemberAccess callee, got {:?}",
+                other
+            ),
         }
     } else {
         panic!("Expected FunctionDecl with ExpressionStatement");
@@ -7770,7 +7826,12 @@ fn test_protocol_get_set_accessor_var_passes() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "var property should satisfy {{ get set }}, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "var property should satisfy {{ get set }}, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -7796,12 +7857,19 @@ fn test_protocol_get_set_accessor_let_fails() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "let property should NOT satisfy {{ get set }}");
+    assert!(
+        !errors.is_empty(),
+        "let property should NOT satisfy {{ get set }}"
+    );
     let found = errors.iter().any(|e| {
         e.code == TrussDiagnosticCode::ProtocolRequirementNotImplemented
             && e.message.contains("get set")
     });
-    assert!(found, "Expected ProtocolRequirementNotImplemented about {{ get set }}, got: {:?}", errors);
+    assert!(
+        found,
+        "Expected ProtocolRequirementNotImplemented about {{ get set }}, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -7827,7 +7895,12 @@ fn test_protocol_get_accessor_let_passes() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "{{ get }} should be satisfied by let property, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "{{ get }} should be satisfied by let property, got: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -7842,11 +7915,19 @@ fn test_mutating_method_can_assign_to_self_var_property() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
-    assert!(!engine.borrow().has_errors(), "SymbolRes errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "SymbolRes errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
     type_resolver.resolve(&program, module);
     let engine_ref = engine.borrow();
@@ -7900,7 +7981,8 @@ fn test_nonmutating_method_can_assign_to_other_var_property() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct Foo { var x: Int32 }
-             func test() { let f = Foo(x: 1); f.x = 2 }".to_string(),
+             func test() { let f = Foo(x: 1); f.x = 2 }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7970,7 +8052,11 @@ fn test_self_init_delegation_in_init() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
@@ -7999,7 +8085,11 @@ fn test_self_init_delegation_overload_resolution() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
@@ -8028,7 +8118,11 @@ fn test_init_call_with_param_count_overload() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    assert!(!engine.borrow().has_errors(), "Parser errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Parser errors: {:?}",
+        engine.borrow().get_errors()
+    );
     let (packages, _krate) = truss::krate::single_package_map("test");
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     let module = resolver.resolve(&program, "test".to_string());
@@ -8135,7 +8229,12 @@ fn test_closure_explicit_capture_type_resolved() {
     }
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no type errors, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Expected no type errors, got: {:?}",
+        errors
+    );
 }
 
 fn resolve_program(
@@ -8153,54 +8252,46 @@ fn resolve_program(
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     let (packages, _) = truss::krate::single_package_map("main");
-    let mut resolver = SymbolResolver::new(
-        packages.clone(),
-        "main".to_string(),
-        engine.clone(),
-    );
+    let mut resolver = SymbolResolver::new(packages.clone(), "main".to_string(), engine.clone());
     let module_id = resolver.resolve(&program, "main".to_string());
-    let mut type_resolver = TypeResolver::new(
-        packages.clone(),
-        "main".to_string(),
-        engine.clone(),
-    );
+    let mut type_resolver = TypeResolver::new(packages.clone(), "main".to_string(), engine.clone());
     type_resolver.resolve(&program, module_id);
     (engine, program, packages)
 }
 
 #[test]
 fn test_weak_on_non_class_type_error() {
-    let (engine, _, _) = resolve_program(
-        "struct S {} func test() { weak var x: S }",
-    );
+    let (engine, _, _) = resolve_program("struct S {} func test() { weak var x: S }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "Expected error for weak on non-class type");
-    let has_weak_error = errors.iter().any(|e| {
-        matches!(e.code, TrussDiagnosticCode::WeakRequiresClassType)
-    });
+    assert!(
+        !errors.is_empty(),
+        "Expected error for weak on non-class type"
+    );
+    let has_weak_error = errors
+        .iter()
+        .any(|e| matches!(e.code, TrussDiagnosticCode::WeakRequiresClassType));
     assert!(has_weak_error, "Expected WeakRequiresClassType error");
 }
 
 #[test]
 fn test_unowned_on_non_class_type_error() {
-    let (engine, _, _) = resolve_program(
-        "struct S {} func test() { unowned var x: S }",
-    );
+    let (engine, _, _) = resolve_program("struct S {} func test() { unowned var x: S }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert!(!errors.is_empty(), "Expected error for unowned on non-class type");
-    let has_unowned_error = errors.iter().any(|e| {
-        matches!(e.code, TrussDiagnosticCode::UnownedRequiresClassType)
-    });
+    assert!(
+        !errors.is_empty(),
+        "Expected error for unowned on non-class type"
+    );
+    let has_unowned_error = errors
+        .iter()
+        .any(|e| matches!(e.code, TrussDiagnosticCode::UnownedRequiresClassType));
     assert!(has_unowned_error, "Expected UnownedRequiresClassType error");
 }
 
 #[test]
 fn test_weak_on_class_type_no_error() {
-    let (engine, _, _) = resolve_program(
-        "class C {} func test() { weak var x: C }",
-    );
+    let (engine, _, _) = resolve_program("class C {} func test() { weak var x: C }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     let has_type_error = errors.iter().any(|e| {
@@ -8213,9 +8304,7 @@ fn test_weak_on_class_type_no_error() {
 
 #[test]
 fn test_unowned_on_class_type_no_error() {
-    let (engine, _, _) = resolve_program(
-        "class C {} func test() { unowned var x: C }",
-    );
+    let (engine, _, _) = resolve_program("class C {} func test() { unowned var x: C }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     let has_type_error = errors.iter().any(|e| {
@@ -8223,14 +8312,15 @@ fn test_unowned_on_class_type_no_error() {
             || matches!(e.code, TrussDiagnosticCode::WeakRequiresClassType)
             || matches!(e.code, TrussDiagnosticCode::UnownedRequiresClassType)
     });
-    assert!(!has_type_error, "Expected no type errors for unowned on class");
+    assert!(
+        !has_type_error,
+        "Expected no type errors for unowned on class"
+    );
 }
 
 #[test]
 fn test_strong_no_error() {
-    let (engine, _, _) = resolve_program(
-        "class C {} func test() { var x: C }",
-    );
+    let (engine, _, _) = resolve_program("class C {} func test() { var x: C }");
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors for strong ref");
