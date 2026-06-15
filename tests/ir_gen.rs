@@ -784,6 +784,20 @@ fn test_irgen_struct_get_set_read_write() {
 }
 
 #[test]
+fn test_irgen_struct_repr_c() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "#[repr(C)] struct S { var x: Int32; var y: Int32 }
+         func test() -> Int32 { return 0 }",
+    );
+    assert!(
+        llvm_ir.contains("%struct.S = type { i32, i32 }"),
+        "repr(C) struct should have C-compatible layout, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
 fn test_irgen_enum_decl_simple_cases() {
     let code = r#"
         enum Option {
