@@ -626,8 +626,8 @@ fn test_irgen_struct_getter_shorthand() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(llvm_ir.contains("_T$T$i$getter$$"));
-    assert!(llvm_ir.contains("define i32 _T$T$i$getter$$(ptr"));
-    assert!(llvm_ir.contains("call i32 @T.i.getter("));
+    assert!(llvm_ir.contains("define i32 @\"_T$T$i$getter$$\"(ptr"));
+    assert!(llvm_ir.contains("call i32 @\"_T$T$i$getter$$\"("));
 }
 
 #[test]
@@ -660,8 +660,8 @@ fn test_irgen_struct_getter_explicit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 _T$T$i$getter$$(ptr"));
-    assert!(llvm_ir.contains("call i32 @T.i.getter("));
+    assert!(llvm_ir.contains("define i32 @\"_T$T$i$getter$$\"(ptr"));
+    assert!(llvm_ir.contains("call i32 @\"_T$T$i$getter$$\"("));
 }
 
 #[test]
@@ -698,9 +698,9 @@ fn test_irgen_struct_get_set() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 _T$T$i$getter$$(ptr"));
-    assert!(llvm_ir.contains("define void _T$T$i$setter$$(ptr"));
-    assert!(llvm_ir.contains("call void @T.i.setter("));
+    assert!(llvm_ir.contains("define i32 @\"_T$T$i$getter$$\"(ptr"));
+    assert!(llvm_ir.contains("define void @\"_T$T$i$setter$$\"(ptr"));
+    assert!(llvm_ir.contains("call void @\"_T$T$i$setter$$\"("));
 }
 
 #[test]
@@ -736,10 +736,10 @@ fn test_irgen_struct_willset_didset() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define void _T$T$i$willSet$$(ptr"));
-    assert!(llvm_ir.contains("define void _T$T$i$didSet$$(ptr"));
-    assert!(llvm_ir.contains("call void @T.i.willSet("));
-    assert!(llvm_ir.contains("call void @T.i.didSet("));
+    assert!(llvm_ir.contains("define void @\"_T$T$i$willSet$$\"(ptr"));
+    assert!(llvm_ir.contains("define void @\"_T$T$i$didSet$$\"(ptr"));
+    assert!(llvm_ir.contains("call void @\"_T$T$i$willSet$$\"("));
+    assert!(llvm_ir.contains("call void @\"_T$T$i$didSet$$\"("));
 }
 
 #[test]
@@ -777,10 +777,10 @@ fn test_irgen_struct_get_set_read_write() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 _T$T$i$getter$$(ptr"));
-    assert!(llvm_ir.contains("define void _T$T$i$setter$$(ptr"));
-    assert!(llvm_ir.contains("call void @T.i.setter("));
-    assert!(llvm_ir.contains("call i32 @T.i.getter("));
+    assert!(llvm_ir.contains("define i32 @\"_T$T$i$getter$$\"(ptr"));
+    assert!(llvm_ir.contains("define void @\"_T$T$i$setter$$\"(ptr"));
+    assert!(llvm_ir.contains("call void @\"_T$T$i$setter$$\"("));
+    assert!(llvm_ir.contains("call i32 @\"_T$T$i$getter$$\"("));
 }
 
 #[test]
@@ -790,7 +790,7 @@ fn test_irgen_struct_repr_c() {
          func test() -> Int32 { return 0 }",
     );
     assert!(
-        llvm_ir.contains("%struct.S = type { i32, i32 }"),
+        llvm_ir.contains("_T$S$$$S = type { i32, i32 }"),
         "repr(C) struct should have C-compatible layout, got:\n{}",
         llvm_ir
     );
@@ -1305,7 +1305,7 @@ fn test_irgen_class_method_call() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Point.f"),
+        llvm_ir.contains("_T$Point$f$$"),
         "Expected Point.f in IR:\n{}",
         llvm_ir
     );
@@ -1353,12 +1353,12 @@ fn test_irgen_class_vtable_global() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Animal.speak"),
+        llvm_ir.contains("_T$Animal$speak$$"),
         "Expected Animal.speak in vtable:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Animal.eat"),
+        llvm_ir.contains("_T$Animal$eat$$"),
         "Expected Animal.eat in vtable:\n{}",
         llvm_ir
     );
@@ -1410,7 +1410,7 @@ fn test_irgen_class_vtable_method_call_is_indirect() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Greeter.greet"),
+        llvm_ir.contains("_T$Greeter$greet$$"),
         "Expected Greeter.greet function:\n{}",
         llvm_ir
     );
@@ -1470,12 +1470,12 @@ fn test_irgen_class_inheritance_vtable_inherited_methods() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Dog.speak"),
+        llvm_ir.contains("_T$Dog$speak$$"),
         "Expected Dog.speak in IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Animal.speak"),
+        llvm_ir.contains("_T$Animal$speak$$"),
         "Expected Animal.speak in IR:\n{}",
         llvm_ir
     );
@@ -2017,7 +2017,7 @@ fn test_irgen_protocol_method_requirement_only() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        !llvm_ir.contains("Drawable.draw"),
+        !llvm_ir.contains("_T$Drawable$draw$$"),
         "Method requirement without body should not generate IR function"
     );
 }
@@ -2045,7 +2045,7 @@ fn test_irgen_protocol_default_implementation() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Greeter.greet"),
+        llvm_ir.contains("_T$Greeter$greet$$"),
         "Default implementation should generate function:\n{}",
         llvm_ir
     );
@@ -2079,12 +2079,12 @@ fn test_irgen_protocol_default_impl_no_crash() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Helper.help"),
+        llvm_ir.contains("_T$Helper$help$$"),
         "Default impl 'help' should generate function:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Helper.need"),
+        llvm_ir.contains("_T$Helper$need$$"),
         "Default impl 'need' should generate function:\n{}",
         llvm_ir
     );
@@ -2113,17 +2113,17 @@ fn test_irgen_protocol_only_requirement_no_default() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        !llvm_ir.contains("Drawable.draw"),
+        !llvm_ir.contains("_T$Drawable$draw$$"),
         "Requirement-only 'draw' should NOT generate function:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Helper.help"),
+        llvm_ir.contains("_T$Helper$help$$"),
         "Default impl 'help' should generate function:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Helper.need"),
+        llvm_ir.contains("_T$Helper$need$$"),
         "Default impl 'need' should generate function:\n{}",
         llvm_ir
     );
@@ -2152,7 +2152,7 @@ fn test_irgen_protocol_existential_container() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Drawable.draw"),
+        llvm_ir.contains("_T$Drawable$draw$$"),
         "Default implementation should generate function:\n{}",
         llvm_ir
     );
@@ -2324,7 +2324,7 @@ fn test_irgen_compound_protocol_existential_dispatch() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Circle.draw"),
+        llvm_ir.contains("_T$Circle$draw$$"),
         "Circle.draw function should exist:\n{}",
         llvm_ir
     );
@@ -2454,7 +2454,7 @@ fn test_irgen_class_computed_property_getter_in_vtable() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("ViewModel.value.getter"),
+        llvm_ir.contains("_T$ViewModel$value$getter$$"),
         "getter function should be in vtable:\n{}",
         llvm_ir
     );
@@ -2501,12 +2501,12 @@ fn test_irgen_class_computed_property_setter_in_vtable() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("ViewModel.value.getter"),
+        llvm_ir.contains("_T$ViewModel$value$getter$$"),
         "getter should be in vtable:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("ViewModel.value.setter"),
+        llvm_ir.contains("_T$ViewModel$value$setter$$"),
         "setter should be in vtable:\n{}",
         llvm_ir
     );
@@ -2570,12 +2570,12 @@ fn test_irgen_class_computed_property_inheritance_override() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Base.value.getter"),
+        llvm_ir.contains("_T$Base$value$getter$$"),
         "Base getter should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Derived.value.getter"),
+        llvm_ir.contains("_T$Derived$value$getter$$"),
         "Derived getter should exist:\n{}",
         llvm_ir
     );
@@ -2617,12 +2617,12 @@ fn test_irgen_class_stored_property_auto_getter_setter() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Data.name.getter"),
+        llvm_ir.contains("_T$Data$name$getter$$"),
         "stored property should have getter:\n{}",
         llvm_ir
     );
     assert!(
-        !llvm_ir.contains("Data.name.setter"),
+        !llvm_ir.contains("_T$Data$name$setter$$"),
         "let property should not have setter:\n{}",
         llvm_ir
     );
@@ -2665,12 +2665,12 @@ fn test_irgen_class_stored_var_auto_getter_and_setter() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Data.value.getter"),
+        llvm_ir.contains("_T$Data$value$getter$$"),
         "var should have getter:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Data.value.setter"),
+        llvm_ir.contains("_T$Data$value$setter$$"),
         "var should have setter:\n{}",
         llvm_ir
     );
@@ -2707,7 +2707,7 @@ fn test_irgen_struct_auto_deinit() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Data.deinit"),
+        llvm_ir.contains("_T$Data$deinit$"),
         "struct should have deinit function:\n{}",
         llvm_ir
     );
@@ -2745,7 +2745,7 @@ fn test_irgen_enum_auto_deinit() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Option.deinit"),
+        llvm_ir.contains("_T$Option$deinit$"),
         "enum should have deinit function:\n{}",
         llvm_ir
     );
@@ -2782,12 +2782,12 @@ fn test_irgen_struct_deinit_called_on_scope_exit() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Counter.deinit"),
+        llvm_ir.contains("_T$Counter$deinit$"),
         "struct deinit function should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("call void @Counter.deinit"),
+        llvm_ir.contains("_T$Counter$deinit"),
         "deinit should be called on scope exit:\n{}",
         llvm_ir
     );
@@ -2827,12 +2827,12 @@ fn test_irgen_user_defined_struct_deinit() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Data.deinit"),
+        llvm_ir.contains("_T$Data$deinit$"),
         "struct deinit function should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("call void @Data.deinit"),
+        llvm_ir.contains("_T$Data$deinit"),
         "deinit should be called on scope exit:\n{}",
         llvm_ir
     );
@@ -2878,12 +2878,12 @@ fn test_irgen_struct_explicit_deinit_call() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Data.deinit"),
+        llvm_ir.contains("_T$Data$deinit$"),
         "struct deinit function should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("call void @Data.deinit"),
+        llvm_ir.contains("_T$Data$deinit"),
         "calling d.deinit() should emit call to Data.deinit:\n{}",
         llvm_ir
     );
@@ -2921,12 +2921,12 @@ fn test_irgen_enum_deinit_called_on_scope_exit() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("Option.deinit"),
+        llvm_ir.contains("_T$Option$deinit$"),
         "enum deinit function should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("call void @Option.deinit"),
+        llvm_ir.contains("_T$Option$deinit"),
         "deinit should be called on scope exit:\n{}",
         llvm_ir
     );
@@ -2955,7 +2955,7 @@ fn test_irgen_extension_method() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Foo.bar"),
+        llvm_ir.contains("_T$Foo$bar"),
         "extension method should generate Foo.bar:\n{}",
         llvm_ir
     );
@@ -2984,7 +2984,7 @@ fn test_irgen_extension_self_access() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Point.getX"),
+        llvm_ir.contains("_T$Point$getX"),
         "extension method self access should generate Point.getX:\n{}",
         llvm_ir
     );
@@ -3013,7 +3013,7 @@ fn test_irgen_extension_protocol_witness_table() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Foo.req"),
+        llvm_ir.contains("_T$Foo$req"),
         "extension method should generate Foo.req:\n{}",
         llvm_ir
     );
@@ -3047,12 +3047,12 @@ fn test_irgen_extension_static_method_struct() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Foo.bar"),
+        llvm_ir.contains("_T$Foo$bar"),
         "static method should generate Foo.bar:\n{}",
         llvm_ir
     );
     assert!(
-        !llvm_ir.contains("define i32 @Foo.bar(i32"),
+        !llvm_ir.contains("define i32 @\"_T$Foo$bar$$\"(i32"),
         "static method should NOT take i32 (self) as first parameter:\n{}",
         llvm_ir
     );
@@ -3086,12 +3086,12 @@ fn test_irgen_extension_static_method_class() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Foo.bar"),
+        llvm_ir.contains("_T$Foo$bar"),
         "static method in class extension should generate Foo.bar:\n{}",
         llvm_ir
     );
     assert!(
-        !llvm_ir.contains("define i32 @Foo.bar(ptr"),
+        !llvm_ir.contains("define i32 @\"_T$Foo$bar$$\"(ptr"),
         "static method in class extension should NOT take ptr (self) as first parameter:\n{}",
         llvm_ir
     );
@@ -3120,7 +3120,7 @@ fn test_irgen_extension_static_method_enum() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Foo.bar"),
+        llvm_ir.contains("_T$Foo$bar"),
         "static method in enum extension should generate Foo.bar:\n{}",
         llvm_ir
     );
@@ -3149,7 +3149,7 @@ fn test_irgen_extension_static_method_protocol() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Foo.bar"),
+        llvm_ir.contains("_T$Foo$bar"),
         "static method in protocol extension should generate Foo.bar:\n{}",
         llvm_ir
     );
@@ -3178,7 +3178,7 @@ fn test_irgen_extension_instance_method_has_self_param() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Foo.bar(ptr"),
+        llvm_ir.contains("define i32 @\"_T$Foo$bar$$\"(ptr"),
         "instance method in extension should have ptr (self) as first parameter:\n{}",
         llvm_ir
     );
@@ -3208,12 +3208,12 @@ fn test_irgen_extension_static_method_with_params() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Calc.add"),
+        llvm_ir.contains("_T$Calc$add"),
         "static method with params should generate Calc.add:\n{}",
         llvm_ir
     );
     assert!(
-        !llvm_ir.contains("define i32 @Calc.add(ptr"),
+        !llvm_ir.contains("define i32 @\"_T$Calc$add$$\"(ptr"),
         "static method with params should NOT have ptr (self) as first parameter, got:\n{}",
         llvm_ir
     );
@@ -4140,7 +4140,7 @@ fn test_irgen_generic_function_decl() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        llvm_ir.contains("define ptr @identity"),
+        llvm_ir.contains("_T$identity"),
         "expected generic function identity with ptr return type, got:\n{}",
         llvm_ir
     );
@@ -4666,8 +4666,8 @@ fn test_irgen_closure_multiple_in_function() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("__closure_1"),
-        "Should define __closure_1, IR:\n{}",
+        llvm_ir.contains("_T$CC$1"),
+        "Should define _T$CC$1, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -4941,22 +4941,22 @@ fn test_irgen_super_method_call() {
 
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
     assert!(
-        llvm_ir.contains("Animal.speak"),
+        llvm_ir.contains("_T$Animal$speak$$"),
         "Expected Animal.speak definition:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Dog.speak"),
+        llvm_ir.contains("_T$Dog$speak$$"),
         "Expected Dog.speak definition:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("Dog.call_super"),
+        llvm_ir.contains("_T$Dog$call_super$$"),
         "Expected Dog.call_super definition:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("call i32 @Animal.speak"),
+        llvm_ir.contains("_T$Animal$speak"),
         "Expected direct call to Animal.speak (not through vtable):\n{}",
         llvm_ir
     );
@@ -5130,7 +5130,7 @@ fn test_irgen_class_subscript_getter() {
         engine.borrow().get_errors()
     );
     assert!(
-        llvm_ir.contains("subscript.getter"),
+        llvm_ir.contains("_T$subscript$getter$$"),
         "Expected subscript getter in vtable:\n{}",
         llvm_ir
     );
@@ -5270,7 +5270,7 @@ fn test_irgen_addr_of_static_method() {
         engine.borrow().get_errors()
     );
     assert!(
-        llvm_ir.contains("Math.square"),
+        llvm_ir.contains("_T$Math$square"),
         "Expected Math.square in IR:\n{}",
         llvm_ir
     );
@@ -5305,7 +5305,7 @@ fn test_irgen_addr_of_init() {
         engine.borrow().get_errors()
     );
     assert!(
-        llvm_ir.contains("Point.init"),
+        llvm_ir.contains("_T$Point$init"),
         "Expected Point.init in IR:\n{}",
         llvm_ir
     );
@@ -5948,7 +5948,7 @@ fn test_irgen_builtintype_struct_no_llvm_struct() {
     assert_eq!(engine.borrow().get_errors().len(), 0);
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        !llvm_ir.contains("struct.Int32"),
+        !llvm_ir.contains("_T$S$$$Int32"),
         "Built-in type should not create LLVM struct type"
     );
     assert!(llvm_ir.contains("i32"), "Should use i32 for Int32");
@@ -6372,7 +6372,7 @@ fn test_irgen_final_class_static_dispatch() {
     );
     // But call through final class type should be direct, not indirect
     assert!(
-        llvm_ir.contains("call i32 @Dog.speak"),
+        llvm_ir.contains("_T$Dog$speak"),
         "Expected direct call to Dog.speak (final class static dispatch):\n{}",
         llvm_ir
     );
@@ -6415,7 +6415,7 @@ fn test_irgen_final_method_static_dispatch() {
 
     // finalMethod is final, so should use direct call
     assert!(
-        llvm_ir.contains("call i32 @Animal.finalMethod"),
+        llvm_ir.contains("_T$Animal$finalMethod"),
         "Expected direct call to Animal.finalMethod (final method static dispatch):\n{}",
         llvm_ir
     );
@@ -6456,12 +6456,12 @@ fn test_irgen_extension_with_type_arguments() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("define i32 @Wrapper.I32.compute"),
+        llvm_ir.contains("_T$Wrapper$I32.compute"),
         "Expected specialized function Wrapper.I32.compute:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @Wrapper.compute"),
+        llvm_ir.contains("_T$Wrapper$compute"),
         "Expected generic function Wrapper.compute:\n{}",
         llvm_ir
     );
