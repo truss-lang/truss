@@ -9391,6 +9391,36 @@ fn test_parse_subscript_decl_get_set() {
 }
 
 #[test]
+fn test_parse_subscript_set_implicit_newvalue() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "subscript(index: Int32) -> Int32 { get { return 0 } set { x = newValue } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::SubscriptDecl {
+        parameters,
+        accessors,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(parameters.len(), 1);
+        assert_eq!(accessors.len(), 2);
+        assert_eq!(accessors[0].kind, AccessorKind::Get);
+        assert_eq!(accessors[1].kind, AccessorKind::Set);
+        assert!(accessors[1].parameter.is_none(), "implicit set should have no explicit parameter");
+        assert_eq!(accessors[1].body.len(), 1, "setter body should have one statement");
+    } else {
+        panic!("Expected SubscriptDecl");
+    }
+}
+
+#[test]
 fn test_parse_subscript_decl_implicit_get() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
