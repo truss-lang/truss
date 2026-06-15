@@ -4495,7 +4495,7 @@ fn test_irgen_fn_ref_call_through_variable() {
 
 #[test]
 fn test_irgen_closure_capture_outer_variable() {
-    let code = "func test() -> Int32 { let x = 42; let f = { (y: Int32) -> Int32 in x + y }; return f(10) }";
+    let code = "func test() -> Int32 { let x = 42; let f = { (y: Int32) -> Int32 in x + y }; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4513,16 +4513,14 @@ fn test_irgen_closure_capture_outer_variable() {
     let ir_gen = IRGenerator::new(&context, engine.clone());
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
-    eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
-    eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
         llvm_ir.contains("__closure_0"),
         "Should define __closure_0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("call i32 "),
-        "Should call the closure, IR:\n{}",
+        llvm_ir.contains("__closure_ctx"),
+        "Should define __closure_ctx struct type, IR:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");

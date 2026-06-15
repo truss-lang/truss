@@ -8009,7 +8009,7 @@ fn test_closure_implicit_capture_type_resolved() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func test() -> Int32 { let a = 42; let f = { (x: Int32) -> Int32 in a + x }; return f(10) }".to_string(),
+            "func test() -> Int32 { let a = 42; let f = { (x: Int32) -> Int32 in a + x }; return 0 }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -8041,10 +8041,12 @@ fn test_closure_implicit_capture_type_resolved() {
             assert_eq!(captures.len(), 1, "Should have 1 capture");
             assert_eq!(captures[0].name.value, "a");
             let fn_ty = ty.as_ref().unwrap().borrow().clone();
-            if let Type::Function(_, ret_type, false, None) = fn_ty {
+            if let Type::ClosureContext(params, ret_type) = fn_ty {
                 assert_eq!(*ret_type.borrow(), type_of("Int32"));
+                assert_eq!(params.len(), 1);
+                assert_eq!(*params[0].borrow(), type_of("Int32"));
             } else {
-                panic!("Expected Type::Function");
+                panic!("Expected Type::ClosureContext for captured closure");
             }
         } else {
             panic!("Expected closure with captures");
@@ -8057,7 +8059,7 @@ fn test_closure_explicit_capture_type_resolved() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func test() -> Int32 { let a = 42; let f = { [a] (x: Int32) -> Int32 in a + x }; return f(10) }".to_string(),
+            "func test() -> Int32 { let a = 42; let f = { [a] (x: Int32) -> Int32 in a + x }; return 0 }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),

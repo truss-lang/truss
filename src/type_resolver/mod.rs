@@ -4275,12 +4275,19 @@ impl TypeResolver {
                     }
                 }
 
-                let fn_type = Rc::new(RefCell::new(Type::Function(
-                    param_types.clone(),
-                    ret_type,
-                    false,
-                    None,
-                )));
+                let fn_type = if captures.is_empty() {
+                    Rc::new(RefCell::new(Type::Function(
+                        param_types.clone(),
+                        ret_type,
+                        false,
+                        None,
+                    )))
+                } else {
+                    Rc::new(RefCell::new(Type::ClosureContext(
+                        param_types.clone(),
+                        ret_type,
+                    )))
+                };
                 *ty = Some(fn_type.clone());
 
                 if let Some(sc) = scope {
