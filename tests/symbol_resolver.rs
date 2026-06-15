@@ -5664,3 +5664,59 @@ fn test_strong_variable_default_ownership_in_symbol() {
         panic!("Expected FunctionDecl with body");
     }
 }
+
+#[test]
+fn test_optional_chaining_resolves_object() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test(a: Optional<Int32>) { let x = a?.x }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+}
+
+#[test]
+fn test_force_unwrap_resolves_operand() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test(a: Optional<Int32>) { let x = a! }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+}
+
+#[test]
+fn test_nil_coalescing_resolves_both_operands() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test(a: Optional<Int32>, b: Int32) { let x = a ?: b }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+}
+
+#[test]
+fn test_optional_chaining_multi_level_resolves() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("func test(a: Optional<Optional<Int32>>) { let x = a?.inner?.y }".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+}

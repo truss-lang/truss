@@ -2128,6 +2128,9 @@ impl SymbolResolver {
             Expression::TupleIndexAccess { object, .. } => {
                 self.resolve_expression(object.clone());
             }
+            Expression::OptionalChain { object, .. } => {
+                self.resolve_expression(object.clone());
+            }
             Expression::SelfKeyword { token, symbol, .. } => {
                 match self.resolve_symbol(token) {
                 Ok(sym) => {
