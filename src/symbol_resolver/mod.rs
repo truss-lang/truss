@@ -1442,12 +1442,16 @@ impl SymbolResolver {
             }
             Statement::VariableDecl {
                 name,
+                pattern: decl_pattern,
                 token: var_token,
                 initializer,
                 accessors,
                 ..
             } => {
-                if name.value != "_" {
+                if let Some(pattern) = decl_pattern {
+                    let is_var = var_token.value == "var";
+                    Self::resolve_variable_pattern(pattern, stmt.clone(), is_var, self);
+                } else if name.value != "_" {
                     let is_var = var_token.value == "var";
                     let symbol = Rc::new(RefCell::new(Symbol::Variable {
                         name: name.value.clone(),
@@ -2389,6 +2393,37 @@ impl SymbolResolver {
             _ => {
                 self.resolve_expression(conformance.clone());
             }
+        }
+    }
+
+    fn resolve_variable_pattern(pattern: &Pattern, decl: Rc<RefCell<Statement>>, is_var: bool, resolver: &mut SymbolResolver) {
+        match pattern {
+            Pattern::Identifier(name) => {
+                if name.value != "_" {
+                    let sym = Rc::new(RefCell::new(Symbol::Variable {
+                        name: name.value.clone(),
+                        decl: Some(decl),
+                        parameter: None,
+                        is_var,
+                    }));
+                    resolver.enter(sym, name);
+                }
+            }
+            Pattern::Tuple(items) => {
+                for item in items {
+                    Self::resolve_variable_pattern(item, decl.clone(), is_var, resolver);
+                }
+            }
+            Pattern::Ignore => {}
+            Pattern::ValueBinding(inner) => {
+                Self::resolve_variable_pattern(inner.as_ref(), decl, is_var, resolver);
+            }
+            Pattern::EnumCase { bindings, .. } => {
+                for binding in bindings {
+                    Self::resolve_variable_pattern(binding, decl.clone(), is_var, resolver);
+                }
+            }
+            Pattern::Expr(_) => {}
         }
     }
 

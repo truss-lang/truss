@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{ElseBranch, Expression},
-        statement::{FunctionBody, GenericParameterKind, Statement},
+        statement::{FunctionBody, GenericParameterKind, Pattern, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
     krate::Package,
@@ -157,6 +157,42 @@ fn test_struct_field_symbol() {
     } else {
         panic!("Expected StructDecl");
     }
+}
+
+#[test]
+fn test_tuple_pattern_let_resolves() {
+    let engine = create_engine();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let (x, y) = (1, 2) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors(), "Expected no errors: {:?}", engine.borrow().get_diagnostics());
+}
+
+#[test]
+fn test_tuple_pattern_partial_ignore_resolves() {
+    let engine = create_engine();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let (x, _) = (1, 2) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    assert!(!engine.borrow().has_errors(), "Expected no errors: {:?}", engine.borrow().get_diagnostics());
 }
 
 #[test]
