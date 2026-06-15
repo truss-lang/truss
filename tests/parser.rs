@@ -3,8 +3,8 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression,
-            MacroDelimiter, TryKind, UnaryOperator,
+            AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression, MacroDelimiter,
+            TryKind, UnaryOperator,
         },
         statement::{
             AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
@@ -1617,7 +1617,7 @@ fn test_parse_cast_chained() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func test() { let x = 1 as Int32 as Float64 }".to_string(),
+            "func test() { let x = 1 as Int32 as Double }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -1637,7 +1637,7 @@ fn test_parse_cast_chained() {
     {
         assert_eq!(outer_kind, &CastKind::Regular);
         assert!(
-            matches!(&*outer_target.borrow(), Expression::Type { name, .. } if name.value == "Float64")
+            matches!(&*outer_target.borrow(), Expression::Type { name, .. } if name.value == "Double")
         );
         if let Expression::Cast {
             expression: inner_expr,
@@ -1667,7 +1667,7 @@ fn test_parse_cast_precedence() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func test() { let x = 1 + 2 as Float64 }".to_string(),
+            "func test() { let x = 1 + 2 as Double }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -1689,7 +1689,7 @@ fn test_parse_cast_precedence() {
         assert!(matches!(*left.borrow(), Expression::IntegerLiteral { .. }));
         if let Expression::Cast { target_type, .. } = &*right.borrow() {
             assert!(
-                matches!(&*target_type.borrow(), Expression::Type { name, .. } if name.value == "Float64")
+                matches!(&*target_type.borrow(), Expression::Type { name, .. } if name.value == "Double")
             );
         } else {
             panic!();
@@ -8192,7 +8192,7 @@ fn test_parse_overloaded_top_level_functions() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func foo(x: Int32) { x } func foo(y: Float64) { y }".to_string(),
+            "func foo(x: Int32) { x } func foo(y: Double) { y }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -8225,9 +8225,9 @@ fn test_parse_overloaded_top_level_functions() {
         assert!(
             matches!(
                 &*parameters[0].borrow().type_expression.borrow(),
-                Expression::Type { name, .. } if name.value == "Float64"
+                Expression::Type { name, .. } if name.value == "Double"
             ),
-            "Expected Float64 parameter type"
+            "Expected Double parameter type"
         );
     } else {
         panic!("Expected FunctionDecl");
