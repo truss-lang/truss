@@ -781,7 +781,12 @@ impl TypeResolver {
                         if let Some(init) = initializer {
                             let closure_info: Option<(usize, Rc<RefCell<Scope>>)> = {
                                 let init_ref = init.borrow();
-                                if let Expression::Closure { parameters, body, scope, .. } = &*init_ref
+                                if let Expression::Closure {
+                                    parameters,
+                                    body,
+                                    scope,
+                                    ..
+                                } = &*init_ref
                                     && parameters.is_empty()
                                     && self.find_max_shorthand(body).is_some()
                                 {
@@ -797,7 +802,9 @@ impl TypeResolver {
                                 if let Type::Closure(expected_param_tys, _) = &*annotated.borrow()
                                     && !expected_param_tys.is_empty()
                                 {
-                                    for (i, pt) in expected_param_tys.iter().enumerate().take(param_count + 1) {
+                                    for (i, pt) in
+                                        expected_param_tys.iter().enumerate().take(param_count + 1)
+                                    {
                                         let name = format!("${}", i);
                                         sc.borrow_mut().set_type(name, pt.clone());
                                     }
@@ -1981,7 +1988,7 @@ impl TypeResolver {
                 Type::Void,
             )))))),
             "Int8" | "Int16" | "Int32" | "Int64" | "Int128" | "UInt8" | "UInt16" | "UInt32"
-            | "UInt64" | "UInt128" | "Float32" | "Float64" | "Bool" | "Char" => {
+            | "UInt64" | "UInt128" | "Float" | "Double" | "Bool" | "Char" => {
                 Some(Rc::new(RefCell::new(Type::Struct(
                     name.to_string(),
                     WeakSymbol(std::rc::Weak::new()),
@@ -2013,7 +2020,7 @@ impl TypeResolver {
                 Type::Void,
             )))))),
             "Int8" | "Int16" | "Int32" | "Int64" | "Int128" | "UInt8" | "UInt16" | "UInt32"
-            | "UInt64" | "UInt128" | "Float32" | "Float64" | "Bool" | "Char" => {
+            | "UInt64" | "UInt128" | "Float" | "Double" | "Bool" | "Char" => {
                 Some(Rc::new(RefCell::new(Type::Struct(
                     name.to_string(),
                     WeakSymbol(std::rc::Weak::new()),
@@ -2175,7 +2182,7 @@ impl TypeResolver {
             }
             Expression::DecimalLiteral { ty, .. } => {
                 if ty.is_none() {
-                    *ty = Some(Rc::new(RefCell::new(crate::types::builtin_type("Float64"))));
+                    *ty = Some(Rc::new(RefCell::new(crate::types::builtin_type("Double"))));
                 }
                 ty.clone().unwrap()
             }
@@ -4380,7 +4387,8 @@ impl TypeResolver {
                                     param_types.push(pt);
                                 }
                                 if ret_type_from_expected {
-                                    let ret = Rc::new(RefCell::new(Type::clone(&*expected_ret.borrow())));
+                                    let ret =
+                                        Rc::new(RefCell::new(Type::clone(&*expected_ret.borrow())));
                                     let _ = std::mem::replace(&mut ret_type, ret);
                                 }
                             }
@@ -5040,7 +5048,7 @@ impl TypeResolver {
     fn is_float_type(ty: &Type) -> bool {
         matches!(
             ty,
-            Type::Struct(name, _, _) if matches!(name.as_str(), "Float32" | "Float64")
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Float" | "Double")
         )
     }
 
@@ -5050,7 +5058,7 @@ impl TypeResolver {
             Type::Struct(name, _, _) if matches!(name.as_str(),
                 "Int8" | "Int16" | "Int32" | "Int64" | "Int128"
                 | "UInt8" | "UInt16" | "UInt32" | "UInt64" | "UInt128"
-                | "Float32" | "Float64"
+                | "Float" | "Double"
             )
         )
     }
@@ -5354,10 +5362,10 @@ impl TypeResolver {
                 Some(8)
             }
             Type::Struct(name, _, _) if matches!(name.as_str(), "Int16" | "UInt16") => Some(16),
-            Type::Struct(name, _, _) if matches!(name.as_str(), "Int32" | "UInt32" | "Float32") => {
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int32" | "UInt32" | "Float") => {
                 Some(32)
             }
-            Type::Struct(name, _, _) if matches!(name.as_str(), "Int64" | "UInt64" | "Float64") => {
+            Type::Struct(name, _, _) if matches!(name.as_str(), "Int64" | "UInt64" | "Double") => {
                 Some(64)
             }
             Type::Struct(name, _, _) if matches!(name.as_str(), "Int128" | "UInt128") => Some(128),

@@ -592,26 +592,26 @@ fn test_uint128_annotation() {
 
 #[test]
 fn test_float_literal_default() {
-    let ty = run_type_check_with_return("func test() -> Float64 { return 3.14 }");
-    assert_eq!(ty, type_of("Float64"));
+    let ty = run_type_check_with_return("func test() -> Double { return 3.14 }");
+    assert_eq!(ty, type_of("Double"));
 }
 
 #[test]
 fn test_float_with_exponent() {
-    let ty = run_type_check_with_return("func test() -> Float64 { return 1.5e10 }");
-    assert_eq!(ty, type_of("Float64"));
+    let ty = run_type_check_with_return("func test() -> Double { return 1.5e10 }");
+    assert_eq!(ty, type_of("Double"));
 }
 
 #[test]
-fn test_float32_annotation() {
-    let ty = run_type_check_var("func test() { let a: Float32 = 3.14 }", "a");
-    assert_eq!(ty, type_of("Float32"));
+fn test_float_annotation() {
+    let ty = run_type_check_var("func test() { let a: Float = 3.14 }", "a");
+    assert_eq!(ty, type_of("Float"));
 }
 
 #[test]
-fn test_float64_annotation() {
-    let ty = run_type_check_var("func test() { let a: Float64 = 3.14159265358979 }", "a");
-    assert_eq!(ty, type_of("Float64"));
+fn test_double_annotation() {
+    let ty = run_type_check_var("func test() { let a: Double = 3.14159265358979 }", "a");
+    assert_eq!(ty, type_of("Double"));
 }
 
 #[test]
@@ -633,15 +633,15 @@ fn test_return_type_context_uint32() {
 }
 
 #[test]
-fn test_return_type_context_float32() {
-    let ty = run_type_check_with_return("func test() -> Float32 { return 3.14 }");
-    assert_eq!(ty, type_of("Float32"));
+fn test_return_type_context_float() {
+    let ty = run_type_check_with_return("func test() -> Float { return 3.14 }");
+    assert_eq!(ty, type_of("Float"));
 }
 
 #[test]
-fn test_return_type_context_float64() {
-    let ty = run_type_check_with_return("func test() -> Float64 { return 3.14 }");
-    assert_eq!(ty, type_of("Float64"));
+fn test_return_type_context_double() {
+    let ty = run_type_check_with_return("func test() -> Double { return 3.14 }");
+    assert_eq!(ty, type_of("Double"));
 }
 
 #[test]
@@ -720,7 +720,7 @@ fn test_u32_max() {
 
 #[test]
 fn test_type_mismatch_int_float() {
-    let code = "func test() -> Int32 { let a: Float64 = 3.14 return a }";
+    let code = "func test() -> Int32 { let a: Double = 3.14 return a }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -741,7 +741,7 @@ fn test_type_mismatch_int_float() {
     assert_eq!(errors[0].code, TrussDiagnosticCode::TypeMismatch);
     assert!(errors[0].message.contains("Type mismatch"));
     assert!(errors[0].message.contains("Int32"));
-    assert!(errors[0].message.contains("Float64"));
+    assert!(errors[0].message.contains("Double"));
 }
 
 #[test]
@@ -837,8 +837,8 @@ fn test_function_call_parameter_type_inference_int64() {
 }
 
 #[test]
-fn test_function_call_parameter_type_inference_float32() {
-    let code = "func test(_ a: Float32) -> Float32 { return a } func main() { let result = test(3.14) return result }";
+fn test_function_call_parameter_type_inference_float() {
+    let code = "func test(_ a: Float) -> Float { return a } func main() { let result = test(3.14) return result }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -860,9 +860,9 @@ fn test_function_call_parameter_type_inference_float32() {
         if let Statement::VariableDecl { ty, .. } = &*statements[0].borrow()
             && let Some(ty) = ty
         {
-            assert_eq!(ty.borrow().clone(), type_of("Float32"));
+            assert_eq!(ty.borrow().clone(), type_of("Float"));
         } else {
-            panic!("Variable should have Float32 type inferred from function parameter");
+            panic!("Variable should have Float type inferred from function parameter");
         }
     } else {
         panic!("Expected FunctionDecl");
@@ -1362,7 +1362,7 @@ fn test_nullptr_default_void_pointer() {
 
 #[test]
 fn test_cast_int_to_float() {
-    let code = "func test() -> Float64 { let x = 1 as Float64 return x }";
+    let code = "func test() -> Double { let x = 1 as Double return x }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -1389,12 +1389,12 @@ fn test_cast_int_to_float() {
         && let Some(ty) = ty
         && let Some(init) = initializer
     {
-        assert_eq!(ty.borrow().clone(), type_of("Float64"));
+        assert_eq!(ty.borrow().clone(), type_of("Double"));
         if let Expression::Cast { ty: cast_ty, .. } = &*init.borrow() {
             assert!(cast_ty.is_some());
             assert_eq!(
                 cast_ty.as_ref().unwrap().borrow().clone(),
-                type_of("Float64")
+                type_of("Double")
             );
         } else {
             panic!("Expected Cast expression");
@@ -1438,7 +1438,7 @@ fn test_cast_bool_to_int() {
 
 #[test]
 fn test_cast_invalid_bool_to_float() {
-    let code = "func test() { let x = true as Float64 }";
+    let code = "func test() { let x = true as Double }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -1557,7 +1557,7 @@ fn test_cast_conditional_no_type_error() {
 
 #[test]
 fn test_cast_force_bitcast_same_size() {
-    let code = "func test() -> Int32 { let x = 3.14 as Float32 as!! Int32 return x }";
+    let code = "func test() -> Int32 { let x = 3.14 as Float as!! Int32 return x }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4678,7 +4678,7 @@ fn test_overloaded_function_call_selects_correct_overload() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } func caller() -> Float64 { foo(y: 3.0) }".to_string(),
+            "func foo(x: Int32) -> Int32 { x } func foo(y: Double) -> Double { y } func caller() -> Double { foo(y: 3.0) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -4709,7 +4709,7 @@ fn test_overloaded_function_call_selects_correct_overload() {
                     assert_eq!(
                         *selected_index,
                         Some(1),
-                        "should select foo(y: Float64) overload"
+                        "should select foo(y: Double) overload"
                     );
                 } else {
                     panic!("Expected Call expression");
@@ -4724,7 +4724,7 @@ fn test_overloaded_function_call_no_match_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } func caller() -> Int32 { foo(x: true) }".to_string(),
+            "func foo(x: Int32) -> Int32 { x } func foo(y: Double) -> Double { y } func caller() -> Int32 { foo(x: true) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -4750,7 +4750,7 @@ fn test_overloaded_struct_method_call_resolved() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct S { func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } } func test() -> Float64 { let s = S() return s.foo(y: 3.0) }".to_string(),
+            "struct S { func foo(x: Int32) -> Int32 { x } func foo(y: Double) -> Double { y } } func test() -> Double { let s = S() return s.foo(y: 3.0) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -4777,7 +4777,7 @@ fn test_overloaded_struct_method_call_resolved() {
             && let Statement::ExpressionStatement { expression } = &*stmts[1].borrow()
             && let Expression::Call { selected_index, .. } = &*expression.borrow()
         {
-            assert_eq!(*selected_index, Some(1), "should select foo(y: Float64)");
+            assert_eq!(*selected_index, Some(1), "should select foo(y: Double)");
         }
     }
 }
@@ -4787,7 +4787,7 @@ fn test_overloaded_struct_method_call_no_match_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "struct S { func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } } func test() -> Int32 { let s = S() return s.foo(x: true) }".to_string(),
+            "struct S { func foo(x: Int32) -> Int32 { x } func foo(y: Double) -> Double { y } } func test() -> Int32 { let s = S() return s.foo(x: true) }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -7772,7 +7772,9 @@ func getLib() -> TargetKind {
         let expr = expression.borrow();
         match &*expr {
             Expression::Call {
-                callee, parameters: _, ..
+                callee,
+                parameters: _,
+                ..
             } => {
                 let callee_expr = callee.borrow();
                 match &*callee_expr {
