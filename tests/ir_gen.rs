@@ -4248,7 +4248,7 @@ fn test_irgen_closure_simple() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
+        llvm_ir.contains("define i32 @\"_T$CC$0\"(i32 %"),
         "Closure should have i32 parameter and return i32"
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -4312,7 +4312,7 @@ fn test_irgen_closure_multi_param() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
+        llvm_ir.contains("define i32 @\"_T$CC$0\"(i32 %"),
         "Closure should have i32 params"
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -4786,7 +4786,7 @@ fn test_irgen_closure_shorthand_argument() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
+        llvm_ir.contains("define i32 @\"_T$CC$0\"(i32 %"),
         "Closure should take one i32 param and return i32, IR:\n{}",
         llvm_ir
     );
@@ -4795,7 +4795,8 @@ fn test_irgen_closure_shorthand_argument() {
 
 #[test]
 fn test_irgen_closure_shorthand_binary() {
-    let code = "func test() -> Int32 { let f = { (a: Int32, b: Int32) -> Int32 in a + b }; return 0 }";
+    let code =
+        "func test() -> Int32 { let f = { (a: Int32, b: Int32) -> Int32 in a + b }; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4821,7 +4822,7 @@ fn test_irgen_closure_shorthand_binary() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
+        llvm_ir.contains("define i32 @\"_T$CC$0\"(i32 %"),
         "Closure should take two i32 params and return i32, IR:\n{}",
         llvm_ir
     );
@@ -4861,7 +4862,7 @@ fn test_irgen_closure_shorthand_with_type_annotation() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
+        llvm_ir.contains("define i32 @\"_T$CC$0\"(i32 %"),
         "IR:\n{}",
         llvm_ir
     );
@@ -4897,7 +4898,7 @@ fn test_irgen_closure_shorthand_multi_args() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
+        llvm_ir.contains("define i32 @\"_T$CC$0\"(i32 %"),
         "Closure should take i32 params, IR:\n{}",
         llvm_ir
     );
@@ -6869,12 +6870,9 @@ fn test_irgen_closure_capture_multiple() {
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
-
 #[test]
 fn test_irgen_mangled_function_name() {
-    let (llvm_ir, engine) = run_ir_gen(
-        "func add(x: Int32, y: Int32) -> Int32 { return x + y }",
-    );
+    let (llvm_ir, engine) = run_ir_gen("func add(x: Int32, y: Int32) -> Int32 { return x + y }");
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
     assert!(
         llvm_ir.contains("_T$add$x_y$I32_I32"),
@@ -6885,9 +6883,7 @@ fn test_irgen_mangled_function_name() {
 
 #[test]
 fn test_irgen_mangled_struct_type_name() {
-    let (llvm_ir, engine) = run_ir_gen(
-        "struct Point { let x: Int32 let y: Int32 }",
-    );
+    let (llvm_ir, engine) = run_ir_gen("struct Point { let x: Int32 let y: Int32 }");
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
     assert!(
         llvm_ir.contains("_T$S$$$Point"),
@@ -6898,9 +6894,8 @@ fn test_irgen_mangled_struct_type_name() {
 
 #[test]
 fn test_irgen_mangled_function_with_cname() {
-    let (llvm_ir, engine) = run_ir_gen(
-        "#[cname(\"my_exported_fn\")] func foo(x: Int32) -> Int32 { return x }",
-    );
+    let (llvm_ir, engine) =
+        run_ir_gen("#[cname(\"my_exported_fn\")] func foo(x: Int32) -> Int32 { return x }");
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
     assert!(
         llvm_ir.contains("my_exported_fn"),
@@ -6916,9 +6911,7 @@ fn test_irgen_mangled_function_with_cname() {
 
 #[test]
 fn test_irgen_extern_c_name_not_mangled() {
-    let (llvm_ir, engine) = run_ir_gen(
-        r#"extern "C" func putchar(_ c: Char)"#,
-    );
+    let (llvm_ir, engine) = run_ir_gen(r#"extern "C" func putchar(_ c: Char)"#);
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
     assert!(
         llvm_ir.contains("declare void @putchar"),
