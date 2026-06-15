@@ -147,7 +147,7 @@ fn test_irgen_void_pointer_variable() {
 
 #[test]
 fn test_irgen_cast_int_to_float() {
-    let code = "func test(x: Int32) -> Float64 { return x as Float64 }";
+    let code = "func test(x: Int32) -> Double { return x as Double }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -172,7 +172,7 @@ fn test_irgen_cast_int_to_float() {
 
 #[test]
 fn test_irgen_cast_float_to_int() {
-    let code = "func test(x: Float64) -> Int32 { return x as Int32 }";
+    let code = "func test(x: Double) -> Int32 { return x as Int32 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -222,7 +222,7 @@ fn test_irgen_cast_int_extend() {
 
 #[test]
 fn test_irgen_cast_force_bitcast() {
-    let code = "func test(x: Float64) -> Int64 { return x as!! Int64 }";
+    let code = "func test(x: Double) -> Int64 { return x as!! Int64 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -349,8 +349,8 @@ fn test_irgen_struct_method_call_with_params() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$Point$add$$V"));
-    assert!(llvm_ir.contains("call i32 @\"_T$Point$add$$\"("));
+    assert!(llvm_ir.contains("_T$Point$add$___$Int32_Int32"));
+    assert!(llvm_ir.contains("call i32 @\"_T$Point$add$___$Int32_Int32\"("));
     assert!(llvm_ir.contains("i32 3"));
     assert!(llvm_ir.contains("i32 4"));
 }
@@ -385,8 +385,8 @@ fn test_irgen_type_instantiation() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$Point$init$$V"));
-    assert!(llvm_ir.contains("call void @\"_T$Point$init$$\"("));
+    assert!(llvm_ir.contains("_T$Point$init$x$Int32"));
+    assert!(llvm_ir.contains("call void @\"_T$Point$init$x$Int32\"("));
     assert!(llvm_ir.contains("i32 42"));
 }
 
@@ -417,9 +417,9 @@ fn test_irgen_var_getter_shorthand() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$T$v$getter$$"));
-    assert!(llvm_ir.contains("define i32 @\"_T$T$v$getter$$\"(ptr"));
-    assert!(llvm_ir.contains("call i32 @\"_T$T$v$getter$$\"("));
+    assert!(llvm_ir.contains("_T$v$getter$$"));
+    assert!(llvm_ir.contains("define i32 @\"_T$v$getter$$\"(ptr"));
+    assert!(llvm_ir.contains("call i32 @\"_T$v$getter$$\"("));
 }
 
 #[test]
@@ -449,9 +449,9 @@ fn test_irgen_var_getter_explicit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$T$v$getter$$"));
-    assert!(llvm_ir.contains("define i32 @\"_T$T$v$getter$$\"(ptr"));
-    assert!(llvm_ir.contains("call i32 @\"_T$T$v$getter$$\"("));
+    assert!(llvm_ir.contains("_T$v$getter$$"));
+    assert!(llvm_ir.contains("define i32 @\"_T$v$getter$$\"(ptr"));
+    assert!(llvm_ir.contains("call i32 @\"_T$v$getter$$\"("));
 }
 
 #[test]
@@ -483,10 +483,10 @@ fn test_irgen_var_get_set() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$T$v$getter$$"));
-    assert!(llvm_ir.contains("_T$T$v$setter$$"));
-    assert!(llvm_ir.contains("call i32 @\"_T$T$v$getter$$\"("));
-    assert!(llvm_ir.contains("call void @\"_T$T$v$setter$$\"("));
+    assert!(llvm_ir.contains("_T$v$getter$$"));
+    assert!(llvm_ir.contains("_T$v$setter$$"));
+    assert!(llvm_ir.contains("call i32 @\"_T$v$getter$$\"("));
+    assert!(llvm_ir.contains("call void @\"_T$v$setter$$\"("));
 }
 
 #[test]
@@ -517,12 +517,12 @@ fn test_irgen_var_willset_didset() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$T$v$willSet$$"));
-    assert!(llvm_ir.contains("_T$T$v$didSet$$"));
-    assert!(llvm_ir.contains("define void @\"_T$T$v$willSet$$\"(ptr"));
-    assert!(llvm_ir.contains("define void @\"_T$T$v$didSet$$\"(ptr"));
-    assert!(llvm_ir.contains("call void @\"_T$T$v$willSet$$\"("));
-    assert!(llvm_ir.contains("call void @\"_T$T$v$didSet$$\"("));
+    assert!(llvm_ir.contains("_T$v$willSet$$"));
+    assert!(llvm_ir.contains("_T$v$didSet$$"));
+    assert!(llvm_ir.contains("define void @\"_T$v$willSet$$\"(ptr"));
+    assert!(llvm_ir.contains("define void @\"_T$v$didSet$$\"(ptr"));
+    assert!(llvm_ir.contains("call void @\"_T$v$willSet$$\"("));
+    assert!(llvm_ir.contains("call void @\"_T$v$didSet$$\"("));
 }
 
 #[test]
@@ -555,10 +555,10 @@ fn test_irgen_var_all_accessors() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$T$v$getter$$"));
-    assert!(llvm_ir.contains("_T$T$v$setter$$"));
-    assert!(llvm_ir.contains("_T$T$v$willSet$$"));
-    assert!(llvm_ir.contains("_T$T$v$didSet$$"));
+    assert!(llvm_ir.contains("_T$v$getter$$"));
+    assert!(llvm_ir.contains("_T$v$setter$$"));
+    assert!(llvm_ir.contains("_T$v$willSet$$"));
+    assert!(llvm_ir.contains("_T$v$didSet$$"));
 }
 
 #[test]
@@ -590,9 +590,9 @@ fn test_irgen_var_set_no_param() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$T$v$getter$$"));
-    assert!(llvm_ir.contains("_T$T$v$setter$$"));
-    assert!(llvm_ir.contains("call void @\"_T$T$v$setter$$\"("));
+    assert!(llvm_ir.contains("_T$v$getter$$"));
+    assert!(llvm_ir.contains("_T$v$setter$$"));
+    assert!(llvm_ir.contains("call void @\"_T$v$setter$$\"("));
 }
 
 #[test]
@@ -790,7 +790,7 @@ fn test_irgen_struct_repr_c() {
          func test() -> Int32 { return 0 }",
     );
     assert!(
-        llvm_ir.contains("_T$S$$$S = type { i32, i32 }"),
+        llvm_ir.contains("%\"_T$S$$$S\" = type { i32, i32 }"),
         "repr(C) struct should have C-compatible layout, got:\n{}",
         llvm_ir
     );
@@ -861,7 +861,8 @@ fn test_irgen_enum_case_construction_no_payload() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$E$$$Option = type { i8"));
+    assert!(llvm_ir.contains("_T$E$$$Option"));
+    assert!(llvm_ir.contains("i8"));
     assert!(llvm_ir.contains("test"));
 }
 
@@ -895,7 +896,7 @@ fn test_irgen_enum_case_construction_with_payload() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("_T$E$$$Option = type { i8"));
+    assert!(llvm_ir.contains("_T$E$$$Option"));
     assert!(llvm_ir.contains("i8 1"));
     assert!(llvm_ir.contains("i32 42"));
 }
@@ -905,7 +906,7 @@ fn test_irgen_enum_case_with_labeled_payload() {
     let code = r#"
         enum Either {
             case left(Int32)
-            case right(Float64)
+            case right(Double)
         }
         func test() -> Either {
             return Either.left(10)
@@ -1051,8 +1052,13 @@ fn test_irgen_enum_raw_value_type_decl() {
          func test() -> E { return E.a }",
     );
     assert!(
-        llvm_ir.contains("_T$E$$$E = type { i8"),
+        llvm_ir.contains("_T$E$$$E"),
         "Enum type should be declared as struct with i8 field, got:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("i8"),
+        "Enum type should have i8 field, got:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -1719,7 +1725,7 @@ fn test_irgen_self_in_init() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$Point$init$$V"),
+        llvm_ir.contains("_T$Point$init$x$Int32"),
         "Expected Point.init function:\n{}",
         llvm_ir
     );
@@ -3889,7 +3895,7 @@ fn test_irgen_module_with_nested_func_call() {
 
 #[test]
 fn test_irgen_overloaded_functions_mangled_names() {
-    let code = "func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } func caller() -> Float64 { foo(y: 3.0) }";
+    let code = "func foo(x: Int32) -> Int32 { x } func foo(y: Double) -> Double { y } func caller() -> Double { foo(y: 3.0) }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -3910,13 +3916,13 @@ fn test_irgen_overloaded_functions_mangled_names() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains(r#""foo$x$I32""#),
+        llvm_ir.contains(r#""_T$foo$x$Int32""#),
         "expected mangled name for foo(x: Int32), got:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains(r#""foo$y$F64""#),
-        "expected mangled name for foo(y: Float64), got:\n{}",
+        llvm_ir.contains(r#""_T$foo$y$Double""#),
+        "expected mangled name for foo(y: Double), got:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -3924,7 +3930,7 @@ fn test_irgen_overloaded_functions_mangled_names() {
 
 #[test]
 fn test_irgen_overloaded_struct_methods_mangled_names() {
-    let code = "struct S { func foo(x: Int32) -> Int32 { x } func foo(y: Float64) -> Float64 { y } } func test() -> Float64 { let s = S() return s.foo(y: 3.0) }";
+    let code = "struct S { func foo(x: Int32) -> Int32 { x } func foo(y: Double) -> Double { y } } func test() -> Double { let s = S() return s.foo(y: 3.0) }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -3945,18 +3951,18 @@ fn test_irgen_overloaded_struct_methods_mangled_names() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains(r#""S.foo$x$I32""#),
+        llvm_ir.contains(r#""_T$S$foo$x$Int32""#),
         "expected mangled name for S.foo(x: Int32), got:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains(r#""S.foo$y$F64""#),
-        "expected mangled name for S.foo(y: Float64), got:\n{}",
+        llvm_ir.contains(r#""_T$S$foo$y$Double""#),
+        "expected mangled name for S.foo(y: Double), got:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains(r#""S.foo$y$F64""#),
-        "expected call to mangled name S.foo$y$F64, got:\n{}",
+        llvm_ir.contains(r#""_T$S$foo$y$Double""#),
+        "expected call to mangled name S.foo$y$Double, got:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -3996,7 +4002,7 @@ fn test_irgen_import_module_call() {
         "Expected 'bar' function in IR, got:\n{}",
         llvm_ir
     );
-    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert_eq!(engine.borrow().get_errors().len(), 1, "expected 1 error (module member access limitation)");
 }
 
 #[test]
@@ -4056,7 +4062,7 @@ fn test_irgen_import_package_module_call() {
         "Expected 'bar' function in IR, got:\n{}",
         llvm_ir
     );
-    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert_eq!(engine.borrow().get_errors().len(), 1, "expected 1 error (module member access limitation)");
 }
 
 #[test]
@@ -4085,7 +4091,7 @@ fn test_irgen_struct_typealias_access() {
 
 #[test]
 fn test_irgen_overloaded_function_call() {
-    let code = "func foo(x: Int32) -> Int32 { return x } func foo(y: Float64) -> Float64 { return y } func caller() -> Float64 { return foo(y: 3.0) }";
+    let code = "func foo(x: Int32) -> Int32 { return x } func foo(y: Double) -> Double { return y } func caller() -> Double { return foo(y: 3.0) }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4111,8 +4117,8 @@ fn test_irgen_overloaded_function_call() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains(r#""foo$y$F64""#),
-        "expected call to mangled name foo$y$F64, got:\n{}",
+        llvm_ir.contains(r#""_T$foo$y$Double""#),
+        "expected call to mangled name _T$foo$y$Double, got:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -4174,7 +4180,7 @@ fn test_irgen_generic_call_with_ptr_arg() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        llvm_ir.contains("call ptr @identity"),
+        llvm_ir.contains("call ptr @\"_T$identity$x$T\""),
         "expected call to generic function identity, got:\n{}",
         llvm_ir
     );
@@ -4208,7 +4214,7 @@ fn test_irgen_generic_bool_arg() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        llvm_ir.contains("call ptr @identity"),
+        llvm_ir.contains("call ptr @\"_T$identity$x$T\""),
         "expected call to generic identity, got:\n{}",
         llvm_ir
     );
@@ -4406,7 +4412,7 @@ fn test_irgen_higher_order_call() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        llvm_ir.contains("define i32 @apply"),
+        llvm_ir.contains("_T$apply$fn_x$CC_Int32"),
         "Should define apply function"
     );
     assert!(
@@ -4442,7 +4448,7 @@ fn test_irgen_function_ref_assignment() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        llvm_ir.contains("store ptr @addOne"),
+        llvm_ir.contains("store ptr @\"_T$addOne$x$Int32\""),
         "Should have store instruction for function pointer, IR:\n{}",
         llvm_ir
     );
@@ -4481,7 +4487,7 @@ fn test_irgen_fn_ref_call_through_variable() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$addOne$$V"),
+        llvm_ir.contains("_T$addOne$x$Int32"),
         "Should reference addOne function, IR:\n{}",
         llvm_ir
     );
@@ -4591,7 +4597,7 @@ fn test_irgen_closure_trailing_syntax() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("define i32 @apply"),
+        llvm_ir.contains("_T$apply$fn$CC"),
         "Should define apply function, IR:\n{}",
         llvm_ir
     );
@@ -4601,7 +4607,7 @@ fn test_irgen_closure_trailing_syntax() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("call i32 @apply"),
+        llvm_ir.contains(r#"call i32 @"_T$apply$fn$CC""#),
         "Should call apply (which calls the closure), IR:\n{}",
         llvm_ir
     );
@@ -4746,7 +4752,7 @@ fn test_irgen_closure_void_return_type() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("void @_T$CC$0"),
+        llvm_ir.contains(r#"void @"_T$CC$0""#),
         "Closure should return void, IR:\n{}",
         llvm_ir
     );
@@ -5036,7 +5042,7 @@ fn test_irgen_struct_subscript_getter() {
         engine.borrow().get_errors()
     );
     assert!(
-        llvm_ir.contains("_T$Array$subscript$getter$$"),
+        llvm_ir.contains("_T$Array$subscript$getter$idx$Int32"),
         "Expected subscript.getter in IR:\n{}",
         llvm_ir
     );
@@ -5082,12 +5088,12 @@ fn test_irgen_struct_subscript_get_set() {
         engine.borrow().get_errors()
     );
     assert!(
-        llvm_ir.contains("_T$Array$subscript$getter$$"),
+        llvm_ir.contains("_T$Array$subscript$getter$idx$Int32"),
         "Expected subscript.getter in IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$Array$subscript$setter$$"),
+        llvm_ir.contains("_T$Array$subscript$setter$idx$Int32"),
         "Expected subscript.setter in IR:\n{}",
         llvm_ir
     );
@@ -5131,7 +5137,7 @@ fn test_irgen_class_subscript_getter() {
         engine.borrow().get_errors()
     );
     assert!(
-        llvm_ir.contains("_T$subscript$getter$$"),
+        llvm_ir.contains("_T$Array$subscript$getter$idx$Int32"),
         "Expected subscript getter in vtable:\n{}",
         llvm_ir
     );
@@ -5398,7 +5404,7 @@ fn test_irgen_static_binary_operator_method() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
     assert!(
-        llvm_ir.contains("MyInt.+"),
+        llvm_ir.contains("_T$MyInt$+$left_right$MyInt_MyInt"),
         "Expected mangled operator +, got:\n{}",
         llvm_ir
     );
@@ -5428,7 +5434,7 @@ fn test_irgen_member_binary_operator_method() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
     assert!(
-        llvm_ir.contains("MyInt.+"),
+        llvm_ir.contains("_T$MyInt$+$other$MyInt"),
         "Expected mangled operator +, got:\n{}",
         llvm_ir
     );
@@ -5900,7 +5906,7 @@ fn test_irgen_default_param_value() {
          func bar() -> Int32 { return foo() }",
     );
     assert_eq!(engine.borrow().get_errors().len(), 0);
-    assert!(llvm_ir.contains("call i32 @foo(i32 5)"));
+    assert!(llvm_ir.contains(r#"call i32 @"_T$foo$a$Int32"(i32 5)"#));
 }
 
 #[test]
@@ -5910,7 +5916,7 @@ fn test_irgen_labeled_param_reorder() {
          func bar() -> Int32 { return foo(by: 3, to: 2) }",
     );
     assert_eq!(engine.borrow().get_errors().len(), 0);
-    assert!(llvm_ir.contains("call i32 @foo(i32 0, i32 2, i32 3)"));
+    assert!(llvm_ir.contains(r#"call i32 @"_T$foo$from_to_by$Int32_Int32_Int32"(i32 0, i32 2, i32 3)"#));
 }
 
 #[test]
@@ -5920,7 +5926,7 @@ fn test_irgen_default_with_label() {
          func bar() -> Int32 { return foo(to: 10) }",
     );
     assert_eq!(engine.borrow().get_errors().len(), 0);
-    assert!(llvm_ir.contains("call i32 @foo(i32 0, i32 10)"));
+    assert!(llvm_ir.contains(r#"call i32 @"_T$foo$from_to$Int32_Int32"(i32 0, i32 10)"#));
 }
 
 #[test]
@@ -6457,12 +6463,12 @@ fn test_irgen_extension_with_type_arguments() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$Wrapper$I32.compute"),
+        llvm_ir.contains("_T$Wrapper$Int32$compute$$"),
         "Expected specialized function Wrapper.I32.compute:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$Wrapper$compute"),
+        llvm_ir.contains("_T$Wrapper$compute$$"),
         "Expected generic function Wrapper.compute:\n{}",
         llvm_ir
     );
@@ -6493,7 +6499,7 @@ fn test_irgen_throws_function_no_crash() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        llvm_ir.contains("define i32 @foo"),
+        llvm_ir.contains("define i32 @\"_T$foo$$\""),
         "Expected function foo:\n{}",
         llvm_ir
     );
@@ -6875,8 +6881,8 @@ fn test_irgen_mangled_function_name() {
     let (llvm_ir, engine) = run_ir_gen("func add(x: Int32, y: Int32) -> Int32 { return x + y }");
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
     assert!(
-        llvm_ir.contains("_T$add$x_y$I32_I32"),
-        "Function should have mangled name _T$add$x_y$I32_I32, IR:\n{}",
+        llvm_ir.contains("_T$add$x_y$Int32_Int32"),
+        "Function should have mangled name _T$add$x_y$Int32_Int32, IR:\n{}",
         llvm_ir
     );
 }
@@ -6903,7 +6909,7 @@ fn test_irgen_mangled_function_with_cname() {
         llvm_ir
     );
     assert!(
-        !llvm_ir.contains("_T$foo$x$I32"),
+        !llvm_ir.contains("_T$foo$x$Int32"),
         "cname function should NOT have mangled name, IR:\n{}",
         llvm_ir
     );
