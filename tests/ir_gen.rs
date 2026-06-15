@@ -5173,6 +5173,146 @@ fn test_irgen_address_of_deref() {
 }
 
 #[test]
+fn test_irgen_addr_of_stored_property() {
+    let code = "struct Point { var x: Int32; var y: Int32 }
+                 func test(p: Point) -> Int32* { return &p.x }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors for &obj.storedProp, got: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("getelementptr"),
+        "Expected GEP in IR for stored property address:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_addr_of_function() {
+    let code = "func foo(_ x: Int32) -> Bool { return x > 0 }
+                 func test() -> (Int32) -> Bool { return &foo }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors for &fnName, got: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("foo"),
+        "Expected foo function reference in IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_addr_of_static_method() {
+    let code = "struct Math { static func square(x: Int32) -> Int32 { return x * x } }
+                 func test() { let s = Math.square(5) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors for static method call, got: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("Math.square"),
+        "Expected Math.square in IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_addr_of_init() {
+    let code = "struct Point { var x: Int32; init(x: Int32) { self.x = x } }
+                 func test() { let p = Point(x: 5) }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors for init call, got: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("Point.init"),
+        "Expected Point.init in IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
 fn test_irgen_macro_declaration() {
     let code = "macro id { ($x:expr) => { $x } }\nfunc test() -> Int32 { return 42 }";
     let engine = create_engine();

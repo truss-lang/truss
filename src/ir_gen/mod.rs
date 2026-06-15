@@ -5623,6 +5623,10 @@ impl<'ctx> IRGenerator<'ctx> {
                             if let Some(ptr) = self.lookup_variable(&name.value) {
                                 return Ok(Some(ptr.into()));
                             }
+                            if let Some(f) = self.module.get_function(&name.value) {
+                                let fn_ptr = f.as_global_value().as_pointer_value();
+                                return Ok(Some(fn_ptr.into()));
+                            }
                         }
                         if let Expression::Unary {
                             expression: deref_target,
@@ -5632,6 +5636,52 @@ impl<'ctx> IRGenerator<'ctx> {
                         {
                             let ptr_val = self.resolve_expression(deref_target.clone())?;
                             return Ok(ptr_val);
+                        }
+                        if let Expression::MemberAccess { object, member, .. } = &*inner {
+                            if let Expression::Variable { name, .. } = &*object.borrow() {
+                                let fn_name = format!("{}.{}", name.value, member.value);
+                                if let Some(f) = self.module.get_function(&fn_name) {
+                                    let fn_ptr = f.as_global_value().as_pointer_value();
+                                    return Ok(Some(fn_ptr.into()));
+                                }
+                            }
+                            let object_expr = object.borrow();
+                            let object_ty = object_expr.get_ty_ref()?.clone();
+                            drop(object_expr);
+                            if let Some(ty) = &object_ty {
+                                let (type_name, class_types) = match &*ty.borrow() {
+                                    Type::Struct(n, _, _) => (n.clone(), false),
+                                    Type::Class(n, _, _) => (n.clone(), true),
+                                    _ => (String::new(), false),
+                                };
+                                if !type_name.is_empty() {
+                                    let field_name = member.value.clone();
+                                    let object_val =
+                                        self.resolve_expression(object.clone())?.unwrap();
+                                    let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                        p
+                                    } else {
+                                        let p = self
+                                            .builder
+                                            .build_alloca(object_val.get_type(), "")?;
+                                        self.builder.build_store(p, object_val)?;
+                                        p
+                                    };
+                                    let field_index = self.get_stored_struct_field_index(
+                                        &type_name,
+                                        &field_name,
+                                    )?;
+                                    let llvm_type = if class_types {
+                                        *self.class_types.borrow().get(&type_name).unwrap()
+                                    } else {
+                                        *self.struct_types.borrow().get(&type_name).unwrap()
+                                    };
+                                    let field_ptr = self.builder.build_struct_gep(
+                                        llvm_type, ptr, field_index as u32, "",
+                                    )?;
+                                    return Ok(Some(field_ptr.into()));
+                                }
+                            }
                         }
                         anyhow::bail!(
                             "AddressOf operator not yet supported for this expression in IR generation"
