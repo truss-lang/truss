@@ -1426,7 +1426,7 @@ impl Parser {
                 {
                     self.index += 1;
                     let return_type = self.parse_type_expression()?;
-                    return Ok(Expression::FunctionType {
+                    return Ok(Expression::ClosureType {
                         param_types: vec![],
                         return_type: Rc::new(RefCell::new(return_type)),
                         ty: None,
@@ -1492,7 +1492,7 @@ impl Parser {
                 {
                     self.index += 1;
                     let return_type = self.parse_type_expression()?;
-                    return Ok(Expression::FunctionType {
+                    return Ok(Expression::ClosureType {
                         param_types: elements.into_iter().map(|(_, t)| t).collect(),
                         return_type: Rc::new(RefCell::new(return_type)),
                         ty: None,
@@ -1558,7 +1558,7 @@ impl Parser {
             {
                 self.index += 1;
                 let return_type = self.parse_type_expression()?;
-                return Ok(Expression::FunctionType {
+                return Ok(Expression::ClosureType {
                     param_types: vec![first],
                     return_type: Rc::new(RefCell::new(return_type)),
                     ty: None,

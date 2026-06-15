@@ -5277,20 +5277,19 @@ fn test_function_type_expression_resolved() {
             type_expression, ..
         } = &*statements[0].borrow()
         && let Some(te) = type_expression
-        && let Expression::FunctionType { ty, .. } = &*te.borrow()
+        && let Expression::ClosureType { ty, .. } = &*te.borrow()
     {
-        assert!(ty.is_some(), "FunctionType should have a resolved type");
+        assert!(ty.is_some(), "ClosureType should have a resolved type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
+        if let Type::Closure(param_types, ret_type) = t {
             assert_eq!(param_types.len(), 1);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*ret_type.borrow(), type_of("Bool"));
-            assert!(!is_vararg);
         } else {
-            panic!("Expected Type::Function for function type, got {:?}", t);
+            panic!("Expected Type::Closure for function type, got {:?}", t);
         }
     } else {
-        panic!("Expected FunctionType with resolved type");
+        panic!("Expected ClosureType with resolved type");
     }
 }
 
@@ -5852,7 +5851,7 @@ fn test_address_of_deref_type() {
 #[test]
 fn test_addr_of_fn_type() {
     let code = "func foo(x: Int32) -> Bool { return x > 0 }
-                 func test() -> (Int32) -> Bool { return &foo }";
+                 func test() -> func(Int32) -> Bool { return &foo }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -5934,7 +5933,7 @@ fn test_addr_of_computed_property_err() {
 #[test]
 fn test_addr_of_static_method_type() {
     let code = "struct Math { static func square(x: Int32) -> Int32 { return x * x } }
-                 func test() -> (Int32) -> Int32 { return &Math.square }";
+                 func test() -> func(Int32) -> Int32 { return &Math.square }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -5962,7 +5961,7 @@ fn test_addr_of_static_method_type() {
 #[test]
 fn test_addr_of_instance_method_type() {
     let code = "struct Point { var x: Int32; func isZero() -> Bool { return self.x == 0 } }
-                 func test() -> () -> Bool { return &Point.isZero }";
+                 func test() -> func() -> Bool { return &Point.isZero }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -5990,7 +5989,7 @@ fn test_addr_of_instance_method_type() {
 #[test]
 fn test_addr_of_init_type() {
     let code = "struct Point { var x: Int32; init(x: Int32) { self.x = x } }
-                 func test() -> (Int32) -> Void { return &Point.init }";
+                 func test() -> func(Int32) -> Void { return &Point.init }";
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -8082,12 +8081,12 @@ fn test_closure_implicit_capture_type_resolved() {
             assert_eq!(captures.len(), 1, "Should have 1 capture");
             assert_eq!(captures[0].name.value, "a");
             let fn_ty = ty.as_ref().unwrap().borrow().clone();
-            if let Type::ClosureContext(params, ret_type) = fn_ty {
+            if let Type::Closure(params, ret_type) = fn_ty {
                 assert_eq!(*ret_type.borrow(), type_of("Int32"));
                 assert_eq!(params.len(), 1);
                 assert_eq!(*params[0].borrow(), type_of("Int32"));
             } else {
-                panic!("Expected Type::ClosureContext for captured closure");
+                panic!("Expected Type::Closure for captured closure");
             }
         } else {
             panic!("Expected closure with captures");

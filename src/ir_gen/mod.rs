@@ -1205,7 +1205,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::AssociatedType(_, name) => name.clone(),
             Type::Compound(_) => "C".into(),
             Type::Function(_, _, _, _) => "F".into(),
-            Type::ClosureContext(_, _) => "CC".into(),
+            Type::Closure(_, _) => "CC".into(),
             Type::Inline(inner, _) => {
                 format!("inline{}", Self::type_to_abbreviation(&inner.borrow()))
             }
@@ -4550,6 +4550,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::SomeType { ty, .. }
                 | Expression::CompoundType { ty, .. }
                 | Expression::Closure { ty, .. }
+                | Expression::ClosureType { ty, .. }
                 | Expression::FunctionType { ty, .. }
                 | Expression::SubscriptAccess { ty, .. }
                 | Expression::MacroInvocation { ty, .. }
@@ -4614,6 +4615,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::SomeType { ty, .. }
                 | Expression::CompoundType { ty, .. }
                 | Expression::Closure { ty, .. }
+                | Expression::ClosureType { ty, .. }
                 | Expression::FunctionType { ty, .. }
                 | Expression::SubscriptAccess { ty, .. }
                 | Expression::MacroInvocation { ty, .. }
@@ -8043,12 +8045,18 @@ impl<'ctx> IRGenerator<'ctx> {
                 };
                 let is_throwing_call = callee_ty.as_ref().map_or(false, |t| {
                     matches!(&*t.borrow(), Type::Function(_, _, _, Some(_)))
+                        || matches!(&*t.borrow(), Type::Closure(_, _))
                 });
                 if let Some(ty) = callee_ty
-                    && let Type::Function(param_tys, ret_ty, is_vararg, throws_types) =
-                        &*ty.borrow()
                     && self.module.get_function(&function_name).is_none()
                 {
+                    let (param_tys, ret_ty, is_vararg, throws_types) = match &*ty.borrow() {
+                        Type::Function(pt, rt, iv, tt) => (pt.clone(), rt.clone(), *iv, tt.clone()),
+                        Type::Closure(pt, rt) => (pt.clone(), rt.clone(), false, None),
+                        _ => {
+                            anyhow::bail!("Unsupported callee type for indirect call");
+                        }
+                    };
                     let fn_ptr_val = self.resolve_expression(callee.clone())?.unwrap();
                     let mut all_param_tys = param_tys.clone();
                     if throws_types.is_some() {
@@ -8058,7 +8066,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         all_param_tys.insert(0, err_ty);
                     }
                     let fn_llvm_type =
-                        self.get_function_type(ret_ty.clone(), all_param_tys, *is_vararg)?;
+                        self.get_function_type(ret_ty.clone(), all_param_tys, is_vararg)?;
                     let fn_ptr = fn_ptr_val.into_pointer_value();
 
                     let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
@@ -8619,10 +8627,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     })
                     .or_else(|| {
                         ty.as_ref().and_then(|t| {
-                            if let Type::Function(_, ret_ty, _, None) = &*t.borrow() {
-                                Some(ret_ty.clone())
-                            } else {
-                                None
+                            let t_borrow = t.borrow();
+                            match &*t_borrow {
+                                Type::Function(_, ret_ty, _, None) | Type::Closure(_, ret_ty) => Some(ret_ty.clone()),
+                                _ => None,
                             }
                         })
                     })
@@ -8642,10 +8650,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 let all_param_types: Vec<Rc<RefCell<Type>>> = ty
                     .as_ref()
                     .and_then(|t| {
-                        if let Type::Function(pts, _, _, None) = &*t.borrow() {
-                            Some(pts.clone())
-                        } else {
-                            None
+                        let t_borrow = t.borrow();
+                        match &*t_borrow {
+                            Type::Function(pts, _, _, None) | Type::Closure(pts, _) => Some(pts.clone()),
+                            _ => None,
                         }
                     })
                     .unwrap_or_else(|| param_types.clone());
@@ -8840,6 +8848,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     ))
                 }
             }
+            Expression::ClosureType { .. } => Ok(None),
             Expression::FunctionType { .. } => Ok(None),
             Expression::ShorthandArgument { index, ty } => {
                 let var_name = format!("${}", index);
@@ -9545,7 +9554,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::Function(_, _, _, _) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
-            Type::ClosureContext(_, _) => {
+            Type::Closure(_, _) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
             Type::Pointer(_) | Type::NonNullPointer(_) => {

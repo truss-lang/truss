@@ -1156,7 +1156,7 @@ fn test_parse_fn_ptr_type_param() {
         let fn_param = parameters[0].borrow();
         assert_eq!(fn_param.name.value, "fn");
         let te = fn_param.type_expression.borrow();
-        if let Expression::FunctionType {
+        if let Expression::ClosureType {
             param_types,
             return_type,
             ..
@@ -9051,7 +9051,7 @@ fn test_parse_function_type() {
     } = &*program.statements[0].borrow()
     {
         let t = type_expression.as_ref().unwrap().borrow();
-        if let Expression::FunctionType {
+        if let Expression::ClosureType {
             param_types,
             return_type,
             ..
@@ -9092,7 +9092,7 @@ fn test_parse_function_type_single_param() {
     } = &*program.statements[0].borrow()
     {
         let t = type_expression.as_ref().unwrap().borrow();
-        if let Expression::FunctionType { param_types, .. } = &*t {
+        if let Expression::ClosureType { param_types, .. } = &*t {
             assert_eq!(param_types.len(), 1);
             assert!(matches!(
                 &*param_types[0].borrow(),
@@ -9121,7 +9121,7 @@ fn test_parse_function_type_void_params() {
     } = &*program.statements[0].borrow()
     {
         let t = type_expression.as_ref().unwrap().borrow();
-        if let Expression::FunctionType { param_types, .. } = &*t {
+        if let Expression::ClosureType { param_types, .. } = &*t {
             assert_eq!(param_types.len(), 0);
         } else {
             panic!("Expected FunctionType expression");
@@ -9152,7 +9152,7 @@ fn test_parse_closure_with_function_type_annotation() {
     {
         assert!(type_expression.is_some());
         let t = type_expression.as_ref().unwrap().borrow();
-        assert!(matches!(&*t, Expression::FunctionType { .. }));
+        assert!(matches!(&*t, Expression::ClosureType { .. }));
         let init = initializer.as_ref().unwrap().borrow();
         assert!(matches!(&*init, Expression::Closure { .. }));
     } else {

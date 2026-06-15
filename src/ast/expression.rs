@@ -209,6 +209,11 @@ pub enum Expression {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    ClosureType {
+        param_types: Vec<Rc<RefCell<Expression>>>,
+        return_type: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     FunctionType {
         param_types: Vec<Rc<RefCell<Expression>>>,
         return_type: Rc<RefCell<Expression>>,
@@ -283,6 +288,7 @@ impl Expression {
             Self::SomeType { ty, .. } => Ok(ty.clone()),
             Self::CompoundType { ty, .. } => Ok(ty.clone()),
             Self::Closure { ty, .. } => Ok(ty.clone()),
+            Self::ClosureType { ty, .. } => Ok(ty.clone()),
             Self::FunctionType { ty, .. } => Ok(ty.clone()),
             Self::ShorthandArgument { ty, .. } => Ok(ty.clone()),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty.clone()),
@@ -311,6 +317,7 @@ impl Expression {
             Self::SomeType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
             Self::Closure { ty, .. } => Ok(ty),
+            Self::ClosureType { ty, .. } => Ok(ty),
             Self::FunctionType { ty, .. } => Ok(ty),
             Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
@@ -342,6 +349,7 @@ impl Expression {
             Self::SomeType { ty, .. } => Ok(ty),
             Self::CompoundType { ty, .. } => Ok(ty),
             Self::Closure { ty, .. } => Ok(ty),
+            Self::ClosureType { ty, .. } => Ok(ty),
             Self::FunctionType { ty, .. } => Ok(ty),
             Self::ShorthandArgument { ty, .. } => Ok(ty),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty),
@@ -438,6 +446,7 @@ impl Expression {
                     )
                 }
             }
+            Expression::ClosureType { param_types, .. } => param_types[0].borrow().token(),
             Expression::FunctionType { param_types, .. } => param_types[0].borrow().token(),
             Expression::ShorthandArgument { .. } => Token::new(
                 "".to_string(),

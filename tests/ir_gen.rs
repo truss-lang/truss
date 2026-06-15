@@ -4423,7 +4423,7 @@ fn test_irgen_higher_order_call() {
 #[test]
 fn test_irgen_function_ref_assignment() {
     let code = "func addOne(x: Int32) -> Int32 { return x + 1 }
-                 func test() -> Int32 { let f: (Int32)->Int32 = addOne; return 0 }";
+                 func test() -> Int32 { let f: func(Int32)->Int32 = addOne; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4457,7 +4457,7 @@ fn test_irgen_function_ref_assignment() {
 #[test]
 fn test_irgen_fn_ref_call_through_variable() {
     let code = "func addOne(x: Int32) -> Int32 { return x + 1 }
-                 func test() -> Int32 { let f: (Int32)->Int32 = addOne; return f(41) }";
+                 func test() -> Int32 { let f: func(Int32)->Int32 = addOne; return f(41) }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4759,7 +4759,7 @@ fn test_irgen_closure_void_return_type() {
 
 #[test]
 fn test_irgen_closure_shorthand_argument() {
-    let code = "func test() -> Int32 { let f: (Int32) -> Int32 = { $0 }; return 0 }";
+    let code = "func test() -> Int32 { let f = { (x: Int32) in x }; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -4794,7 +4794,7 @@ fn test_irgen_closure_shorthand_argument() {
 
 #[test]
 fn test_irgen_closure_shorthand_binary() {
-    let code = "func test() -> Int32 { let f: (Int32, Int32) -> Int32 = { $0 + $1 }; return 0 }";
+    let code = "func test() -> Int32 { let f = { (a: Int32, b: Int32) in a + b }; return 0 }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
@@ -5208,7 +5208,7 @@ fn test_irgen_addr_of_stored_property() {
 #[test]
 fn test_irgen_addr_of_function() {
     let code = "func foo(_ x: Int32) -> Bool { return x > 0 }
-                 func test() -> (Int32) -> Bool { return &foo }";
+                 func test() -> func(Int32) -> Bool { return &foo }";
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),

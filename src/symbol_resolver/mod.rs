@@ -2366,6 +2366,11 @@ impl SymbolResolver {
 
                 self.leave_scope();
             }
+            Expression::ClosureType { param_types, .. } => {
+                for pt in param_types {
+                    self.resolve_expression(pt.clone());
+                }
+            }
             Expression::FunctionType { param_types, .. } => {
                 for pt in param_types {
                     self.resolve_expression(pt.clone());
