@@ -4208,6 +4208,7 @@ impl Parser {
             name: Box::new(name),
             generic_parameters,
             conformances,
+            raw_value_type: None,
             cases,
             body,
             where_clause,

@@ -81,6 +81,7 @@ pub enum Statement {
         name: Box<Token>,
         generic_parameters: Vec<GenericParameter>,
         conformances: Vec<Rc<RefCell<Expression>>>,
+        raw_value_type: Option<Rc<RefCell<Type>>>,
         cases: Vec<EnumCase>,
         body: Vec<Rc<RefCell<Statement>>>,
         where_clause: Option<Vec<WhereRequirement>>,

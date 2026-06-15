@@ -505,6 +505,8 @@ impl TypeResolver {
                 body,
                 scope,
                 generic_parameters,
+                conformances,
+                raw_value_type,
                 ..
             } => {
                 let Some(symbol) = self
@@ -551,6 +553,60 @@ impl TypeResolver {
                     if let Some(default_value) = &gp.default_value {
                         self.infer_type(default_value.clone());
                     }
+                }
+
+                let mut protocol_conformances: Vec<Rc<RefCell<Expression>>> = Vec::new();
+                for conformance in conformances {
+                    let ty = self.infer_type(conformance.clone());
+                    if let Some(ref ty) = ty {
+                        if Self::is_integer_type(&*ty.borrow()) {
+                            if raw_value_type.is_some() {
+                                let diag = new_diagnostic(
+                                    TrussDiagnosticCode::TypeError,
+                                    "Multiple raw value types specified for enum",
+                                )
+                                .with_label(primary_label_from_token(
+                                    name,
+                                    "Only one raw value type is allowed",
+                                ));
+                                self.engine.borrow_mut().emit(diag);
+                            } else {
+                                *raw_value_type = Some(ty.clone());
+                            }
+                        } else if matches!(&*ty.borrow(), Type::Protocol(..)) {
+                            protocol_conformances.push(conformance.clone());
+                        } else {
+                            let diag = new_diagnostic(
+                                TrussDiagnosticCode::TypeError,
+                                &format!(
+                                    "Type '{}' is not a valid raw value type or protocol",
+                                    ty.borrow()
+                                ),
+                            )
+                            .with_label(primary_label_from_token(
+                                name,
+                                "Expected an integer type or protocol conformance",
+                            ));
+                            self.engine.borrow_mut().emit(diag);
+                        }
+                    }
+                }
+
+                let has_associated_values = ast_cases.iter().any(|c| !c.parameters.is_empty());
+                if raw_value_type.is_some() && has_associated_values {
+                    let diag = new_diagnostic(
+                        TrussDiagnosticCode::TypeError,
+                        "Enum with raw value type cannot have cases with associated values",
+                    )
+                    .with_label(primary_label_from_token(
+                        name,
+                        "Remove associated values or remove the raw value type",
+                    ));
+                    self.engine.borrow_mut().emit(diag);
+                }
+
+                if !protocol_conformances.is_empty() {
+                    self.check_protocol_conformances(&name.value, name.as_ref(), &protocol_conformances, false);
                 }
                 if let Symbol::Enum { cases, .. } = &mut *symbol.borrow_mut() {
                     for (case_symbol, ast_case) in cases.iter().zip(ast_cases.iter()) {
@@ -6667,6 +6723,13 @@ impl TypeResolver {
                             .iter()
                             .filter_map(|f| f.borrow().name().ok())
                             .collect(),
+                    ),
+                    Symbol::Enum { methods, .. } => (
+                        methods
+                            .iter()
+                            .filter_map(|m| m.borrow().name().ok())
+                            .collect(),
+                        vec![],
                     ),
                     _ => (vec![], vec![]),
                 }
