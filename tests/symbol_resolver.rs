@@ -3908,6 +3908,98 @@ fn test_address_of_deref_resolved() {
 }
 
 #[test]
+fn test_addr_of_fn_expr_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func foo(x: Int32) -> Int32 { return x }
+             func test() { let f = &foo }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression: inner,
+            operator,
+            is_prefix,
+            ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(
+            operator,
+            &truss::ast::expression::UnaryOperator::AddressOf
+        );
+        assert!(is_prefix);
+        if let Expression::Variable { symbol, .. } = &*inner.borrow() {
+            assert!(
+                symbol.is_some(),
+                "Function name should resolve to a symbol"
+            );
+        } else {
+            panic!("Expected Variable expression inside &");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_addr_of_method_member_access_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct MyStruct { func doSomething(x: Int32) -> Int32 { return x } }
+             func test() { let f = &MyStruct.doSomething }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[1].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { initializer, .. } = &*statements[0].borrow()
+        && let Some(init_expr) = initializer
+        && let Expression::Unary {
+            expression: inner,
+            operator,
+            is_prefix,
+            ..
+        } = &*init_expr.borrow()
+    {
+        assert_eq!(
+            operator,
+            &truss::ast::expression::UnaryOperator::AddressOf
+        );
+        assert!(is_prefix);
+        if let Expression::MemberAccess { object, member, .. } = &*inner.borrow() {
+            assert_eq!(member.value, "doSomething");
+            if let Expression::Variable { name, .. } = &*object.borrow() {
+                assert_eq!(name.value, "MyStruct");
+            } else {
+                panic!("Expected Variable expression for type name");
+            }
+        } else {
+            panic!("Expected MemberAccess expression inside &");
+        }
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_struct_subscript_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
