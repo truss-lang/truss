@@ -246,6 +246,69 @@ fn test_variable_decl_with_bool_annotation() {
 }
 
 #[test]
+fn test_tuple_pattern_let_type_check() {
+    let engine = create_engine();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let (x, y) = (1 as Int32, 2 as Int32) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    assert!(!engine.borrow().has_errors(), "Expected no errors, got: {:?}", engine.borrow().get_diagnostics());
+}
+
+#[test]
+fn test_tuple_pattern_partial_ignore_type_check() {
+    let engine = create_engine();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let (x, _) = (1 as Int32, 2 as Int32) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    assert!(!engine.borrow().has_errors(), "Expected no errors, got: {:?}", engine.borrow().get_diagnostics());
+}
+
+#[test]
+fn test_match_tuple_pattern_type_check() {
+    let engine = create_engine();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test(t: (Int32, Int32)) { match t { case (0, 0): 1 case (x, y): x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = resolver.resolve(&program, "test".to_string());
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    assert!(!engine.borrow().has_errors(), "Expected no errors, got: {:?}", engine.borrow().get_diagnostics());
+}
+
+#[test]
 fn test_type_annotation_mismatch() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

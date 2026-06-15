@@ -695,6 +695,7 @@ impl TypeResolver {
             }
             Statement::VariableDecl {
                 name,
+                pattern: decl_pattern,
                 type_expression,
                 initializer,
                 accessors,
@@ -712,21 +713,29 @@ impl TypeResolver {
                             );
                         }
                         *ty = Some(annotated.clone());
-                        self.current_scope
-                            .as_ref()
-                            .unwrap()
-                            .borrow_mut()
-                            .set_type(name.value.clone(), annotated);
+                        if let Some(pattern) = decl_pattern {
+                            self.set_pattern_types(pattern, &annotated);
+                        } else {
+                            self.current_scope
+                                .as_ref()
+                                .unwrap()
+                                .borrow_mut()
+                                .set_type(name.value.clone(), annotated);
+                        }
                     }
                 } else if let Some(init) = initializer {
                     let init_ty = self.infer_type(init.clone());
                     if let Some(init_ty) = init_ty {
                         *ty = Some(init_ty.clone());
-                        self.current_scope
-                            .as_ref()
-                            .unwrap()
-                            .borrow_mut()
-                            .set_type(name.value.clone(), init_ty);
+                        if let Some(pattern) = decl_pattern {
+                            self.set_pattern_types(pattern, &init_ty);
+                        } else {
+                            self.current_scope
+                                .as_ref()
+                                .unwrap()
+                                .borrow_mut()
+                                .set_type(name.value.clone(), init_ty);
+                        }
                     }
                 }
                 for accessor in accessors {
@@ -1159,6 +1168,7 @@ impl TypeResolver {
         match &mut *statement.borrow_mut() {
             Statement::VariableDecl {
                 name,
+                pattern: decl_pattern,
                 type_expression,
                 initializer,
                 accessors,
@@ -1176,21 +1186,29 @@ impl TypeResolver {
                             );
                         }
                         *ty = Some(annotated.clone());
-                        self.current_scope
-                            .as_ref()
-                            .unwrap()
-                            .borrow_mut()
-                            .set_type(name.value.clone(), annotated);
+                        if let Some(pattern) = decl_pattern {
+                            self.set_pattern_types(pattern, &annotated);
+                        } else {
+                            self.current_scope
+                                .as_ref()
+                                .unwrap()
+                                .borrow_mut()
+                                .set_type(name.value.clone(), annotated);
+                        }
                     }
                 } else if let Some(init) = initializer {
                     let init_ty = self.infer_type(init.clone());
                     if let Some(init_ty) = init_ty {
                         *ty = Some(init_ty.clone());
-                        self.current_scope
-                            .as_ref()
-                            .unwrap()
-                            .borrow_mut()
-                            .set_type(name.value.clone(), init_ty);
+                        if let Some(pattern) = decl_pattern {
+                            self.set_pattern_types(pattern, &init_ty);
+                        } else {
+                            self.current_scope
+                                .as_ref()
+                                .unwrap()
+                                .borrow_mut()
+                                .set_type(name.value.clone(), init_ty);
+                        }
                     }
                 } else {
                     self.emit_error(
@@ -2973,6 +2991,17 @@ impl TypeResolver {
                                     case_scope
                                         .borrow_mut()
                                         .set_type(name.value.clone(), subject_ty.clone());
+                                }
+                            }
+                        }
+                        if let Pattern::Tuple(items) = pattern.as_ref() {
+                            if let Some(ref subject_ty) = subject_ty {
+                                if let Type::Tuple(elements) = &*subject_ty.borrow() {
+                                    for (i, item) in items.iter().enumerate() {
+                                        if i < elements.len() {
+                                            Self::set_match_pattern_type(item, &elements[i].1, &case_scope);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -6032,6 +6061,69 @@ impl TypeResolver {
                 }
                 _ => {}
             }
+        }
+    }
+
+    fn set_pattern_types(&mut self, pattern: &Pattern, ty: &Rc<RefCell<Type>>) {
+        match pattern {
+            Pattern::Identifier(name) => {
+                if name.value != "_" {
+                    self.current_scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(name.value.clone(), ty.clone());
+                }
+            }
+            Pattern::Tuple(items) => {
+                if let Type::Tuple(elements) = &*ty.borrow() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i < elements.len() {
+                            self.set_pattern_types(item, &elements[i].1);
+                        }
+                    }
+                }
+            }
+            Pattern::Ignore => {}
+            Pattern::ValueBinding(inner) => {
+                self.set_pattern_types(inner.as_ref(), ty);
+            }
+            Pattern::EnumCase { case_name, bindings } => {
+                if let Type::Enum(enum_name, ..) = &*ty.borrow() {
+                    let param_types = self.get_enum_case_parameter_types(enum_name, &case_name.value);
+                    if let Some(param_types) = param_types {
+                        for (i, binding) in bindings.iter().enumerate() {
+                            if i < param_types.len() {
+                                self.set_pattern_types(binding, &param_types[i]);
+                            }
+                        }
+                    }
+                }
+            }
+            Pattern::Expr(_) => {}
+        }
+    }
+
+    fn set_match_pattern_type(item: &Pattern, ty: &Rc<RefCell<Type>>, scope: &Rc<RefCell<Scope>>) {
+        match item {
+            Pattern::Identifier(name) => {
+                if name.value != "_" {
+                    scope.borrow_mut().set_type(name.value.clone(), ty.clone());
+                }
+            }
+            Pattern::ValueBinding(inner) => {
+                Self::set_match_pattern_type(inner.as_ref(), ty, scope);
+            }
+            Pattern::Tuple(items) => {
+                if let Type::Tuple(elements) = &*ty.borrow() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i < elements.len() {
+                            Self::set_match_pattern_type(item, &elements[i].1, scope);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
