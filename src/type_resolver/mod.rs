@@ -4802,8 +4802,83 @@ impl TypeResolver {
                     }
                 }
             }
-            Expression::OptionalChain { .. } => {
-                todo!("OptionalChain type resolution not yet implemented")
+            Expression::OptionalChain {
+                token,
+                object,
+                member,
+                ty,
+            } => {
+                let object_ty = match self.infer_type(object.clone()) {
+                    Some(t) => t,
+                    None => {
+                        self.emit_error(
+                            TrussDiagnosticCode::InvalidOperand,
+                            "Cannot resolve type for optional chaining object",
+                            token,
+                        );
+                        return None;
+                    }
+                };
+                let inner_ty = match &*object_ty.borrow() {
+                    Type::Enum(name, _, params) if name == "Optional" && !params.is_empty() => {
+                        params[0].clone()
+                    }
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::InvalidOperand,
+                            format!(
+                                "Optional chaining requires an Optional type, found {}",
+                                object_ty.borrow()
+                            ),
+                            token,
+                        );
+                        return None;
+                    }
+                };
+                let type_name = match &*inner_ty.borrow() {
+                    Type::Struct(n, _, _) | Type::Class(n, _, _) | Type::Enum(n, _, _) => n.clone(),
+                    _ => {
+                        self.emit_error(
+                            TrussDiagnosticCode::InvalidOperand,
+                            format!("Cannot access member on type {}", inner_ty.borrow()),
+                            token,
+                        );
+                        return None;
+                    }
+                };
+                let scope = self.current_scope.as_ref().unwrap().borrow();
+                let sym = scope.get_symbol(&type_name)?;
+                let binding = sym.borrow();
+                let member_ty_opt = match &*binding {
+                    Symbol::Struct { properties, .. } | Symbol::Class { properties, .. } => {
+                        let prop = properties
+                            .iter()
+                            .find(|p| p.borrow().name().as_ref().ok() == Some(&member.value))?;
+                        let decl = prop.borrow().get_decl().ok()??;
+                        if let Statement::VariableDecl { ty: Some(t), .. } = &*decl.borrow() {
+                            Some(t.clone())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+                drop(binding);
+                drop(scope);
+                let member_ty = member_ty_opt?;
+                if let Some(result) =
+                    self.create_parameterized_type_from_truss("Optional", member_ty)
+                {
+                    *ty = Some(result.clone());
+                    result
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::InvalidOperand,
+                        "Cannot construct Optional type for chaining result",
+                        token,
+                    );
+                    return None;
+                }
             }
         };
         Some(result)
@@ -5333,6 +5408,19 @@ impl TypeResolver {
                     vec![],
                 ))))
             }
+            BinaryOperator::NullCoalescing => {
+                let left_ty = left.borrow().clone();
+                let inner_ty = match &left_ty {
+                    Type::Enum(name, _, params) if name == "Optional" && !params.is_empty() => {
+                        params[0].clone()
+                    }
+                    _ => return None,
+                };
+                if right.borrow().clone() != *inner_ty.borrow() {
+                    return None;
+                }
+                Some(inner_ty)
+            }
             _ => None,
         }
     }
@@ -5439,6 +5527,15 @@ impl TypeResolver {
                     Some(inner_ty)
                 } else {
                     None
+                }
+            }
+            UnaryOperator::NotNullAssertation => {
+                let op_ty = operand.borrow().clone();
+                match &op_ty {
+                    Type::Enum(name, _, params) if name == "Optional" && !params.is_empty() => {
+                        Some(params[0].clone())
+                    }
+                    _ => None,
                 }
             }
             _ => None,

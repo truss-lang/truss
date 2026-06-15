@@ -8381,3 +8381,80 @@ fn test_strong_no_error() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no errors for strong ref");
 }
+
+#[test]
+fn test_null_coalescing_optional_left() {
+    let errors = run_type_check_with_stdlib(
+        "func test() -> Box { let a: Box? = null; return a ?: Box() }",
+        &[
+            "public struct Box { public init() {} }",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert_eq!(errors, 0, "nil-coalescing with Optional left and T right should work");
+}
+
+#[test]
+fn test_null_coalescing_non_optional_error() {
+    let errors = run_type_check_with_stdlib(
+        "func test() -> Box { let a: Box = Box(); return a ?: Box() }",
+        &[
+            "public struct Box { public init() {} }",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert!(errors > 0, "nil-coalescing with non-Optional left should error");
+}
+
+#[test]
+fn test_force_unwrap_optional() {
+    let errors = run_type_check_with_stdlib(
+        "func test() -> Box { let a: Box? = null; return a! }",
+        &[
+            "public struct Box {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert_eq!(errors, 0, "force unwrap of Optional should return inner type");
+}
+
+#[test]
+fn test_force_unwrap_non_optional_error() {
+    let errors = run_type_check_with_stdlib(
+        "func test() -> Box { let a: Box = Box(); return a! }",
+        &[
+            "public struct Box {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert!(errors > 0, "force unwrap of non-Optional should error");
+}
+
+#[test]
+fn test_optional_chaining_struct_member() {
+    let errors = run_type_check_with_stdlib(
+        "struct Point { var x: Box }
+         func test() -> Box? { let p: Point? = null; return p?.x }",
+        &[
+            "public struct Box {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert_eq!(
+        errors, 0,
+        "optional chaining should return Optional<member_type>"
+    );
+}
+
+#[test]
+fn test_optional_chaining_non_optional_error() {
+    let errors = run_type_check_with_stdlib(
+        "struct Point { var x: Box }
+         func test(p: Point) -> Optional<Box> { return p?.x }",
+        &[
+            "public struct Box {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert!(errors > 0, "optional chaining on non-Optional should error");
+}
