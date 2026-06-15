@@ -7809,3 +7809,95 @@ fn test_init_call_with_param_count_overload() {
         errors
     );
 }
+
+#[test]
+fn test_closure_implicit_capture_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { let a = 42; let f = { (x: Int32) -> Int32 in a + x }; return f(10) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let closure_decl = statements
+            .iter()
+            .find(|s| {
+                matches!(&*s.borrow(),
+                    Statement::VariableDecl { name, .. } if name.value == "f"
+                )
+            })
+            .expect("Expected variable 'f'");
+        if let Statement::VariableDecl { initializer, .. } = &*closure_decl.borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure { ty, captures, .. } = &*init.borrow()
+        {
+            assert!(ty.is_some(), "Closure should have a type");
+            assert_eq!(captures.len(), 1, "Should have 1 capture");
+            assert_eq!(captures[0].name.value, "a");
+            let fn_ty = ty.as_ref().unwrap().borrow().clone();
+            if let Type::Function(_, ret_type, false, None) = fn_ty {
+                assert_eq!(*ret_type.borrow(), type_of("Int32"));
+            } else {
+                panic!("Expected Type::Function");
+            }
+        } else {
+            panic!("Expected closure with captures");
+        }
+    }
+}
+
+#[test]
+fn test_closure_explicit_capture_type_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() -> Int32 { let a = 42; let f = { [a] (x: Int32) -> Int32 in a + x }; return f(10) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let closure_decl = statements
+            .iter()
+            .find(|s| {
+                matches!(&*s.borrow(),
+                    Statement::VariableDecl { name, .. } if name.value == "f"
+                )
+            })
+            .expect("Expected variable 'f'");
+        if let Statement::VariableDecl { initializer, .. } = &*closure_decl.borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure { captures, .. } = &*init.borrow()
+        {
+            assert_eq!(captures.len(), 1, "Should have 1 explicit capture");
+            assert_eq!(captures[0].name.value, "a");
+        } else {
+            panic!("Expected closure with captures");
+        }
+    }
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no type errors, got: {:?}", errors);
+}

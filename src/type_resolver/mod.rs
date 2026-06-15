@@ -4183,6 +4183,7 @@ impl TypeResolver {
                 result
             }
             Expression::Closure {
+                captures,
                 parameters,
                 return_type,
                 body,
@@ -4263,6 +4264,33 @@ impl TypeResolver {
 
                 if let Some(sc) = scope {
                     self.enter_scope(sc.clone());
+
+                    // Register captured variable types in closure scope
+                    for cap in captures.iter() {
+                        let cap_name = cap.name.value.clone();
+                        if cap_name == "_" {
+                            continue;
+                        }
+                        let cap_type = if let Some(cap_expr) = &cap.expression {
+                            // Explicit capture with expression: resolve the expression type
+                            self.infer_type(cap_expr.clone())
+                        } else {
+                            // Explicit (variable name) or implicit capture: look up from enclosing scope
+                            self.current_scope.as_ref().and_then(|s| {
+                                s.borrow().parent.as_ref().and_then(|parent| {
+                                    parent.borrow().get_type(&cap_name)
+                                })
+                            })
+                        };
+                        if let Some(cap_type) = cap_type {
+                            self.current_scope
+                                .as_ref()
+                                .unwrap()
+                                .borrow_mut()
+                                .set_type(cap_name, cap_type);
+                        }
+                    }
+
                     for (i, param) in parameters.iter().enumerate() {
                         let p = param.borrow();
                         let param_type = if i < param_types.len() {
