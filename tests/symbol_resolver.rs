@@ -2723,7 +2723,7 @@ fn test_overloaded_functions_register_without_error() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func foo(x: Int32) { x } func foo(y: Float64) { y }".to_string(),
+            "func foo(x: Int32) { x } func foo(y: Double) { y }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -2773,7 +2773,7 @@ fn test_get_all_symbols_returns_overloads() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "func foo(x: Int32) { x } func foo(y: Float64) { y } func caller() { foo(x: 1) }"
+            "func foo(x: Int32) { x } func foo(y: Double) { y } func caller() { foo(x: 1) }"
                 .to_string(),
             Rc::new("".to_string()),
         ),
@@ -4136,7 +4136,7 @@ fn test_operator_function_overloads() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "func + (left: Int32, right: Int32) -> Int32 { left }
-             func + (left: Float64, right: Float64) -> Float64 { left }"
+             func + (left: Double, right: Double) -> Double { left }"
                 .to_string(),
             Rc::new("".to_string()),
         ),
