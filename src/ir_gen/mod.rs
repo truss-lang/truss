@@ -10,7 +10,7 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
-    types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
+    types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, StructType},
     values::{
         BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
     },
@@ -3097,12 +3097,16 @@ impl<'ctx> IRGenerator<'ctx> {
         match &*statement.borrow() {
             Statement::VariableDecl {
                 name,
+                pattern: decl_pattern,
                 initializer,
                 ty,
                 accessors,
                 token,
                 ..
             } => {
+                if let Some(Pattern::Tuple(items)) = decl_pattern {
+                    return self.resolve_tuple_pattern_decl(items, initializer, ty);
+                }
                 let llvm_var_type = if let Some(ty) = ty {
                     self.resolve_type(ty.clone())?
                 } else {
@@ -4271,6 +4275,134 @@ impl<'ctx> IRGenerator<'ctx> {
             } => self.resolve_asm_block(instructions, outputs, inputs, clobbers),
             _ => Ok(false),
         }
+    }
+
+    fn resolve_tuple_pattern_decl(
+        &self,
+        items: &[Pattern],
+        initializer: &Option<Rc<RefCell<Expression>>>,
+        ty: &Option<Rc<RefCell<Type>>>,
+    ) -> Result<bool> {
+        let Some(init) = initializer else {
+            return Err(anyhow::anyhow!("Tuple pattern needs initializer"));
+        };
+        let Some(init_val) = self.resolve_expression(init.clone())? else {
+            return Err(anyhow::anyhow!("Cannot resolve tuple initializer"));
+        };
+        let tuple_type = ty.as_ref().map(|t| t.clone()).or_else(|| {
+            init.borrow().get_ty_ref().ok().and_then(|t| t.clone())
+        });
+        let Some(tuple_type) = tuple_type else {
+            return Err(anyhow::anyhow!("Cannot determine tuple type"));
+        };
+        let elements = match &*tuple_type.borrow() {
+            Type::Tuple(e) => e.clone(),
+            _ => return Err(anyhow::anyhow!("Expected tuple type for pattern")),
+        };
+        let llvm_tuple_ty = self.resolve_type(tuple_type)?.into_struct_type();
+        let struct_ptr = match init_val {
+            BasicValueEnum::PointerValue(ptr) => ptr,
+            val => {
+                let ptr = self.builder.build_alloca(val.get_type(), "")?;
+                self.builder.build_store(ptr, val)?;
+                ptr
+            }
+        };
+        for (i, item) in items.iter().enumerate() {
+            if i >= elements.len() {
+                break;
+            }
+            self.resolve_tuple_pattern_item(item, struct_ptr, llvm_tuple_ty, i)?;
+        }
+        Ok(false)
+    }
+
+    fn resolve_tuple_pattern_item(
+        &self,
+        pattern: &Pattern,
+        struct_ptr: PointerValue<'ctx>,
+        tuple_llvm: StructType<'ctx>,
+        index: usize,
+    ) -> Result<()> {
+        match pattern {
+            Pattern::Identifier(tok) => {
+                if tok.value == "_" {
+                    return Ok(());
+                }
+                let field_ptr = self.builder.build_struct_gep(tuple_llvm, struct_ptr, index as u32, "")?;
+                let field_ty = tuple_llvm.get_field_type_at_index(index as u32)
+                    .ok_or_else(|| anyhow::anyhow!("Field not found at idx {}", index))?;
+                let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                let var_ptr = self.builder.build_alloca(field_ty, &tok.value)?;
+                self.builder.build_store(var_ptr, field_val)?;
+                self.declare_variable(tok.value.clone(), var_ptr);
+            }
+            Pattern::ValueBinding(inner) => {
+                if let Pattern::Identifier(tok) = inner.as_ref() {
+                    if tok.value == "_" {
+                        return Ok(());
+                    }
+                    let field_ptr = self.builder.build_struct_gep(tuple_llvm, struct_ptr, index as u32, "")?;
+                    let field_ty = tuple_llvm.get_field_type_at_index(index as u32)
+                        .ok_or_else(|| anyhow::anyhow!("Field not found at idx {}", index))?;
+                    let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                    let var_ptr = self.builder.build_alloca(field_ty, &tok.value)?;
+                    self.builder.build_store(var_ptr, field_val)?;
+                    self.declare_variable(tok.value.clone(), var_ptr);
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn match_tuple_elements(
+        &self,
+        items: &[Pattern],
+        subject_alloca: PointerValue<'ctx>,
+        subject_expr: Rc<RefCell<Expression>>,
+    ) -> Result<Option<IntValue>> {
+        let subject_ty = subject_expr.borrow().get_ty_ref()?.clone()
+            .ok_or_else(|| anyhow::anyhow!("Cannot determine match subject type"))?;
+        let elements = match &*subject_ty.borrow() {
+            Type::Tuple(e) => e.clone(),
+            _ => return Err(anyhow::anyhow!("Expected tuple type for match pattern")),
+        };
+        let llvm_tuple_ty = self.resolve_type(subject_ty)?.into_struct_type();
+        let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+
+        for (i, item) in items.iter().enumerate() {
+            if i >= elements.len() {
+                break;
+            }
+            if let Pattern::Expr(expr) = item {
+                let element_ptr = self.builder.build_struct_gep(llvm_tuple_ty, subject_alloca, i as u32, "")?;
+                let element_ty = llvm_tuple_ty.get_field_type_at_index(i as u32)
+                    .ok_or_else(|| anyhow::anyhow!("Field not found at idx {}", i))?;
+                let element_val = self.builder.build_load(element_ty, element_ptr, "")?;
+                let next_bb = self.context.append_basic_block(fn_val, "tuple_elem_check");
+                if let Some(cmp) = self.get_literal_match(element_val, expr.clone())? {
+                    let body_bb = self.builder.get_insert_block().unwrap();
+                    self.builder.build_conditional_branch(cmp, body_bb, next_bb)?;
+                    self.builder.position_at_end(next_bb);
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn resolve_match_tuple_bindings(
+        &self,
+        items: &[Pattern],
+        subject_alloca: PointerValue<'ctx>,
+    ) -> Result<()> {
+        let loaded = self.builder.build_load(subject_alloca.get_type(), subject_alloca, "")?;
+        let basic_ty = loaded.get_type();
+        let struct_ty = basic_ty.into_struct_type();
+        for (i, item) in items.iter().enumerate() {
+            self.resolve_tuple_pattern_item(item, subject_alloca, struct_ty, i)?;
+        }
+        Ok(())
     }
 
     fn resolve_asm_block(
@@ -8134,6 +8266,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                 }
                                 _ => None,
                             }
+                        } else if let Pattern::Tuple(tuple_items) = pattern.as_ref() {
+                            self.match_tuple_elements(tuple_items, subject_alloca, value.clone())?
                         } else {
                             match pattern.as_ref() {
                                 Pattern::Expr(expr) => {
@@ -8265,6 +8399,14 @@ impl<'ctx> IRGenerator<'ctx> {
                                     self.declare_variable(tok.value.clone(), var_ptr);
                                 }
                                 break;
+                            }
+                        }
+                    }
+
+                    if !is_enum {
+                        for pattern in &case.patterns {
+                            if let Pattern::Tuple(tuple_items) = pattern.as_ref() {
+                                self.resolve_match_tuple_bindings(tuple_items, subject_alloca)?;
                             }
                         }
                     }
