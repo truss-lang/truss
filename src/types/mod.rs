@@ -24,6 +24,7 @@ pub enum Type {
     GenericParam(String),
     ConstGeneric(String, Rc<RefCell<Type>>),
     AssociatedType(Rc<RefCell<Type>>, String),
+    ClosureContext(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>),
 }
 
 impl fmt::Display for Type {
@@ -149,6 +150,16 @@ impl fmt::Display for Type {
             Type::GenericParam(name) => write!(f, "GenericParam({})", name),
             Type::ConstGeneric(name, ty) => write!(f, "ConstGeneric({}, {})", name, ty.borrow()),
             Type::AssociatedType(base, name) => write!(f, "{}.{}", base.borrow(), name),
+            Type::ClosureContext(params, ret) => {
+                write!(f, "closure(")?;
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", param.borrow())?;
+                }
+                write!(f, ") -> {}", ret.borrow())
+            }
         }
     }
 }
@@ -161,9 +172,7 @@ impl PartialEq for Type {
             (Type::Struct(n1, _, p1), Type::Struct(n2, _, p2))
             | (Type::Class(n1, _, p1), Type::Class(n2, _, p2))
             | (Type::Enum(n1, _, p1), Type::Enum(n2, _, p2))
-            | (Type::Protocol(n1, _, p1), Type::Protocol(n2, _, p2)) => {
-                n1 == n2 && p1 == p2
-            }
+            | (Type::Protocol(n1, _, p1), Type::Protocol(n2, _, p2)) => n1 == n2 && p1 == p2,
             (Type::Function(p1, r1, v1, t1), Type::Function(p2, r2, v2, t2)) => {
                 p1 == p2 && r1 == r2 && v1 == v2 && t1 == t2
             }
@@ -175,6 +184,7 @@ impl PartialEq for Type {
             (Type::ConstGeneric(n1, t1), Type::ConstGeneric(n2, t2)) => n1 == n2 && t1 == t2,
             (Type::GenericParam(n1), Type::GenericParam(n2)) => n1 == n2,
             (Type::AssociatedType(b1, n1), Type::AssociatedType(b2, n2)) => b1 == b2 && n1 == n2,
+            (Type::ClosureContext(p1, r1), Type::ClosureContext(p2, r2)) => p1 == p2 && r1 == r2,
             _ => false,
         }
     }

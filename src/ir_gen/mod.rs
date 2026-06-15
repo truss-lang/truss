@@ -1205,6 +1205,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::AssociatedType(_, name) => name.clone(),
             Type::Compound(_) => "C".into(),
             Type::Function(_, _, _, _) => "F".into(),
+            Type::ClosureContext(_, _) => "CC".into(),
             Type::Inline(inner, _) => {
                 format!("inline{}", Self::type_to_abbreviation(&inner.borrow()))
             }
@@ -9542,6 +9543,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("Void type is handled specially as void return type");
             }
             Type::Function(_, _, _, _) => {
+                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+            }
+            Type::ClosureContext(_, _) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
             Type::Pointer(_) | Type::NonNullPointer(_) => {
