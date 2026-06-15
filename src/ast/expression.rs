@@ -259,6 +259,12 @@ pub enum Expression {
         inner: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    OptionalChain {
+        token: Box<Token>,
+        object: Rc<RefCell<Expression>>,
+        member: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     ArrayType {
         inner: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
@@ -328,6 +334,7 @@ impl Expression {
             Self::Do { ty, .. } => Ok(ty),
             Self::InlineType { ty, .. } => Ok(ty),
             Self::OptionalType { ty, .. } => Ok(ty),
+            Self::OptionalChain { ty, .. } => Ok(ty),
             Self::ArrayType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
             Self::Try { ty, .. } => Ok(ty),
@@ -360,6 +367,7 @@ impl Expression {
             Self::Do { ty, .. } => Ok(ty),
             Self::InlineType { ty, .. } => Ok(ty),
             Self::OptionalType { ty, .. } => Ok(ty),
+            Self::OptionalChain { ty, .. } => Ok(ty),
             Self::ArrayType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
             Self::Try { ty, .. } => Ok(ty),
@@ -466,6 +474,7 @@ impl Expression {
             Expression::Try { token, .. } => (**token).clone(),
             Expression::InlineType { base, .. } => base.borrow().token(),
             Expression::OptionalType { inner, .. } => inner.borrow().token(),
+            Expression::OptionalChain { token, .. } => (**token).clone(),
             Expression::ArrayType { inner, .. } => inner.borrow().token(),
         }
     }
@@ -515,6 +524,7 @@ pub enum BinaryOperator {
     RangeTo,
     RangeUntil,
     OpenRange,
+    NilCoalescing,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
@@ -566,6 +576,7 @@ impl BinaryOperator {
             BinaryOperator::RangeTo => "..",
             BinaryOperator::RangeUntil => "..<",
             BinaryOperator::OpenRange => "...",
+            BinaryOperator::NilCoalescing => "?:",
         }
     }
 
@@ -591,6 +602,7 @@ impl BinaryOperator {
             OperatorType::RangeTo => Some(BinaryOperator::RangeTo),
             OperatorType::RangeUntil => Some(BinaryOperator::RangeUntil),
             OperatorType::OpenRange => Some(BinaryOperator::OpenRange),
+            OperatorType::NilCoalescing => Some(BinaryOperator::NilCoalescing),
             _ => None,
         }
     }

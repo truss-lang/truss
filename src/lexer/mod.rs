@@ -350,16 +350,29 @@ impl Lexer {
                 ))
             }
         } else if c == '?' {
-            let position = self.input.get_current_position();
+            let begin_pos = self.input.get_current_position();
             self.input.inc_pos();
-            Some(Token::new(
-                '?'.to_string(),
-                TokenType::Operator {
-                    operator: OperatorType::QuestionMark,
-                },
-                position,
-                self.input.file.clone(),
-            ))
+            if self.input.peek() == ':' {
+                self.input.inc_pos();
+                let position = self.get_position_with_begin(begin_pos, None);
+                Some(Token::new(
+                    "?:".to_string(),
+                    TokenType::Operator {
+                        operator: OperatorType::NilCoalescing,
+                    },
+                    position,
+                    self.input.file.clone(),
+                ))
+            } else {
+                Some(Token::new(
+                    '?'.to_string(),
+                    TokenType::Operator {
+                        operator: OperatorType::QuestionMark,
+                    },
+                    begin_pos,
+                    self.input.file.clone(),
+                ))
+            }
         } else if c == '.' {
             let begin_pos = self.input.get_current_position();
             self.input.inc_pos();

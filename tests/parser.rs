@@ -13519,3 +13519,174 @@ fn test_parse_strong_variable_default() {
 fn test_parse_ownership_modifier_default() {
     assert_eq!(OwnershipModifier::default(), OwnershipModifier::Strong);
 }
+
+#[test]
+fn test_parse_nil_coalescing() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("a ?: b".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::Binary { operator, .. } = &*expression.borrow() {
+            assert_eq!(*operator, BinaryOperator::NilCoalescing);
+        } else {
+            panic!("Expected Binary expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_optional_chaining() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("a?.b".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::OptionalChain { member, .. } = &*expression.borrow() {
+            assert_eq!(member.value, "b");
+        } else {
+            panic!("Expected OptionalChain expression, got {:?}", *expression.borrow());
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_optional_chaining_multi_level() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("a?.b?.c".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::OptionalChain { member, object, .. } = &*expression.borrow() {
+            assert_eq!(member.value, "c");
+            if let Expression::OptionalChain { member: inner_member, .. } = &*object.borrow() {
+                assert_eq!(inner_member.value, "b");
+            } else {
+                panic!("Expected inner OptionalChain");
+            }
+        } else {
+            panic!("Expected OptionalChain expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_force_unwrap() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("a!".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::Unary { operator, is_prefix, .. } = &*expression.borrow() {
+            assert_eq!(*operator, UnaryOperator::NotNullAssertation);
+            assert!(!is_prefix);
+        } else {
+            panic!("Expected Unary expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_force_unwrap_chained_with_member() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("a!.b".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::MemberAccess { member, .. } = &*expression.borrow() {
+            assert_eq!(member.value, "b");
+        } else {
+            panic!("Expected MemberAccess with force unwrapped object, got {:?}", *expression.borrow());
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_optional_chaining_variable_decl() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("let x = a?.b".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap();
+        if let Expression::OptionalChain { member, .. } = &*init.borrow() {
+            assert_eq!(member.value, "b");
+        } else {
+            panic!("Expected OptionalChain in initializer, got {:?}", *init.borrow());
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_nil_coalescing_precedence() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("a ?: b + c".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
+        if let Expression::Binary { operator, right, .. } = &*expression.borrow() {
+            assert_eq!(*operator, BinaryOperator::NilCoalescing);
+            if let Expression::Binary { operator: right_op, .. } = &*right.borrow() {
+                assert_eq!(*right_op, BinaryOperator::Plus);
+            } else {
+                panic!("Expected Binary(Plus) on right side of ?:");
+            }
+        } else {
+            panic!("Expected Binary expression");
+        }
+    } else {
+        panic!("Expected ExpressionStatement");
+    }
+}
+
+#[test]
+fn test_parse_single_question_error() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("a ? b".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let _program = parser.parse();
+    assert!(engine.borrow().has_errors());
+}

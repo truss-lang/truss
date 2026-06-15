@@ -112,6 +112,7 @@ pub enum SeparatorType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OperatorType {
     QuestionMark,     // ?
+    NilCoalescing,    // ?:
     Plus,             // +
     Minus,            // -
     Multiply,         // *

@@ -577,26 +577,7 @@ impl Parser {
                         })
                     }
                     OperatorType::Not => {
-                        if let Some(token2) = self.peek2()
-                            && let TokenType::Operator { operator } = token2.ty
-                            && let OperatorType::Not = operator
-                        {
-                            self.index += 2;
-                            Ok(Expression::Unary {
-                                expression: Rc::new(RefCell::new(expression)),
-                                operator: UnaryOperator::NotNullAssertation,
-                                is_prefix: false,
-                                overloads: vec![],
-                                selected_index: None,
-                            })
-                        } else {
-                            self.emit_error(
-                                TrussDiagnosticCode::UnexpectedToken,
-                                "Expected '!!' for not-null assertion",
-                                &token,
-                            );
-                            Err(())
-                        }
+                        Ok(expression)
                     }
                     _ => Ok(expression),
                 }
@@ -949,73 +930,69 @@ impl Parser {
                 if let Some(next) = self.peek()
                     && OperatorType::is_operator(&next, OperatorType::Not)
                 {
-                    self.index += 1;
-                    let delimiter = if let Some(d) = self.peek() {
-                        if SeparatorType::is_separator(&d, SeparatorType::OpenParen) {
-                            MacroDelimiter::Paren
-                        } else if SeparatorType::is_separator(&d, SeparatorType::OpenBracket) {
-                            MacroDelimiter::Bracket
-                        } else if SeparatorType::is_separator(&d, SeparatorType::OpenBrace) {
-                            MacroDelimiter::Brace
+                    let is_macro = match self.peek2() {
+                        Some(d) if SeparatorType::is_separator(&d, SeparatorType::OpenParen)
+                            || SeparatorType::is_separator(&d, SeparatorType::OpenBracket)
+                            || SeparatorType::is_separator(&d, SeparatorType::OpenBrace) => true,
+                        _ => false,
+                    };
+                    if is_macro {
+                        self.index += 1;
+                        let delimiter = if let Some(d) = self.peek() {
+                            if SeparatorType::is_separator(&d, SeparatorType::OpenParen) {
+                                MacroDelimiter::Paren
+                            } else if SeparatorType::is_separator(&d, SeparatorType::OpenBracket) {
+                                MacroDelimiter::Bracket
+                            } else {
+                                MacroDelimiter::Brace
+                            }
                         } else {
-                            self.emit_error(
-                                TrussDiagnosticCode::UnexpectedToken,
-                                format!(
-                                    "Expected '(' '[' or '{{' after macro name '{}'",
-                                    token.value
-                                ),
-                                &next,
-                            );
-                            return Err(());
-                        }
-                    } else {
-                        self.emit_error(
-                            TrussDiagnosticCode::UnexpectedToken,
-                            format!(
-                                "Expected '(' '[' or '{{' after macro name '{}'",
-                                token.value
-                            ),
-                            &next,
-                        );
-                        return Err(());
-                    };
-                    let close_delim = match delimiter {
-                        MacroDelimiter::Paren => SeparatorType::CloseParen,
-                        MacroDelimiter::Bracket => SeparatorType::CloseBracket,
-                        MacroDelimiter::Brace => SeparatorType::CloseBrace,
-                    };
-                    self.next().unwrap();
-                    let mut depth = 1u32;
-                    let mut arguments = Vec::new();
-                    while let Some(ref t) = self.peek() {
-                        if SeparatorType::is_separator(t, close_delim) && depth == 1 {
-                            self.index += 1;
-                            break;
-                        }
-                        if SeparatorType::is_separator(t, SeparatorType::OpenParen)
-                            || SeparatorType::is_separator(t, SeparatorType::OpenBracket)
-                            || SeparatorType::is_separator(t, SeparatorType::OpenBrace)
-                        {
-                            depth += 1;
-                        } else if SeparatorType::is_separator(t, SeparatorType::CloseParen)
-                            || SeparatorType::is_separator(t, SeparatorType::CloseBracket)
-                            || SeparatorType::is_separator(t, SeparatorType::CloseBrace)
-                        {
-                            depth -= 1;
-                            if depth == 0 {
+                            unreachable!()
+                        };
+                        let close_delim = match delimiter {
+                            MacroDelimiter::Paren => SeparatorType::CloseParen,
+                            MacroDelimiter::Bracket => SeparatorType::CloseBracket,
+                            MacroDelimiter::Brace => SeparatorType::CloseBrace,
+                        };
+                        self.next().unwrap();
+                        let mut depth = 1u32;
+                        let mut arguments = Vec::new();
+                        while let Some(ref t) = self.peek() {
+                            if SeparatorType::is_separator(t, close_delim) && depth == 1 {
                                 self.index += 1;
                                 break;
                             }
+                            if SeparatorType::is_separator(t, SeparatorType::OpenParen)
+                                || SeparatorType::is_separator(t, SeparatorType::OpenBracket)
+                                || SeparatorType::is_separator(t, SeparatorType::OpenBrace)
+                            {
+                                depth += 1;
+                            } else if SeparatorType::is_separator(t, SeparatorType::CloseParen)
+                                || SeparatorType::is_separator(t, SeparatorType::CloseBracket)
+                                || SeparatorType::is_separator(t, SeparatorType::CloseBrace)
+                            {
+                                depth -= 1;
+                                if depth == 0 {
+                                    self.index += 1;
+                                    break;
+                                }
+                            }
+                            arguments.push(t.clone());
+                            self.index += 1;
                         }
-                        arguments.push(t.clone());
-                        self.index += 1;
+                        Ok(Expression::MacroInvocation {
+                            name: Box::new(token),
+                            delimiter,
+                            arguments,
+                            ty: None,
+                        })
+                    } else {
+                        Ok(Expression::Variable {
+                            name: Box::new(token),
+                            ty: None,
+                            symbol: None,
+                        })
                     }
-                    Ok(Expression::MacroInvocation {
-                        name: Box::new(token),
-                        delimiter,
-                        arguments,
-                        ty: None,
-                    })
                 } else {
                     Ok(Expression::Variable {
                         name: Box::new(token),
@@ -1202,6 +1179,78 @@ impl Parser {
                         } else {
                             break;
                         }
+                    }
+                    OperatorType::QuestionMark => {
+                        self.index += 1;
+                        if let Some(dot) = self.peek()
+                            && OperatorType::is_operator(&dot, OperatorType::Dot)
+                        {
+                            self.index += 1;
+                            let Some(member_token) = self.next() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ExpectedExpression,
+                                    "Expected member name after '?.'",
+                                    &token,
+                                );
+                                return Err(());
+                            };
+                            if TokenType::Identifier == member_token.ty
+                                || matches!(
+                                    member_token.ty,
+                                    TokenType::IntegerLiteral { .. }
+                                )
+                                || matches!(
+                                    member_token.ty,
+                                    TokenType::DecimalLiteral { .. }
+                                )
+                                || matches!(
+                                    member_token.ty,
+                                    TokenType::Keyword {
+                                        keyword: KeywordType::Deinit
+                                    }
+                                )
+                                || matches!(
+                                    member_token.ty,
+                                    TokenType::Keyword {
+                                        keyword: KeywordType::Init
+                                    }
+                                )
+                            {
+                                expression = Expression::OptionalChain {
+                                    token: Box::new(token),
+                                    object: Rc::new(RefCell::new(expression)),
+                                    member: Box::new(member_token),
+                                    ty: None,
+                                };
+                            } else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ExpectedIdentifier,
+                                    format!(
+                                        "Expected member name or index after '?.' but found '{}'",
+                                        member_token.value
+                                    ),
+                                    &member_token,
+                                );
+                                return Err(());
+                            }
+                        } else {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnexpectedToken,
+                                "Expected '.' after '?' for optional chaining",
+                                &token,
+                            );
+                            return Err(());
+                        }
+                    }
+                    OperatorType::Not => {
+                        self.index += 1;
+                        expression = Expression::Unary {
+                            expression: Rc::new(RefCell::new(expression)),
+                            operator: UnaryOperator::NotNullAssertation,
+                            is_prefix: false,
+                            overloads: vec![],
+                            selected_index: None,
+                        };
                     }
                     _ => {
                         break;

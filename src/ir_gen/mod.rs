@@ -5641,6 +5641,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         );
                         anyhow::bail!("Range expressions not implemented");
                     }
+                    BinaryOperator::NilCoalescing => {
+                        todo!("NilCoalescing IR gen not yet implemented")
+                    }
                 }
             }
             Expression::Unary {

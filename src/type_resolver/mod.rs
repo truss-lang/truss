@@ -4802,6 +4802,9 @@ impl TypeResolver {
                     }
                 }
             }
+            Expression::OptionalChain { .. } => {
+                todo!("OptionalChain type resolution not yet implemented")
+            }
         };
         Some(result)
     }
