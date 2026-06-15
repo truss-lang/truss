@@ -494,6 +494,145 @@ fn test_parse_variable_decl_in_function_at_eof() {
 }
 
 #[test]
+fn test_parse_tuple_pattern_let() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let (x, y) = (1, 2) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), .. } = &*statements[0].borrow()
+    {
+        assert_eq!(items.len(), 2);
+        assert!(matches!(&items[0], Pattern::Identifier(t) if t.value == "x"));
+        assert!(matches!(&items[1], Pattern::Identifier(t) if t.value == "y"));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_tuple_pattern_wildcard() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let (x, _) = (1, 2) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), .. } = &*statements[0].borrow()
+    {
+        assert_eq!(items.len(), 2);
+        assert!(matches!(&items[0], Pattern::Identifier(t) if t.value == "x"));
+        assert!(matches!(&items[1], Pattern::Ignore));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_tuple_pattern_typed() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let (x, y): (Int32, String) = (1, \"hello\") }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), type_expression: Some(_), .. } = &*statements[0].borrow()
+    {
+        assert_eq!(items.len(), 2);
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_tuple_nested_pattern() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let (x, (y, z)) = (1, (2, 3)) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), .. } = &*statements[0].borrow()
+    {
+        assert_eq!(items.len(), 2);
+        assert!(matches!(&items[0], Pattern::Identifier(t) if t.value == "x"));
+        assert!(matches!(&items[1], Pattern::Tuple(inner) if inner.len() == 2));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_var_tuple_pattern() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { var (a, b) = (10, 20) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), .. } = &*statements[0].borrow()
+    {
+        assert_eq!(items.len(), 2);
+        assert!(matches!(&items[0], Pattern::Identifier(t) if t.value == "a"));
+        assert!(matches!(&items[1], Pattern::Identifier(t) if t.value == "b"));
+    } else {
+        panic!();
+    }
+}
+
+#[test]
+fn test_parse_ignore_pattern() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let _ = 42 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl { pattern: Some(Pattern::Ignore), .. } = &*statements[0].borrow()
+    {
+    } else {
+        panic!();
+    }
+}
+
+#[test]
 fn test_parse_extern_block_single_func() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

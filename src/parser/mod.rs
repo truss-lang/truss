@@ -2977,22 +2977,14 @@ impl Parser {
         let Some(token) = self.next() else {
             return Err(());
         };
-        let Some(name) = self.next() else {
-            self.emit_error(
-                TrussDiagnosticCode::InvalidVariableName,
-                "Expected variable name after 'let' or 'var'",
-                &token,
-            );
-            return Err(());
-        };
-        if TokenType::Identifier != name.ty {
-            self.emit_error(
-                TrussDiagnosticCode::InvalidVariableName,
-                format!("Expected variable name but found '{}'", name.value),
-                &name,
-            );
-            return Err(());
-        }
+        let pattern = self.parse_pattern()?;
+        let name = Self::extract_first_name(&pattern).cloned().unwrap_or(Token::new(
+            "_".to_string(),
+            TokenType::Identifier,
+            token.position.clone(),
+            token.file.clone(),
+        ));
+        let pattern = Some(pattern);
         let type_expression = if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::Colon)
         {
@@ -3024,6 +3016,7 @@ impl Parser {
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
+            pattern,
             type_expression: type_expression.map(RefCell::new).map(Rc::new),
             initializer: initializer.map(RefCell::new).map(Rc::new),
             accessors,
@@ -5583,6 +5576,16 @@ impl Parser {
             }
         } else {
             Ok(None)
+        }
+    }
+
+    fn extract_first_name(pattern: &Pattern) -> Option<&Token> {
+        match pattern {
+            Pattern::Identifier(tok) => Some(tok.as_ref()),
+            Pattern::Tuple(items) => items.first().and_then(Self::extract_first_name),
+            Pattern::ValueBinding(inner) => Self::extract_first_name(inner.as_ref()),
+            Pattern::EnumCase { case_name, .. } => Some(case_name.as_ref()),
+            _ => None,
         }
     }
 

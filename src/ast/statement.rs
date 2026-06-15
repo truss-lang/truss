@@ -34,6 +34,7 @@ pub enum Statement {
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
+        pattern: Option<Pattern>,
         type_expression: Option<Rc<RefCell<Expression>>>,
         initializer: Option<Rc<RefCell<Expression>>>,
         accessors: Vec<Accessor>,
