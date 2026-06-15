@@ -3834,6 +3834,98 @@ fn test_parse_enum_case_constructor() {
 }
 
 #[test]
+fn test_parse_enum_with_raw_value_type() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum E: UInt8 { case a, b }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::EnumDecl {
+        name, conformances, cases, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "E");
+        assert_eq!(conformances.len(), 1);
+        if let Expression::Type { name: ty_name, .. } = &*conformances[0].borrow() {
+            assert_eq!(ty_name.value, "UInt8");
+        } else {
+            panic!("Expected Type expression for raw value type");
+        }
+        assert_eq!(cases.len(), 2);
+        assert_eq!(cases[0].name.value, "a");
+        assert_eq!(cases[1].name.value, "b");
+    } else {
+        panic!("Expected EnumDecl");
+    }
+}
+
+#[test]
+fn test_parse_enum_with_multiple_conformances() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum E: UInt8, Equatable { case a, b }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::EnumDecl {
+        name, conformances, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "E");
+        assert_eq!(conformances.len(), 2);
+        if let Expression::Type { name: ty_name, .. } = &*conformances[0].borrow() {
+            assert_eq!(ty_name.value, "UInt8");
+        } else {
+            panic!("Expected Type expression for UInt8");
+        }
+        if let Expression::Type { name: ty_name, .. } = &*conformances[1].borrow() {
+            assert_eq!(ty_name.value, "Equatable");
+        } else {
+            panic!("Expected Type expression for Equatable");
+        }
+    } else {
+        panic!("Expected EnumDecl");
+    }
+}
+
+#[test]
+fn test_parse_enum_with_protocol_conformance() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "enum E: Equatable { case a, b }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::EnumDecl {
+        name, conformances, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "E");
+        assert_eq!(conformances.len(), 1);
+        if let Expression::Type { name: ty_name, .. } = &*conformances[0].borrow() {
+            assert_eq!(ty_name.value, "Equatable");
+        } else {
+            panic!("Expected Type expression for Equatable");
+        }
+    } else {
+        panic!("Expected EnumDecl");
+    }
+}
+
+#[test]
 fn test_parse_if_case_no_bindings() {
     let code = r#"
         enum Option { case None case Some }

@@ -4051,6 +4051,22 @@ impl Parser {
             return Err(());
         }
         let generic_parameters = self.parse_generic_parameters()?.unwrap_or_default();
+        let mut conformances = Vec::new();
+        if let Some(next) = self.peek()
+            && SeparatorType::is_separator(&next, SeparatorType::Colon)
+        {
+            self.index += 1;
+            loop {
+                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+        }
         let where_clause = self.parse_where_clause()?;
         let mut cases = Vec::new();
         let mut body = Vec::new();
@@ -4191,6 +4207,7 @@ impl Parser {
             token: Box::new(token),
             name: Box::new(name),
             generic_parameters,
+            conformances,
             cases,
             body,
             where_clause,
