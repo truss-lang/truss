@@ -6,8 +6,8 @@ use crate::{
         node::Program,
         statement::{
             AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Modifier, ModifierType,
-            Pattern, ProtocolAccessorSet, ProtocolMember, SelectiveAlias, Statement, WhereRequirement,
-            WhereRequirementKind,
+            OwnershipModifier, Pattern, ProtocolAccessorSet, ProtocolMember, SelectiveAlias,
+            Statement, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -211,6 +211,7 @@ impl SymbolResolver {
                         decl: None,
                         parameter: None,
                         is_var: true,
+                        ownership: OwnershipModifier::Strong,
                     }));
                     self.enter(self_sym, name);
                 }
@@ -218,6 +219,7 @@ impl SymbolResolver {
                     if let Statement::VariableDecl {
                         name: field_name,
                         token: field_token,
+                        ownership: field_ownership,
                         ..
                     } = &*field_stmt.borrow()
                     {
@@ -227,6 +229,7 @@ impl SymbolResolver {
                             parent: WeakSymbol(Rc::downgrade(&struct_symbol)),
                             decl: Some(field_stmt.clone()),
                             is_var,
+                            ownership: *field_ownership,
                         }));
                         fields.push(field_symbol.clone());
                         self.enter(field_symbol, field_name);
@@ -338,6 +341,7 @@ impl SymbolResolver {
                                                     decl: None,
                                                     parameter: Some(param.clone()),
                                                     is_var: true,
+                                                    ownership: OwnershipModifier::Strong,
                                                 }));
                                             self.enter(param_sym, &param.borrow().name);
                                         }
@@ -348,6 +352,7 @@ impl SymbolResolver {
                                             decl: None,
                                             parameter: None,
                                             is_var: true,
+                                            ownership: OwnershipModifier::Strong,
                                         }));
                                         self.enter(param_sym, p);
                                     } else {
@@ -360,6 +365,7 @@ impl SymbolResolver {
                                             decl: None,
                                             parameter: None,
                                             is_var: true,
+                                            ownership: OwnershipModifier::Strong,
                                         }));
                                         if let Some(scope) = self.current_scope.clone() {
                                             scope.borrow_mut().set_symbol(param_sym);
@@ -451,6 +457,7 @@ impl SymbolResolver {
                         decl: None,
                         parameter: None,
                         is_var: true,
+                        ownership: OwnershipModifier::Strong,
                     }));
                     self.enter(self_sym, name);
                 }
@@ -459,6 +466,7 @@ impl SymbolResolver {
                         name: field_name,
                         token: field_token,
                         modifiers: field_mods,
+                        ownership: field_ownership,
                         ..
                     } = &*field_stmt.borrow()
                     {
@@ -473,6 +481,7 @@ impl SymbolResolver {
                             is_var,
                             is_final: is_field_final || is_final,
                             is_override: is_field_override,
+                            ownership: *field_ownership,
                         }));
                         fields.push(field_symbol.clone());
                         self.enter(field_symbol, field_name);
@@ -611,6 +620,7 @@ impl SymbolResolver {
                                                     decl: None,
                                                     parameter: Some(param.clone()),
                                                     is_var: true,
+                                                    ownership: OwnershipModifier::Strong,
                                                 }));
                                             self.enter(param_sym, &param.borrow().name);
                                         }
@@ -621,6 +631,7 @@ impl SymbolResolver {
                                             decl: None,
                                             parameter: None,
                                             is_var: true,
+                                            ownership: OwnershipModifier::Strong,
                                         }));
                                         self.enter(param_sym, p);
                                     } else {
@@ -633,6 +644,7 @@ impl SymbolResolver {
                                             decl: None,
                                             parameter: None,
                                             is_var: true,
+                                            ownership: OwnershipModifier::Strong,
                                         }));
                                         if let Some(scope) = self.current_scope.clone() {
                                             scope.borrow_mut().set_symbol(param_sym);
@@ -1424,6 +1436,7 @@ impl SymbolResolver {
                             decl: None,
                             parameter: Some(parameter.clone()),
                             is_var: true,
+                            ownership: OwnershipModifier::Strong,
                         }));
                         self.enter(symbol, &parameter.borrow().name);
                     }
@@ -1455,11 +1468,17 @@ impl SymbolResolver {
                     Self::resolve_variable_pattern(pattern, stmt.clone(), is_var, self);
                 } else if name.value != "_" {
                     let is_var = var_token.value == "var";
+                    let ownership = if let Statement::VariableDecl { ownership, .. } = &*stmt.borrow() {
+                        *ownership
+                    } else {
+                        OwnershipModifier::Strong
+                    };
                     let symbol = Rc::new(RefCell::new(Symbol::Variable {
                         name: name.value.clone(),
                         decl: Some(stmt.clone()),
                         parameter: None,
                         is_var,
+                        ownership,
                     }));
                     self.enter(symbol, name);
                 }
@@ -1477,6 +1496,7 @@ impl SymbolResolver {
                             decl: None,
                             parameter: None,
                             is_var: true,
+                            ownership: OwnershipModifier::Strong,
                         }));
                         accessor_scope.borrow_mut().set_symbol(backing_sym);
                         if let Some(param) = &accessor.parameter {
@@ -1485,6 +1505,7 @@ impl SymbolResolver {
                                 decl: None,
                                 parameter: None,
                                 is_var: true,
+                                ownership: OwnershipModifier::Strong,
                             }));
                             self.enter(param_sym, param);
                         } else {
@@ -1497,6 +1518,7 @@ impl SymbolResolver {
                                 decl: None,
                                 parameter: None,
                                 is_var: true,
+                                ownership: OwnershipModifier::Strong,
                             }));
                             if let Some(scope) = self.current_scope.clone() {
                                 scope.borrow_mut().set_symbol(param_sym);
@@ -1712,6 +1734,7 @@ impl SymbolResolver {
                             decl: None,
                             parameter: Some(parameter.clone()),
                             is_var: true,
+                            ownership: OwnershipModifier::Strong,
                         }));
                         self.enter(symbol, &parameter.borrow().name);
                     }
@@ -1771,6 +1794,7 @@ impl SymbolResolver {
                                             decl: None,
                                             parameter: Some(parameter.clone()),
                                             is_var: true,
+                                            ownership: OwnershipModifier::Strong,
                                         }));
                                         self.enter(symbol, &parameter.borrow().name);
                                     }
@@ -1995,6 +2019,7 @@ impl SymbolResolver {
                                     )),
                                     expression: None,
                                     is_var,
+                                    ownership: OwnershipModifier::Strong,
                                 });
                             }
                             let mut current = closure_scope.borrow().parent.clone();
@@ -2266,6 +2291,7 @@ impl SymbolResolver {
                             decl: None,
                             parameter: None,
                             is_var: cap.is_var,
+                            ownership: OwnershipModifier::Strong,
                         }));
                         self.enter(symbol, &cap.name);
                     }
@@ -2274,7 +2300,7 @@ impl SymbolResolver {
                     }
                 }
 
-                // Push closure capture context for implicit capture detection
+                // Push closure capture context
                 let collected_captures: Vec<ClosureCapture> = captures.clone();
                 self.closure_capture_stack
                     .push((closure_scope.clone(), collected_captures));
@@ -2287,6 +2313,7 @@ impl SymbolResolver {
                             decl: None,
                             parameter: None,
                             is_var: true,
+                            ownership: OwnershipModifier::Strong,
                         }));
                         self.enter(symbol, &param.borrow().name);
                     }
@@ -2313,6 +2340,7 @@ impl SymbolResolver {
                             decl: None,
                             parameter: None,
                             is_var: true,
+                            ownership: OwnershipModifier::Strong,
                         }));
                         self.enter(
                             sym,
@@ -2409,6 +2437,7 @@ impl SymbolResolver {
                         decl: None,
                         parameter: None,
                         is_var: true,
+                        ownership: OwnershipModifier::Strong,
                     }));
                     resolver.enter(sym, name);
                 }
@@ -2437,6 +2466,7 @@ impl SymbolResolver {
                             decl: None,
                             parameter: None,
                             is_var: true,
+                            ownership: OwnershipModifier::Strong,
                         }));
                         resolver.enter(sym, name);
                     }
@@ -2490,6 +2520,7 @@ impl SymbolResolver {
                         decl: Some(decl),
                         parameter: None,
                         is_var,
+                        ownership: OwnershipModifier::Strong,
                     }));
                     resolver.enter(sym, name);
                 }

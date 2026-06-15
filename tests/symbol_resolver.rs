@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{ClosureCapture, ElseBranch, Expression},
-        statement::{FunctionBody, GenericParameterKind, Pattern, Statement},
+        statement::{FunctionBody, GenericParameterKind, OwnershipModifier, Pattern, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
     krate::Package,
@@ -5415,5 +5415,126 @@ fn test_closure_no_implicit_capture_for_local_params() {
         }
     } else {
         panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_weak_variable_ownership_in_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class MyClass {}
+             func test() {
+                 weak var x: MyClass?
+             }"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+
+    let packages = truss::krate::create_root_package();
+    let mut resolver = SymbolResolver::new(
+        packages.clone(),
+        "main".to_string(),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "main".to_string());
+    assert!(!engine.borrow().has_errors());
+
+    let pkg = packages.get("main").unwrap();
+    let module = pkg.borrow().modules.get("main").unwrap();
+    let scope = module.borrow().scope.clone().unwrap();
+    let func_scope = scope.borrow().children.first().cloned().unwrap();
+    let inner_scope = func_scope.borrow().children.first().cloned().unwrap();
+    let sym = inner_scope.borrow().get_symbol("x").unwrap();
+    if let Symbol::Variable { ownership, is_var, .. } = &*sym.borrow() {
+        assert_eq!(*ownership, OwnershipModifier::Weak);
+        assert!(*is_var);
+    } else {
+        panic!("Expected Variable symbol");
+    }
+}
+
+#[test]
+fn test_unowned_variable_ownership_in_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class MyClass {}
+             func test() {
+                 unowned var x: MyClass
+             }"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+
+    let packages = truss::krate::create_root_package();
+    let mut resolver = SymbolResolver::new(
+        packages.clone(),
+        "main".to_string(),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "main".to_string());
+    assert!(!engine.borrow().has_errors());
+
+    let pkg = packages.get("main").unwrap();
+    let module = pkg.borrow().modules.get("main").unwrap();
+    let scope = module.borrow().scope.clone().unwrap();
+    let func_scope = scope.borrow().children.first().cloned().unwrap();
+    let inner_scope = func_scope.borrow().children.first().cloned().unwrap();
+    let sym = inner_scope.borrow().get_symbol("x").unwrap();
+    if let Symbol::Variable { ownership, .. } = &*sym.borrow() {
+        assert_eq!(*ownership, OwnershipModifier::Unowned);
+    } else {
+        panic!("Expected Variable symbol");
+    }
+}
+
+#[test]
+fn test_strong_variable_default_ownership_in_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "class MyClass {}
+             func test() {
+                 var x: MyClass
+             }"
+            .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+
+    let packages = truss::krate::create_root_package();
+    let mut resolver = SymbolResolver::new(
+        packages.clone(),
+        "main".to_string(),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "main".to_string());
+    assert!(!engine.borrow().has_errors());
+
+    let pkg = packages.get("main").unwrap();
+    let module = pkg.borrow().modules.get("main").unwrap();
+    let scope = module.borrow().scope.clone().unwrap();
+    let func_scope = scope.borrow().children.first().cloned().unwrap();
+    let inner_scope = func_scope.borrow().children.first().cloned().unwrap();
+    let sym = inner_scope.borrow().get_symbol("x").unwrap();
+    if let Symbol::Variable { ownership, .. } = &*sym.borrow() {
+        assert_eq!(*ownership, OwnershipModifier::Strong);
+    } else {
+        panic!("Expected Variable symbol");
     }
 }
