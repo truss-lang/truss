@@ -3,8 +3,8 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression, MacroDelimiter,
-            TryKind, UnaryOperator,
+            AssignmentOperator, BinaryOperator, CastKind, ClosureCapture, ElseBranch, Expression,
+            MacroDelimiter, TryKind, UnaryOperator,
         },
         statement::{
             AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
@@ -12914,5 +12914,213 @@ fn test_parse_self_init_call_in_struct_init() {
         assert!(init_stmt.is_some(), "Should find init");
     } else {
         panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_parse_closure_capture_simple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { [x] in x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure {
+            captures,
+            parameters,
+            ..
+        } = &*init
+        {
+            assert_eq!(captures.len(), 1);
+            assert_eq!(captures[0].name.value, "x");
+            assert!(captures[0].expression.is_none());
+            assert!(!captures[0].is_var);
+            assert_eq!(parameters.len(), 0);
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_closure_capture_multiple() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { [x, y] (a: Int32) -> Int32 in x + y + a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure {
+            captures,
+            parameters,
+            ..
+        } = &*init
+        {
+            assert_eq!(captures.len(), 2);
+            assert_eq!(captures[0].name.value, "x");
+            assert_eq!(captures[1].name.value, "y");
+            assert_eq!(parameters.len(), 1);
+            assert_eq!(parameters[0].borrow().name.value, "a");
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_closure_capture_var() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { [var x] in x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure { captures, .. } = &*init {
+            assert_eq!(captures.len(), 1);
+            assert_eq!(captures[0].name.value, "x");
+            assert!(captures[0].is_var);
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_closure_capture_let() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { [let x] in x }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure { captures, .. } = &*init {
+            assert_eq!(captures.len(), 1);
+            assert_eq!(captures[0].name.value, "x");
+            assert!(!captures[0].is_var);
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_closure_capture_with_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { [a = x + 1] in a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure { captures, .. } = &*init {
+            assert_eq!(captures.len(), 1);
+            assert_eq!(captures[0].name.value, "a");
+            assert!(captures[0].expression.is_some());
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_closure_capture_var_with_expression() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { [var a = x + 1] in a }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure { captures, .. } = &*init {
+            assert_eq!(captures.len(), 1);
+            assert_eq!(captures[0].name.value, "a");
+            assert!(captures[0].expression.is_some());
+            assert!(captures[0].is_var);
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_closure_no_capture_unaffected() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { (x: Int32) -> Int32 in x + 1 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure {
+            captures,
+            parameters,
+            ..
+        } = &*init
+        {
+            assert_eq!(captures.len(), 0);
+            assert_eq!(parameters.len(), 1);
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
     }
 }

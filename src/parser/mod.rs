@@ -5,8 +5,8 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CallParameter, CastKind, ClosureParameter,
-            ElseBranch, Expression, MacroDelimiter, TryKind, UnaryOperator,
+            AssignmentOperator, BinaryOperator, CallParameter, CastKind, ClosureCapture,
+            ClosureParameter, ElseBranch, Expression, MacroDelimiter, TryKind, UnaryOperator,
         },
         node::Program,
         statement::{
@@ -4758,10 +4758,102 @@ impl Parser {
         }
     }
 
+    fn parse_closure_capture_list(&mut self) -> Result<Vec<ClosureCapture>, ()> {
+        let mut captures = Vec::new();
+        loop {
+            if let Some(token) = self.peek()
+                && SeparatorType::is_separator(&token, SeparatorType::CloseBracket)
+            {
+                break;
+            }
+
+            let is_var = if let Some(token) = self.peek()
+                && KeywordType::is_keyword(&token, KeywordType::Var)
+            {
+                self.index += 1;
+                true
+            } else if let Some(token) = self.peek()
+                && KeywordType::is_keyword(&token, KeywordType::Let)
+            {
+                self.index += 1;
+                false
+            } else {
+                false
+            };
+
+            let Some(name) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedExpression,
+                    "Expected capture name",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if TokenType::Identifier != name.ty {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    format!("Expected capture name but found '{}'", name.value),
+                    &name,
+                );
+                return Err(());
+            }
+
+            let expression = if let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::Assign)
+            {
+                self.index += 1;
+                Some(Rc::new(RefCell::new(self.parse_expression()?)))
+            } else {
+                None
+            };
+
+            captures.push(ClosureCapture {
+                name: Box::new(name),
+                expression,
+                is_var,
+            });
+
+            if let Some(token) = self.peek()
+                && SeparatorType::is_separator(&token, SeparatorType::Comma)
+            {
+                self.index += 1;
+            } else {
+                break;
+            }
+        }
+        Ok(captures)
+    }
+
     fn parse_closure_expression(&mut self) -> Result<Expression, ()> {
         self.index += 1;
+        let captures: Vec<ClosureCapture>;
         let parameters: Vec<Rc<RefCell<ClosureParameter>>>;
         let return_type: Option<Rc<RefCell<Expression>>>;
+
+        if let Some(token) = self.peek()
+            && SeparatorType::is_separator(&token, SeparatorType::OpenBracket)
+        {
+            self.index += 1;
+            captures = self.parse_closure_capture_list()?;
+            let Some(close) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected ']' to close capture list",
+                    &self.tokens[self.index.saturating_sub(1)],
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close, SeparatorType::CloseBracket) {
+                self.emit_error(
+                    TrussDiagnosticCode::UnexpectedToken,
+                    format!("Expected ']' but found '{}'", close.value),
+                    &close,
+                );
+                return Err(());
+            }
+        } else {
+            captures = Vec::new();
+        }
 
         if let Some(token) = self.peek()
             && KeywordType::is_keyword(&token, KeywordType::In)
@@ -4915,6 +5007,7 @@ impl Parser {
         self.scope_nesting -= 1;
         if SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
             Ok(Expression::Closure {
+                captures,
                 parameters,
                 return_type,
                 body,

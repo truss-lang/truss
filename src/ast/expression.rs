@@ -24,6 +24,13 @@ pub struct ClosureParameter {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ClosureCapture {
+    pub name: Box<Token>,
+    pub expression: Option<Rc<RefCell<Expression>>>,
+    pub is_var: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     IntegerLiteral {
         token: Box<Token>,
@@ -194,6 +201,7 @@ pub enum Expression {
         ty: Option<Rc<RefCell<Type>>>,
     },
     Closure {
+        captures: Vec<ClosureCapture>,
         parameters: Vec<Rc<RefCell<ClosureParameter>>>,
         return_type: Option<Rc<RefCell<Expression>>>,
         body: Vec<Rc<RefCell<Statement>>>,
