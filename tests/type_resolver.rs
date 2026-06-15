@@ -5217,7 +5217,7 @@ fn test_closure_no_params_no_return_type() {
         let t = ty.as_ref().unwrap().borrow().clone();
         if let Type::Closure(param_types, ret_type) = t {
             assert_eq!(param_types.len(), 0);
-            assert_eq!(*ret_type.borrow(), Type::Void);
+            assert_eq!(*ret_type.borrow(), type_of("Int32"));
         } else {
             panic!("Expected Type::Closure for closure, got {:?}", t);
         }

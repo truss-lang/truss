@@ -779,6 +779,30 @@ impl TypeResolver {
                     let annotated = self.infer_type(type_expr.clone());
                     if let Some(annotated) = annotated {
                         if let Some(init) = initializer {
+                            let closure_info: Option<(usize, Rc<RefCell<Scope>>)> = {
+                                let init_ref = init.borrow();
+                                if let Expression::Closure { parameters, body, scope, .. } = &*init_ref
+                                    && parameters.is_empty()
+                                    && self.find_max_shorthand(body).is_some()
+                                {
+                                    scope.as_ref().map(|sc| {
+                                        let max_idx = self.find_max_shorthand(body).unwrap();
+                                        (max_idx as usize, sc.clone())
+                                    })
+                                } else {
+                                    None
+                                }
+                            };
+                            if let Some((param_count, sc)) = closure_info {
+                                if let Type::Closure(expected_param_tys, _) = &*annotated.borrow()
+                                    && !expected_param_tys.is_empty()
+                                {
+                                    for (i, pt) in expected_param_tys.iter().enumerate().take(param_count + 1) {
+                                        let name = format!("${}", i);
+                                        sc.borrow_mut().set_type(name, pt.clone());
+                                    }
+                                }
+                            }
                             self.check_type_with_expected(
                                 init.clone(),
                                 annotated.clone(),
@@ -4325,8 +4349,24 @@ impl TypeResolver {
                         }
                     } else if shorthand_start == 0 {
                         if let Some(expected_ty) = &self.closure_expected_type {
-                            if let Type::Function(expected_params, expected_ret, _, None) =
-                                &*expected_ty.borrow()
+                            let expected_params_opt: Option<Vec<Rc<RefCell<Type>>>>;
+                            let expected_ret_opt: Option<Rc<RefCell<Type>>>;
+                            match &*expected_ty.borrow() {
+                                Type::Function(expected_params, expected_ret, _, None) => {
+                                    expected_params_opt = Some(expected_params.clone());
+                                    expected_ret_opt = Some(expected_ret.clone());
+                                }
+                                Type::Closure(expected_params, expected_ret) => {
+                                    expected_params_opt = Some(expected_params.clone());
+                                    expected_ret_opt = Some(expected_ret.clone());
+                                }
+                                _ => {
+                                    expected_params_opt = None;
+                                    expected_ret_opt = None;
+                                }
+                            }
+                            if let (Some(expected_params), Some(expected_ret)) =
+                                (expected_params_opt, expected_ret_opt)
                             {
                                 for idx in 0..required_params {
                                     let pt =
@@ -4340,8 +4380,7 @@ impl TypeResolver {
                                     param_types.push(pt);
                                 }
                                 if ret_type_from_expected {
-                                    let ret =
-                                        Rc::new(RefCell::new(Type::clone(&*expected_ret.borrow())));
+                                    let ret = Rc::new(RefCell::new(Type::clone(&*expected_ret.borrow())));
                                     let _ = std::mem::replace(&mut ret_type, ret);
                                 }
                             }
