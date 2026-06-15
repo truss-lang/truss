@@ -4028,6 +4028,32 @@ fn test_struct_subscript_symbol() {
 }
 
 #[test]
+fn test_struct_subscript_set_newvalue_symbol() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "struct Buffer { var x: Int32; subscript(index: Int32) -> Int32 { get { return x } set { x = newValue } } }"
+                .to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    resolver.resolve(&program, "test".to_string());
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should resolve subscript set newValue without errors, got: {:?}",
+        errors
+    );
+}
+
+#[test]
 fn test_class_subscript_symbol() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
