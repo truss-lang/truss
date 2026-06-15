@@ -6652,6 +6652,29 @@ fn test_parse_struct_with_where_clause() {
 }
 
 #[test]
+fn test_parse_repr_c_attribute() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "#[repr(C)] struct S { var x: Int32 }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    if let Statement::StructDecl { name, attributes, .. } = &*program.statements[0].borrow() {
+        assert_eq!(name.value, "S");
+        assert!(
+            attributes.iter().any(|a| a.name == "repr" && a.value.as_deref() == Some("C")),
+            "Expected #[repr(C)] attribute on struct S"
+        );
+    } else {
+        panic!("Expected StructDecl");
+    }
+}
+
+#[test]
 fn test_parse_builtintype_attribute() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

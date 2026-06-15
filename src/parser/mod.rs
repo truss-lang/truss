@@ -5345,10 +5345,11 @@ impl Parser {
                 };
                 let value = match &val_tok.ty {
                     TokenType::StringLiteral { value } => value.clone(),
+                    TokenType::Identifier => val_tok.value.clone(),
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::ParserError,
-                            format!("Expected string literal but found '{}'", val_tok.value),
+                            format!("Expected string literal or identifier but found '{}'", val_tok.value),
                             &val_tok,
                         );
                         return Err(());
