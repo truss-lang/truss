@@ -2,8 +2,8 @@ use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::{
-        expression::{ClosureCapture, ElseBranch, Expression},
-        statement::{FunctionBody, GenericParameterKind, OwnershipModifier, Pattern, Statement},
+        expression::{ElseBranch, Expression},
+        statement::{FunctionBody, GenericParameterKind, OwnershipModifier, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
     krate::Package,
@@ -174,7 +174,11 @@ fn test_tuple_pattern_let_resolves() {
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     resolver.resolve(&program, "test".to_string());
-    assert!(!engine.borrow().has_errors(), "Expected no errors: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Expected no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -192,7 +196,11 @@ fn test_tuple_pattern_partial_ignore_resolves() {
     let program = parser.parse();
     let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
     resolver.resolve(&program, "test".to_string());
-    assert!(!engine.borrow().has_errors(), "Expected no errors: {:?}", engine.borrow().get_diagnostics());
+    assert!(
+        !engine.borrow().has_errors(),
+        "Expected no errors: {:?}",
+        engine.borrow().get_diagnostics()
+    );
 }
 
 #[test]
@@ -1341,7 +1349,8 @@ fn test_enum_raw_value_type_resolves() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct MyInt {}
-             enum E: MyInt { case a, b }".to_string(),
+             enum E: MyInt { case a, b }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3913,7 +3922,8 @@ fn test_addr_of_fn_expr_resolved() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "func foo(x: Int32) -> Int32 { return x }
-             func test() { let f = &foo }".to_string(),
+             func test() { let f = &foo }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3934,16 +3944,10 @@ fn test_addr_of_fn_expr_resolved() {
             ..
         } = &*init_expr.borrow()
     {
-        assert_eq!(
-            operator,
-            &truss::ast::expression::UnaryOperator::AddressOf
-        );
+        assert_eq!(operator, &truss::ast::expression::UnaryOperator::AddressOf);
         assert!(is_prefix);
         if let Expression::Variable { symbol, .. } = &*inner.borrow() {
-            assert!(
-                symbol.is_some(),
-                "Function name should resolve to a symbol"
-            );
+            assert!(symbol.is_some(), "Function name should resolve to a symbol");
         } else {
             panic!("Expected Variable expression inside &");
         }
@@ -3958,7 +3962,8 @@ fn test_addr_of_method_member_access_resolved() {
     let mut lexer = Lexer::new(
         CharStream::new(
             "struct MyStruct { func doSomething(x: Int32) -> Int32 { return x } }
-             func test() { let f = &MyStruct.doSomething }".to_string(),
+             func test() { let f = &MyStruct.doSomething }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -3979,10 +3984,7 @@ fn test_addr_of_method_member_access_resolved() {
             ..
         } = &*init_expr.borrow()
     {
-        assert_eq!(
-            operator,
-            &truss::ast::expression::UnaryOperator::AddressOf
-        );
+        assert_eq!(operator, &truss::ast::expression::UnaryOperator::AddressOf);
         assert!(is_prefix);
         if let Expression::MemberAccess { object, member, .. } = &*inner.borrow() {
             assert_eq!(member.value, "doSomething");
@@ -5331,13 +5333,10 @@ fn test_mutating_method_registered_as_struct_method() {
     resolver.resolve(&program, "test".to_string());
     if let Statement::StructDecl { name, body, .. } = &*program.statements[0].borrow() {
         assert_eq!(name.value, "Foo");
-        let method_stmt = body.iter().find(|s| {
-            matches!(&*s.borrow(), Statement::FunctionDecl { name: n, .. } if n.value == "foo")
-        });
-        assert!(
-            method_stmt.is_some(),
-            "Should find func foo in struct body"
+        let method_stmt = body.iter().find(
+            |s| matches!(&*s.borrow(), Statement::FunctionDecl { name: n, .. } if n.value == "foo"),
         );
+        assert!(method_stmt.is_some(), "Should find func foo in struct body");
         if let Statement::FunctionDecl { mutating, .. } = &*method_stmt.unwrap().borrow() {
             assert!(*mutating, "Expected mutating to be true");
         } else {
@@ -5529,11 +5528,7 @@ fn test_weak_variable_ownership_in_symbol() {
     assert!(!engine.borrow().has_errors());
 
     let (packages, _) = truss::krate::single_package_map("main");
-    let mut resolver = SymbolResolver::new(
-        packages.clone(),
-        "main".to_string(),
-        engine.clone(),
-    );
+    let mut resolver = SymbolResolver::new(packages.clone(), "main".to_string(), engine.clone());
     resolver.resolve(&program, "main".to_string());
     assert!(!engine.borrow().has_errors());
 
@@ -5544,7 +5539,10 @@ fn test_weak_variable_ownership_in_symbol() {
     if let Statement::FunctionDecl { body, .. } = &*func_stmt.borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
     {
-        if let Statement::VariableDecl { name, ownership, .. } = &*stmts[0].borrow() {
+        if let Statement::VariableDecl {
+            name, ownership, ..
+        } = &*stmts[0].borrow()
+        {
             assert_eq!(*ownership, OwnershipModifier::Weak);
             assert_eq!(name.value, "x");
         } else {
@@ -5574,11 +5572,7 @@ fn test_unowned_variable_ownership_in_symbol() {
     assert!(!engine.borrow().has_errors());
 
     let (packages, _) = truss::krate::single_package_map("main");
-    let mut resolver = SymbolResolver::new(
-        packages.clone(),
-        "main".to_string(),
-        engine.clone(),
-    );
+    let mut resolver = SymbolResolver::new(packages.clone(), "main".to_string(), engine.clone());
     resolver.resolve(&program, "main".to_string());
     assert!(!engine.borrow().has_errors());
 
@@ -5588,7 +5582,10 @@ fn test_unowned_variable_ownership_in_symbol() {
     if let Statement::FunctionDecl { body, .. } = &*func_stmt.borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
     {
-        if let Statement::VariableDecl { name, ownership, .. } = &*stmts[0].borrow() {
+        if let Statement::VariableDecl {
+            name, ownership, ..
+        } = &*stmts[0].borrow()
+        {
             assert_eq!(*ownership, OwnershipModifier::Unowned);
             assert_eq!(name.value, "x");
         } else {
@@ -5618,11 +5615,7 @@ fn test_strong_variable_default_ownership_in_symbol() {
     assert!(!engine.borrow().has_errors());
 
     let (packages, _) = truss::krate::single_package_map("main");
-    let mut resolver = SymbolResolver::new(
-        packages.clone(),
-        "main".to_string(),
-        engine.clone(),
-    );
+    let mut resolver = SymbolResolver::new(packages.clone(), "main".to_string(), engine.clone());
     resolver.resolve(&program, "main".to_string());
     assert!(!engine.borrow().has_errors());
 
@@ -5632,7 +5625,10 @@ fn test_strong_variable_default_ownership_in_symbol() {
     if let Statement::FunctionDecl { body, .. } = &*func_stmt.borrow()
         && let FunctionBody::Statements(stmts) = &*body.borrow()
     {
-        if let Statement::VariableDecl { name, ownership, .. } = &*stmts[0].borrow() {
+        if let Statement::VariableDecl {
+            name, ownership, ..
+        } = &*stmts[0].borrow()
+        {
             assert_eq!(*ownership, OwnershipModifier::Strong);
             assert_eq!(name.value, "x");
         } else {

@@ -5346,7 +5346,7 @@ fn test_func_ptr_type_syntax_resolved() {
     {
         assert!(ty.is_some(), "FunctionType should have a resolved type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
+        if let Type::Function(param_types, _ret_type, is_vararg, None) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*param_types[1].borrow(), type_of("Bool"));
@@ -7772,7 +7772,7 @@ func getLib() -> TargetKind {
         let expr = expression.borrow();
         match &*expr {
             Expression::Call {
-                callee, parameters, ..
+                callee, parameters: _, ..
             } => {
                 let callee_expr = callee.borrow();
                 match &*callee_expr {

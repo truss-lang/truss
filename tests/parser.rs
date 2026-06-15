@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use truss::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CastKind, ClosureCapture, ElseBranch, Expression,
+            AssignmentOperator, BinaryOperator, CastKind, ElseBranch, Expression,
             MacroDelimiter, TryKind, UnaryOperator,
         },
         statement::{
@@ -507,7 +507,10 @@ fn test_parse_tuple_pattern_let() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), .. } = &*statements[0].borrow()
+        && let Statement::VariableDecl {
+            pattern: Some(Pattern::Tuple(items)),
+            ..
+        } = &*statements[0].borrow()
     {
         assert_eq!(items.len(), 2);
         assert!(matches!(&items[0], Pattern::Identifier(t) if t.value == "x"));
@@ -531,7 +534,10 @@ fn test_parse_tuple_pattern_wildcard() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), .. } = &*statements[0].borrow()
+        && let Statement::VariableDecl {
+            pattern: Some(Pattern::Tuple(items)),
+            ..
+        } = &*statements[0].borrow()
     {
         assert_eq!(items.len(), 2);
         assert!(matches!(&items[0], Pattern::Identifier(t) if t.value == "x"));
@@ -555,7 +561,11 @@ fn test_parse_tuple_pattern_typed() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), type_expression: Some(_), .. } = &*statements[0].borrow()
+        && let Statement::VariableDecl {
+            pattern: Some(Pattern::Tuple(items)),
+            type_expression: Some(_),
+            ..
+        } = &*statements[0].borrow()
     {
         assert_eq!(items.len(), 2);
     } else {
@@ -577,7 +587,10 @@ fn test_parse_tuple_nested_pattern() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), .. } = &*statements[0].borrow()
+        && let Statement::VariableDecl {
+            pattern: Some(Pattern::Tuple(items)),
+            ..
+        } = &*statements[0].borrow()
     {
         assert_eq!(items.len(), 2);
         assert!(matches!(&items[0], Pattern::Identifier(t) if t.value == "x"));
@@ -601,7 +614,10 @@ fn test_parse_var_tuple_pattern() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { pattern: Some(Pattern::Tuple(items)), .. } = &*statements[0].borrow()
+        && let Statement::VariableDecl {
+            pattern: Some(Pattern::Tuple(items)),
+            ..
+        } = &*statements[0].borrow()
     {
         assert_eq!(items.len(), 2);
         assert!(matches!(&items[0], Pattern::Identifier(t) if t.value == "a"));
@@ -625,7 +641,10 @@ fn test_parse_ignore_pattern() {
     let program = parser.parse();
     if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
         && let FunctionBody::Statements(statements) = &*body.borrow()
-        && let Statement::VariableDecl { pattern: Some(Pattern::Ignore), .. } = &*statements[0].borrow()
+        && let Statement::VariableDecl {
+            pattern: Some(Pattern::Ignore),
+            ..
+        } = &*statements[0].borrow()
     {
     } else {
         panic!();
@@ -4053,7 +4072,10 @@ fn test_parse_enum_with_raw_value_type() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     if let Statement::EnumDecl {
-        name, conformances, cases, ..
+        name,
+        conformances,
+        cases,
+        ..
     } = &*program.statements[0].borrow()
     {
         assert_eq!(name.value, "E");
@@ -6870,10 +6892,15 @@ fn test_parse_repr_c_attribute() {
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    if let Statement::StructDecl { name, attributes, .. } = &*program.statements[0].borrow() {
+    if let Statement::StructDecl {
+        name, attributes, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(name.value, "S");
         assert!(
-            attributes.iter().any(|a| a.name == "repr" && a.value.as_deref() == Some("C")),
+            attributes
+                .iter()
+                .any(|a| a.name == "repr" && a.value.as_deref() == Some("C")),
             "Expected #[repr(C)] attribute on struct S"
         );
     } else {
@@ -13050,12 +13077,16 @@ fn test_parse_mutating_function_with_modifiers() {
         });
         assert!(mutating_func.is_some(), "Should find func foo");
         if let Statement::FunctionDecl {
-            modifiers, mutating, ..
+            modifiers,
+            mutating,
+            ..
         } = &*mutating_func.unwrap().borrow()
         {
             assert!(*mutating, "Expected mutating to be true");
             assert!(
-                modifiers.iter().any(|m| matches!(m.ty, ModifierType::Access(_))),
+                modifiers
+                    .iter()
+                    .any(|m| matches!(m.ty, ModifierType::Access(_))),
                 "Expected access modifier"
             );
         } else {
@@ -13117,7 +13148,9 @@ fn test_parse_self_init_call_in_struct_init() {
         engine.borrow().get_errors()
     );
     if let Statement::StructDecl { body, .. } = &*program.statements[0].borrow() {
-        let init_stmt = body.iter().find(|s| matches!(&*s.borrow(), Statement::InitDecl { .. }));
+        let init_stmt = body
+            .iter()
+            .find(|s| matches!(&*s.borrow(), Statement::InitDecl { .. }));
         assert!(init_stmt.is_some(), "Should find init");
     } else {
         panic!("Expected StructDecl");
@@ -13128,10 +13161,7 @@ fn test_parse_self_init_call_in_struct_init() {
 fn test_parse_closure_capture_simple() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new(
-            "let f = { [x] in x }".to_string(),
-            Rc::new("".to_string()),
-        ),
+        CharStream::new("let f = { [x] in x }".to_string(), Rc::new("".to_string())),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -13345,7 +13375,10 @@ fn test_parse_weak_variable() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { ownership, name, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        ownership, name, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(*ownership, OwnershipModifier::Weak);
         assert_eq!(name.value, "x");
     } else {
@@ -13366,7 +13399,10 @@ fn test_parse_unowned_variable() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { ownership, name, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        ownership, name, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(*ownership, OwnershipModifier::Unowned);
         assert_eq!(name.value, "x");
     } else {
@@ -13438,7 +13474,10 @@ fn test_parse_strong_variable_default() {
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
-    if let Statement::VariableDecl { ownership, name, .. } = &*program.statements[0].borrow() {
+    if let Statement::VariableDecl {
+        ownership, name, ..
+    } = &*program.statements[0].borrow()
+    {
         assert_eq!(*ownership, OwnershipModifier::Strong);
         assert_eq!(name.value, "x");
     } else {
