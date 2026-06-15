@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
-        expression::{ElseBranch, Expression},
+        expression::{ClosureCapture, ElseBranch, Expression},
         node::Program,
         statement::{
             AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Modifier, ModifierType,
@@ -26,6 +26,7 @@ pub struct SymbolResolver {
     current_scope: Option<Rc<RefCell<Scope>>>,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
     root_module_name: String,
+    closure_capture_stack: Vec<(Rc<RefCell<Scope>>, Vec<ClosureCapture>)>,
 }
 impl SymbolResolver {
     pub fn new(
@@ -40,6 +41,7 @@ impl SymbolResolver {
             current_scope: None,
             engine,
             root_module_name: String::new(),
+            closure_capture_stack: Vec::new(),
         }
     }
 
@@ -1965,6 +1967,52 @@ impl SymbolResolver {
                 if is_type_name {
                     return;
                 }
+
+                // Detect implicit closure captures
+                if !self.closure_capture_stack.is_empty() {
+                    let (closure_scope, _) = &self.closure_capture_stack.last().unwrap().clone();
+                    let var_name = name.value.clone();
+                    if !closure_scope.borrow().name_table.contains_key(&var_name)
+                        && self.resolve_symbol(name).is_ok()
+                    {
+                        let already_captured = self.closure_capture_stack
+                            .last()
+                            .map_or(false, |(_, caps)| {
+                                caps.iter().any(|c| c.name.value == var_name)
+                            });
+                        if !already_captured {
+                            let is_var = match self.resolve_symbol(name) {
+                                Ok(sym) => matches!(&*sym.borrow(), Symbol::Variable { is_var: true, .. }),
+                                Err(_) => false,
+                            };
+                            if let Some((_, captures)) = self.closure_capture_stack.last_mut() {
+                                captures.push(ClosureCapture {
+                                    name: Box::new(Token::new(
+                                        var_name.clone(),
+                                        TokenType::Identifier,
+                                        name.position,
+                                        name.file.clone(),
+                                    )),
+                                    expression: None,
+                                    is_var,
+                                });
+                            }
+                            let mut current = closure_scope.borrow().parent.clone();
+                            while let Some(scope) = current {
+                                if scope.borrow().name_table.contains_key(&var_name) {
+                                    scope.borrow_mut().captured_by_closures.insert(var_name);
+                                    break;
+                                }
+                                current = scope.borrow().parent.clone();
+                            }
+                        }
+                        if let Ok(sym) = self.resolve_symbol(name) {
+                            *symbol = Some(WeakSymbol(Rc::downgrade(&sym)));
+                        }
+                        return;
+                    }
+                }
+
                 match self.resolve_symbol(name) {
                 Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
                 Err(_) => {
@@ -2197,6 +2245,7 @@ impl SymbolResolver {
                 }
             }
             Expression::Closure {
+                captures,
                 parameters,
                 return_type,
                 body,
@@ -2204,6 +2253,32 @@ impl SymbolResolver {
                 ..
             } => {
                 *scope = Some(self.enter_scope(None));
+                let closure_scope = scope.as_ref().unwrap().clone();
+
+                // Register explicit captures
+                let mut explicit_capture_names = Vec::new();
+                for cap in captures.iter() {
+                    let cap_name = cap.name.value.clone();
+                    explicit_capture_names.push(cap_name.clone());
+                    if cap_name != "_" {
+                        let symbol = Rc::new(RefCell::new(Symbol::Variable {
+                            name: cap_name.clone(),
+                            decl: None,
+                            parameter: None,
+                            is_var: cap.is_var,
+                        }));
+                        self.enter(symbol, &cap.name);
+                    }
+                    if let Some(expr) = &cap.expression {
+                        self.resolve_expression(expr.clone());
+                    }
+                }
+
+                // Push closure capture context for implicit capture detection
+                let collected_captures: Vec<ClosureCapture> = captures.clone();
+                self.closure_capture_stack
+                    .push((closure_scope.clone(), collected_captures));
+
                 for param in parameters {
                     let name = param.borrow().name.value.clone();
                     if name != "_" {
@@ -2255,6 +2330,12 @@ impl SymbolResolver {
                         );
                     }
                 }
+
+                // Pop closure capture context and backfill captures
+                if let Some((_, final_captures)) = self.closure_capture_stack.pop() {
+                    *captures = final_captures;
+                }
+
                 self.leave_scope();
             }
             Expression::FunctionType { param_types, .. } => {

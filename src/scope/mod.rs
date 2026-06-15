@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use crate::{symbol::Symbol, types::Type};
 
@@ -8,6 +12,7 @@ pub struct Scope {
     pub overloads: HashMap<String, Vec<Rc<RefCell<Symbol>>>>,
     pub type_env: HashMap<String, Rc<RefCell<Type>>>,
     pub parent: Option<Rc<RefCell<Scope>>>,
+    pub captured_by_closures: HashSet<String>,
 }
 impl Scope {
     pub fn new(parent: Option<Rc<RefCell<Scope>>>) -> Self {
@@ -16,6 +21,7 @@ impl Scope {
             overloads: HashMap::new(),
             type_env: HashMap::new(),
             parent,
+            captured_by_closures: HashSet::new(),
         }
     }
 

@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::{
-        expression::{ElseBranch, Expression},
+        expression::{ClosureCapture, ElseBranch, Expression},
         statement::{FunctionBody, GenericParameterKind, Pattern, Statement},
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -5253,5 +5253,167 @@ fn test_mutating_method_registered_as_struct_method() {
         }
     } else {
         panic!("Expected StructDecl");
+    }
+}
+
+#[test]
+fn test_closure_implicit_capture_detected() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a = 1; let f = { (x: Int32) in a + x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let closure_decl = statements
+            .iter()
+            .find(|s| {
+                matches!(&*s.borrow(),
+                    Statement::VariableDecl { name, .. } if name.value == "f"
+                )
+            })
+            .expect("Expected variable 'f'");
+        if let Statement::VariableDecl { initializer, .. } = &*closure_decl.borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure { captures, .. } = &*init.borrow()
+        {
+            assert_eq!(captures.len(), 1, "Should have 1 implicit capture");
+            assert_eq!(captures[0].name.value, "a");
+            assert!(captures[0].expression.is_none());
+            assert!(!captures[0].is_var, "let a should be captured as let");
+        } else {
+            panic!("Expected Closure with captures");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_closure_explicit_capture_preserved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let a = 1; let b = 2; let f = { [a] (x: Int32) in a + x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let closure_decl = statements
+            .iter()
+            .find(|s| {
+                matches!(&*s.borrow(),
+                    Statement::VariableDecl { name, .. } if name.value == "f"
+                )
+            })
+            .expect("Expected variable 'f'");
+        if let Statement::VariableDecl { initializer, .. } = &*closure_decl.borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure { captures, .. } = &*init.borrow()
+        {
+            assert_eq!(captures.len(), 1, "Should have 1 explicit capture");
+            assert_eq!(captures[0].name.value, "a");
+        } else {
+            panic!("Expected Closure with captures");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_closure_implicit_capture_var_detected() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { var a = 1; let f = { in a } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let closure_decl = statements
+            .iter()
+            .find(|s| {
+                matches!(&*s.borrow(),
+                    Statement::VariableDecl { name, .. } if name.value == "f"
+                )
+            })
+            .expect("Expected variable 'f'");
+        if let Statement::VariableDecl { initializer, .. } = &*closure_decl.borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure { captures, .. } = &*init.borrow()
+        {
+            assert_eq!(captures.len(), 1, "Should have 1 implicit capture");
+            assert_eq!(captures[0].name.value, "a");
+            assert!(captures[0].is_var, "var a should be captured as var");
+        } else {
+            panic!("Expected Closure with captures");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_closure_no_implicit_capture_for_local_params() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f = { (x: Int32) in x } }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _) = truss::krate::single_package_map("test");
+    let mut resolver = SymbolResolver::new(packages.clone(), "test".to_string(), engine);
+    resolver.resolve(&program, "test".to_string());
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+    {
+        let closure_decl = statements
+            .iter()
+            .find(|s| {
+                matches!(&*s.borrow(),
+                    Statement::VariableDecl { name, .. } if name.value == "f"
+                )
+            })
+            .expect("Expected variable 'f'");
+        if let Statement::VariableDecl { initializer, .. } = &*closure_decl.borrow()
+            && let Some(init) = initializer
+            && let Expression::Closure { captures, .. } = &*init.borrow()
+        {
+            assert_eq!(captures.len(), 0, "Should have no captures (x is a param)");
+        } else {
+            panic!("Expected Closure with captures");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
     }
 }
