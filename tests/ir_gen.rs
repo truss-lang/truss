@@ -274,7 +274,7 @@ fn test_irgen_struct_field_access() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("struct.Point"));
+    assert!(llvm_ir.contains("_T$S$$$Point"));
     assert!(llvm_ir.contains("load"));
 }
 
@@ -312,8 +312,8 @@ fn test_irgen_struct_method_call() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@Point.f"));
-    assert!(llvm_ir.contains("call i64 @Point.f(ptr"));
+    assert!(llvm_ir.contains("_T$Point$f$$"));
+    assert!(llvm_ir.contains("call i64 @\"_T$Point$f$$\"(ptr"));
 }
 
 #[test]
@@ -349,8 +349,8 @@ fn test_irgen_struct_method_call_with_params() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@Point.add"));
-    assert!(llvm_ir.contains("call i32 @Point.add("));
+    assert!(llvm_ir.contains("_T$Point$add$$V"));
+    assert!(llvm_ir.contains("call i32 @\"_T$Point$add$$\"("));
     assert!(llvm_ir.contains("i32 3"));
     assert!(llvm_ir.contains("i32 4"));
 }
@@ -385,8 +385,8 @@ fn test_irgen_type_instantiation() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@Point.init"));
-    assert!(llvm_ir.contains("call void @Point.init("));
+    assert!(llvm_ir.contains("_T$Point$init$$V"));
+    assert!(llvm_ir.contains("call void @\"_T$Point$init$$\"("));
     assert!(llvm_ir.contains("i32 42"));
 }
 
@@ -417,9 +417,9 @@ fn test_irgen_var_getter_shorthand() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@v.getter"));
-    assert!(llvm_ir.contains("define i32 @v.getter(ptr"));
-    assert!(llvm_ir.contains("call i32 @v.getter("));
+    assert!(llvm_ir.contains("_T$T$v$getter$$"));
+    assert!(llvm_ir.contains("define i32 @\"_T$T$v$getter$$\"(ptr"));
+    assert!(llvm_ir.contains("call i32 @\"_T$T$v$getter$$\"("));
 }
 
 #[test]
@@ -449,9 +449,9 @@ fn test_irgen_var_getter_explicit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@v.getter"));
-    assert!(llvm_ir.contains("define i32 @v.getter(ptr"));
-    assert!(llvm_ir.contains("call i32 @v.getter("));
+    assert!(llvm_ir.contains("_T$T$v$getter$$"));
+    assert!(llvm_ir.contains("define i32 @\"_T$T$v$getter$$\"(ptr"));
+    assert!(llvm_ir.contains("call i32 @\"_T$T$v$getter$$\"("));
 }
 
 #[test]
@@ -483,10 +483,10 @@ fn test_irgen_var_get_set() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@v.getter"));
-    assert!(llvm_ir.contains("@v.setter"));
-    assert!(llvm_ir.contains("call i32 @v.getter("));
-    assert!(llvm_ir.contains("call void @v.setter("));
+    assert!(llvm_ir.contains("_T$T$v$getter$$"));
+    assert!(llvm_ir.contains("_T$T$v$setter$$"));
+    assert!(llvm_ir.contains("call i32 @\"_T$T$v$getter$$\"("));
+    assert!(llvm_ir.contains("call void @\"_T$T$v$setter$$\"("));
 }
 
 #[test]
@@ -517,12 +517,12 @@ fn test_irgen_var_willset_didset() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@v.willSet"));
-    assert!(llvm_ir.contains("@v.didSet"));
-    assert!(llvm_ir.contains("define void @v.willSet(ptr"));
-    assert!(llvm_ir.contains("define void @v.didSet(ptr"));
-    assert!(llvm_ir.contains("call void @v.willSet("));
-    assert!(llvm_ir.contains("call void @v.didSet("));
+    assert!(llvm_ir.contains("_T$T$v$willSet$$"));
+    assert!(llvm_ir.contains("_T$T$v$didSet$$"));
+    assert!(llvm_ir.contains("define void @\"_T$T$v$willSet$$\"(ptr"));
+    assert!(llvm_ir.contains("define void @\"_T$T$v$didSet$$\"(ptr"));
+    assert!(llvm_ir.contains("call void @\"_T$T$v$willSet$$\"("));
+    assert!(llvm_ir.contains("call void @\"_T$T$v$didSet$$\"("));
 }
 
 #[test]
@@ -555,10 +555,10 @@ fn test_irgen_var_all_accessors() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@v.getter"));
-    assert!(llvm_ir.contains("@v.setter"));
-    assert!(llvm_ir.contains("@v.willSet"));
-    assert!(llvm_ir.contains("@v.didSet"));
+    assert!(llvm_ir.contains("_T$T$v$getter$$"));
+    assert!(llvm_ir.contains("_T$T$v$setter$$"));
+    assert!(llvm_ir.contains("_T$T$v$willSet$$"));
+    assert!(llvm_ir.contains("_T$T$v$didSet$$"));
 }
 
 #[test]
@@ -590,9 +590,9 @@ fn test_irgen_var_set_no_param() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@v.getter"));
-    assert!(llvm_ir.contains("@v.setter"));
-    assert!(llvm_ir.contains("call void @v.setter("));
+    assert!(llvm_ir.contains("_T$T$v$getter$$"));
+    assert!(llvm_ir.contains("_T$T$v$setter$$"));
+    assert!(llvm_ir.contains("call void @\"_T$T$v$setter$$\"("));
 }
 
 #[test]
@@ -625,8 +625,8 @@ fn test_irgen_struct_getter_shorthand() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@T.i.getter"));
-    assert!(llvm_ir.contains("define i32 @T.i.getter(ptr"));
+    assert!(llvm_ir.contains("_T$T$i$getter$$"));
+    assert!(llvm_ir.contains("define i32 _T$T$i$getter$$(ptr"));
     assert!(llvm_ir.contains("call i32 @T.i.getter("));
 }
 
@@ -660,7 +660,7 @@ fn test_irgen_struct_getter_explicit() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 @T.i.getter(ptr"));
+    assert!(llvm_ir.contains("define i32 _T$T$i$getter$$(ptr"));
     assert!(llvm_ir.contains("call i32 @T.i.getter("));
 }
 
@@ -698,8 +698,8 @@ fn test_irgen_struct_get_set() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 @T.i.getter(ptr"));
-    assert!(llvm_ir.contains("define void @T.i.setter(ptr"));
+    assert!(llvm_ir.contains("define i32 _T$T$i$getter$$(ptr"));
+    assert!(llvm_ir.contains("define void _T$T$i$setter$$(ptr"));
     assert!(llvm_ir.contains("call void @T.i.setter("));
 }
 
@@ -736,8 +736,8 @@ fn test_irgen_struct_willset_didset() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define void @T.i.willSet(ptr"));
-    assert!(llvm_ir.contains("define void @T.i.didSet(ptr"));
+    assert!(llvm_ir.contains("define void _T$T$i$willSet$$(ptr"));
+    assert!(llvm_ir.contains("define void _T$T$i$didSet$$(ptr"));
     assert!(llvm_ir.contains("call void @T.i.willSet("));
     assert!(llvm_ir.contains("call void @T.i.didSet("));
 }
@@ -777,8 +777,8 @@ fn test_irgen_struct_get_set_read_write() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("define i32 @T.i.getter(ptr"));
-    assert!(llvm_ir.contains("define void @T.i.setter(ptr"));
+    assert!(llvm_ir.contains("define i32 _T$T$i$getter$$(ptr"));
+    assert!(llvm_ir.contains("define void _T$T$i$setter$$(ptr"));
     assert!(llvm_ir.contains("call void @T.i.setter("));
     assert!(llvm_ir.contains("call i32 @T.i.getter("));
 }
@@ -827,8 +827,8 @@ fn test_irgen_enum_decl_simple_cases() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("%enum.Option"));
-    assert!(llvm_ir.contains("%enum.Option.payloads"));
+    assert!(llvm_ir.contains("_T$E$$$Option"));
+    assert!(llvm_ir.contains("_T$E$$$Option.payloads"));
 }
 
 #[test]
@@ -861,7 +861,7 @@ fn test_irgen_enum_case_construction_no_payload() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("%enum.Option = type { i8"));
+    assert!(llvm_ir.contains("_T$E$$$Option = type { i8"));
     assert!(llvm_ir.contains("test"));
 }
 
@@ -895,7 +895,7 @@ fn test_irgen_enum_case_construction_with_payload() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("%enum.Option = type { i8"));
+    assert!(llvm_ir.contains("_T$E$$$Option = type { i8"));
     assert!(llvm_ir.contains("i8 1"));
     assert!(llvm_ir.contains("i32 42"));
 }
@@ -930,7 +930,7 @@ fn test_irgen_enum_case_with_labeled_payload() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("%enum.Either"));
+    assert!(llvm_ir.contains("_T$E$$$Either"));
     assert!(llvm_ir.contains("i32 10"));
 }
 
@@ -966,7 +966,7 @@ fn test_irgen_enum_multiple_cases() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("%enum.Status"));
+    assert!(llvm_ir.contains("_T$E$$$Status"));
     assert!(llvm_ir.contains("i8 3"));
     assert!(llvm_ir.contains("i32 404"));
 }
@@ -1004,7 +1004,7 @@ fn test_irgen_enum_method() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("@Option.is_some"));
+    assert!(llvm_ir.contains("_T$Option$is_some$$"));
     assert!(llvm_ir.contains("true"));
 }
 
@@ -1039,7 +1039,7 @@ fn test_irgen_enum_variable() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
 
-    assert!(llvm_ir.contains("%enum.Option"));
+    assert!(llvm_ir.contains("_T$E$$$Option"));
     assert!(llvm_ir.contains("i32 99"));
 }
 
@@ -1051,7 +1051,7 @@ fn test_irgen_enum_raw_value_type_decl() {
          func test() -> E { return E.a }",
     );
     assert!(
-        llvm_ir.contains("%enum.E = type { i8"),
+        llvm_ir.contains("_T$E$$$E = type { i8"),
         "Enum type should be declared as struct with i8 field, got:\n{}",
         llvm_ir
     );
@@ -1081,7 +1081,7 @@ fn test_irgen_enum_raw_value_no_payload_union() {
          func test() -> E { return E.a }",
     );
     assert!(
-        !llvm_ir.contains("%enum.E.payloads"),
+        !llvm_ir.contains("_T$E$$$E.payloads"),
         "Raw value enum should not have payload union, got:\n{}",
         llvm_ir
     );
@@ -1264,7 +1264,7 @@ fn test_irgen_class_decl() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("class.Point"),
+        llvm_ir.contains("_T$C$$$Point"),
         "Expected class.Point in IR:\n{}",
         llvm_ir
     );
@@ -1511,7 +1511,7 @@ fn test_irgen_class_inheritance_field_layout() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("class.Dog"),
+        llvm_ir.contains("_T$C$$$Dog"),
         "Expected class.Dog in IR:\n{}",
         llvm_ir
     );
@@ -1553,7 +1553,7 @@ fn test_irgen_class_inheritance_field_access() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("class.Dog"),
+        llvm_ir.contains("_T$C$$$Dog"),
         "Expected class.Dog in IR:\n{}",
         llvm_ir
     );
@@ -1597,7 +1597,7 @@ fn test_irgen_class_inheritance_multi_level() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("class.Dog"),
+        llvm_ir.contains("_T$C$$$Dog"),
         "Expected class.Dog in IR:\n{}",
         llvm_ir
     );
@@ -1681,7 +1681,7 @@ fn test_irgen_self_return_in_struct_method() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("@Point.identity"),
+        llvm_ir.contains("_T$Point$identity$$"),
         "Expected Point.identity function:\n{}",
         llvm_ir
     );
@@ -1719,7 +1719,7 @@ fn test_irgen_self_in_init() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("@Point.init"),
+        llvm_ir.contains("_T$Point$init$$V"),
         "Expected Point.init function:\n{}",
         llvm_ir
     );
@@ -4243,12 +4243,12 @@ fn test_irgen_closure_simple() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
         "Closure should have i32 parameter and return i32"
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -4277,8 +4277,8 @@ fn test_irgen_closure_no_params() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -4307,12 +4307,12 @@ fn test_irgen_closure_multi_param() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
         "Closure should have i32 params"
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -4341,8 +4341,8 @@ fn test_irgen_closure_with_return() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -4378,8 +4378,8 @@ fn test_irgen_closure_call() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function"
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function"
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
@@ -4410,8 +4410,8 @@ fn test_irgen_higher_order_call() {
         "Should define apply function"
     );
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function"
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function"
     );
     assert!(
         llvm_ir.contains("call i32"),
@@ -4481,7 +4481,7 @@ fn test_irgen_fn_ref_call_through_variable() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("@addOne"),
+        llvm_ir.contains("_T$addOne$$V"),
         "Should reference addOne function, IR:\n{}",
         llvm_ir
     );
@@ -4515,8 +4515,8 @@ fn test_irgen_closure_capture_outer_variable() {
     let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -4550,8 +4550,8 @@ fn test_irgen_closure_multi_statement_body() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -4596,8 +4596,8 @@ fn test_irgen_closure_trailing_syntax() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -4631,8 +4631,8 @@ fn test_irgen_closure_expression_only_body() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
@@ -4661,8 +4661,8 @@ fn test_irgen_closure_multiple_in_function() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -4701,8 +4701,8 @@ fn test_irgen_closure_implicit_return_last_expression() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -4741,12 +4741,12 @@ fn test_irgen_closure_void_return_type() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("void @__closure_0"),
+        llvm_ir.contains("void @_T$CC$0"),
         "Closure should return void, IR:\n{}",
         llvm_ir
     );
@@ -4781,12 +4781,12 @@ fn test_irgen_closure_shorthand_argument() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
         "Closure should take one i32 param and return i32, IR:\n{}",
         llvm_ir
     );
@@ -4816,12 +4816,12 @@ fn test_irgen_closure_shorthand_binary() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
         "Closure should take two i32 params and return i32, IR:\n{}",
         llvm_ir
     );
@@ -4856,12 +4856,12 @@ fn test_irgen_closure_shorthand_with_type_annotation() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
         "IR:\n{}",
         llvm_ir
     );
@@ -4892,12 +4892,12 @@ fn test_irgen_closure_shorthand_multi_args() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("define i32 @__closure_0(i32 %"),
+        llvm_ir.contains("define i32 @_T$CC$0(i32 %"),
         "Closure should take i32 params, IR:\n{}",
         llvm_ir
     );
@@ -5035,7 +5035,7 @@ fn test_irgen_struct_subscript_getter() {
         engine.borrow().get_errors()
     );
     assert!(
-        llvm_ir.contains("@Array.subscript.getter"),
+        llvm_ir.contains("_T$Array$subscript$getter$$"),
         "Expected subscript.getter in IR:\n{}",
         llvm_ir
     );
@@ -5081,12 +5081,12 @@ fn test_irgen_struct_subscript_get_set() {
         engine.borrow().get_errors()
     );
     assert!(
-        llvm_ir.contains("@Array.subscript.getter"),
+        llvm_ir.contains("_T$Array$subscript$getter$$"),
         "Expected subscript.getter in IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("@Array.subscript.setter"),
+        llvm_ir.contains("_T$Array$subscript$setter$$"),
         "Expected subscript.setter in IR:\n{}",
         llvm_ir
     );
@@ -5794,7 +5794,7 @@ fn test_irgen_inline_class_init() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("class.Point"),
+        llvm_ir.contains("_T$C$$$Point"),
         "Expected class.Point struct in IR:\n{}",
         llvm_ir
     );
@@ -5983,7 +5983,7 @@ fn test_irgen_non_builtintype_struct_creates_llvm_struct() {
     assert_eq!(engine.borrow().get_errors().len(), 0);
     let llvm_ir = module.print_to_string().to_string();
     assert!(
-        llvm_ir.contains("struct.Point"),
+        llvm_ir.contains("_T$S$$$Point"),
         "Non-built-in struct should create LLVM struct type"
     );
 }
@@ -6779,8 +6779,8 @@ fn test_irgen_closure_capture_outer_generates_context() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -6804,8 +6804,8 @@ fn test_irgen_closure_explicit_capture() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert!(
@@ -6862,9 +6862,67 @@ fn test_irgen_closure_capture_multiple() {
     eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
     eprintln!("Errors: {:?}", engine.borrow().get_errors());
     assert!(
-        llvm_ir.contains("__closure_0"),
-        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir.contains("_T$CC$0"),
+        "Should define _T$CC$0 function, IR:\n{}",
         llvm_ir
     );
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+
+#[test]
+fn test_irgen_mangled_function_name() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "func add(x: Int32, y: Int32) -> Int32 { return x + y }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        llvm_ir.contains("_T$add$x_y$I32_I32"),
+        "Function should have mangled name _T$add$x_y$I32_I32, IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_mangled_struct_type_name() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "struct Point { let x: Int32 let y: Int32 }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        llvm_ir.contains("_T$S$$$Point"),
+        "Struct type should have mangled name _T$S$$$Point, IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_mangled_function_with_cname() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "#[cname(\"my_exported_fn\")] func foo(x: Int32) -> Int32 { return x }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        llvm_ir.contains("my_exported_fn"),
+        "cname function should use cname, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        !llvm_ir.contains("_T$foo$x$I32"),
+        "cname function should NOT have mangled name, IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_extern_c_name_not_mangled() {
+    let (llvm_ir, engine) = run_ir_gen(
+        r#"extern "C" func putchar(_ c: Char)"#,
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        llvm_ir.contains("declare void @putchar"),
+        "extern C function should use C name 'putchar', IR:\n{}",
+        llvm_ir
+    );
 }

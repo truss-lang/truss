@@ -165,7 +165,8 @@ impl BuildOrchestrator {
                     return;
                 }
 
-                let file_ir_gen = IRGenerator::new(&context, ir_engine.clone());
+                let file_ir_gen = IRGenerator::new(&context, ir_engine.clone())
+                    .with_namespace(&pkg_name, &pkg_name);
                 let file_modules_result =
                     file_ir_gen.generate_with_stdlib(&program, &[], main_scope.clone());
                 file_modules.push((
@@ -183,7 +184,8 @@ impl BuildOrchestrator {
             }
 
             let combined_module = if file_modules.is_empty() {
-                let single_ir_gen = IRGenerator::new(&context, ir_engine.clone());
+                let single_ir_gen = IRGenerator::new(&context, ir_engine.clone())
+                    .with_namespace(&pkg_name, &pkg_name);
                 let modules = single_ir_gen.generate_with_stdlib(&prog, &[], main_scope);
                 if ir_engine.borrow().has_errors() {
                     let formatted = duck_diagnostic::format_all_smart(&*ir_engine.borrow(), false);

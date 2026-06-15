@@ -85,6 +85,10 @@ pub struct IRGenerator<'ctx> {
     closure_counter: Rc<RefCell<u32>>,
     yield_targets: Rc<RefCell<Vec<(PointerValue<'ctx>, BasicBlock<'ctx>)>>>,
     error_ptr: Rc<RefCell<Option<PointerValue<'ctx>>>>,
+    package_name: String,
+    module_name: String,
+    extern_fn_c_names: Rc<RefCell<HashMap<String, String>>>,
+    mangled_fn_names: Rc<RefCell<HashMap<String, String>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -117,7 +121,17 @@ impl<'ctx> IRGenerator<'ctx> {
             closure_counter: Rc::new(RefCell::new(0)),
             yield_targets: Rc::new(RefCell::new(Vec::new())),
             error_ptr: Rc::new(RefCell::new(None)),
+            package_name: String::new(),
+            module_name: String::new(),
+            extern_fn_c_names: Rc::new(RefCell::new(HashMap::new())),
+            mangled_fn_names: Rc::new(RefCell::new(HashMap::new())),
         }
+    }
+
+    pub fn with_namespace(mut self, package: &str, module: &str) -> Self {
+        self.package_name = package.to_string();
+        self.module_name = module.to_string();
+        self
     }
 
     fn unique_alloca_name(&self, base_name: &str) -> String {
@@ -451,9 +465,10 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             let struct_name = &name.value;
             if !self.struct_types.borrow().contains_key(struct_name) {
+                let mangled = Self::mangle_type_name("S", &self.package_name, &self.module_name, struct_name);
                 let struct_type = self
                     .context
-                    .opaque_struct_type(&format!("struct.{}", struct_name));
+                    .opaque_struct_type(&mangled);
                 self.struct_types
                     .borrow_mut()
                     .insert(struct_name.clone(), struct_type);
@@ -530,9 +545,10 @@ impl<'ctx> IRGenerator<'ctx> {
         if let Statement::ClassDecl { name, .. } = &*statement.borrow() {
             let class_name = &name.value;
             if !self.class_types.borrow().contains_key(class_name) {
+                let mangled = Self::mangle_type_name("C", &self.package_name, &self.module_name, class_name);
                 let class_type = self
                     .context
-                    .opaque_struct_type(&format!("class.{}", class_name));
+                    .opaque_struct_type(&mangled);
                 self.class_types
                     .borrow_mut()
                     .insert(class_name.clone(), class_type);
@@ -807,16 +823,18 @@ impl<'ctx> IRGenerator<'ctx> {
         if let Statement::EnumDecl { name, .. } = &*statement.borrow() {
             let enum_name = &name.value;
             if !self.enum_types.borrow().contains_key(enum_name) {
+                let mangled = Self::mangle_type_name("E", &self.package_name, &self.module_name, enum_name);
                 let enum_type = self
                     .context
-                    .opaque_struct_type(&format!("enum.{}", enum_name));
+                    .opaque_struct_type(&mangled);
                 self.enum_types
                     .borrow_mut()
                     .insert(enum_name.clone(), enum_type);
 
+                let mangled_payloads = Self::mangle_type_name("E", &self.package_name, &self.module_name, &format!("{}.payloads", enum_name));
                 let payload_type = self
                     .context
-                    .opaque_struct_type(&format!("enum.{}.payloads", enum_name));
+                    .opaque_struct_type(&mangled_payloads);
                 self.enum_payload_types
                     .borrow_mut()
                     .insert(enum_name.clone(), payload_type);
@@ -1228,6 +1246,10 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn mangle_type_name(kind: &str, package: &str, module: &str, name: &str) -> String {
+        format!("_T${}${}${}${}", kind, package, module, name)
+    }
+
     fn mangle_fn_name(base_name: &str, params: &[Rc<RefCell<Parameter>>]) -> String {
         let labels: Vec<String> = params
             .iter()
@@ -1250,7 +1272,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     .unwrap_or_else(|| "?".into())
             })
             .collect();
-        format!("{}${}${}", base_name, labels.join("_"), types.join("_"))
+        let base = base_name.replace('.', "$");
+        format!("_T${}${}${}", base, labels.join("_"), types.join("_"))
     }
 
     fn types_compatible(a: &Type, b: &Type) -> bool {
@@ -1296,8 +1319,24 @@ impl<'ctx> IRGenerator<'ctx> {
         call_params: &[CallParameter],
     ) -> Option<String> {
         if let Ok(Some(decl)) = sym.borrow().get_decl()
-            && let Statement::FunctionDecl { parameters, .. } = &*decl.borrow()
+            && let Statement::FunctionDecl {
+                parameters,
+                attributes,
+                ..
+            } = &*decl.borrow()
         {
+            if let Some(cname) = attributes
+                .iter()
+                .find(|a| a.name == "cname")
+                .and_then(|a| a.value.as_deref())
+            {
+                return Some(cname.to_string());
+            }
+            if self.extern_fn_c_names.borrow().contains_key(base_name) {
+                if let Some(c_name) = self.extern_fn_c_names.borrow().get(base_name) {
+                    return Some(c_name.clone());
+                }
+            }
             Some(Self::mangle_fn_name(base_name, parameters))
         } else {
             let labels: Vec<String> = call_params
@@ -1325,14 +1364,30 @@ impl<'ctx> IRGenerator<'ctx> {
             ty,
             parameters,
             body,
+            attributes,
             ..
         } = &*statement.borrow()
         {
             if let Some(ty) = ty {
-                if self.overloaded_fn_names.borrow().contains(&name.value) {
-                    self.create_mangled_function_declaration(name, parameters, ty);
+                if let Some(cname) = attributes
+                    .iter()
+                    .find(|a| a.name == "cname")
+                    .and_then(|a| a.value.as_deref())
+                {
+                    if let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow() {
+                        let mut all_params = param_types.clone();
+                        if throws_types.is_some() {
+                            let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                                Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
+                            )))));
+                            all_params.insert(0, err_ty);
+                        }
+                        if let Ok(function_type) = self.get_function_type(return_type.clone(), all_params, *is_vararg) {
+                            self.module.add_function(cname, function_type, None);
+                        }
+                    }
                 } else {
-                    let _ = self.create_function_declaration(name, ty);
+                    self.create_mangled_function_declaration(name, parameters, ty);
                 }
             }
             match &*body.borrow() {
@@ -1393,12 +1448,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
                     {
                         let base_name = format!("{}.{}", name.value, method_name.value);
-                        if self.overloaded_fn_names.borrow().contains(&base_name) {
-                            let mangled = Self::mangle_fn_name(&base_name, parameters);
-                            self.module.add_function(&mangled, function_type, None);
-                        } else {
-                            self.module.add_function(&base_name, function_type, None);
-                        }
+                        let mangled = Self::mangle_fn_name(&base_name, parameters);
+                        self.module.add_function(&mangled, function_type, None);
+                        self.register_mangled_name(&base_name, &mangled);
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
@@ -1531,12 +1583,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.get_function_type(return_type.clone(), all_param_types, *is_vararg)
                     {
                         let base_name = format!("{}.{}", name.value, method_name.value);
-                        if self.overloaded_fn_names.borrow().contains(&base_name) {
-                            let mangled = Self::mangle_fn_name(&base_name, parameters);
-                            self.module.add_function(&mangled, function_type, None);
-                        } else {
-                            self.module.add_function(&base_name, function_type, None);
-                        }
+                        let mangled = Self::mangle_fn_name(&base_name, parameters);
+                        self.module.add_function(&mangled, function_type, None);
+                        self.register_mangled_name(&base_name, &mangled);
                     }
                 }
                 if let Statement::InitDecl { ty: Some(ty), .. } = &*stmt.borrow()
@@ -1929,7 +1978,7 @@ impl<'ctx> IRGenerator<'ctx> {
             && let Some(ty) = ty
             && let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow()
         {
-            let llvm_name = attributes
+            let c_name = attributes
                 .iter()
                 .find(|a| a.name == "cname")
                 .and_then(|a| a.value.as_deref())
@@ -1943,7 +1992,10 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             let function_type =
                 self.get_function_type(return_type.clone(), all_params, *is_vararg)?;
-            self.module.add_function(llvm_name, function_type, None);
+            self.module.add_function(c_name, function_type, None);
+            self.extern_fn_c_names
+                .borrow_mut()
+                .insert(name.value.clone(), c_name.to_string());
         }
         if let Statement::VariableDecl { name, ty, .. } = &*statement.borrow()
             && let Some(ty) = ty
@@ -1960,22 +2012,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.create_function_declarations(stmt.clone());
             }
         }
-    }
-
-    fn create_function_declaration(&self, name: &Token, ty: &Rc<RefCell<Type>>) -> Result<()> {
-        if let Type::Function(param_types, return_type, is_vararg, throws_types) = &*ty.borrow() {
-            let mut all_params = param_types.clone();
-            if throws_types.is_some() {
-                let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                    Type::Struct("Int8".to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
-                )))));
-                all_params.insert(0, err_ty);
-            }
-            let function_type =
-                self.get_function_type(return_type.clone(), all_params, *is_vararg)?;
-            self.module.add_function(&name.value, function_type, None);
-        }
-        Ok(())
     }
 
     fn create_mangled_function_declaration(
@@ -1997,8 +2033,17 @@ impl<'ctx> IRGenerator<'ctx> {
             {
                 let mangled = Self::mangle_fn_name(&name.value, parameters);
                 self.module.add_function(&mangled, function_type, None);
+                self.mangled_fn_names
+                    .borrow_mut()
+                    .insert(name.value.clone(), mangled);
             }
         }
+    }
+
+    fn register_mangled_name(&self, src_name: &str, mangled: &str) {
+        self.mangled_fn_names
+            .borrow_mut()
+            .insert(src_name.to_string(), mangled.to_string());
     }
 
     fn compute_vtable_method_list(&self, class_name: &str) -> Vec<(String, String)> {
@@ -3768,6 +3813,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 parameters,
                 body,
                 static_method,
+                attributes,
                 ..
             } => {
                 if let Type::Function(_parameter_types, return_type, _, throws_types) =
@@ -3777,17 +3823,17 @@ impl<'ctx> IRGenerator<'ctx> {
                     let saved_struct = self.current_struct.borrow_mut().take();
                     self.class_refs.borrow_mut().clear();
                     self.container_refs.borrow_mut().clear();
-                    let fn_name = if let Some(struct_name) = &saved_struct {
+                    let fn_name = if let Some(cname) = attributes
+                        .iter()
+                        .find(|a| a.name == "cname")
+                        .and_then(|a| a.value.as_deref())
+                    {
+                        cname.to_string()
+                    } else if let Some(struct_name) = &saved_struct {
                         let base = format!("{}.{}", struct_name, name.value);
-                        if self.overloaded_fn_names.borrow().contains(&base) {
-                            Self::mangle_fn_name(&base, parameters)
-                        } else {
-                            base
-                        }
-                    } else if self.overloaded_fn_names.borrow().contains(&name.value) {
-                        Self::mangle_fn_name(&name.value, parameters)
+                        Self::mangle_fn_name(&base, parameters)
                     } else {
-                        name.value.clone()
+                        Self::mangle_fn_name(&name.value, parameters)
                     };
                     let function = self.module.get_function(&fn_name).unwrap();
 
@@ -5028,7 +5074,16 @@ impl<'ctx> IRGenerator<'ctx> {
                     };
                     let val = self.builder.build_load(llvm_type, field_ptr, "")?;
                     Ok(Some(val))
-                } else if let Some(fn_val) = self.module.get_function(&name.value) {
+                } else if let Some(fn_val) = self
+                    .module
+                    .get_function(&name.value)
+                    .or_else(|| {
+                        self.mangled_fn_names
+                            .borrow()
+                            .get(&name.value)
+                            .and_then(|mangled| self.module.get_function(mangled))
+                    })
+                {
                     let fn_ptr = fn_val.as_global_value().as_pointer_value();
                     let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                     Ok(Some(
@@ -8701,7 +8756,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     *c += 1;
                     val
                 };
-                let fn_name = format!("__closure_{}", counter);
+                let fn_name = format!("_T$CC${}", counter);
 
                 let ret_type = return_type
                     .as_ref()
@@ -9968,10 +10023,13 @@ impl<'ctx> IRGenerator<'ctx> {
         let s = stmt.borrow();
         match &*s {
             Statement::FunctionDecl {
-                attributes, name, ..
+                attributes,
+                name,
+                parameters,
+                ..
             } => {
                 if attributes.iter().any(|a| a.name == "main") {
-                    Some(name.value.clone())
+                    Some(Self::mangle_fn_name(&name.value, parameters))
                 } else {
                     None
                 }
