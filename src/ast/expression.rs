@@ -9,7 +9,7 @@ use crate::{
     types::Type,
 };
 
-use super::statement::{CatchClause, MatchCase, Statement};
+use super::statement::{CatchClause, MatchCase, OwnershipModifier, Statement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallParameter {
@@ -28,6 +28,7 @@ pub struct ClosureCapture {
     pub name: Box<Token>,
     pub expression: Option<Rc<RefCell<Expression>>>,
     pub is_var: bool,
+    pub ownership: OwnershipModifier,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -6,7 +6,7 @@ use std::{
 use anyhow::{Ok, Result};
 
 use crate::{
-    ast::statement::{Parameter, ProtocolAccessorSet, Statement},
+    ast::statement::{OwnershipModifier, Parameter, ProtocolAccessorSet, Statement},
     krate::Module as PackageModule,
     types::Type,
 };
@@ -22,6 +22,7 @@ pub enum Symbol {
         decl: Option<Rc<RefCell<Statement>>>,
         parameter: Option<Rc<RefCell<Parameter>>>,
         is_var: bool,
+        ownership: OwnershipModifier,
     },
     Struct {
         name: String,
@@ -38,6 +39,7 @@ pub enum Symbol {
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
         is_var: bool,
+        ownership: OwnershipModifier,
     },
     StructMethod {
         name: String,
@@ -68,6 +70,7 @@ pub enum Symbol {
         is_var: bool,
         is_final: bool,
         is_override: bool,
+        ownership: OwnershipModifier,
     },
     ClassMethod {
         name: String,

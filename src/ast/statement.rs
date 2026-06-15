@@ -38,6 +38,7 @@ pub enum Statement {
         type_expression: Option<Rc<RefCell<Expression>>>,
         initializer: Option<Rc<RefCell<Expression>>>,
         accessors: Vec<Accessor>,
+        ownership: OwnershipModifier,
         ty: Option<Rc<RefCell<Type>>>,
     },
     StructDecl {
@@ -318,6 +319,19 @@ pub enum OperatorFixity {
     Postfix,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OwnershipModifier {
+    Strong,
+    Weak,
+    Unowned,
+}
+
+impl Default for OwnershipModifier {
+    fn default() -> Self {
+        Self::Strong
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ModifierType {
     Access(AccessModifier),
@@ -328,6 +342,8 @@ pub enum ModifierType {
     Override,
     Abstract,
     Final,
+    Weak,
+    Unowned,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
