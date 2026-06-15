@@ -1139,6 +1139,173 @@ fn test_parse_address_of_binary() {
 }
 
 #[test]
+fn test_parse_fn_ptr_type_param() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func apply(fn: (Int32) -> Bool, x: Int32) -> Bool { return fn(x) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters.len(), 2);
+        let fn_param = parameters[0].borrow();
+        assert_eq!(fn_param.name.value, "fn");
+        let te = fn_param.type_expression.borrow();
+        if let Expression::FunctionType {
+            param_types,
+            return_type,
+            ..
+        } = &*te
+        {
+            assert_eq!(param_types.len(), 1);
+            assert!(matches!(
+                &*param_types[0].borrow(),
+                Expression::Type { name, .. } if name.value == "Int32"
+            ));
+            assert!(matches!(
+                &*return_type.borrow(),
+                Expression::Type { name, .. } if name.value == "Bool"
+            ));
+        } else {
+            panic!("Expected FunctionType expression for parameter type");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_addr_of_method() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let m = &MyStruct.method".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Unary {
+            expression,
+            operator,
+            is_prefix,
+            ..
+        } = &*init
+        {
+            assert_eq!(operator, &UnaryOperator::AddressOf);
+            assert!(is_prefix);
+            if let Expression::MemberAccess { object, member, .. } = &*expression.borrow() {
+                assert_eq!(member.value, "method");
+                if let Expression::Variable { name, .. } = &*object.borrow() {
+                    assert_eq!(name.value, "MyStruct");
+                } else {
+                    panic!("Expected Variable expression for type name");
+                }
+            } else {
+                panic!("Expected MemberAccess expression");
+            }
+        } else {
+            panic!("Expected Unary expression with AddressOf");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_addr_of_init() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let m = &MyStruct.init".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Unary {
+            expression,
+            operator,
+            is_prefix,
+            ..
+        } = &*init
+        {
+            assert_eq!(operator, &UnaryOperator::AddressOf);
+            assert!(is_prefix);
+            if let Expression::MemberAccess { object, member, .. } = &*expression.borrow() {
+                assert_eq!(member.value, "init");
+                if let Expression::Variable { name, .. } = &*object.borrow() {
+                    assert_eq!(name.value, "MyStruct");
+                } else {
+                    panic!("Expected Variable expression for type name");
+                }
+            } else {
+                panic!("Expected MemberAccess expression");
+            }
+        } else {
+            panic!("Expected Unary expression with AddressOf");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_addr_of_deinit() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let m = &MyClass.deinit".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Unary {
+            expression,
+            operator,
+            is_prefix,
+            ..
+        } = &*init
+        {
+            assert_eq!(operator, &UnaryOperator::AddressOf);
+            assert!(is_prefix);
+            if let Expression::MemberAccess { object, member, .. } = &*expression.borrow() {
+                assert_eq!(member.value, "deinit");
+                if let Expression::Variable { name, .. } = &*object.borrow() {
+                    assert_eq!(name.value, "MyClass");
+                } else {
+                    panic!("Expected Variable expression for type name");
+                }
+            } else {
+                panic!("Expected MemberAccess expression");
+            }
+        } else {
+            panic!("Expected Unary expression with AddressOf");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
 fn test_parse_deref_postfix_inc() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
