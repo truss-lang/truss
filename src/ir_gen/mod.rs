@@ -840,9 +840,22 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_enum_type_bodies(&self, statement: Rc<RefCell<Statement>>) {
-        if let Statement::EnumDecl { name, cases, .. } = &*statement.borrow() {
+        if let Statement::EnumDecl {
+            name,
+            cases,
+            raw_value_type,
+            ..
+        } = &*statement.borrow()
+        {
             let enum_name = &name.value;
             if let Some(enum_type) = self.enum_types.borrow().get(enum_name).cloned() {
+                if let Some(raw_type) = raw_value_type {
+                    if let Ok(raw_llvm_type) = self.resolve_type(raw_type.clone()) {
+                        enum_type.set_body(&[raw_llvm_type], false);
+                    }
+                    return;
+                }
+
                 let mut case_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
                 for case in cases {
                     let param_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = case
@@ -865,7 +878,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
 
-                if let Some(payload_type) = self.enum_payload_types.borrow().get(enum_name).cloned()
+                if let Some(payload_type) =
+                    self.enum_payload_types.borrow().get(enum_name).cloned()
                 {
                     payload_type.set_body(&case_types, false);
                 }
@@ -1060,6 +1074,21 @@ impl<'ctx> IRGenerator<'ctx> {
             }
         }
         anyhow::bail!("Case '{}' not found in enum '{}'", case_name, enum_name)
+    }
+
+    fn get_enum_raw_llvm_type(&self, enum_name: &str) -> Option<BasicTypeEnum<'ctx>> {
+        if let Some(scope) = self.program_scope.borrow().as_ref() {
+            if let Some(symbol) = scope.borrow().get_symbol(enum_name) {
+                if let Symbol::Enum { decl, .. } = &*symbol.borrow() {
+                    if let Statement::EnumDecl { raw_value_type, .. } = &*decl.borrow() {
+                        if let Some(raw_type) = raw_value_type {
+                            return self.resolve_type(raw_type.clone()).ok();
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn count_fn_name_frequencies(
@@ -4210,19 +4239,44 @@ impl<'ctx> IRGenerator<'ctx> {
                         .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
                     drop(enum_types);
 
-                    let tag_ptr =
-                        self.builder
-                            .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
-                    let tag_val = self
-                        .builder
-                        .build_load(self.context.i8_type(), tag_ptr, "")?;
-                    let expected_tag = self.context.i8_type().const_int(case_idx as u64, false);
-                    let match_result = self.builder.build_int_compare(
-                        inkwell::IntPredicate::EQ,
-                        tag_val.into_int_value(),
-                        expected_tag,
-                        "",
-                    )?;
+                    let (match_result, exit_bb) = if let Some(raw_llvm_type) =
+                        self.get_enum_raw_llvm_type(&enum_name)
+                    {
+                        let raw_ptr =
+                            self.builder
+                                .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
+                        let tag_val = self.builder.build_load(
+                            raw_llvm_type,
+                            raw_ptr,
+                            "",
+                        )?;
+                        let expected_tag = raw_llvm_type
+                            .into_int_type()
+                            .const_int(case_idx as u64, false);
+                        let match_result = self.builder.build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            tag_val.into_int_value(),
+                            expected_tag,
+                            "",
+                        )?;
+                        (match_result, exit_bb)
+                    } else {
+                        let tag_ptr =
+                            self.builder
+                                .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
+                        let tag_val = self
+                            .builder
+                            .build_load(self.context.i8_type(), tag_ptr, "")?;
+                        let expected_tag =
+                            self.context.i8_type().const_int(case_idx as u64, false);
+                        let match_result = self.builder.build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            tag_val.into_int_value(),
+                            expected_tag,
+                            "",
+                        )?;
+                        (match_result, exit_bb)
+                    };
 
                     self.builder
                         .build_conditional_branch(match_result, exit_bb, else_bb)?;
@@ -6189,19 +6243,38 @@ impl<'ctx> IRGenerator<'ctx> {
                         .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
                     drop(enum_types);
 
-                    let tag_ptr =
-                        self.builder
-                            .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
-                    let tag_val = self
-                        .builder
-                        .build_load(self.context.i8_type(), tag_ptr, "")?;
-                    let expected_tag = self.context.i8_type().const_int(case_idx as u64, false);
-                    let match_result = self.builder.build_int_compare(
-                        inkwell::IntPredicate::EQ,
-                        tag_val.into_int_value(),
-                        expected_tag,
-                        "",
-                    )?;
+                    let match_result = if let Some(raw_ty) = self.get_enum_raw_llvm_type(enum_name) {
+                        let tag_ptr =
+                            self.builder
+                                .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
+                        let tag_val = self
+                            .builder
+                            .build_load(raw_ty, tag_ptr, "")?;
+                        let expected_tag = raw_ty
+                            .into_int_type()
+                            .const_int(case_idx as u64, false);
+                        self.builder.build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            tag_val.into_int_value(),
+                            expected_tag,
+                            "",
+                        )?
+                    } else {
+                        let tag_ptr =
+                            self.builder
+                                .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
+                        let tag_val = self
+                            .builder
+                            .build_load(self.context.i8_type(), tag_ptr, "")?;
+                        let expected_tag =
+                            self.context.i8_type().const_int(case_idx as u64, false);
+                        self.builder.build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            tag_val.into_int_value(),
+                            expected_tag,
+                            "",
+                        )?
+                    };
 
                     self.builder.build_conditional_branch(
                         match_result,
@@ -7051,6 +7124,23 @@ impl<'ctx> IRGenerator<'ctx> {
                         .copied()
                         .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
                     drop(enum_types);
+
+                    if let Some(raw_llvm_type) = self.get_enum_raw_llvm_type(&enum_name) {
+                        let raw_val = raw_llvm_type
+                            .into_int_type()
+                            .const_int(case_index as u64, false);
+                        let alloca = self
+                            .builder
+                            .build_alloca(enum_llvm_type.as_basic_type_enum(), "")?;
+                        let raw_ptr = self
+                            .builder
+                            .build_struct_gep(enum_llvm_type, alloca, 0, "")?;
+                        self.builder.build_store(raw_ptr, raw_val)?;
+                        let val = self
+                            .builder
+                            .build_load(enum_llvm_type.as_basic_type_enum(), alloca, "")?;
+                        return Ok(Some(val));
+                    }
 
                     let alloca = self
                         .builder
@@ -8201,7 +8291,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 let is_enum = !enum_name.is_empty();
 
-                let (tag_val, enum_llvm_type) = if is_enum {
+                let (tag_val, enum_llvm_type, raw_llvm_type) = if is_enum {
                     let enum_types = self.enum_types.borrow();
                     let enum_llvm_type = enum_types
                         .get(&enum_name)
@@ -8209,15 +8299,25 @@ impl<'ctx> IRGenerator<'ctx> {
                         .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
                     drop(enum_types);
 
-                    let tag_ptr =
-                        self.builder
-                            .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
-                    let tag_val = self
-                        .builder
-                        .build_load(self.context.i8_type(), tag_ptr, "")?;
-                    (Some(tag_val.into_int_value()), Some(enum_llvm_type))
+                    if let Some(raw_ty) = self.get_enum_raw_llvm_type(&enum_name) {
+                        let raw_ptr =
+                            self.builder
+                                .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
+                        let tag_val = self
+                            .builder
+                            .build_load(raw_ty, raw_ptr, "")?;
+                        (Some(tag_val.into_int_value()), Some(enum_llvm_type), Some(raw_ty))
+                    } else {
+                        let tag_ptr =
+                            self.builder
+                                .build_struct_gep(enum_llvm_type, subject_alloca, 0, "")?;
+                        let tag_val = self
+                            .builder
+                            .build_load(self.context.i8_type(), tag_ptr, "")?;
+                        (Some(tag_val.into_int_value()), Some(enum_llvm_type), None)
+                    }
                 } else {
-                    (None, None)
+                    (None, None, None)
                 };
 
                 let mut all_body_bbs = Vec::new();
@@ -8255,8 +8355,11 @@ impl<'ctx> IRGenerator<'ctx> {
                                 Pattern::EnumCase { case_name, .. } => {
                                     let idx =
                                         self.get_enum_case_index(&enum_name, &case_name.value)?;
-                                    let expected_tag =
-                                        self.context.i8_type().const_int(idx as u64, false);
+                                    let expected_tag = if let Some(raw_ty) = raw_llvm_type {
+                                        raw_ty.into_int_type().const_int(idx as u64, false)
+                                    } else {
+                                        self.context.i8_type().const_int(idx as u64, false)
+                                    };
                                     Some(self.builder.build_int_compare(
                                         inkwell::IntPredicate::EQ,
                                         tag_val.unwrap(),

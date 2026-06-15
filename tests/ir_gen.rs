@@ -1030,6 +1030,51 @@ fn test_irgen_enum_variable() {
 }
 
 #[test]
+fn test_irgen_enum_raw_value_type_decl() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "struct UInt8 {}
+         enum E: UInt8 { case a, b }
+         func test() -> E { return E.a }",
+    );
+    assert!(
+        llvm_ir.contains("%enum.E = type { i8"),
+        "Enum type should be declared as struct with i8 field, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_enum_raw_value_type_construction() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "struct Int32 {}
+         enum Status: Int32 { case idle, busy }
+         func test() -> Status { return Status.idle }",
+    );
+    assert!(
+        llvm_ir.contains("i32 0"),
+        "Raw value enum should use i32 for case idle, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_enum_raw_value_no_payload_union() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "struct Int32 {}
+         enum E: Int32 { case a, b }
+         func test() -> E { return E.a }",
+    );
+    assert!(
+        !llvm_ir.contains("%enum.E.payloads"),
+        "Raw value enum should not have payload union, got:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
 fn test_irgen_if_case_no_bindings() {
     let code = r#"
         enum Option { case None case Some(Int32) }
