@@ -7020,6 +7020,60 @@ fn test_subscript_internal_default_accessible() {
 }
 
 #[test]
+fn test_subscript_set_newvalue_type_matches_return_type() {
+    let errors = run_type_check(
+        "struct Buffer {
+            var x: Int32
+            subscript(index: Int32) -> Int32 {
+                get { return x }
+                set { x = newValue }
+            }
+        }
+        func test(b: Buffer) -> Int32 { return b[0] }",
+    );
+    assert_eq!(
+        errors, 0,
+        "newValue in subscript setter should have same type as return type"
+    );
+}
+
+#[test]
+fn test_subscript_set_newvalue_type_float() {
+    let errors = run_type_check(
+        "struct Buffer {
+            var x: Float
+            subscript(index: Int32) -> Float {
+                get { return x }
+                set { x = newValue }
+            }
+        }
+        func test(b: Buffer) -> Float { return b[0] }",
+    );
+    assert_eq!(
+        errors, 0,
+        "newValue should be Float when subscript returns Float"
+    );
+}
+
+#[test]
+fn test_subscript_set_explicit_param_name_type() {
+    let errors = run_type_check(
+        "struct Buffer {
+            var x: Int32
+            subscript(index: Int32) -> Int32 {
+                get { return x }
+                set(v) { x = v }
+            }
+        }
+        func test(b: Buffer) -> Int32 { return b[0] }",
+    );
+    assert_eq!(
+        errors, 0,
+        "explicit set parameter should have same type as return type"
+    );
+}
+
+#[test]
 fn test_array_literal_integer_elements() {
     let errors = run_type_check("func test() { let a = [1, 2, 3] }");
     assert_eq!(
