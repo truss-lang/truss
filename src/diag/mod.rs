@@ -72,6 +72,10 @@ pub enum TrussDiagnosticCode {
     InternalUsedReferenced,
 
     AssignToSelfInNonMutating,
+    WeakRequiresClassType,
+    UnownedRequiresClassType,
+    WeakMustBeVar,
+    InvalidOwnershipModifier,
 
     IRError,
     UnsupportedFeature,
@@ -152,6 +156,10 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::InternalUsedReferenced => "W0325",
 
             Self::AssignToSelfInNonMutating => "E0326",
+            Self::WeakRequiresClassType => "E0327",
+            Self::UnownedRequiresClassType => "E0328",
+            Self::WeakMustBeVar => "E0329",
+            Self::InvalidOwnershipModifier => "E0330",
 
             Self::IRError => "E0401",
             Self::UnsupportedFeature => "E0402",

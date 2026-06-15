@@ -7901,3 +7901,101 @@ fn test_closure_explicit_capture_type_resolved() {
     let errors = engine_ref.get_errors();
     assert_eq!(errors.len(), 0, "Expected no type errors, got: {:?}", errors);
 }
+
+fn resolve_program(
+    source: &str,
+) -> (
+    Rc<RefCell<truss::diag::TrussDiagnosticEngine>>,
+    truss::ast::node::Program,
+    HashMap<String, Rc<RefCell<truss::krate::Package>>>,
+) {
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let mut lexer = Lexer::new(
+        CharStream::new(source.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let packages = truss::krate::create_root_package();
+    let mut resolver = SymbolResolver::new(
+        packages.clone(),
+        "main".to_string(),
+        engine.clone(),
+    );
+    resolver.resolve(&program, "main".to_string());
+    let mut type_resolver = TypeResolver::new(
+        packages.clone(),
+        "main".to_string(),
+        engine.clone(),
+    );
+    type_resolver.resolve(&program, "test".to_string());
+    (engine, program, packages)
+}
+
+#[test]
+fn test_weak_on_non_class_type_error() {
+    let (engine, _, _) = resolve_program(
+        "struct S {} func test() { weak var x: S }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty(), "Expected error for weak on non-class type");
+    let has_weak_error = errors.iter().any(|e| {
+        matches!(e.code, TrussDiagnosticCode::WeakRequiresClassType)
+    });
+    assert!(has_weak_error, "Expected WeakRequiresClassType error");
+}
+
+#[test]
+fn test_unowned_on_non_class_type_error() {
+    let (engine, _, _) = resolve_program(
+        "struct S {} func test() { unowned var x: S }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert!(!errors.is_empty(), "Expected error for unowned on non-class type");
+    let has_unowned_error = errors.iter().any(|e| {
+        matches!(e.code, TrussDiagnosticCode::UnownedRequiresClassType)
+    });
+    assert!(has_unowned_error, "Expected UnownedRequiresClassType error");
+}
+
+#[test]
+fn test_weak_on_class_type_no_error() {
+    let (engine, _, _) = resolve_program(
+        "class C {} func test() { weak var x: C }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    let has_type_error = errors.iter().any(|e| {
+        matches!(e.code, TrussDiagnosticCode::TypeMismatch)
+            || matches!(e.code, TrussDiagnosticCode::WeakRequiresClassType)
+            || matches!(e.code, TrussDiagnosticCode::UnownedRequiresClassType)
+    });
+    assert!(!has_type_error, "Expected no type errors for weak on class");
+}
+
+#[test]
+fn test_unowned_on_class_type_no_error() {
+    let (engine, _, _) = resolve_program(
+        "class C {} func test() { unowned var x: C }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    let has_type_error = errors.iter().any(|e| {
+        matches!(e.code, TrussDiagnosticCode::TypeMismatch)
+            || matches!(e.code, TrussDiagnosticCode::WeakRequiresClassType)
+            || matches!(e.code, TrussDiagnosticCode::UnownedRequiresClassType)
+    });
+    assert!(!has_type_error, "Expected no type errors for unowned on class");
+}
+
+#[test]
+fn test_strong_no_error() {
+    let (engine, _, _) = resolve_program(
+        "class C {} func test() { var x: C }",
+    );
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors for strong ref");
+}

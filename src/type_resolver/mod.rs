@@ -10,8 +10,8 @@ use crate::{
         node::Program,
         statement::{
             AccessModifier, AccessorKind, FunctionBody, GenericParameterKind, ModifierType,
-            OperatorFixity, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember, Statement, VariadicKind,
-            WhereRequirement, WhereRequirementKind,
+            OperatorFixity, OwnershipModifier, Parameter, Pattern, ProtocolAccessorSet,
+            ProtocolMember, Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{
@@ -96,6 +96,14 @@ impl TypeResolver {
         let is_container_class = {
             let stmt_ref = statement.borrow();
             matches!(&*stmt_ref, Statement::ClassDecl { .. })
+        };
+        let var_ownership = {
+            let stmt_ref = statement.borrow();
+            if let Statement::VariableDecl { ownership, token, .. } = &*stmt_ref {
+                Some((*ownership, token.clone()))
+            } else {
+                None
+            }
         };
 
         match &mut *statement.borrow_mut() {
@@ -1210,6 +1218,11 @@ impl TypeResolver {
             }
             _ => {}
         }
+        if let Some((ownership, token)) = var_ownership {
+            if let Statement::VariableDecl { ty: Some(var_ty), name, .. } = &*statement.borrow() {
+                self.validate_ownership_type(ownership, &*var_ty.borrow(), &token, name);
+            }
+        }
     }
 
     fn process_function_decl_in_expr(&mut self, expr: Rc<RefCell<Expression>>) {
@@ -1229,6 +1242,8 @@ impl TypeResolver {
                 initializer,
                 accessors,
                 ty,
+                ownership,
+                token,
                 ..
             } => {
                 if let Some(type_expr) = type_expression {
@@ -1273,7 +1288,9 @@ impl TypeResolver {
                         name.as_ref(),
                     );
                 };
-
+                if let Some(var_ty) = ty.as_ref() {
+                    self.validate_ownership_type(*ownership, &*var_ty.borrow(), token, name);
+                }
                 if !accessors.is_empty() {
                     let saved_return_type = self.current_return_type.clone();
                     for accessor in accessors {
@@ -4647,6 +4664,40 @@ impl TypeResolver {
                 Some(ty.clone().unwrap_or(Rc::new(RefCell::new(Type::Void))))
             }
             _ => Some(Rc::new(RefCell::new(Type::Void))),
+        }
+    }
+
+    fn is_class_type(ty: &Type) -> bool {
+        matches!(ty, Type::Class(_, _, _))
+    }
+
+    fn validate_ownership_type(
+        &mut self,
+        ownership: OwnershipModifier,
+        var_type: &Type,
+        _token: &Token,
+        name: &Token,
+    ) {
+        match ownership {
+            OwnershipModifier::Weak => {
+                if !Self::is_class_type(var_type) {
+                    self.emit_error(
+                        TrussDiagnosticCode::WeakRequiresClassType,
+                        "weak modifier requires a class type (possibly wrapped in Optional)",
+                        name,
+                    );
+                }
+            }
+            OwnershipModifier::Unowned => {
+                if !Self::is_class_type(var_type) {
+                    self.emit_error(
+                        TrussDiagnosticCode::UnownedRequiresClassType,
+                        "unowned modifier requires a class type",
+                        name,
+                    );
+                }
+            }
+            OwnershipModifier::Strong => {}
         }
     }
 
