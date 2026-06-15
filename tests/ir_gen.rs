@@ -6678,6 +6678,45 @@ fn test_irgen_closure_explicit_capture() {
 }
 
 #[test]
+fn test_irgen_strong_class_ref_has_release() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "class C { init() {} } func test() -> Int32 { let c = C(); return 0 }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        llvm_ir.contains("call void @truss_release"),
+        "Strong class reference should call truss_release, IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_weak_class_ref_no_release() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "class C { init() {} } func test() -> Int32 { weak var c: C; c = C(); return 0 }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        !llvm_ir.contains("call void @truss_release"),
+        "Weak class reference should NOT call truss_release, IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_unowned_class_ref_no_release() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "class C { init() {} } func test() -> Int32 { unowned var c: C; c = C(); return 0 }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        !llvm_ir.contains("call void @truss_release"),
+        "Unowned class reference should NOT call truss_release, IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
 fn test_irgen_closure_capture_multiple() {
     let (llvm_ir, engine) = run_ir_gen(
         "func test() -> Int32 { let a = 1; let b = 2; let f = { (x: Int32) -> Int32 in a + b + x }; return 0 }",

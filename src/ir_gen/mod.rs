@@ -24,8 +24,8 @@ use crate::{
         },
         node::Program,
         statement::{
-            Accessor, AccessorKind, AsmOperand, FunctionBody, Parameter, Pattern, ProtocolMember,
-            Statement, VariadicKind,
+            Accessor, AccessorKind, AsmOperand, FunctionBody, OwnershipModifier, Parameter,
+            Pattern, ProtocolMember, Statement, VariadicKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -3139,6 +3139,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 ty,
                 accessors,
                 token,
+                ownership,
                 ..
             } => {
                 if let Some(Pattern::Tuple(items)) = decl_pattern {
@@ -3339,7 +3340,9 @@ impl<'ctx> IRGenerator<'ctx> {
                                 self.builder.build_call(function, &args, "")?;
                                 if !is_inline {
                                     self.builder.build_store(ptr, obj_ptr)?;
-                                    self.class_refs.borrow_mut().push(ptr);
+                                    if !matches!(ownership, OwnershipModifier::Weak | OwnershipModifier::Unowned) {
+                                        self.class_refs.borrow_mut().push(ptr);
+                                    }
                                 }
                             } else {
                                 let fn_ret_type = function.get_type().get_return_type();
