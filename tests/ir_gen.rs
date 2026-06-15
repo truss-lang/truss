@@ -6631,3 +6631,63 @@ fn test_ir_gen_mutating_method() {
         engine.borrow().get_errors()
     );
 }
+
+#[test]
+fn test_irgen_closure_capture_outer_generates_context() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "func test() -> Int32 { let x = 42; let f = { (y: Int32) -> Int32 in x + y }; return 0 }",
+    );
+    eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
+    eprintln!("Errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__closure_ctx"),
+        "Should have closure context struct, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("malloc"),
+        "Should allocate closure context on heap, IR:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_closure_explicit_capture() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "func test() -> Int32 { let x = 42; let f = { [x] (y: Int32) -> Int32 in x + y }; return 0 }",
+    );
+    eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
+    eprintln!("Errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("__closure_ctx"),
+        "Should have closure context struct, IR:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}
+
+#[test]
+fn test_irgen_closure_capture_multiple() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "func test() -> Int32 { let a = 1; let b = 2; let f = { (x: Int32) -> Int32 in a + b + x }; return 0 }",
+    );
+    eprintln!("=== LLVM IR ===\n{}\n=== END ===", llvm_ir);
+    eprintln!("Errors: {:?}", engine.borrow().get_errors());
+    assert!(
+        llvm_ir.contains("__closure_0"),
+        "Should define __closure_0 function, IR:\n{}",
+        llvm_ir
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+}

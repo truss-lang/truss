@@ -19,8 +19,8 @@ use inkwell::{
 use crate::{
     ast::{
         expression::{
-            AssignmentOperator, BinaryOperator, CallParameter, CastKind, ElseBranch, Expression,
-            TryKind, UnaryOperator,
+            AssignmentOperator, BinaryOperator, CallParameter, CastKind, ClosureCapture,
+            ElseBranch, Expression, TryKind, UnaryOperator,
         },
         node::Program,
         statement::{
@@ -58,6 +58,12 @@ pub struct IRModules<'ctx> {
     pub stdlib: Option<Rc<Module<'ctx>>>,
 }
 
+struct ClosureContextInfo<'ctx> {
+    captures: Vec<ClosureCapture>,
+    closure_fn: FunctionValue<'ctx>,
+    cell_ptr_types: Vec<Rc<RefCell<Type>>>,
+}
+
 pub struct IRGenerator<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
@@ -83,6 +89,7 @@ pub struct IRGenerator<'ctx> {
     container_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
     overloaded_fn_names: Rc<RefCell<HashSet<String>>>,
     closure_counter: Rc<RefCell<u32>>,
+    closure_context_vars: Rc<RefCell<HashMap<String, ClosureContextInfo<'ctx>>>>,
     yield_targets: Rc<RefCell<Vec<(PointerValue<'ctx>, BasicBlock<'ctx>)>>>,
     error_ptr: Rc<RefCell<Option<PointerValue<'ctx>>>>,
 }
@@ -115,6 +122,7 @@ impl<'ctx> IRGenerator<'ctx> {
             container_refs: Rc::new(RefCell::new(Vec::new())),
             overloaded_fn_names: Rc::new(RefCell::new(HashSet::new())),
             closure_counter: Rc::new(RefCell::new(0)),
+            closure_context_vars: Rc::new(RefCell::new(HashMap::new())),
             yield_targets: Rc::new(RefCell::new(Vec::new())),
             error_ptr: Rc::new(RefCell::new(None)),
         }
@@ -8533,9 +8541,11 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(None)
             }
             Expression::Closure {
+                captures,
                 parameters,
                 return_type,
                 body,
+                scope,
                 ty,
                 ..
             } => {
@@ -8586,8 +8596,36 @@ impl<'ctx> IRGenerator<'ctx> {
                     })
                     .unwrap_or_else(|| param_types.clone());
 
-                let fn_llvm_type =
-                    self.get_function_type(ret_type.clone(), all_param_types.clone(), false)?;
+                // Resolve capture types from the closure's parent scope (set by TypeResolver)
+                let capture_llvm_types: Vec<BasicTypeEnum> = if !captures.is_empty() {
+                    let parent_scope = scope.as_ref().and_then(|s| s.borrow().parent.clone());
+                    captures.iter().filter_map(|cap| {
+                        let cap_name = &cap.name.value;
+                        let var_ty = parent_scope.as_ref().and_then(|s| s.borrow().get_type(cap_name))?;
+                        self.resolve_type(var_ty).ok()
+                    }).collect()
+                } else {
+                    Vec::new()
+                };
+                let has_captures = !captures.is_empty();
+
+                let fn_llvm_type = if has_captures {
+                    // Closure function takes captured values (by value, using their actual types)
+                    // as extra parameters before explicit params
+                    let mut fn_param_types = Vec::new();
+                    for ct in &capture_llvm_types {
+                        fn_param_types.push((*ct).into());
+                    }
+                    for pt in &all_param_types {
+                        let llvm_pt = self.resolve_type(pt.clone())?;
+                        fn_param_types.push(llvm_pt.as_basic_type_enum().into());
+                    }
+                    let ret_llvm_ty = self.resolve_type(ret_type.clone())?;
+                    let fn_ty: FunctionType = ret_llvm_ty.fn_type(&fn_param_types, false);
+                    fn_ty
+                } else {
+                    self.get_function_type(ret_type.clone(), all_param_types.clone(), false)?
+                };
                 let function = self.module.add_function(&fn_name, fn_llvm_type, None);
 
                 let current_block = self.builder.get_insert_block();
@@ -8596,6 +8634,23 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 self.enter_scope_with_stmts(body)?;
                 let mut param_idx = 0u32;
+                // Closure function: first capture params (by value), then explicit params
+                if has_captures {
+                    for (i, cap) in captures.iter().enumerate() {
+                        let cap_name = &cap.name.value;
+                        let llvm_ty = if i < capture_llvm_types.len() {
+                            capture_llvm_types[i]
+                        } else {
+                            self.context.i32_type().into()
+                        };
+                        let alloca_name = self.unique_alloca_name(cap_name);
+                        let ptr = self.builder.build_alloca(llvm_ty, &alloca_name)?;
+                        let param_value = function.get_nth_param(param_idx).unwrap();
+                        self.builder.build_store(ptr, param_value)?;
+                        self.declare_variable(cap_name.clone(), ptr);
+                        param_idx += 1;
+                    }
+                }
                 for (i, param) in parameters.iter().enumerate() {
                     let param_name = &param.borrow().name.value;
                     let llvm_type = self.resolve_type(param_types[i].clone())?;
@@ -8666,11 +8721,70 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.builder.position_at_end(block);
                 }
 
-                let fn_ptr = function.as_global_value().as_pointer_value();
                 let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
-                Ok(Some(
-                    self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?.into(),
-                ))
+                if has_captures {
+                    // Create context struct with fn_ptr and captured values
+                    // For each capture, allocate heap cell, copy value, store cell ptr in context
+                    let context_struct_type = self.context.opaque_struct_type("__closure_ctx");
+                    let mut field_types: Vec<BasicTypeEnum> = Vec::new();
+                    let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                    field_types.push(ptr_ty.into()); // fn_ptr
+                    for _ in captures.iter() {
+                        field_types.push(ptr_ty.into()); // cell ptr (i8*)
+                    }
+                    context_struct_type.set_body(&field_types, false);
+
+                    // Allocate context struct on heap
+                    let ctx_ptr = self.heap_allocate(context_struct_type.as_basic_type_enum())?;
+
+                    // Store function pointer
+                    let fn_ptr = function.as_global_value().as_pointer_value();
+                    let fn_field_ptr = self.builder.build_struct_gep(
+                        context_struct_type, ctx_ptr, 0, "",
+                    )?;
+                    let fn_bitcast = self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?;
+                    self.builder.build_store(fn_field_ptr, fn_bitcast)?;
+
+                    // For each capture: heap-allocate a cell, copy value, store cell ptr
+                    let closure_scope_parent = scope.as_ref().and_then(|s| {
+                        s.borrow().parent.clone()
+                    });
+                    for (i, cap) in captures.iter().enumerate() {
+                        // Get the LLVM type of the captured variable
+                        let var_ty = closure_scope_parent.as_ref().and_then(|s| {
+                            s.borrow().get_type(&cap.name.value)
+                        });
+                        let llvm_cell_ty = if let Some(ty) = var_ty {
+                            self.resolve_type(ty).unwrap_or_else(|_| self.context.i32_type().into())
+                        } else {
+                            self.context.i32_type().into()
+                        };
+
+                        // Look up the variable in enclosing scope
+                        if let Some(stack_ptr) = self.lookup_variable(&cap.name.value) {
+                            // Allocate heap cell of the variable's type
+                            let heap_cell = self.heap_allocate(llvm_cell_ty)?;
+                            // Copy value from stack to heap
+                            let val = self.builder.build_load(llvm_cell_ty, stack_ptr, "")?;
+                            self.builder.build_store(heap_cell, val)?;
+                            // Store cell ptr (bitcast to i8*) in context struct
+                            let cell_field_ptr = self.builder.build_struct_gep(
+                                context_struct_type, ctx_ptr, (i + 1) as u32, "",
+                            )?;
+                            let cell_ptr_i8 = self.builder.build_bit_cast(heap_cell, ptr_ty, "")?;
+                            self.builder.build_store(cell_field_ptr, cell_ptr_i8)?;
+                        }
+                    }
+
+                    // Return context struct pointer as i8*
+                    let ctx_ptr_i8 = self.builder.build_bit_cast(ctx_ptr, ptr_ty, "")?;
+                    Ok(Some(ctx_ptr_i8))
+                } else {
+                    let fn_ptr = function.as_global_value().as_pointer_value();
+                    Ok(Some(
+                        self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?.into(),
+                    ))
+                }
             }
             Expression::FunctionType { .. } => Ok(None),
             Expression::ShorthandArgument { index, ty } => {
