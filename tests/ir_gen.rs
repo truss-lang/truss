@@ -4002,7 +4002,11 @@ fn test_irgen_import_module_call() {
         "Expected 'bar' function in IR, got:\n{}",
         llvm_ir
     );
-    assert_eq!(engine.borrow().get_errors().len(), 1, "expected 1 error (module member access limitation)");
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        1,
+        "expected 1 error (module member access limitation)"
+    );
 }
 
 #[test]
@@ -4062,7 +4066,11 @@ fn test_irgen_import_package_module_call() {
         "Expected 'bar' function in IR, got:\n{}",
         llvm_ir
     );
-    assert_eq!(engine.borrow().get_errors().len(), 1, "expected 1 error (module member access limitation)");
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        1,
+        "expected 1 error (module member access limitation)"
+    );
 }
 
 #[test]
@@ -5968,7 +5976,9 @@ fn test_irgen_labeled_param_reorder() {
          func bar() -> Int32 { return foo(by: 3, to: 2) }",
     );
     assert_eq!(engine.borrow().get_errors().len(), 0);
-    assert!(llvm_ir.contains(r#"call i32 @"_T$foo$from_to_by$Int32_Int32_Int32"(i32 0, i32 2, i32 3)"#));
+    assert!(
+        llvm_ir.contains(r#"call i32 @"_T$foo$from_to_by$Int32_Int32_Int32"(i32 0, i32 2, i32 3)"#)
+    );
 }
 
 #[test]
@@ -6976,4 +6986,56 @@ fn test_irgen_extern_c_name_not_mangled() {
         "extern C function should use C name 'putchar', IR:\n{}",
         llvm_ir
     );
+}
+
+#[test]
+fn test_irgen_force_unwrap_some() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "func test() -> Int32 { let a: Int32? = null; return a! }",
+        &[
+            "#[builtintype] public struct Int32 {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "force unwrap should generate IR without errors"
+    );
+    assert!(llvm_ir.contains("unwrap_some") || llvm_ir.contains("unwrap_cont"));
+}
+
+#[test]
+fn test_irgen_nil_coalescing_default() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "func test() -> Int32 { let a: Int32? = null; return a ?: 42 }",
+        &[
+            "#[builtintype] public struct Int32 {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "nil-coalescing should generate IR without errors"
+    );
+    assert!(llvm_ir.contains("coalesce_some") || llvm_ir.contains("coalesce_cont"));
+}
+
+#[test]
+fn test_irgen_optional_chaining() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "struct Point { var x: Int32 }
+         func test() -> Int32? { let p: Point? = null; return p?.x }",
+        &[
+            "#[builtintype] public struct Int32 {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "optional chaining should generate IR without errors"
+    );
+    assert!(llvm_ir.contains("chain_some") || llvm_ir.contains("chain_cont"));
 }
