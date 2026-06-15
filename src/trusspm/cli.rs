@@ -82,8 +82,8 @@ pub fn process_build_truss(
     let ir_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
     let scope = main_module.borrow().scope.clone();
     if let Some(s) = scope {
-        let ir_generator = IRGenerator::new(&context, ir_engine.clone())
-            .with_namespace("Build", "Build");
+        let ir_generator =
+            IRGenerator::new(&context, ir_engine.clone()).with_namespace("Build", "Build");
         let modules = ir_generator.generate_with_stdlib(&program, &[], s);
         if ir_engine.borrow().has_errors() {
             return None;

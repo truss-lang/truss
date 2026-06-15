@@ -259,8 +259,7 @@ fn main() {
 
     let context = inkwell::context::Context::create();
     let ir_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-    let ir_generator = IRGenerator::new(&context, ir_engine.clone())
-        .with_namespace("main", "main");
+    let ir_generator = IRGenerator::new(&context, ir_engine.clone()).with_namespace("main", "main");
     let modules = ir_generator.generate_with_stdlib(
         &combined_prog,
         &stdlib_stmts,
