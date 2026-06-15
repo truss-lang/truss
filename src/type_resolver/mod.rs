@@ -2347,6 +2347,10 @@ impl TypeResolver {
                 selected_index,
                 ..
             } => {
+                if *operator == UnaryOperator::AddressOf {
+                    let operand_ty = self.infer_type(expression.clone());
+                    return self.check_address_of(expression.clone(), operand_ty);
+                }
                 let operand_ty = self.infer_type(expression.clone())?;
                 if let Some(result) = self.check_unary(*operator, operand_ty.clone()) {
                     if matches!(operator, UnaryOperator::Inc | UnaryOperator::Dec) {
@@ -5254,8 +5258,197 @@ impl TypeResolver {
                     None
                 }
             }
-            UnaryOperator::AddressOf => Some(Rc::new(RefCell::new(Type::Pointer(operand)))),
             _ => None,
+        }
+    }
+
+    fn check_address_of(
+        &mut self,
+        expression: Rc<RefCell<Expression>>,
+        operand_ty: Option<Rc<RefCell<Type>>>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        match &*expression.borrow() {
+            Expression::Variable { symbol, .. } => {
+                if let Some(sym_weak) = symbol {
+                    if let Some(sym) = sym_weak.0.upgrade() {
+                        if matches!(&*sym.borrow(), Symbol::Function { .. }) {
+                            return operand_ty;
+                        }
+                    }
+                }
+                operand_ty.map(|t| Rc::new(RefCell::new(Type::Pointer(t))))
+            }
+            Expression::MemberAccess { object, member, .. } => {
+                let object_ty = self.infer_type(object.clone());
+                if let Some(ref object_ty) = object_ty {
+                    let type_name = match &*object_ty.borrow() {
+                        Type::Struct(n, _, _) | Type::Class(n, _, _) | Type::Enum(n, _, _) => {
+                            n.clone()
+                        }
+                        _ => return None,
+                    };
+                    let scope = self.current_scope.as_ref()?.borrow();
+                    let sym = scope.get_symbol(&type_name)?;
+                    let binding = sym.borrow();
+                    let (properties, methods, constructors, destrcutor) = match &*binding {
+                        Symbol::Struct {
+                            properties,
+                            methods,
+                            constructors,
+                            destrcutor,
+                            ..
+                        }
+                        | Symbol::Class {
+                            properties,
+                            methods,
+                            constructors,
+                            destrcutor,
+                            ..
+                        } => {
+                            let props = properties.clone();
+                            let meths = methods.clone();
+                            let ctors = constructors.clone();
+                            let dtor = destrcutor.clone();
+                            drop(binding);
+                            (props, meths, ctors, dtor)
+                        }
+                        Symbol::Enum { methods, .. } => {
+                            let meths = methods.clone();
+                            drop(binding);
+                            (vec![], meths, vec![], None)
+                        }
+                        _ => {
+                            drop(binding);
+                            return None;
+                        }
+                    };
+                    drop(scope);
+                    for method in methods {
+                        if method.borrow().name().as_ref().ok() == Some(&member.value) {
+                            if let Some(decl) = method.borrow().get_decl().ok().flatten() {
+                                if let Statement::FunctionDecl { ty: Some(t), .. } =
+                                    &*decl.borrow()
+                                {
+                                    return Some(t.clone());
+                                }
+                            }
+                        }
+                    }
+                    for prop in properties {
+                        if prop.borrow().name().as_ref().ok() == Some(&member.value) {
+                            if let Some(decl) = prop.borrow().get_decl().ok().flatten() {
+                                if let Statement::VariableDecl {
+                                    ty: Some(prop_ty),
+                                    accessors,
+                                    ..
+                                } = &*decl.borrow()
+                                {
+                                    if !accessors.is_empty() {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::InvalidOperand,
+                                            "Cannot take address of computed property"
+                                                .to_string(),
+                                            member,
+                                        );
+                                        return None;
+                                    }
+                                    return Some(Rc::new(RefCell::new(Type::Pointer(
+                                        prop_ty.clone(),
+                                    ))));
+                                }
+                            }
+                        }
+                    }
+                    if member.value == "init" {
+                        for ctor in &constructors {
+                            if let Some(decl) = ctor.borrow().get_decl().ok().flatten() {
+                                if let Statement::InitDecl { ty: Some(t), .. } = &*decl.borrow() {
+                                    return Some(t.clone());
+                                }
+                            }
+                        }
+                    }
+                    if member.value == "deinit" {
+                        if let Some(dtor) = &destrcutor {
+                            if let Some(decl) = dtor.borrow().get_decl().ok().flatten() {
+                                if let Statement::DeinitDecl { ty: Some(t), .. } = &*decl.borrow()
+                                {
+                                    return Some(t.clone());
+                                }
+                            }
+                        }
+                    }
+                    return None;
+                }
+                if let Expression::Variable { name, .. } = &*object.borrow() {
+                    let type_name = &name.value;
+                    let scope = self.current_scope.as_ref()?.borrow();
+                    let sym = scope.get_symbol(type_name)?;
+                    let binding = sym.borrow();
+                    let (methods, constructors, destrcutor) = match &*binding {
+                        Symbol::Struct {
+                            methods,
+                            constructors,
+                            destrcutor,
+                            ..
+                        }
+                        | Symbol::Class {
+                            methods,
+                            constructors,
+                            destrcutor,
+                            ..
+                        } => {
+                            let meths = methods.clone();
+                            let ctors = constructors.clone();
+                            let dtor = destrcutor.clone();
+                            drop(binding);
+                            (meths, ctors, dtor)
+                        }
+                        Symbol::Enum { methods, .. } => {
+                            let meths = methods.clone();
+                            drop(binding);
+                            (meths, vec![], None)
+                        }
+                        _ => {
+                            drop(binding);
+                            return None;
+                        }
+                    };
+                    drop(scope);
+                    for method in &methods {
+                        if method.borrow().name().as_ref().ok() == Some(&member.value) {
+                            if let Some(decl) = method.borrow().get_decl().ok().flatten() {
+                                if let Statement::FunctionDecl { ty: Some(t), .. } =
+                                    &*decl.borrow()
+                                {
+                                    return Some(t.clone());
+                                }
+                            }
+                        }
+                    }
+                    if member.value == "init" {
+                        for ctor in &constructors {
+                            if let Some(decl) = ctor.borrow().get_decl().ok().flatten() {
+                                if let Statement::InitDecl { ty: Some(t), .. } = &*decl.borrow() {
+                                    return Some(t.clone());
+                                }
+                            }
+                        }
+                    }
+                    if member.value == "deinit" {
+                        if let Some(dtor) = &destrcutor {
+                            if let Some(decl) = dtor.borrow().get_decl().ok().flatten() {
+                                if let Statement::DeinitDecl { ty: Some(t), .. } = &*decl.borrow()
+                                {
+                                    return Some(t.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            _ => operand_ty.map(|t| Rc::new(RefCell::new(Type::Pointer(t)))),
         }
     }
 
