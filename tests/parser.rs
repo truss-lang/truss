@@ -9,8 +9,8 @@ use truss::{
         statement::{
             AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
             GenericParameterKind, ImportKind, MacroMetaVarType, MacroPatternFragment, Modifier,
-            ModifierType, OperatorFixity, Parameter, Pattern, ProtocolMember, SelectiveAlias,
-            Statement, VariadicKind, WhereRequirementKind,
+            ModifierType, OperatorFixity, OwnershipModifier, Parameter, Pattern, ProtocolMember,
+            SelectiveAlias, Statement, VariadicKind, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -13123,4 +13123,123 @@ fn test_parse_closure_no_capture_unaffected() {
     } else {
         panic!("Expected VariableDecl");
     }
+}
+
+#[test]
+fn test_parse_weak_variable() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "weak var x: SomeClass?".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { ownership, name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(*ownership, OwnershipModifier::Weak);
+        assert_eq!(name.value, "x");
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_unowned_variable() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "unowned var x: SomeClass".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { ownership, name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(*ownership, OwnershipModifier::Unowned);
+        assert_eq!(name.value, "x");
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_weak_closure_capture() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { [weak self] in self?.foo() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure { captures, .. } = &*init {
+            assert_eq!(captures.len(), 1);
+            assert_eq!(captures[0].ownership, OwnershipModifier::Weak);
+            assert_eq!(captures[0].name.value, "self");
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_unowned_closure_capture() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "let f = { [unowned self] in self.foo() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { initializer, .. } = &*program.statements[0].borrow() {
+        let init = initializer.as_ref().unwrap().borrow();
+        if let Expression::Closure { captures, .. } = &*init {
+            assert_eq!(captures.len(), 1);
+            assert_eq!(captures[0].ownership, OwnershipModifier::Unowned);
+            assert_eq!(captures[0].name.value, "self");
+        } else {
+            panic!("Expected Closure expression");
+        }
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_strong_variable_default() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new("var x: SomeClass".to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!engine.borrow().has_errors());
+    if let Statement::VariableDecl { ownership, name, .. } = &*program.statements[0].borrow() {
+        assert_eq!(*ownership, OwnershipModifier::Strong);
+        assert_eq!(name.value, "x");
+    } else {
+        panic!("Expected VariableDecl");
+    }
+}
+
+#[test]
+fn test_parse_ownership_modifier_default() {
+    assert_eq!(OwnershipModifier::default(), OwnershipModifier::Strong);
 }

@@ -13,9 +13,10 @@ use crate::{
             AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Attribute,
             CatchClause, Condition, ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody,
             GenericParameter, GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType,
-            MacroPatternFragment, MatchCase, Modifier, ModifierType, OperatorFixity, Parameter,
-            Pattern, ProtocolAccessorSet, ProtocolMember, SelectiveAlias, SelectiveMember,
-            Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
+            MacroPatternFragment, MatchCase, Modifier, ModifierType, OperatorFixity,
+            OwnershipModifier, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember,
+            SelectiveAlias, SelectiveMember, Statement, VariadicKind, WhereRequirement,
+            WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -3012,6 +3013,7 @@ impl Parser {
         } else {
             Vec::new()
         };
+        let ownership = Self::extract_ownership(&modifiers);
         Ok(Statement::VariableDecl {
             modifiers,
             token: Box::new(token),
@@ -3020,6 +3022,7 @@ impl Parser {
             type_expression: type_expression.map(RefCell::new).map(Rc::new),
             initializer: initializer.map(RefCell::new).map(Rc::new),
             accessors,
+            ownership,
             ty: None,
         })
     }
@@ -4767,6 +4770,20 @@ impl Parser {
                 break;
             }
 
+            let ownership = if let Some(token) = self.peek()
+                && KeywordType::is_keyword(&token, KeywordType::Weak)
+            {
+                self.index += 1;
+                OwnershipModifier::Weak
+            } else if let Some(token) = self.peek()
+                && KeywordType::is_keyword(&token, KeywordType::Unowned)
+            {
+                self.index += 1;
+                OwnershipModifier::Unowned
+            } else {
+                OwnershipModifier::Strong
+            };
+
             let is_var = if let Some(token) = self.peek()
                 && KeywordType::is_keyword(&token, KeywordType::Var)
             {
@@ -4811,6 +4828,7 @@ impl Parser {
                 name: Box::new(name),
                 expression,
                 is_var,
+                ownership,
             });
 
             if let Some(token) = self.peek()
@@ -5536,6 +5554,8 @@ impl Parser {
                     KeywordType::Override => ModifierType::Override,
                     KeywordType::Abstract => ModifierType::Abstract,
                     KeywordType::Final => ModifierType::Final,
+                    KeywordType::Weak => ModifierType::Weak,
+                    KeywordType::Unowned => ModifierType::Unowned,
                     _ => {
                         break;
                     }
@@ -5699,6 +5719,17 @@ impl Parser {
             Pattern::EnumCase { case_name, .. } => Some(case_name.as_ref()),
             _ => None,
         }
+    }
+
+    fn extract_ownership(modifiers: &[Modifier]) -> OwnershipModifier {
+        for m in modifiers {
+            match m.ty {
+                ModifierType::Weak => return OwnershipModifier::Weak,
+                ModifierType::Unowned => return OwnershipModifier::Unowned,
+                _ => {}
+            }
+        }
+        OwnershipModifier::Strong
     }
 
     fn parse_pattern(&mut self) -> Result<Pattern, ()> {
