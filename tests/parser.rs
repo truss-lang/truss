@@ -13172,7 +13172,7 @@ fn test_parse_weak_closure_capture() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "let f = { [weak self] in self?.foo() }".to_string(),
+            "let f = { [weak x] in x }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -13185,7 +13185,7 @@ fn test_parse_weak_closure_capture() {
         if let Expression::Closure { captures, .. } = &*init {
             assert_eq!(captures.len(), 1);
             assert_eq!(captures[0].ownership, OwnershipModifier::Weak);
-            assert_eq!(captures[0].name.value, "self");
+            assert_eq!(captures[0].name.value, "x");
         } else {
             panic!("Expected Closure expression");
         }
@@ -13199,7 +13199,7 @@ fn test_parse_unowned_closure_capture() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "let f = { [unowned self] in self.foo() }".to_string(),
+            "let f = { [unowned x] in x }".to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -13212,7 +13212,7 @@ fn test_parse_unowned_closure_capture() {
         if let Expression::Closure { captures, .. } = &*init {
             assert_eq!(captures.len(), 1);
             assert_eq!(captures[0].ownership, OwnershipModifier::Unowned);
-            assert_eq!(captures[0].name.value, "self");
+            assert_eq!(captures[0].name.value, "x");
         } else {
             panic!("Expected Closure expression");
         }

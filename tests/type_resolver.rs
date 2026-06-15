@@ -7916,19 +7916,19 @@ fn resolve_program(
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
     let program = parser.parse();
-    let packages = truss::krate::create_root_package();
+    let (packages, _) = truss::krate::single_package_map("main");
     let mut resolver = SymbolResolver::new(
         packages.clone(),
         "main".to_string(),
         engine.clone(),
     );
-    resolver.resolve(&program, "main".to_string());
+    let module_id = resolver.resolve(&program, "main".to_string());
     let mut type_resolver = TypeResolver::new(
         packages.clone(),
         "main".to_string(),
         engine.clone(),
     );
-    type_resolver.resolve(&program, "test".to_string());
+    type_resolver.resolve(&program, module_id);
     (engine, program, packages)
 }
 

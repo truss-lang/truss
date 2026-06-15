@@ -5436,7 +5436,7 @@ fn test_weak_variable_ownership_in_symbol() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
 
-    let packages = truss::krate::create_root_package();
+    let (packages, _) = truss::krate::single_package_map("main");
     let mut resolver = SymbolResolver::new(
         packages.clone(),
         "main".to_string(),
@@ -5445,17 +5445,21 @@ fn test_weak_variable_ownership_in_symbol() {
     resolver.resolve(&program, "main".to_string());
     assert!(!engine.borrow().has_errors());
 
-    let pkg = packages.get("main").unwrap();
-    let module = pkg.borrow().modules.get("main").unwrap();
-    let scope = module.borrow().scope.clone().unwrap();
-    let func_scope = scope.borrow().children.first().cloned().unwrap();
-    let inner_scope = func_scope.borrow().children.first().cloned().unwrap();
-    let sym = inner_scope.borrow().get_symbol("x").unwrap();
-    if let Symbol::Variable { ownership, is_var, .. } = &*sym.borrow() {
-        assert_eq!(*ownership, OwnershipModifier::Weak);
-        assert!(*is_var);
+    // Find the variable x: find FunctionDecl in program statements
+    let func_stmt = program.statements.iter().find(|s| {
+        matches!(&*s.borrow(), Statement::FunctionDecl { name, .. } if name.value == "test")
+    }).cloned().expect("Expected func test");
+    if let Statement::FunctionDecl { body, .. } = &*func_stmt.borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { name, ownership, .. } = &*stmts[0].borrow() {
+            assert_eq!(*ownership, OwnershipModifier::Weak);
+            assert_eq!(name.value, "x");
+        } else {
+            panic!("Expected VariableDecl");
+        }
     } else {
-        panic!("Expected Variable symbol");
+        panic!("Expected FunctionDecl with body");
     }
 }
 
@@ -5477,7 +5481,7 @@ fn test_unowned_variable_ownership_in_symbol() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
 
-    let packages = truss::krate::create_root_package();
+    let (packages, _) = truss::krate::single_package_map("main");
     let mut resolver = SymbolResolver::new(
         packages.clone(),
         "main".to_string(),
@@ -5486,16 +5490,20 @@ fn test_unowned_variable_ownership_in_symbol() {
     resolver.resolve(&program, "main".to_string());
     assert!(!engine.borrow().has_errors());
 
-    let pkg = packages.get("main").unwrap();
-    let module = pkg.borrow().modules.get("main").unwrap();
-    let scope = module.borrow().scope.clone().unwrap();
-    let func_scope = scope.borrow().children.first().cloned().unwrap();
-    let inner_scope = func_scope.borrow().children.first().cloned().unwrap();
-    let sym = inner_scope.borrow().get_symbol("x").unwrap();
-    if let Symbol::Variable { ownership, .. } = &*sym.borrow() {
-        assert_eq!(*ownership, OwnershipModifier::Unowned);
+    let func_stmt = program.statements.iter().find(|s| {
+        matches!(&*s.borrow(), Statement::FunctionDecl { name, .. } if name.value == "test")
+    }).cloned().expect("Expected func test");
+    if let Statement::FunctionDecl { body, .. } = &*func_stmt.borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { name, ownership, .. } = &*stmts[0].borrow() {
+            assert_eq!(*ownership, OwnershipModifier::Unowned);
+            assert_eq!(name.value, "x");
+        } else {
+            panic!("Expected VariableDecl");
+        }
     } else {
-        panic!("Expected Variable symbol");
+        panic!("Expected FunctionDecl with body");
     }
 }
 
@@ -5517,7 +5525,7 @@ fn test_strong_variable_default_ownership_in_symbol() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
 
-    let packages = truss::krate::create_root_package();
+    let (packages, _) = truss::krate::single_package_map("main");
     let mut resolver = SymbolResolver::new(
         packages.clone(),
         "main".to_string(),
@@ -5526,15 +5534,19 @@ fn test_strong_variable_default_ownership_in_symbol() {
     resolver.resolve(&program, "main".to_string());
     assert!(!engine.borrow().has_errors());
 
-    let pkg = packages.get("main").unwrap();
-    let module = pkg.borrow().modules.get("main").unwrap();
-    let scope = module.borrow().scope.clone().unwrap();
-    let func_scope = scope.borrow().children.first().cloned().unwrap();
-    let inner_scope = func_scope.borrow().children.first().cloned().unwrap();
-    let sym = inner_scope.borrow().get_symbol("x").unwrap();
-    if let Symbol::Variable { ownership, .. } = &*sym.borrow() {
-        assert_eq!(*ownership, OwnershipModifier::Strong);
+    let func_stmt = program.statements.iter().find(|s| {
+        matches!(&*s.borrow(), Statement::FunctionDecl { name, .. } if name.value == "test")
+    }).cloned().expect("Expected func test");
+    if let Statement::FunctionDecl { body, .. } = &*func_stmt.borrow()
+        && let FunctionBody::Statements(stmts) = &*body.borrow()
+    {
+        if let Statement::VariableDecl { name, ownership, .. } = &*stmts[0].borrow() {
+            assert_eq!(*ownership, OwnershipModifier::Strong);
+            assert_eq!(name.value, "x");
+        } else {
+            panic!("Expected VariableDecl");
+        }
     } else {
-        panic!("Expected Variable symbol");
+        panic!("Expected FunctionDecl with body");
     }
 }
