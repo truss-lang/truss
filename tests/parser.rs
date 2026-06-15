@@ -1353,6 +1353,46 @@ fn test_parse_deref_postfix_inc() {
 }
 
 #[test]
+fn test_parse_func_ptr_type_syntax() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func apply(fn: func(Int32) -> Bool, x: Int32) -> Bool { return fn(x) }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    assert!(!program.statements.is_empty());
+    if let Statement::FunctionDecl { parameters, .. } = &*program.statements[0].borrow() {
+        assert_eq!(parameters.len(), 2);
+        let fn_param = parameters[0].borrow();
+        let te = fn_param.type_expression.borrow();
+        if let Expression::FunctionType {
+            param_types,
+            return_type,
+            ..
+        } = &*te
+        {
+            assert_eq!(param_types.len(), 1);
+            assert!(matches!(
+                &*param_types[0].borrow(),
+                Expression::Type { name, .. } if name.value == "Int32"
+            ));
+            assert!(matches!(
+                &*return_type.borrow(),
+                Expression::Type { name, .. } if name.value == "Bool"
+            ));
+        } else {
+            panic!("Expected FunctionType for func(Int32) -> Bool");
+        }
+    } else {
+        panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
 fn test_parse_deref_prefix_inc() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

@@ -5295,6 +5295,47 @@ fn test_function_type_expression_resolved() {
 }
 
 #[test]
+fn test_func_ptr_type_syntax_resolved() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func test() { let f: func(Int32, Bool) -> Void }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine);
+    type_resolver.resolve(&program, module_id);
+    if let Statement::FunctionDecl { body, .. } = &*program.statements[0].borrow()
+        && let FunctionBody::Statements(statements) = &*body.borrow()
+        && let Statement::VariableDecl {
+            type_expression, ..
+        } = &*statements[0].borrow()
+        && let Some(te) = type_expression
+        && let Expression::FunctionType { ty, .. } = &*te.borrow()
+    {
+        assert!(ty.is_some(), "FunctionType should have a resolved type");
+        let t = ty.as_ref().unwrap().borrow().clone();
+        if let Type::Function(param_types, ret_type, is_vararg, None) = t {
+            assert_eq!(param_types.len(), 2);
+            assert_eq!(*param_types[0].borrow(), type_of("Int32"));
+            assert_eq!(*param_types[1].borrow(), type_of("Bool"));
+            assert!(!is_vararg);
+        } else {
+            panic!("Expected Type::Function for func type, got {:?}", t);
+        }
+    } else {
+        panic!("Expected FunctionType with resolved type for func syntax");
+    }
+}
+
+#[test]
 fn test_closure_untyped_params_inferred() {
     let engine = create_engine();
     let mut lexer = Lexer::new(

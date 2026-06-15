@@ -1276,6 +1276,87 @@ impl Parser {
         }
 
         if let Some(token) = self.peek()
+            && KeywordType::is_keyword(&token, KeywordType::Func)
+        {
+            self.index += 1;
+            let Some(open) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    "Expected '(' after 'func' in function pointer type",
+                    &token,
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&open, SeparatorType::OpenParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    format!("Expected '(' but found '{}'", open.value),
+                    &open,
+                );
+                return Err(());
+            }
+
+            let mut param_types = Vec::new();
+            loop {
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::CloseParen)
+                {
+                    break;
+                }
+                let param_type = self.parse_type_expression()?;
+                param_types.push(Rc::new(RefCell::new(param_type)));
+                if let Some(t) = self.peek()
+                    && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                {
+                    self.index += 1;
+                } else {
+                    break;
+                }
+            }
+
+            let Some(close) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    "Expected ')' in function pointer type",
+                    &token,
+                );
+                return Err(());
+            };
+            if !SeparatorType::is_separator(&close, SeparatorType::CloseParen) {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    format!("Expected ')' but found '{}'", close.value),
+                    &close,
+                );
+                return Err(());
+            }
+
+            let Some(arrow) = self.next() else {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    "Expected '->' in function pointer type",
+                    &close,
+                );
+                return Err(());
+            };
+            if !OperatorType::is_operator(&arrow, OperatorType::Arrow) {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedType,
+                    format!("Expected '->' but found '{}'", arrow.value),
+                    &arrow,
+                );
+                return Err(());
+            }
+
+            let return_type = self.parse_type_expression()?;
+            return Ok(Expression::FunctionType {
+                param_types,
+                return_type: Rc::new(RefCell::new(return_type)),
+                ty: None,
+            });
+        }
+
+        if let Some(token) = self.peek()
             && KeywordType::is_keyword(&token, KeywordType::Inline)
         {
             self.index += 1;
