@@ -1678,8 +1678,12 @@ impl SymbolResolver {
                 body,
                 scope,
                 where_clause,
+                conformances,
                 ..
             } => {
+                for conformance in conformances {
+                    self.resolve_conformance(conformance.clone());
+                }
                 if let Some(where_clause) = where_clause {
                     for req in where_clause {
                         self.resolve_where_requirement(req);
