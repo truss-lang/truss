@@ -5654,41 +5654,84 @@ impl<'ctx> IRGenerator<'ctx> {
                             && let Type::Enum(enum_name, _, _) = &*ty.borrow()
                             && enum_name == "Optional"
                         {
-                            let enum_type = self.enum_types.borrow().get(enum_name).copied().ok_or_else(|| {
-                                anyhow::anyhow!("Enum type '{}' not found", enum_name)
-                            })?;
-                            let payloads_type = self.enum_payload_types.borrow().get(enum_name).copied().ok_or_else(|| {
-                                anyhow::anyhow!("Enum payload type '{}' not found", enum_name)
-                            })?;
-                            let alloca = self.builder.build_alloca(enum_type.as_basic_type_enum(), "")?;
+                            let enum_type = self
+                                .enum_types
+                                .borrow()
+                                .get(enum_name)
+                                .copied()
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                                })?;
+                            let payloads_type = self
+                                .enum_payload_types
+                                .borrow()
+                                .get(enum_name)
+                                .copied()
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("Enum payload type '{}' not found", enum_name)
+                                })?;
+                            let alloca = self
+                                .builder
+                                .build_alloca(enum_type.as_basic_type_enum(), "")?;
                             self.builder.build_store(alloca, left_val)?;
-                            let tag_ptr = self.builder.build_struct_gep(enum_type, alloca, 0, "")?;
-                            let tag = self.builder.build_load(self.context.i8_type(), tag_ptr, "")?;
+                            let tag_ptr =
+                                self.builder.build_struct_gep(enum_type, alloca, 0, "")?;
+                            let tag =
+                                self.builder
+                                    .build_load(self.context.i8_type(), tag_ptr, "")?;
                             let none_tag = self.context.i8_type().const_zero();
                             let is_none = self.builder.build_int_compare(
-                                inkwell::IntPredicate::EQ, tag.into_int_value(), none_tag, "")?;
-                            let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
-                            let left_some_bb = self.context.append_basic_block(fn_val, "coalesce_some");
-                            let left_none_bb = self.context.append_basic_block(fn_val, "coalesce_none");
+                                inkwell::IntPredicate::EQ,
+                                tag.into_int_value(),
+                                none_tag,
+                                "",
+                            )?;
+                            let fn_val = self
+                                .builder
+                                .get_insert_block()
+                                .unwrap()
+                                .get_parent()
+                                .unwrap();
+                            let left_some_bb =
+                                self.context.append_basic_block(fn_val, "coalesce_some");
+                            let left_none_bb =
+                                self.context.append_basic_block(fn_val, "coalesce_none");
                             let cont_bb = self.context.append_basic_block(fn_val, "coalesce_cont");
-                            self.builder.build_conditional_branch(is_none, left_none_bb, left_some_bb)?;
+                            self.builder.build_conditional_branch(
+                                is_none,
+                                left_none_bb,
+                                left_some_bb,
+                            )?;
                             self.builder.position_at_end(left_some_bb);
-                            let payload_union_ptr = self.builder.build_struct_gep(enum_type, alloca, 1, "")?;
-                            let some_payload_ptr = self.builder.build_struct_gep(payloads_type, payload_union_ptr, 1, "")?;
-                            let some_payload_ty = payloads_type.get_field_type_at_index(1).ok_or_else(|| {
-                                anyhow::anyhow!("Some payload field not found")
-                            })?.into_struct_type();
-                            let payload_val = self.builder.build_load(some_payload_ty, some_payload_ptr, "")?;
+                            let payload_union_ptr =
+                                self.builder.build_struct_gep(enum_type, alloca, 1, "")?;
+                            let some_payload_ptr = self.builder.build_struct_gep(
+                                payloads_type,
+                                payload_union_ptr,
+                                1,
+                                "",
+                            )?;
+                            let some_payload_ty = payloads_type
+                                .get_field_type_at_index(1)
+                                .ok_or_else(|| anyhow::anyhow!("Some payload field not found"))?
+                                .into_struct_type();
+                            let payload_val =
+                                self.builder
+                                    .build_load(some_payload_ty, some_payload_ptr, "")?;
                             self.builder.build_unconditional_branch(cont_bb)?;
                             self.builder.position_at_end(left_none_bb);
                             let none_val = right_val;
                             self.builder.build_unconditional_branch(cont_bb)?;
                             self.builder.position_at_end(cont_bb);
-                            let result_ty = payloads_type.get_field_type_at_index(1).ok_or_else(|| {
-                                anyhow::anyhow!("Some payload field type not found")
-                            })?;
+                            let result_ty =
+                                payloads_type.get_field_type_at_index(1).ok_or_else(|| {
+                                    anyhow::anyhow!("Some payload field type not found")
+                                })?;
                             let phi = self.builder.build_phi(result_ty, "")?;
-                            phi.add_incoming(&[(&payload_val, left_some_bb), (&none_val, left_none_bb)]);
+                            phi.add_incoming(&[
+                                (&payload_val, left_some_bb),
+                                (&none_val, left_none_bb),
+                            ]);
                             let result = phi.as_basic_value();
                             Ok(Some(result))
                         } else {
@@ -5854,42 +5897,82 @@ impl<'ctx> IRGenerator<'ctx> {
                             && enum_name == "Optional"
                             && !params.is_empty()
                         {
-                            let enum_type = self.enum_types.borrow().get(enum_name).copied().ok_or_else(|| {
-                                anyhow::anyhow!("Enum type '{}' not found", enum_name)
-                            })?;
-                            let payloads_type = self.enum_payload_types.borrow().get(enum_name).copied().ok_or_else(|| {
-                                anyhow::anyhow!("Enum payload type '{}' not found", enum_name)
-                            })?;
-                            let alloca = self.builder.build_alloca(enum_type.as_basic_type_enum(), "")?;
+                            let enum_type = self
+                                .enum_types
+                                .borrow()
+                                .get(enum_name)
+                                .copied()
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                                })?;
+                            let payloads_type = self
+                                .enum_payload_types
+                                .borrow()
+                                .get(enum_name)
+                                .copied()
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("Enum payload type '{}' not found", enum_name)
+                                })?;
+                            let alloca = self
+                                .builder
+                                .build_alloca(enum_type.as_basic_type_enum(), "")?;
                             self.builder.build_store(alloca, expr_val)?;
-                            let tag_ptr = self.builder.build_struct_gep(enum_type, alloca, 0, "")?;
-                            let tag = self.builder.build_load(self.context.i8_type(), tag_ptr, "")?;
+                            let tag_ptr =
+                                self.builder.build_struct_gep(enum_type, alloca, 0, "")?;
+                            let tag =
+                                self.builder
+                                    .build_load(self.context.i8_type(), tag_ptr, "")?;
                             let none_tag = self.context.i8_type().const_zero();
                             let is_none = self.builder.build_int_compare(
-                                inkwell::IntPredicate::EQ, tag.into_int_value(), none_tag, "")?;
-                            let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                                inkwell::IntPredicate::EQ,
+                                tag.into_int_value(),
+                                none_tag,
+                                "",
+                            )?;
+                            let fn_val = self
+                                .builder
+                                .get_insert_block()
+                                .unwrap()
+                                .get_parent()
+                                .unwrap();
                             let some_bb = self.context.append_basic_block(fn_val, "unwrap_some");
                             let trap_bb = self.context.append_basic_block(fn_val, "unwrap_trap");
                             let cont_bb = self.context.append_basic_block(fn_val, "unwrap_cont");
-                            self.builder.build_conditional_branch(is_none, trap_bb, some_bb)?;
+                            self.builder
+                                .build_conditional_branch(is_none, trap_bb, some_bb)?;
                             self.builder.position_at_end(trap_bb);
-                            let trap_fn = self.module.get_function("llvm.trap").unwrap_or_else(|| {
-                                self.module.add_function("llvm.trap", self.context.void_type().fn_type(&[], false), None)
-                            });
+                            let trap_fn =
+                                self.module.get_function("llvm.trap").unwrap_or_else(|| {
+                                    self.module.add_function(
+                                        "llvm.trap",
+                                        self.context.void_type().fn_type(&[], false),
+                                        None,
+                                    )
+                                });
                             self.builder.build_call(trap_fn, &[], "")?;
                             self.builder.build_unreachable()?;
                             self.builder.position_at_end(some_bb);
-                            let payload_union_ptr = self.builder.build_struct_gep(enum_type, alloca, 1, "")?;
-                            let some_payload_ptr = self.builder.build_struct_gep(payloads_type, payload_union_ptr, 1, "")?;
-                            let some_payload_ty = payloads_type.get_field_type_at_index(1).ok_or_else(|| {
-                                anyhow::anyhow!("Some payload field not found")
-                            })?.into_struct_type();
-                            let payload_val = self.builder.build_load(some_payload_ty, some_payload_ptr, "")?;
+                            let payload_union_ptr =
+                                self.builder.build_struct_gep(enum_type, alloca, 1, "")?;
+                            let some_payload_ptr = self.builder.build_struct_gep(
+                                payloads_type,
+                                payload_union_ptr,
+                                1,
+                                "",
+                            )?;
+                            let some_payload_ty = payloads_type
+                                .get_field_type_at_index(1)
+                                .ok_or_else(|| anyhow::anyhow!("Some payload field not found"))?
+                                .into_struct_type();
+                            let payload_val =
+                                self.builder
+                                    .build_load(some_payload_ty, some_payload_ptr, "")?;
                             self.builder.build_unconditional_branch(cont_bb)?;
                             self.builder.position_at_end(cont_bb);
-                            let result_ty = payloads_type.get_field_type_at_index(1).ok_or_else(|| {
-                                anyhow::anyhow!("Some payload field type not found")
-                            })?;
+                            let result_ty =
+                                payloads_type.get_field_type_at_index(1).ok_or_else(|| {
+                                    anyhow::anyhow!("Some payload field type not found")
+                                })?;
                             let phi = self.builder.build_phi(result_ty, "")?;
                             phi.add_incoming(&[(&payload_val, some_bb)]);
                             let result = phi.as_basic_value();
@@ -7140,60 +7223,106 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let object_val = self.resolve_expression(object.clone())?.unwrap();
                 let object_ty = object.borrow().get_ty_ref()?.clone();
-                let enum_name = match &*object_ty.as_ref().ok_or_else(|| anyhow::anyhow!("No type for optional chain object"))?.borrow() {
+                let enum_name = match &*object_ty
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("No type for optional chain object"))?
+                    .borrow()
+                {
                     Type::Enum(name, _, _) => name.clone(),
                     _ => anyhow::bail!("Optional chain requires enum type"),
                 };
-                let enum_type = self.enum_types.borrow().get(&enum_name).copied()
+                let enum_type = self
+                    .enum_types
+                    .borrow()
+                    .get(&enum_name)
+                    .copied()
                     .ok_or_else(|| anyhow::anyhow!("Enum type '{}' not found", enum_name))?;
-                let payloads_type = self.enum_payload_types.borrow().get(&enum_name).copied()
-                    .ok_or_else(|| anyhow::anyhow!("Enum payload type '{}' not found", enum_name))?;
-                let alloca = self.builder.build_alloca(enum_type.as_basic_type_enum(), "")?;
+                let payloads_type = self
+                    .enum_payload_types
+                    .borrow()
+                    .get(&enum_name)
+                    .copied()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Enum payload type '{}' not found", enum_name)
+                    })?;
+                let alloca = self
+                    .builder
+                    .build_alloca(enum_type.as_basic_type_enum(), "")?;
                 self.builder.build_store(alloca, object_val)?;
                 let tag_ptr = self.builder.build_struct_gep(enum_type, alloca, 0, "")?;
-                let tag = self.builder.build_load(self.context.i8_type(), tag_ptr, "")?;
+                let tag = self
+                    .builder
+                    .build_load(self.context.i8_type(), tag_ptr, "")?;
                 let none_tag = self.context.i8_type().const_zero();
                 let is_none = self.builder.build_int_compare(
-                    inkwell::IntPredicate::EQ, tag.into_int_value(), none_tag, "")?;
-                let fn_val = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                    inkwell::IntPredicate::EQ,
+                    tag.into_int_value(),
+                    none_tag,
+                    "",
+                )?;
+                let fn_val = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
                 let some_bb = self.context.append_basic_block(fn_val, "chain_some");
                 let none_bb = self.context.append_basic_block(fn_val, "chain_none");
                 let cont_bb = self.context.append_basic_block(fn_val, "chain_cont");
-                self.builder.build_conditional_branch(is_none, none_bb, some_bb)?;
+                self.builder
+                    .build_conditional_branch(is_none, none_bb, some_bb)?;
                 self.builder.position_at_end(none_bb);
-                let none_payload_type = payloads_type.get_field_type_at_index(0)
+                let none_payload_type = payloads_type
+                    .get_field_type_at_index(0)
                     .ok_or_else(|| anyhow::anyhow!("None payload not found"))?;
                 let none_payload = none_payload_type.const_zero();
-                let none_enum_val = enum_type.const_named_struct(&[none_tag.into(), none_payload.into()]);
+                let none_enum_val =
+                    enum_type.const_named_struct(&[none_tag.into(), none_payload.into()]);
                 self.builder.build_unconditional_branch(cont_bb)?;
                 self.builder.position_at_end(some_bb);
                 let payload_union_ptr = self.builder.build_struct_gep(enum_type, alloca, 1, "")?;
-                let some_payload_ptr = self.builder.build_struct_gep(payloads_type, payload_union_ptr, 1, "")?;
-                let some_payload_ty = payloads_type.get_field_type_at_index(1)
-                    .ok_or_else(|| anyhow::anyhow!("Some payload field not found"))?.into_struct_type();
-                let struct_val = self.builder.build_load(some_payload_ty, some_payload_ptr, "")?;
+                let some_payload_ptr =
+                    self.builder
+                        .build_struct_gep(payloads_type, payload_union_ptr, 1, "")?;
+                let some_payload_ty = payloads_type
+                    .get_field_type_at_index(1)
+                    .ok_or_else(|| anyhow::anyhow!("Some payload field not found"))?
+                    .into_struct_type();
+                let struct_val = self
+                    .builder
+                    .build_load(some_payload_ty, some_payload_ptr, "")?;
                 let struct_alloca = self.builder.build_alloca(some_payload_ty, "")?;
                 self.builder.build_store(struct_alloca, struct_val)?;
-                let inner_struct_name = match &*object_ty.as_ref().ok_or_else(|| anyhow::anyhow!("No type"))?.borrow() {
-                    Type::Enum(_, _, params) if !params.is_empty() => {
-                        match &*params[0].borrow() {
-                            Type::Struct(n, _, _) | Type::Class(n, _, _) => n.clone(),
-                            _ => anyhow::bail!("Unsupported inner type for optional chaining"),
-                        }
-                    }
+                let inner_struct_name = match &*object_ty
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("No type"))?
+                    .borrow()
+                {
+                    Type::Enum(_, _, params) if !params.is_empty() => match &*params[0].borrow() {
+                        Type::Struct(n, _, _) | Type::Class(n, _, _) => n.clone(),
+                        _ => anyhow::bail!("Unsupported inner type for optional chaining"),
+                    },
                     _ => anyhow::bail!("Optional without params"),
                 };
-                let field_index = self.get_stored_struct_field_index(&inner_struct_name, &member.value)?;
+                let field_index =
+                    self.get_stored_struct_field_index(&inner_struct_name, &member.value)?;
                 let struct_llvm_type = *self.struct_types.borrow().get(&inner_struct_name).unwrap();
-                let field_ptr = self.builder.build_struct_gep(struct_llvm_type, struct_alloca, field_index as u32, "")?;
+                let field_ptr = self.builder.build_struct_gep(
+                    struct_llvm_type,
+                    struct_alloca,
+                    field_index as u32,
+                    "",
+                )?;
                 let field_ty = self.get_struct_field_type(&inner_struct_name, &member.value)?;
                 let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
                 let field_alloca = self.builder.build_alloca(field_ty, "")?;
                 self.builder.build_store(field_alloca, field_val)?;
                 let field_loaded = self.builder.build_load(field_ty, field_alloca, "")?;
-                let some_payload_struct_for_result = some_payload_ty.const_named_struct(&[field_loaded.into()]);
+                let some_payload_struct_for_result =
+                    some_payload_ty.const_named_struct(&[field_loaded.into()]);
                 let some_tag = self.context.i8_type().const_int(1, false);
-                let some_enum_val = enum_type.const_named_struct(&[some_tag.into(), some_payload_struct_for_result.into()]);
+                let some_enum_val = enum_type
+                    .const_named_struct(&[some_tag.into(), some_payload_struct_for_result.into()]);
                 self.builder.build_unconditional_branch(cont_bb)?;
                 self.builder.position_at_end(cont_bb);
                 let phi = self.builder.build_phi(enum_type.as_basic_type_enum(), "")?;

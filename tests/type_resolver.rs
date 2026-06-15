@@ -8391,7 +8391,10 @@ fn test_null_coalescing_optional_left() {
             "public enum Optional<T> { case None, Some(T) }",
         ],
     );
-    assert_eq!(errors, 0, "nil-coalescing with Optional left and T right should work");
+    assert_eq!(
+        errors, 0,
+        "nil-coalescing with Optional left and T right should work"
+    );
 }
 
 #[test]
@@ -8403,7 +8406,10 @@ fn test_null_coalescing_non_optional_error() {
             "public enum Optional<T> { case None, Some(T) }",
         ],
     );
-    assert!(errors > 0, "nil-coalescing with non-Optional left should error");
+    assert!(
+        errors > 0,
+        "nil-coalescing with non-Optional left should error"
+    );
 }
 
 #[test]
@@ -8415,7 +8421,10 @@ fn test_force_unwrap_optional() {
             "public enum Optional<T> { case None, Some(T) }",
         ],
     );
-    assert_eq!(errors, 0, "force unwrap of Optional should return inner type");
+    assert_eq!(
+        errors, 0,
+        "force unwrap of Optional should return inner type"
+    );
 }
 
 #[test]

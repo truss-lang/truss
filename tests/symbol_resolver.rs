@@ -5669,7 +5669,10 @@ fn test_strong_variable_default_ownership_in_symbol() {
 fn test_optional_chaining_resolves_object() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("func test(a: Optional<Int32>) { let x = a?.x }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "func test(a: Optional<Int32>) { let x = a?.x }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -5683,7 +5686,10 @@ fn test_optional_chaining_resolves_object() {
 fn test_force_unwrap_resolves_operand() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("func test(a: Optional<Int32>) { let x = a! }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "func test(a: Optional<Int32>) { let x = a! }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -5694,10 +5700,13 @@ fn test_force_unwrap_resolves_operand() {
 }
 
 #[test]
-fn test_nil_coalescing_resolves_both_operands() {
+fn test_null_coalescing_resolves_both_operands() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("func test(a: Optional<Int32>, b: Int32) { let x = a ?: b }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "func test(a: Optional<Int32>, b: Int32) { let x = a ?: b }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
@@ -5711,7 +5720,10 @@ fn test_nil_coalescing_resolves_both_operands() {
 fn test_optional_chaining_multi_level_resolves() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
-        CharStream::new("func test(a: Optional<Optional<Int32>>) { let x = a?.inner?.y }".to_string(), Rc::new("".to_string())),
+        CharStream::new(
+            "func test(a: Optional<Optional<Int32>>) { let x = a?.inner?.y }".to_string(),
+            Rc::new("".to_string()),
+        ),
         engine.clone(),
     );
     let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());

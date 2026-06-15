@@ -9395,7 +9395,8 @@ fn test_parse_subscript_set_implicit_newvalue() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new(
-            "subscript(index: Int32) -> Int32 { get { return 0 } set { x = newValue } }".to_string(),
+            "subscript(index: Int32) -> Int32 { get { return 0 } set { x = newValue } }"
+                .to_string(),
             Rc::new("".to_string()),
         ),
         engine.clone(),
@@ -9413,8 +9414,15 @@ fn test_parse_subscript_set_implicit_newvalue() {
         assert_eq!(accessors.len(), 2);
         assert_eq!(accessors[0].kind, AccessorKind::Get);
         assert_eq!(accessors[1].kind, AccessorKind::Set);
-        assert!(accessors[1].parameter.is_none(), "implicit set should have no explicit parameter");
-        assert_eq!(accessors[1].body.len(), 1, "setter body should have one statement");
+        assert!(
+            accessors[1].parameter.is_none(),
+            "implicit set should have no explicit parameter"
+        );
+        assert_eq!(
+            accessors[1].body.len(),
+            1,
+            "setter body should have one statement"
+        );
     } else {
         panic!("Expected SubscriptDecl");
     }
@@ -13521,7 +13529,7 @@ fn test_parse_ownership_modifier_default() {
 }
 
 #[test]
-fn test_parse_nil_coalescing() {
+fn test_parse_null_coalescing() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new("a ?: b".to_string(), Rc::new("".to_string())),
@@ -13532,7 +13540,7 @@ fn test_parse_nil_coalescing() {
     assert!(!engine.borrow().has_errors());
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         if let Expression::Binary { operator, .. } = &*expression.borrow() {
-            assert_eq!(*operator, BinaryOperator::NilCoalescing);
+            assert_eq!(*operator, BinaryOperator::NullCoalescing);
         } else {
             panic!("Expected Binary expression");
         }
@@ -13555,7 +13563,10 @@ fn test_parse_optional_chaining() {
         if let Expression::OptionalChain { member, .. } = &*expression.borrow() {
             assert_eq!(member.value, "b");
         } else {
-            panic!("Expected OptionalChain expression, got {:?}", *expression.borrow());
+            panic!(
+                "Expected OptionalChain expression, got {:?}",
+                *expression.borrow()
+            );
         }
     } else {
         panic!("Expected ExpressionStatement");
@@ -13575,7 +13586,11 @@ fn test_parse_optional_chaining_multi_level() {
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
         if let Expression::OptionalChain { member, object, .. } = &*expression.borrow() {
             assert_eq!(member.value, "c");
-            if let Expression::OptionalChain { member: inner_member, .. } = &*object.borrow() {
+            if let Expression::OptionalChain {
+                member: inner_member,
+                ..
+            } = &*object.borrow()
+            {
                 assert_eq!(inner_member.value, "b");
             } else {
                 panic!("Expected inner OptionalChain");
@@ -13599,7 +13614,12 @@ fn test_parse_force_unwrap() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
-        if let Expression::Unary { operator, is_prefix, .. } = &*expression.borrow() {
+        if let Expression::Unary {
+            operator,
+            is_prefix,
+            ..
+        } = &*expression.borrow()
+        {
             assert_eq!(*operator, UnaryOperator::NotNullAssertation);
             assert!(!is_prefix);
         } else {
@@ -13624,7 +13644,10 @@ fn test_parse_force_unwrap_chained_with_member() {
         if let Expression::MemberAccess { member, .. } = &*expression.borrow() {
             assert_eq!(member.value, "b");
         } else {
-            panic!("Expected MemberAccess with force unwrapped object, got {:?}", *expression.borrow());
+            panic!(
+                "Expected MemberAccess with force unwrapped object, got {:?}",
+                *expression.borrow()
+            );
         }
     } else {
         panic!("Expected ExpressionStatement");
@@ -13646,7 +13669,10 @@ fn test_parse_optional_chaining_variable_decl() {
         if let Expression::OptionalChain { member, .. } = &*init.borrow() {
             assert_eq!(member.value, "b");
         } else {
-            panic!("Expected OptionalChain in initializer, got {:?}", *init.borrow());
+            panic!(
+                "Expected OptionalChain in initializer, got {:?}",
+                *init.borrow()
+            );
         }
     } else {
         panic!("Expected VariableDecl");
@@ -13654,7 +13680,7 @@ fn test_parse_optional_chaining_variable_decl() {
 }
 
 #[test]
-fn test_parse_nil_coalescing_precedence() {
+fn test_parse_null_coalescing_precedence() {
     let engine = create_engine();
     let mut lexer = Lexer::new(
         CharStream::new("a ?: b + c".to_string(), Rc::new("".to_string())),
@@ -13664,9 +13690,15 @@ fn test_parse_nil_coalescing_precedence() {
     let program = parser.parse();
     assert!(!engine.borrow().has_errors());
     if let Statement::ExpressionStatement { expression } = &*program.statements[0].borrow() {
-        if let Expression::Binary { operator, right, .. } = &*expression.borrow() {
-            assert_eq!(*operator, BinaryOperator::NilCoalescing);
-            if let Expression::Binary { operator: right_op, .. } = &*right.borrow() {
+        if let Expression::Binary {
+            operator, right, ..
+        } = &*expression.borrow()
+        {
+            assert_eq!(*operator, BinaryOperator::NullCoalescing);
+            if let Expression::Binary {
+                operator: right_op, ..
+            } = &*right.borrow()
+            {
                 assert_eq!(*right_op, BinaryOperator::Plus);
             } else {
                 panic!("Expected Binary(Plus) on right side of ?:");

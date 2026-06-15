@@ -358,7 +358,7 @@ impl Lexer {
                 Some(Token::new(
                     "?:".to_string(),
                     TokenType::Operator {
-                        operator: OperatorType::NilCoalescing,
+                        operator: OperatorType::NullCoalescing,
                     },
                     position,
                     self.input.file.clone(),

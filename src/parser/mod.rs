@@ -576,9 +576,7 @@ impl Parser {
                             selected_index: None,
                         })
                     }
-                    OperatorType::Not => {
-                        Ok(expression)
-                    }
+                    OperatorType::Not => Ok(expression),
                     _ => Ok(expression),
                 }
             } else {
@@ -931,9 +929,13 @@ impl Parser {
                     && OperatorType::is_operator(&next, OperatorType::Not)
                 {
                     let is_macro = match self.peek2() {
-                        Some(d) if SeparatorType::is_separator(&d, SeparatorType::OpenParen)
-                            || SeparatorType::is_separator(&d, SeparatorType::OpenBracket)
-                            || SeparatorType::is_separator(&d, SeparatorType::OpenBrace) => true,
+                        Some(d)
+                            if SeparatorType::is_separator(&d, SeparatorType::OpenParen)
+                                || SeparatorType::is_separator(&d, SeparatorType::OpenBracket)
+                                || SeparatorType::is_separator(&d, SeparatorType::OpenBrace) =>
+                        {
+                            true
+                        }
                         _ => false,
                     };
                     if is_macro {
@@ -1195,14 +1197,8 @@ impl Parser {
                                 return Err(());
                             };
                             if TokenType::Identifier == member_token.ty
-                                || matches!(
-                                    member_token.ty,
-                                    TokenType::IntegerLiteral { .. }
-                                )
-                                || matches!(
-                                    member_token.ty,
-                                    TokenType::DecimalLiteral { .. }
-                                )
+                                || matches!(member_token.ty, TokenType::IntegerLiteral { .. })
+                                || matches!(member_token.ty, TokenType::DecimalLiteral { .. })
                                 || matches!(
                                     member_token.ty,
                                     TokenType::Keyword {
@@ -3109,12 +3105,14 @@ impl Parser {
             return Err(());
         };
         let pattern = self.parse_pattern()?;
-        let name = Self::extract_first_name(&pattern).cloned().unwrap_or(Token::new(
-            "_".to_string(),
-            TokenType::Identifier,
-            token.position.clone(),
-            token.file.clone(),
-        ));
+        let name = Self::extract_first_name(&pattern)
+            .cloned()
+            .unwrap_or(Token::new(
+                "_".to_string(),
+                TokenType::Identifier,
+                token.position.clone(),
+                token.file.clone(),
+            ));
         let pattern = Some(pattern);
         let type_expression = if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::Colon)
@@ -5590,7 +5588,10 @@ impl Parser {
                     _ => {
                         self.emit_error(
                             TrussDiagnosticCode::ParserError,
-                            format!("Expected string literal or identifier but found '{}'", val_tok.value),
+                            format!(
+                                "Expected string literal or identifier but found '{}'",
+                                val_tok.value
+                            ),
                             &val_tok,
                         );
                         return Err(());

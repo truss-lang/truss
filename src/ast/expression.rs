@@ -524,7 +524,7 @@ pub enum BinaryOperator {
     RangeTo,
     RangeUntil,
     OpenRange,
-    NilCoalescing,
+    NullCoalescing,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
@@ -576,7 +576,7 @@ impl BinaryOperator {
             BinaryOperator::RangeTo => "..",
             BinaryOperator::RangeUntil => "..<",
             BinaryOperator::OpenRange => "...",
-            BinaryOperator::NilCoalescing => "?:",
+            BinaryOperator::NullCoalescing => "?:",
         }
     }
 
@@ -602,7 +602,7 @@ impl BinaryOperator {
             OperatorType::RangeTo => Some(BinaryOperator::RangeTo),
             OperatorType::RangeUntil => Some(BinaryOperator::RangeUntil),
             OperatorType::OpenRange => Some(BinaryOperator::OpenRange),
-            OperatorType::NilCoalescing => Some(BinaryOperator::NilCoalescing),
+            OperatorType::NullCoalescing => Some(BinaryOperator::NullCoalescing),
             _ => None,
         }
     }

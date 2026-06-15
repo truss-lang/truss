@@ -884,10 +884,7 @@ impl SymbolResolver {
                         } => {
                             self.resolve_expression(type_expression.clone());
                         }
-                        ProtocolMember::Subscript {
-                            accessors,
-                            ..
-                        } => {
+                        ProtocolMember::Subscript { accessors, .. } => {
                             let sub = Rc::new(RefCell::new(Symbol::ProtocolSubscript {
                                 name: "subscript".to_string(),
                                 parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
@@ -1118,7 +1115,11 @@ impl SymbolResolver {
                                         FunctionBody::None => {}
                                     }
                                 }
-                            } else if let Statement::SubscriptDecl { accessors: sub_accessors, .. } = &*field_stmt.borrow() {
+                            } else if let Statement::SubscriptDecl {
+                                accessors: sub_accessors,
+                                ..
+                            } = &*field_stmt.borrow()
+                            {
                                 let req_accessors = ProtocolAccessorSet {
                                     get: sub_accessors.iter().any(|a| a.kind == AccessorKind::Get),
                                     set: sub_accessors.iter().any(|a| a.kind == AccessorKind::Set),
@@ -1468,11 +1469,12 @@ impl SymbolResolver {
                     Self::resolve_variable_pattern(pattern, stmt.clone(), is_var, self);
                 } else if name.value != "_" {
                     let is_var = var_token.value == "var";
-                    let ownership = if let Statement::VariableDecl { ownership, .. } = &*stmt.borrow() {
-                        *ownership
-                    } else {
-                        OwnershipModifier::Strong
-                    };
+                    let ownership =
+                        if let Statement::VariableDecl { ownership, .. } = &*stmt.borrow() {
+                            *ownership
+                        } else {
+                            OwnershipModifier::Strong
+                        };
                     let symbol = Rc::new(RefCell::new(Symbol::Variable {
                         name: name.value.clone(),
                         decl: Some(stmt.clone()),
@@ -1916,7 +1918,12 @@ impl SymbolResolver {
                 }
             }
             Statement::Fallthrough { .. } | Statement::Break { .. } => {}
-            Statement::For { pattern, iterator, body, .. } => {
+            Statement::For {
+                pattern,
+                iterator,
+                body,
+                ..
+            } => {
                 self.enter_scope(None);
                 Self::resolve_pattern_bindings_ref(pattern.as_ref(), self);
                 self.resolve_expression(iterator.clone());
@@ -1999,14 +2006,17 @@ impl SymbolResolver {
                     if !closure_scope.borrow().name_table.contains_key(&var_name)
                         && self.resolve_symbol(name).is_ok()
                     {
-                        let already_captured = self.closure_capture_stack
+                        let already_captured = self
+                            .closure_capture_stack
                             .last()
                             .map_or(false, |(_, caps)| {
                                 caps.iter().any(|c| c.name.value == var_name)
                             });
                         if !already_captured {
                             let is_var = match self.resolve_symbol(name) {
-                                Ok(sym) => matches!(&*sym.borrow(), Symbol::Variable { is_var: true, .. }),
+                                Ok(sym) => {
+                                    matches!(&*sym.borrow(), Symbol::Variable { is_var: true, .. })
+                                }
                                 Err(_) => false,
                             };
                             if let Some((_, captures)) = self.closure_capture_stack.last_mut() {
@@ -2039,23 +2049,24 @@ impl SymbolResolver {
                 }
 
                 match self.resolve_symbol(name) {
-                Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
-                Err(_) => {
-                    let has_self = self
-                        .current_scope
-                        .as_ref()
-                        .and_then(|scope| scope.borrow().get_type("self"))
-                        .is_some();
-                    if has_self {
-                        return;
+                    Ok(sym) => *symbol = Some(WeakSymbol(Rc::downgrade(&sym))),
+                    Err(_) => {
+                        let has_self = self
+                            .current_scope
+                            .as_ref()
+                            .and_then(|scope| scope.borrow().get_type("self"))
+                            .is_some();
+                        if has_self {
+                            return;
+                        }
+                        self.emit_error(
+                            TrussDiagnosticCode::UndefinedVariable,
+                            format!("Undefined variable '{}'", name.value),
+                            name.as_ref(),
+                        );
                     }
-                    self.emit_error(
-                        TrussDiagnosticCode::UndefinedVariable,
-                        format!("Undefined variable '{}'", name.value),
-                        name.as_ref(),
-                    );
                 }
-            }},
+            }
             Expression::Call {
                 callee,
                 type_parameters,
@@ -2085,8 +2096,7 @@ impl SymbolResolver {
                 let is_static_call = {
                     let obj = object.borrow();
                     if let Expression::Variable { name, .. } = &*obj {
-                        self
-                            .current_scope
+                        self.current_scope
                             .as_ref()
                             .and_then(|scope| scope.borrow().get_symbol(&name.value))
                             .map(|sym| {
@@ -2133,13 +2143,14 @@ impl SymbolResolver {
             }
             Expression::SelfKeyword { token, symbol, .. } => {
                 match self.resolve_symbol(token) {
-                Ok(sym) => {
-                    *symbol = Some(WeakSymbol(Rc::downgrade(&sym)));
+                    Ok(sym) => {
+                        *symbol = Some(WeakSymbol(Rc::downgrade(&sym)));
+                    }
+                    Err(_) => {
+                        // self is not in scope; skip silently for implicit self support
+                    }
                 }
-                Err(_) => {
-                    // self is not in scope; skip silently for implicit self support
-                }
-            }},
+            }
             Expression::SuperKeyword { token, .. } => {
                 let in_method = self
                     .current_scope
@@ -2519,7 +2530,12 @@ impl SymbolResolver {
         }
     }
 
-    fn resolve_variable_pattern(pattern: &Pattern, decl: Rc<RefCell<Statement>>, is_var: bool, resolver: &mut SymbolResolver) {
+    fn resolve_variable_pattern(
+        pattern: &Pattern,
+        decl: Rc<RefCell<Statement>>,
+        is_var: bool,
+        resolver: &mut SymbolResolver,
+    ) {
         match pattern {
             Pattern::Identifier(name) => {
                 if name.value != "_" {
