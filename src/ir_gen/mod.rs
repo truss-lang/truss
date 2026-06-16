@@ -8855,7 +8855,6 @@ impl<'ctx> IRGenerator<'ctx> {
                 };
                 let is_throwing_call = callee_ty.as_ref().map_or(false, |t| {
                     matches!(&*t.borrow(), Type::Function(_, _, _, Some(_)))
-                        || matches!(&*t.borrow(), Type::Closure(_, _))
                 });
                 if let Some(ty) = callee_ty
                     && self.module.get_function(&function_name).is_none()
