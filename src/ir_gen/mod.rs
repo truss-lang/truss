@@ -9018,6 +9018,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     all_check_bbs.push(self.context.append_basic_block(fn_val, "case_check"));
                 }
 
+                if !all_check_bbs.is_empty() {
+                    self.builder
+                        .build_unconditional_branch(all_check_bbs[0])?;
+                } else {
+                    self.builder.build_unconditional_branch(exit_bb)?;
+                }
+
                 for (i, case) in cases.iter().enumerate() {
                     let body_bb = all_body_bbs[i];
                     let next_check_or_exit_bb = if i + 1 < all_check_bbs.len() {
@@ -9204,14 +9211,24 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
 
+                    let mut case_terminated = false;
                     for stmt in &case.body {
-                        let _ = self.resolve_statement(stmt.clone())?;
+                        if let Ok(terminates) = self.resolve_statement(stmt.clone()) {
+                            if terminates {
+                                case_terminated = true;
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
                     }
                     if case.guard.is_some() {
                         let _ = self.resolve_expression(case.guard.clone().unwrap());
                     }
 
-                    self.builder.build_unconditional_branch(exit_bb)?;
+                    if !case_terminated {
+                        self.builder.build_unconditional_branch(exit_bb)?;
+                    }
                     self.exit_scope();
 
                     if i + 1 < all_check_bbs.len() {
