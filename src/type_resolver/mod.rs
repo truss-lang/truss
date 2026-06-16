@@ -1235,8 +1235,18 @@ impl TypeResolver {
                 )));
                 *ty = Some(fn_type);
                 for accessor in accessors {
+                    let is_setter = matches!(
+                        accessor.kind,
+                        AccessorKind::Set | AccessorKind::WillSet | AccessorKind::DidSet
+                    );
+                    if is_setter {
+                        self.is_mutating.push(true);
+                    }
                     for s in &accessor.body {
                         self.process_decl(s.clone());
+                    }
+                    if is_setter {
+                        self.is_mutating.pop();
                     }
                 }
             }
@@ -1859,8 +1869,18 @@ impl TypeResolver {
                                 .set_type(param_name, ret_type.clone());
                         }
                     }
+                    let is_setter = matches!(
+                        accessor.kind,
+                        AccessorKind::Set | AccessorKind::WillSet | AccessorKind::DidSet
+                    );
+                    if is_setter {
+                        self.is_mutating.push(true);
+                    }
                     for s in &accessor.body {
                         self.resolve_statement(s.clone());
+                    }
+                    if is_setter {
+                        self.is_mutating.pop();
                     }
                     self.leave_scope();
                 }

@@ -1534,11 +1534,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.get_function_type(return_type.clone(), all_param_types.clone(), false)
                     {
                         let sub_base = format!("{}.subscript", name.value);
+                        let getter_mangled = self.mangle_fn_name(&format!("{}.getter", sub_base), parameters);
                         self.module.add_function(
-                            &self.mangle_fn_name(&format!("{}.getter", sub_base), parameters),
+                            &getter_mangled,
                             getter_type,
                             None,
                         );
+                        self.register_mangled_name(&format!("{}.subscript.getter", name.value), &getter_mangled);
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
@@ -1548,11 +1550,13 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.get_function_type(void_ty, setter_param_types, false)
                         {
                             let sub_base = format!("{}.subscript", name.value);
+                            let setter_mangled = self.mangle_fn_name(&format!("{}.setter", sub_base), parameters);
                             self.module.add_function(
-                                &self.mangle_fn_name(&format!("{}.setter", sub_base), parameters),
+                                &setter_mangled,
                                 setter_type,
                                 None,
                             );
+                            self.register_mangled_name(&format!("{}.subscript.setter", name.value), &setter_mangled);
                         }
                     }
                 }
@@ -1722,11 +1726,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.get_function_type(return_type.clone(), all_param_types.clone(), false)
                     {
                         let sub_base = format!("{}.subscript", name.value);
+                        let getter_mangled = self.mangle_fn_name(&format!("{}.getter", sub_base), parameters);
                         self.module.add_function(
-                            &self.mangle_fn_name(&format!("{}.getter", sub_base), parameters),
+                            &getter_mangled,
                             getter_type,
                             None,
                         );
+                        self.register_mangled_name(&format!("{}.subscript.getter", name.value), &getter_mangled);
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
@@ -1736,11 +1742,13 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.get_function_type(void_ty, setter_param_types, false)
                         {
                             let sub_base = format!("{}.subscript", name.value);
+                            let setter_mangled = self.mangle_fn_name(&format!("{}.setter", sub_base), parameters);
                             self.module.add_function(
-                                &self.mangle_fn_name(&format!("{}.setter", sub_base), parameters),
+                                &setter_mangled,
                                 setter_type,
                                 None,
                             );
+                            self.register_mangled_name(&format!("{}.subscript.setter", name.value), &setter_mangled);
                         }
                     }
                 }
@@ -1813,11 +1821,13 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.get_function_type(return_type.clone(), all_param_types.clone(), false)
                     {
                         let sub_base = format!("{}.subscript", name.value);
+                        let getter_mangled = self.mangle_fn_name(&format!("{}.getter", sub_base), parameters);
                         self.module.add_function(
-                            &self.mangle_fn_name(&format!("{}.getter", sub_base), parameters),
+                            &getter_mangled,
                             getter_type,
                             None,
                         );
+                        self.register_mangled_name(&format!("{}.subscript.getter", name.value), &getter_mangled);
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
@@ -1827,11 +1837,13 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.get_function_type(void_ty, setter_param_types, false)
                         {
                             let sub_base = format!("{}.subscript", name.value);
+                            let setter_mangled = self.mangle_fn_name(&format!("{}.setter", sub_base), parameters);
                             self.module.add_function(
-                                &self.mangle_fn_name(&format!("{}.setter", sub_base), parameters),
+                                &setter_mangled,
                                 setter_type,
                                 None,
                             );
+                            self.register_mangled_name(&format!("{}.subscript.setter", name.value), &setter_mangled);
                         }
                     }
                 }
@@ -3611,10 +3623,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     for accessor in accessors {
                         let fn_name = match accessor.kind {
                             AccessorKind::Get => {
-                                self.mangle_fn_name(&format!("{}.subscript.getter", sname), &[])
+                                self.mangle_fn_name(&format!("{}.subscript.getter", sname), parameters)
                             }
                             AccessorKind::Set => {
-                                self.mangle_fn_name(&format!("{}.subscript.setter", sname), &[])
+                                self.mangle_fn_name(&format!("{}.subscript.setter", sname), parameters)
                             }
                             _ => continue,
                         };
@@ -3631,6 +3643,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.builder.position_at_end(entry);
                         let ptr_param = function.get_nth_param(0).unwrap().into_pointer_value();
                         self.enter_scope();
+                        self.declare_variable("self".to_string(), ptr_param);
                         *self.current_accessor_struct.borrow_mut() =
                             Some((sname.clone(), ptr_param));
                         let mut param_idx = 1u32;
@@ -5259,6 +5272,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         if matches!(&*ty.borrow(), Type::Class(..)) {
                             return Ok(Some(ptr.into()));
                         }
+                        if matches!(&*ty.borrow(), Type::Struct(..)) {
+                            return Ok(Some(ptr.into()));
+                        }
                         let llvm_type = self.resolve_type(ty.clone())?;
                         let val = self.builder.build_load(llvm_type, ptr, "")?;
                         Ok(Some(val))
@@ -6450,15 +6466,40 @@ impl<'ctx> IRGenerator<'ctx> {
                     {
                         let struct_name = struct_name.clone();
                         let object_val = self.resolve_expression(sub_object.clone())?.unwrap();
-                        let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
-                            ptr
+                        let struct_ptr = if let Expression::Variable { name, .. } =
+                            &*sub_object.borrow()
+                        {
+                            if let Some(ptr) = self.lookup_variable(&name.value) {
+                                ptr
+                            } else {
+                                if let BasicValueEnum::PointerValue(ptr) = object_val {
+                                    ptr
+                                } else {
+                                    let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                                    self.builder.build_store(ptr, object_val)?;
+                                    ptr
+                                }
+                            }
                         } else {
-                            let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
-                            self.builder.build_store(ptr, object_val)?;
-                            ptr
+                            if let BasicValueEnum::PointerValue(ptr) = object_val {
+                                ptr
+                            } else {
+                                let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(ptr, object_val)?;
+                                ptr
+                            }
                         };
-                        let setter_name =
-                            self.mangle_fn_name(&format!("{}.subscript.setter", struct_name), &[]);
+                        let setter_name = self
+                            .mangled_fn_names
+                            .borrow()
+                            .get(&format!("{}.subscript.setter", struct_name))
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                self.mangle_fn_name(
+                                    &format!("{}.subscript.setter", struct_name),
+                                    &[],
+                                )
+                            });
                         if let Some(setter_fn) = self.module.get_function(&setter_name) {
                             let mut args = vec![struct_ptr.into()];
                             for p in sub_params {
@@ -7876,6 +7917,134 @@ impl<'ctx> IRGenerator<'ctx> {
                 );
                 anyhow::bail!("Member access on non-struct type");
             }
+            Expression::SubscriptAccess {
+                object,
+                parameters,
+                ..
+            } => {
+                let object_ty = {
+                    let obj = object.borrow();
+                    obj.get_ty_ref()?.clone()
+                };
+                if let Some(ty) = &object_ty
+                    && let Type::Struct(struct_name, ..) = &*ty.borrow()
+                {
+                    let struct_name = struct_name.clone();
+                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+                    let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                        ptr
+                    } else {
+                        let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                        self.builder.build_store(ptr, object_val)?;
+                        ptr
+                    };
+                    let getter_name = self
+                        .mangled_fn_names
+                        .borrow()
+                        .get(&format!("{}.subscript.getter", struct_name))
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            self.mangle_fn_name(
+                                &format!("{}.subscript.getter", struct_name),
+                                &[],
+                            )
+                        });
+                    if let Some(getter_fn) = self.module.get_function(&getter_name) {
+                        let mut args = vec![struct_ptr.into()];
+                        for p in parameters {
+                            let arg_val = self.resolve_expression(p.expression.clone())?.unwrap();
+                            args.push(arg_val.into());
+                        }
+                        let result = self.builder.build_call(getter_fn, &args, "")?;
+                        let result_val = match result.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => val,
+                            _ => anyhow::bail!("Subscript getter call did not return a value"),
+                        };
+                        return Ok(Some(result_val));
+                    }
+                }
+                if let Some(ty) = &object_ty
+                    && let Type::Class(class_name, ..) = &*ty.borrow()
+                {
+                    let class_name = class_name.clone();
+                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+                    let class_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                        ptr
+                    } else {
+                        let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                        self.builder.build_store(ptr, object_val)?;
+                        ptr
+                    };
+                    let getter_entry = "subscript.getter";
+                    if let Some(slot_idx) =
+                        self.get_vtable_slot_index(&class_name, getter_entry)
+                    {
+                        let class_type = *self.class_types.borrow().get(&class_name).unwrap();
+                        let vtable_ptr_ptr = self
+                            .builder
+                            .build_struct_gep(class_type, class_ptr, 0, "")?;
+                        let vtable_ptr = self
+                            .builder
+                            .build_load(
+                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                vtable_ptr_ptr,
+                                "",
+                            )?
+                            .into_pointer_value();
+                        let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
+                        let fn_ptr_ptr = self.builder.build_struct_gep(
+                            vtable_type,
+                            vtable_ptr,
+                            slot_idx,
+                            "",
+                        )?;
+                        let fn_ptr_val = self
+                            .builder
+                            .build_load(
+                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                fn_ptr_ptr,
+                                "",
+                            )?
+                            .into_pointer_value();
+                        let method_list = self.compute_vtable_method_list(&class_name);
+                        let (_, owner) = method_list
+                            .iter()
+                            .find(|(n, _)| n == &getter_entry)
+                            .unwrap();
+                        let declared_fn_name = self
+                            .mangled_fn_names
+                            .borrow()
+                            .get(&format!("{}.subscript.getter", owner))
+                            .cloned()
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "Subscript getter function '{}' not found",
+                                    format!("{}.subscript.getter", owner)
+                                )
+                            })?;
+                        let declared_fn =
+                            self.module.get_function(&declared_fn_name).ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "Subscript getter LLVM function {} not found",
+                                    declared_fn_name
+                                )
+                            })?;
+                        let fn_type = declared_fn.get_type();
+                        let mut args = vec![class_ptr.into()];
+                        for p in parameters {
+                            let arg_val = self.resolve_expression(p.expression.clone())?.unwrap();
+                            args.push(arg_val.into());
+                        }
+                        let result = self.builder.build_indirect_call(fn_type, fn_ptr_val, &args, "")?;
+                        let result_val = match result.try_as_basic_value() {
+                            inkwell::values::ValueKind::Basic(val) => val,
+                            _ => anyhow::bail!("Subscript getter call did not return a value"),
+                        };
+                        return Ok(Some(result_val));
+                    }
+                }
+                Ok(None)
+            }
             Expression::Call {
                 callee,
                 parameters,
@@ -7991,7 +8160,21 @@ impl<'ctx> IRGenerator<'ctx> {
                                 && let Type::Struct(struct_name, ..) = &*ty.borrow()
                             {
                                 let object_val = self.resolve_expression(object.clone())?.unwrap();
-                                let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                let ptr = if let Expression::Variable { name, .. } =
+                                    &*object.borrow()
+                                {
+                                    if let Some(var_ptr) = self.lookup_variable(&name.value) {
+                                        var_ptr
+                                    } else {
+                                        if let BasicValueEnum::PointerValue(p) = object_val {
+                                            p
+                                        } else {
+                                            let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                            self.builder.build_store(p, object_val)?;
+                                            p
+                                        }
+                                    }
+                                } else if let BasicValueEnum::PointerValue(p) = object_val {
                                     p
                                 } else {
                                     let p = self.builder.build_alloca(object_val.get_type(), "")?;
@@ -8031,7 +8214,21 @@ impl<'ctx> IRGenerator<'ctx> {
                                 && let Type::Class(class_name, ..) = &*ty.borrow()
                             {
                                 let object_val = self.resolve_expression(object.clone())?.unwrap();
-                                let ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                let ptr = if let Expression::Variable { name, .. } =
+                                    &*object.borrow()
+                                {
+                                    if let Some(var_ptr) = self.lookup_variable(&name.value) {
+                                        var_ptr
+                                    } else {
+                                        if let BasicValueEnum::PointerValue(p) = object_val {
+                                            p
+                                        } else {
+                                            let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                            self.builder.build_store(p, object_val)?;
+                                            p
+                                        }
+                                    }
+                                } else if let BasicValueEnum::PointerValue(p) = object_val {
                                     p
                                 } else {
                                     let p = self.builder.build_alloca(object_val.get_type(), "")?;
