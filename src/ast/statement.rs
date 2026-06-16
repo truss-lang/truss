@@ -178,6 +178,9 @@ pub enum Statement {
     Break {
         token: Box<Token>,
     },
+    Continue {
+        token: Box<Token>,
+    },
     Defer {
         token: Box<Token>,
         body: Vec<Rc<RefCell<Statement>>>,
@@ -259,6 +262,7 @@ impl Statement {
             Self::Guard { token, .. } => (**token).clone(),
             Self::Fallthrough { token, .. } => (**token).clone(),
             Self::Break { token, .. } => (**token).clone(),
+            Self::Continue { token, .. } => (**token).clone(),
             Self::Defer { token, .. } => (**token).clone(),
             Self::ModuleDecl { token, .. } => (**token).clone(),
             Self::ImportDecl { token, .. } => (**token).clone(),
@@ -286,6 +290,7 @@ impl Statement {
             Self::Guard { .. } => Ok(vec![]),
             Self::Fallthrough { .. } => Ok(vec![]),
             Self::Break { .. } => Ok(vec![]),
+            Self::Continue { .. } => Ok(vec![]),
             Self::Defer { .. } => Ok(vec![]),
             Self::ModuleDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::ImportDecl { .. } => Ok(vec![]),

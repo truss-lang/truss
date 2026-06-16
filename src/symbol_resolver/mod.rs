@@ -1917,7 +1917,7 @@ impl SymbolResolver {
                     Self::resolve_pattern_bindings(&bindings, self);
                 }
             }
-            Statement::Fallthrough { .. } | Statement::Break { .. } => {}
+            Statement::Fallthrough { .. } | Statement::Break { .. } | Statement::Continue { .. } => {}
             Statement::For {
                 pattern,
                 iterator,

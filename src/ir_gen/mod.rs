@@ -85,6 +85,8 @@ pub struct IRGenerator<'ctx> {
     closure_counter: Rc<RefCell<u32>>,
     yield_targets: Rc<RefCell<Vec<(PointerValue<'ctx>, BasicBlock<'ctx>)>>>,
     error_ptr: Rc<RefCell<Option<PointerValue<'ctx>>>>,
+    loop_break_targets: Rc<RefCell<Vec<BasicBlock<'ctx>>>>,
+    loop_continue_targets: Rc<RefCell<Vec<BasicBlock<'ctx>>>>,
     package_name: String,
     module_name: String,
     extern_fn_c_names: Rc<RefCell<HashMap<String, String>>>,
@@ -121,6 +123,8 @@ impl<'ctx> IRGenerator<'ctx> {
             closure_counter: Rc::new(RefCell::new(0)),
             yield_targets: Rc::new(RefCell::new(Vec::new())),
             error_ptr: Rc::new(RefCell::new(None)),
+            loop_break_targets: Rc::new(RefCell::new(Vec::new())),
+            loop_continue_targets: Rc::new(RefCell::new(Vec::new())),
             package_name: String::new(),
             module_name: String::new(),
             extern_fn_c_names: Rc::new(RefCell::new(HashMap::new())),
@@ -3702,6 +3706,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 let body_bb = self.context.append_basic_block(fn_val, "while_body");
                 let exit_bb = self.context.append_basic_block(fn_val, "while_exit");
 
+                self.loop_break_targets.borrow_mut().push(exit_bb);
+                self.loop_continue_targets.borrow_mut().push(while_bb);
+
                 self.builder.build_unconditional_branch(while_bb)?;
                 self.builder.position_at_end(while_bb);
 
@@ -3717,6 +3724,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.builder.build_unconditional_branch(while_bb)?;
                 }
 
+                self.loop_break_targets.borrow_mut().pop();
+                self.loop_continue_targets.borrow_mut().pop();
+
                 self.builder.position_at_end(exit_bb);
                 Ok(false)
             }
@@ -3728,7 +3738,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     .get_parent()
                     .unwrap();
                 let body_bb = self.context.append_basic_block(fn_val, "loop_body");
-                let _ = self.context.append_basic_block(fn_val, "loop_exit");
+                let exit_bb = self.context.append_basic_block(fn_val, "loop_exit");
+
+                self.loop_break_targets.borrow_mut().push(exit_bb);
+                self.loop_continue_targets.borrow_mut().push(body_bb);
 
                 self.builder.build_unconditional_branch(body_bb)?;
 
@@ -3739,6 +3752,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.builder.build_unconditional_branch(body_bb)?;
                 }
 
+                self.loop_break_targets.borrow_mut().pop();
+                self.loop_continue_targets.borrow_mut().pop();
+
+                self.builder.position_at_end(exit_bb);
                 Ok(false)
             }
             Statement::RepeatWhile {
@@ -3754,6 +3771,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 let cond_bb = self.context.append_basic_block(fn_val, "repeat_cond");
                 let exit_bb = self.context.append_basic_block(fn_val, "repeat_exit");
 
+                self.loop_break_targets.borrow_mut().push(exit_bb);
+                self.loop_continue_targets.borrow_mut().push(cond_bb);
+
                 self.builder.build_unconditional_branch(body_bb)?;
 
                 self.builder.position_at_end(body_bb);
@@ -3762,6 +3782,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 if !terminates {
                     self.builder.build_unconditional_branch(cond_bb)?;
                 }
+
+                self.loop_break_targets.borrow_mut().pop();
+                self.loop_continue_targets.borrow_mut().pop();
 
                 self.builder.position_at_end(cond_bb);
                 let cond_val = self.resolve_expression(condition.clone())?.unwrap();
@@ -3797,6 +3820,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 let cond_bb = self.context.append_basic_block(function, "for_cond");
                 let body_bb = self.context.append_basic_block(function, "for_body");
                 let exit_bb = self.context.append_basic_block(function, "for_exit");
+
+                self.loop_break_targets.borrow_mut().push(exit_bb);
+                self.loop_continue_targets.borrow_mut().push(cond_bb);
 
                 let _ = self.builder.build_unconditional_branch(cond_bb);
                 self.builder.position_at_end(cond_bb);
@@ -3873,6 +3899,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 } else {
                     self.resolve_block_expression(body)?;
                 }
+
+                self.loop_break_targets.borrow_mut().pop();
+                self.loop_continue_targets.borrow_mut().pop();
+
                 Ok(false)
             }
             Statement::FunctionDecl {
@@ -4480,7 +4510,22 @@ impl<'ctx> IRGenerator<'ctx> {
                 anyhow::bail!("fallthrough outside of match is not supported");
             }
             Statement::Break { .. } => {
-                anyhow::bail!("break outside of match is not supported");
+                let targets = self.loop_break_targets.borrow();
+                if let Some(exit_bb) = targets.last() {
+                    self.builder.build_unconditional_branch(*exit_bb)?;
+                    Ok(true)
+                } else {
+                    anyhow::bail!("break outside of loop is not supported");
+                }
+            }
+            Statement::Continue { .. } => {
+                let targets = self.loop_continue_targets.borrow();
+                if let Some(cont_bb) = targets.last() {
+                    self.builder.build_unconditional_branch(*cont_bb)?;
+                    Ok(true)
+                } else {
+                    anyhow::bail!("continue outside of loop is not supported");
+                }
             }
             Statement::Defer { body, .. } => {
                 self.scope_stack

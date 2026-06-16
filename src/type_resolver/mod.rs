@@ -1812,7 +1812,7 @@ impl TypeResolver {
                 }
                 self.resolve_block_expression(else_body);
             }
-            Statement::Fallthrough { .. } | Statement::Break { .. } => {}
+            Statement::Fallthrough { .. } | Statement::Break { .. } | Statement::Continue { .. } => {}
             Statement::Defer { body, .. } => {
                 self.resolve_block_expression(body);
             }

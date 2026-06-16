@@ -226,6 +226,16 @@ impl Parser {
                     }
                     self.parse_break()
                 }
+                KeywordType::Continue => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_continue()
+                }
                 KeywordType::Defer => {
                     if !modifiers.is_empty() {
                         self.emit_error(
@@ -6134,6 +6144,10 @@ impl Parser {
                         let stmt = self.parse_break()?;
                         return Ok(vec![Rc::new(RefCell::new(stmt))]);
                     }
+                    KeywordType::Continue => {
+                        let stmt = self.parse_continue()?;
+                        return Ok(vec![Rc::new(RefCell::new(stmt))]);
+                    }
                     KeywordType::Case | KeywordType::Default => {
                         return Ok(vec![]);
                     }
@@ -6315,6 +6329,13 @@ impl Parser {
         })
     }
 
+    fn parse_continue(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        Ok(Statement::Continue {
+            token: Box::new(token),
+        })
+    }
+
     fn parse_defer(&mut self) -> Result<Statement, ()> {
         let token = self.next().unwrap();
         if let Some(t) = self.peek()
@@ -6354,6 +6375,7 @@ impl Parser {
                 | Statement::Yield { .. }
                 | Statement::Throw { .. }
                 | Statement::Break { .. }
+                | Statement::Continue { .. }
                 | Statement::Fallthrough { .. }
         )
     }
