@@ -3536,6 +3536,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                     self.builder.build_call(function, &args, "")?;
                                 }
                             }
+                        } else if let Some(init_val) = self.resolve_expression(init.clone())? {
+                            self.builder.build_store(ptr, init_val)?;
                         }
                     } else if let Some(init) = initializer
                         && let Some(init_val) = self.resolve_expression(init.clone())?
@@ -9083,13 +9085,26 @@ impl<'ctx> IRGenerator<'ctx> {
                     let fn_ret_type = function.get_type().get_return_type();
                     if let Some(inkwell::types::BasicTypeEnum::PointerType(_)) = fn_ret_type {
                         if let BasicValueEnum::PointerValue(ptr_val) = call_val {
-                            if let Ok(Some(call_ty)) = expr.borrow().get_ty_ref() {
-                                let t_borrow = call_ty.borrow();
-                                if !matches!(&*t_borrow, Type::Void) {
-                                    if let Ok(expected_ty) = self.resolve_type(call_ty.clone()) {
-                                        if expected_ty != ptr_val.get_type().into() {
+                            let expected_ty = expr.borrow().get_ty_ref().ok().and_then(|ty| ty.clone()).or_else(|| {
+                                match &*callee.borrow() {
+                                    Expression::Variable { ty, .. } | Expression::MemberAccess { ty, .. } => {
+                                        ty.as_ref().and_then(|ct| {
+                                            match &*ct.borrow() {
+                                                Type::Function(_, ret_ty, _, _) => Some(ret_ty.clone()),
+                                                _ => None,
+                                            }
+                                        })
+                                    }
+                                    _ => None,
+                                }
+                            });
+                            if let Some(call_ty) = expected_ty {
+                                let is_void = matches!(&*call_ty.borrow(), Type::Void);
+                                if !is_void {
+                                    if let Ok(expected_llvm_ty) = self.resolve_type(call_ty) {
+                                        if expected_llvm_ty != ptr_val.get_type().into() {
                                             let loaded = self.builder.build_load(
-                                                expected_ty,
+                                                expected_llvm_ty,
                                                 ptr_val,
                                                 "",
                                             )?;
