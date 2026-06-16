@@ -5052,12 +5052,7 @@ impl TypeResolver {
             }
             drop(expr_mut);
         } else if is_null {
-            let is_expected_optional = match &*expected.borrow() {
-                Type::Enum(name, ..) | Type::Struct(name, ..) | Type::Class(name, ..) => {
-                    name == "Optional"
-                }
-                _ => false,
-            };
+            let is_expected_optional = matches!(&*expected.borrow(), Type::Enum(_, ..));
             if is_expected_optional {
                 let mut expr_mut = expression.borrow_mut();
                 if let Expression::NullLiteral { ty, .. } = &mut *expr_mut {
