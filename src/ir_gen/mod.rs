@@ -2970,6 +2970,7 @@ impl<'ctx> IRGenerator<'ctx> {
         if struct_name.is_some() {
             *self.current_accessor_struct.borrow_mut() =
                 Some((struct_name.unwrap().to_string(), ptr_var));
+            self.declare_variable("self".to_string(), ptr_var);
         } else {
             self.declare_variable(format!("_{}", backing_var_name), ptr_var);
         }

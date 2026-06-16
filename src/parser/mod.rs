@@ -3466,9 +3466,13 @@ impl Parser {
             if let Statement::VariableDecl {
                 name,
                 type_expression: Some(type_expr),
+                accessors,
                 ..
             } = &*stmt.borrow()
             {
+                if !accessors.is_empty() {
+                    continue;
+                }
                 let param = Rc::new(RefCell::new(Parameter {
                     label: None,
                     name: Box::new(name.as_ref().clone()),
