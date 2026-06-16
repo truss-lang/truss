@@ -2581,27 +2581,29 @@ impl TypeResolver {
                                 }
                             })
                         {
-                            if let Statement::FunctionDecl { attributes, .. } = &*decl.borrow() {
-                                if attributes.iter().any(|a| a.name == "internalUsed") {
-                                    self.emit_error(
-                                        TrussDiagnosticCode::InternalUsedReferenced,
-                                        "Referencing an internal-used declaration which is intended for internal use only",
-                                        &callee.borrow().token(),
+                            if let Ok(decl_ref) = decl.try_borrow() {
+                                if let Statement::FunctionDecl { attributes, .. } = &*decl_ref {
+                                    if attributes.iter().any(|a| a.name == "internalUsed") {
+                                        self.emit_error(
+                                            TrussDiagnosticCode::InternalUsedReferenced,
+                                            "Referencing an internal-used declaration which is intended for internal use only",
+                                            &callee.borrow().token(),
+                                        );
+                                    }
+                                }
+                                let callee_token = callee.borrow().token();
+                                let decl_params = match &*decl_ref {
+                                    Statement::FunctionDecl { parameters, .. } => parameters.clone(),
+                                    Statement::InitDecl { parameters, .. } => parameters.clone(),
+                                    _ => vec![],
+                                };
+                                if !decl_params.is_empty() {
+                                    self.reorder_call_parameters(
+                                        parameters,
+                                        &decl_params,
+                                        &callee_token,
                                     );
                                 }
-                            }
-                            let callee_token = callee.borrow().token();
-                            let decl_params = match &*decl.borrow() {
-                                Statement::FunctionDecl { parameters, .. } => parameters.clone(),
-                                Statement::InitDecl { parameters, .. } => parameters.clone(),
-                                _ => vec![],
-                            };
-                            if !decl_params.is_empty() {
-                                self.reorder_call_parameters(
-                                    parameters,
-                                    &decl_params,
-                                    &callee_token,
-                                );
                             }
                         }
 
@@ -6333,7 +6335,9 @@ impl TypeResolver {
         func_decl: &Rc<RefCell<Statement>>,
         param_index: usize,
     ) {
-        let decl_borrow = func_decl.borrow();
+        let Ok(decl_borrow) = func_decl.try_borrow() else {
+            return;
+        };
         let parameters = match &*decl_borrow {
             Statement::FunctionDecl { parameters, .. } => parameters,
             Statement::InitDecl { parameters, .. } => parameters,
