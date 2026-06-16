@@ -87,6 +87,7 @@ pub enum Expression {
         parameters: Vec<CallParameter>,
         overloads: Vec<Rc<RefCell<Symbol>>>,
         selected_index: Option<usize>,
+        ty: Option<Rc<RefCell<Type>>>,
     },
     MemberAccess {
         object: Rc<RefCell<Expression>>,
@@ -299,6 +300,7 @@ impl Expression {
             Self::ShorthandArgument { ty, .. } => Ok(ty.clone()),
             Self::AssociatedTypeAccess { ty, .. } => Ok(ty.clone()),
             Self::SubscriptAccess { ty, .. } => Ok(ty.clone()),
+            Self::Call { ty, .. } => Ok(ty.clone()),
             Self::MacroInvocation { ty, .. } => Ok(ty.clone()),
             Self::SizeOf { ty, .. } => Ok(ty.clone()),
             Self::Do { ty, .. } => Ok(ty.clone()),
@@ -338,6 +340,7 @@ impl Expression {
             Self::ArrayType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
             Self::Try { ty, .. } => Ok(ty),
+            Self::Call { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }
@@ -371,6 +374,7 @@ impl Expression {
             Self::ArrayType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
             Self::Try { ty, .. } => Ok(ty),
+            Self::Call { ty, .. } => Ok(ty),
             _ => Err(anyhow!("")),
         }
     }

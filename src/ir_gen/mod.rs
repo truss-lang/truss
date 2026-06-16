@@ -8908,10 +8908,30 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.builder.build_store(err_ptr, err_val)?;
                         }
                     }
-                    match call_result.try_as_basic_value() {
-                        inkwell::values::ValueKind::Basic(val) => return Ok(Some(val)),
+                    let call_val = match call_result.try_as_basic_value() {
+                        inkwell::values::ValueKind::Basic(val) => val,
                         _ => return Ok(None),
+                    };
+                    if let BasicValueEnum::PointerValue(ptr_val) = call_val {
+                        if let Ok(call_ty) = expr.borrow().get_ty_ref().map(|ty| ty.clone()) {
+                            if let Some(call_ty) = call_ty {
+                                let is_void = matches!(&*call_ty.borrow(), Type::Void);
+                                if !is_void {
+                                    if let Ok(expected_llvm_ty) = self.resolve_type(call_ty) {
+                                        if expected_llvm_ty != ptr_val.get_type().into() {
+                                            let loaded = self.builder.build_load(
+                                                expected_llvm_ty,
+                                                ptr_val,
+                                                "",
+                                            )?;
+                                            return Ok(Some(loaded));
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
+                    return Ok(Some(call_val));
                 }
 
                 let function = self.module.get_function(&function_name).ok_or_else(|| {

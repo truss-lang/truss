@@ -361,6 +361,7 @@ impl Parser {
                 }],
                 overloads: vec![],
                 selected_index: None,
+                ty: None,
             })
         } else {
             Ok(expr)
@@ -451,6 +452,7 @@ impl Parser {
                             ],
                             overloads: vec![],
                             selected_index: None,
+                            ty: None,
                         };
                     } else {
                         left = Expression::Binary {
@@ -5249,6 +5251,7 @@ impl Parser {
                 parameters,
                 overloads: vec![],
                 selected_index: None,
+                ty: None,
             })
         } else {
             self.emit_error(

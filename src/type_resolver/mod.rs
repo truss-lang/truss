@@ -2476,6 +2476,7 @@ impl TypeResolver {
                 parameters,
                 overloads,
                 selected_index,
+                ty: call_ty,
                 ..
             } => {
                 let callee_type = self.infer_type(callee.clone());
@@ -2718,6 +2719,7 @@ impl TypeResolver {
                                 }
                             }
                         }
+                        *call_ty = Some(resolved_ret_ty.clone());
                         resolved_ret_ty
                     }
                     Type::Struct(struct_name, ..) => {
