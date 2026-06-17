@@ -91,6 +91,7 @@ pub struct IRGenerator<'ctx> {
     module_name: String,
     extern_fn_c_names: Rc<RefCell<HashMap<String, String>>>,
     mangled_fn_names: Rc<RefCell<HashMap<String, String>>>,
+    stdlib_module: Option<Rc<Module<'ctx>>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -129,6 +130,7 @@ impl<'ctx> IRGenerator<'ctx> {
             module_name: String::new(),
             extern_fn_c_names: Rc::new(RefCell::new(HashMap::new())),
             mangled_fn_names: Rc::new(RefCell::new(HashMap::new())),
+            stdlib_module: None,
         }
     }
 
@@ -350,8 +352,10 @@ impl<'ctx> IRGenerator<'ctx> {
         *self.program_scope.borrow_mut() = Some(scope.clone());
         self.run_all_passes(stdlib_stmts);
         let compiled_stdlib = std::mem::replace(&mut self.module, main_mod);
+        let compiled_stdlib_rc = Rc::new(compiled_stdlib);
+        self.stdlib_module = Some(compiled_stdlib_rc.clone());
 
-        for func in compiled_stdlib.get_functions() {
+        for func in compiled_stdlib_rc.get_functions() {
             let name = func.get_name().to_str().unwrap_or("").to_string();
             if !name.is_empty() && self.module.get_function(&name).is_none() {
                 self.module.add_function(&name, func.get_type(), None);
@@ -410,7 +414,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 &mut self.module,
                 self.context.create_module("done"),
             )),
-            stdlib: Some(Rc::new(compiled_stdlib)),
+            stdlib: Some(compiled_stdlib_rc.clone()),
         }
     }
 
@@ -3932,8 +3936,22 @@ impl<'ctx> IRGenerator<'ctx> {
                         _ => return None,
                     };
                     let key = format!("{}.next", type_name);
-                    self.mangled_fn_names.borrow().get(&key)
-                        .and_then(|mangled| self.module.get_function(mangled))
+                    let m = self.mangled_fn_names.borrow().get(&key).cloned();
+                    let result = m.as_ref().and_then(|s| self.module.get_function(s));
+                    if result.is_none() {
+                        // Search in stdlib module
+                        result.or_else(|| {
+                            self.stdlib_module.as_ref().and_then(|sm| {
+                                sm.get_functions().find(|func| {
+                                    func.get_name().to_str()
+                                        .map(|s| s.contains(type_name.as_str()) && s.contains("next"))
+                                        .unwrap_or(false)
+                                })
+                            })
+                        })
+                    } else {
+                        result
+                    }
                 });
 
                 if let Some(next_fn) = next_fn {
@@ -4119,8 +4137,12 @@ impl<'ctx> IRGenerator<'ctx> {
                                 continue;
                             }
                             let param_name = &param.borrow().name.value;
+                            let param_ty = param.borrow().ty.clone();
+                            let Some(param_ty) = param_ty else {
+                                anyhow::bail!("Parameter '{}' has no resolved type", param_name);
+                            };
                             let llvm_type =
-                                self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                                self.resolve_type(param_ty)?;
                             let alloca_name = self.unique_alloca_name(param_name);
                             let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
                             let param_value =
@@ -4196,6 +4218,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 is_failable,
                 ..
             } => {
+                if Self::contains_generic_param(&*ty.borrow()) {
+                    return Ok(false);
+                }
                 if let Type::Function(_parameter_types, return_type, _, throws_types) =
                     &*ty.borrow()
                 {
@@ -4294,6 +4319,9 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::DeinitDecl {
                 ty: Some(ty), body, ..
             } => {
+                if Self::contains_generic_param(&*ty.borrow()) {
+                    return Ok(false);
+                }
                 if let Type::Function(_, _return_type, _, None) = &*ty.borrow() {
                     let struct_name = self.current_struct.borrow().clone().unwrap();
                     let fn_name = self.mangle_fn_name(&format!("{}.deinit", struct_name), &[]);
@@ -4441,7 +4469,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 *self.current_struct.borrow_mut() = prev;
                 result
             }
-            Statement::ClassDecl { name, body, .. } => {
+            Statement::ClassDecl { name, body, generic_parameters, .. } => {
+                if !generic_parameters.is_empty() {
+                    return Ok(false);
+                }
                 let prev = self.current_struct.borrow_mut().take();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
@@ -4471,9 +4502,20 @@ impl<'ctx> IRGenerator<'ctx> {
                 let result = (|| -> Result<bool> {
                     for member in members {
                         if let ProtocolMember::Method { decl, .. } = member
-                            && let Statement::FunctionDecl { body, .. } = &*decl.borrow()
+                            && let Statement::FunctionDecl { body, ty, .. } = &*decl.borrow()
                             && !matches!(&*body.borrow(), FunctionBody::None)
                         {
+                            // Skip protocol method default implementations that have no type
+                            // info or contain generic parameters
+                            match ty {
+                                Some(fn_ty) if Self::contains_generic_param(&*fn_ty.borrow()) => {
+                                    continue;
+                                }
+                                None => {
+                                    continue;
+                                }
+                                _ => {}
+                            }
                             self.resolve_statement(decl.clone())?;
                         }
                     }

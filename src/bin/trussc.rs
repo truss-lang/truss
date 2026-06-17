@@ -200,29 +200,22 @@ fn main() {
         }
 
         if !has_std_errors {
-            let dummy_program = Program {
-                file: Rc::new("".to_string()),
-                statements: Vec::new(),
+            // Build a proper program with stdlib statements and resolve it fully
+            // (both register_symbols and resolve_statement) so scopes and types are populated
+            let std_prog = Program {
+                file: Rc::new("stdlib".to_string()),
+                statements: stdlib_stmts.clone(),
             };
             let mut std_resolver =
-                SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
-            let std_module = std_resolver.resolve(&dummy_program, "Truss".to_string());
+                SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
+            let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
 
-            if let Some(scope) = std_module.borrow().scope.clone() {
-                std_resolver.enter_scope(Some(scope));
-            }
-
-            for stmt in &stdlib_stmts {
-                std_resolver.register_symbols(stmt.clone());
-            }
-
+            // Use a separate engine for stdlib type resolution so errors in generic
+            // function bodies don't pollute the main diagnostics
+            let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
             let mut std_type_resolver =
-                TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
-            let empty_prog = Program {
-                file: Rc::new("".to_string()),
-                statements: vec![],
-            };
-            std_type_resolver.resolve(&empty_prog, std_module);
+                TypeResolver::new(packages.clone(), "Truss".to_string(), stdlib_ty_engine.clone());
+            std_type_resolver.resolve(&std_prog, std_module);
         }
     }
 

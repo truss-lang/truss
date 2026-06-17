@@ -2609,16 +2609,37 @@ impl TypeResolver {
                         }
 
                         if !*is_vararg && parameters.len() != param_tys.len() {
-                            let token = &callee.borrow().token();
-                            self.emit_error(
-                                TrussDiagnosticCode::ArgumentCountMismatch,
-                                format!(
-                                    "Expected {} arguments but found {}",
-                                    param_tys.len(),
-                                    parameters.len()
-                                ),
-                                token,
-                            );
+                            // Allow fewer arguments when params have default values
+                            let has_defaults = callee.try_borrow().ok().and_then(|callee_ref| {
+                                if let Expression::Variable { name, .. } = &*callee_ref {
+                                    let scope_ref = self.current_scope.as_ref()?.borrow();
+                                    let sym = scope_ref.get_symbol(&name.value)?;
+                                    let binding = sym.borrow();
+                                    let decl = binding.get_decl().ok().flatten()?;
+                                    drop(binding);
+                                    drop(scope_ref);
+                                    let decl_ref = decl.try_borrow().ok()?;
+                                    if let Statement::FunctionDecl { parameters, .. } = &*decl_ref {
+                                        Some(parameters.iter().any(|p| p.borrow().default_value.is_some()))
+                                    } else {
+                                        Some(false)
+                                    }
+                                } else {
+                                    Some(false)
+                                }
+                            }).unwrap_or(false);
+                            if !has_defaults || parameters.len() > param_tys.len() {
+                                let token = &callee.borrow().token();
+                                self.emit_error(
+                                    TrussDiagnosticCode::ArgumentCountMismatch,
+                                    format!(
+                                        "Expected {} arguments but found {}",
+                                        param_tys.len(),
+                                        parameters.len()
+                                    ),
+                                    token,
+                                );
+                            }
                         } else if *is_vararg && parameters.len() < param_tys.len() {
                             let token = &callee.borrow().token();
                             self.emit_error(
