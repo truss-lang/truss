@@ -3637,20 +3637,22 @@ impl TypeResolver {
 
                         let decl = symbol.borrow().get_decl().ok().flatten();
                         let super_info = decl.as_ref().and_then(|decl| {
-                            if let Statement::ClassDecl {
-                                superclass: Some(super_expr),
-                                ..
-                            } = &*decl.borrow()
-                            {
-                                if let Expression::Type {
-                                    name: super_name, ..
-                                } = &*super_expr.borrow()
+                            if let Ok(decl_ref) = decl.try_borrow() {
+                                if let Statement::ClassDecl {
+                                    superclass: Some(super_expr),
+                                    ..
+                                } = &*decl_ref
                                 {
-                                    return Some((
-                                        super_name.value.clone(),
-                                        super_name.position.clone(),
-                                        super_name.file.clone(),
-                                    ));
+                                    if let Expression::Type {
+                                        name: super_name, ..
+                                    } = &*super_expr.borrow()
+                                    {
+                                        return Some((
+                                            super_name.value.clone(),
+                                            super_name.position.clone(),
+                                            super_name.file.clone(),
+                                        ));
+                                    }
                                 }
                             }
                             None
@@ -5216,6 +5218,38 @@ impl TypeResolver {
                 let new_base = Self::substitute_generic_params(base.clone(), mapping);
                 Rc::new(RefCell::new(Type::AssociatedType(new_base, name)))
             }
+            Type::Struct(name, sym, params) => {
+                drop(borrowed);
+                let new_params: Vec<Rc<RefCell<Type>>> = params
+                    .into_iter()
+                    .map(|p| Self::substitute_generic_params(p, mapping))
+                    .collect();
+                Rc::new(RefCell::new(Type::Struct(name, sym, new_params)))
+            }
+            Type::Class(name, sym, params) => {
+                drop(borrowed);
+                let new_params: Vec<Rc<RefCell<Type>>> = params
+                    .into_iter()
+                    .map(|p| Self::substitute_generic_params(p, mapping))
+                    .collect();
+                Rc::new(RefCell::new(Type::Class(name, sym, new_params)))
+            }
+            Type::Enum(name, sym, params) => {
+                drop(borrowed);
+                let new_params: Vec<Rc<RefCell<Type>>> = params
+                    .into_iter()
+                    .map(|p| Self::substitute_generic_params(p, mapping))
+                    .collect();
+                Rc::new(RefCell::new(Type::Enum(name, sym, new_params)))
+            }
+            Type::Protocol(name, sym, params) => {
+                drop(borrowed);
+                let new_params: Vec<Rc<RefCell<Type>>> = params
+                    .into_iter()
+                    .map(|p| Self::substitute_generic_params(p, mapping))
+                    .collect();
+                Rc::new(RefCell::new(Type::Protocol(name, sym, new_params)))
+            }
             other => {
                 drop(borrowed);
                 Rc::new(RefCell::new(other))
@@ -5304,6 +5338,26 @@ impl TypeResolver {
             }
             (Type::Compound(t1), Type::Compound(t2)) => {
                 for (t1, t2) in t1.iter().zip(t2.iter()) {
+                    Self::collect_generic_mappings(t1.clone(), t2.clone(), mapping);
+                }
+            }
+            (Type::Struct(n1, _, p1), Type::Struct(n2, _, p2)) if n1 == n2 => {
+                for (t1, t2) in p1.iter().zip(p2.iter()) {
+                    Self::collect_generic_mappings(t1.clone(), t2.clone(), mapping);
+                }
+            }
+            (Type::Class(n1, _, p1), Type::Class(n2, _, p2)) if n1 == n2 => {
+                for (t1, t2) in p1.iter().zip(p2.iter()) {
+                    Self::collect_generic_mappings(t1.clone(), t2.clone(), mapping);
+                }
+            }
+            (Type::Enum(n1, _, p1), Type::Enum(n2, _, p2)) if n1 == n2 => {
+                for (t1, t2) in p1.iter().zip(p2.iter()) {
+                    Self::collect_generic_mappings(t1.clone(), t2.clone(), mapping);
+                }
+            }
+            (Type::Protocol(n1, _, p1), Type::Protocol(n2, _, p2)) if n1 == n2 => {
+                for (t1, t2) in p1.iter().zip(p2.iter()) {
                     Self::collect_generic_mappings(t1.clone(), t2.clone(), mapping);
                 }
             }
