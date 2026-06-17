@@ -884,6 +884,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 let mut case_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+                let ptr_type = self.context.ptr_type(inkwell::AddressSpace::from(0));
                 for case in cases {
                     let param_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = case
                         .parameters
@@ -891,7 +892,14 @@ impl<'ctx> IRGenerator<'ctx> {
                         .filter_map(|param| {
                             let expr = param.type_expression.borrow();
                             let ty = expr.get_ty().ok().flatten();
-                            ty.and_then(|ty| self.resolve_type(ty).ok())
+                            ty.and_then(|ty| {
+                                let is_recursive = matches!(&*ty.borrow(), Type::Enum(n, ..) if n == enum_name);
+                                if is_recursive {
+                                    Some(ptr_type.as_basic_type_enum())
+                                } else {
+                                    self.resolve_type(ty).ok()
+                                }
+                            })
                         })
                         .collect();
                     if param_types.is_empty() {
@@ -6979,12 +6987,28 @@ impl<'ctx> IRGenerator<'ctx> {
                                                     i
                                                 )
                                             })?;
-                                        let field_val =
-                                            self.builder.build_load(field_ty, field_ptr, "")?;
-                                        let var_ptr =
-                                            self.builder.build_alloca(field_ty, &token.value)?;
-                                        self.builder.build_store(var_ptr, field_val)?;
-                                        self.declare_variable(token.value.clone(), var_ptr);
+                                        if field_ty.is_pointer_type() {
+                                            let val_ptr =
+                                                self.builder.build_load(self.context.ptr_type(inkwell::AddressSpace::from(0)), field_ptr, "")?;
+                                            let loaded_enum_val = self.builder.build_load(
+                                                enum_llvm_type.as_basic_type_enum(),
+                                                val_ptr.into_pointer_value(),
+                                                "",
+                                            )?;
+                                            let var_ptr = self.builder.build_alloca(
+                                                enum_llvm_type.as_basic_type_enum(),
+                                                &token.value,
+                                            )?;
+                                            self.builder.build_store(var_ptr, loaded_enum_val)?;
+                                            self.declare_variable(token.value.clone(), var_ptr);
+                                        } else {
+                                            let field_val =
+                                                self.builder.build_load(field_ty, field_ptr, "")?;
+                                            let var_ptr =
+                                                self.builder.build_alloca(field_ty, &token.value)?;
+                                            self.builder.build_store(var_ptr, field_val)?;
+                                            self.declare_variable(token.value.clone(), var_ptr);
+                                        }
                                     }
                                     Pattern::Ignore => {}
                                     _ => {}
@@ -8222,16 +8246,39 @@ impl<'ctx> IRGenerator<'ctx> {
                                     .build_struct_gep(case_llvm_type, alloca, 1, "")?;
                             let enum_payloads = self.enum_payload_types.borrow();
                             if let Some(payload_type) = enum_payloads.get(&enum_name) {
+                                let case_payload_ptr = self.builder.build_struct_gep(
+                                    *payload_type,
+                                    payload_ptr,
+                                    case_index as u32,
+                                    "",
+                                )?;
+                                let case_payload_ty = payload_type
+                                    .get_field_type_at_index(case_index as u32)
+                                    .ok_or_else(|| {
+                                        anyhow::anyhow!("Case payload field not found at index {}", case_index)
+                                    })?
+                                    .into_struct_type();
                                 for (i, param) in parameters.iter().enumerate() {
                                     let field_ptr = self.builder.build_struct_gep(
-                                        *payload_type,
-                                        payload_ptr,
+                                        case_payload_ty,
+                                        case_payload_ptr,
                                         i as u32,
                                         "",
                                     )?;
                                     let arg_val =
                                         self.resolve_expression(param.expression.clone())?.unwrap();
-                                    self.builder.build_store(field_ptr, arg_val)?;
+                                    let field_llvm_ty = case_payload_ty
+                                        .get_field_type_at_index(i as u32)
+                                        .ok_or_else(|| {
+                                            anyhow::anyhow!("Payload field {} not found", i)
+                                        })?;
+                                    if field_llvm_ty.is_pointer_type() {
+                                        let box_ptr = self.builder.build_alloca(arg_val.get_type(), "")?;
+                                        self.builder.build_store(box_ptr, arg_val)?;
+                                        self.builder.build_store(field_ptr, box_ptr)?;
+                                    } else {
+                                        self.builder.build_store(field_ptr, arg_val)?;
+                                    }
                                 }
                             }
                         }
@@ -8290,6 +8337,50 @@ impl<'ctx> IRGenerator<'ctx> {
                             drop(object_expr);
 
                             if let Some(ty) = &object_ty
+                                && let Type::Enum(enum_name, ..) = &*ty.borrow()
+                            {
+                                let case_name = member.value.clone();
+                                let enum_name = enum_name.clone();
+                                let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
+                                let enum_types = self.enum_types.borrow();
+                                let case_llvm_type = enum_types.get(&enum_name).copied().ok_or_else(|| {
+                                    anyhow::anyhow!("Enum type '{}' not found", enum_name)
+                                })?;
+                                drop(enum_types);
+                                let alloca = self.builder.build_alloca(case_llvm_type.as_basic_type_enum(), "")?;
+                                let tag_ptr = self.builder.build_struct_gep(case_llvm_type, alloca, 0, "")?;
+                                let tag_val = self.context.i8_type().const_int(case_index as u64, false);
+                                self.builder.build_store(tag_ptr, tag_val)?;
+                                if !parameters.is_empty() {
+                                    let payload_ptr = self.builder.build_struct_gep(case_llvm_type, alloca, 1, "")?;
+                                    let enum_payloads = self.enum_payload_types.borrow();
+                                    if let Some(payload_type) = enum_payloads.get(&enum_name) {
+                                        let case_payload_ptr = self.builder.build_struct_gep(
+                                            *payload_type, payload_ptr, case_index as u32, "",
+                                        )?;
+                                        let case_payload_ty = payload_type.get_field_type_at_index(case_index as u32)
+                                            .ok_or_else(|| anyhow::anyhow!("Case payload not found at {}", case_index))?
+                                            .into_struct_type();
+                                        for (i, param) in parameters.iter().enumerate() {
+                                            let field_ptr = self.builder.build_struct_gep(
+                                                case_payload_ty, case_payload_ptr, i as u32, "",
+                                            )?;
+                                            let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
+                                            let field_llvm_ty = case_payload_ty.get_field_type_at_index(i as u32)
+                                                .ok_or_else(|| anyhow::anyhow!("Payload field {} not found", i))?;
+                                            if field_llvm_ty.is_pointer_type() {
+                                                let box_ptr = self.builder.build_alloca(arg_val.get_type(), "")?;
+                                                self.builder.build_store(box_ptr, arg_val)?;
+                                                self.builder.build_store(field_ptr, box_ptr)?;
+                                            } else {
+                                                self.builder.build_store(field_ptr, arg_val)?;
+                                            }
+                                        }
+                                    }
+                                }
+                                let val = self.builder.build_load(case_llvm_type.as_basic_type_enum(), alloca, "")?;
+                                return Ok(Some(val));
+                            } else if let Some(ty) = &object_ty
                                 && let Type::Struct(struct_name, ..) = &*ty.borrow()
                             {
                                 let object_val = self.resolve_expression(object.clone())?.unwrap();
@@ -9512,17 +9603,36 @@ impl<'ctx> IRGenerator<'ctx> {
                                                                 j
                                                             )
                                                         })?;
-                                                    let field_val = self
-                                                        .builder
-                                                        .build_load(field_ty, field_ptr, "")?;
-                                                    let var_ptr = self
-                                                        .builder
-                                                        .build_alloca(field_ty, &tok.value)?;
-                                                    self.builder.build_store(var_ptr, field_val)?;
-                                                    self.declare_variable(
-                                                        tok.value.clone(),
-                                                        var_ptr,
-                                                    );
+                                                    if field_ty.is_pointer_type() {
+                                                        let val_ptr = self.builder.build_load(
+                                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                                            field_ptr,
+                                                            "",
+                                                        )?;
+                                                        let loaded_enum_val = self.builder.build_load(
+                                                            enum_llvm_type.unwrap().as_basic_type_enum(),
+                                                            val_ptr.into_pointer_value(),
+                                                            "",
+                                                        )?;
+                                                        let var_ptr = self.builder.build_alloca(
+                                                            enum_llvm_type.unwrap().as_basic_type_enum(),
+                                                            &tok.value,
+                                                        )?;
+                                                        self.builder.build_store(var_ptr, loaded_enum_val)?;
+                                                        self.declare_variable(tok.value.clone(), var_ptr);
+                                                    } else {
+                                                        let field_val = self
+                                                            .builder
+                                                            .build_load(field_ty, field_ptr, "")?;
+                                                        let var_ptr = self
+                                                            .builder
+                                                            .build_alloca(field_ty, &tok.value)?;
+                                                        self.builder.build_store(var_ptr, field_val)?;
+                                                        self.declare_variable(
+                                                            tok.value.clone(),
+                                                            var_ptr,
+                                                        );
+                                                    }
                                                 }
                                                 Pattern::ValueBinding(inner) => {
                                                     if let Pattern::Identifier(tok) = inner.as_ref()
