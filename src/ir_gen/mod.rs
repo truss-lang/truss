@@ -2804,8 +2804,24 @@ impl<'ctx> IRGenerator<'ctx> {
                     })
                 } else if self.module.get_function(&base_name).is_some() {
                     base_name
+                } else if self.module.get_function(&self.mangle_fn_name(&base_name, &[])).is_some() {
+                    self.mangle_fn_name(&base_name, &[])
                 } else {
-                    format!("{}.{}", type_name, entry_name)
+                    let mangled = self
+                        .mangled_fn_names
+                        .borrow()
+                        .get(&base_name)
+                        .cloned();
+                    if let Some(m) = mangled {
+                        m
+                    } else {
+                        let generic_base = format!("{}.{}", type_name, entry_name);
+                        self.mangled_fn_names
+                            .borrow()
+                            .get(&generic_base)
+                            .cloned()
+                            .unwrap_or(generic_base)
+                    }
                 };
                 if let Some(func) = self.module.get_function(&fn_name) {
                     const_vals.push(
@@ -9299,6 +9315,37 @@ impl<'ctx> IRGenerator<'ctx> {
                             "",
                         )?;
                         args.push(ptr_val.into());
+                    } else if arg_idx < fn_param_types.len()
+                        && fn_param_types[arg_idx] != arg_val.get_type().into()
+                        && fn_param_types[arg_idx].is_struct_type()
+                    {
+                        let struct_ty = fn_param_types[arg_idx].into_struct_type();
+                        let struct_name = struct_ty.get_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                        if struct_name.starts_with("existential.")
+                            && struct_ty.get_field_type_at_index(0).map_or(false, |f| f.is_pointer_type())
+                            && struct_ty.get_field_type_at_index(1).map_or(false, |f| f.is_pointer_type())
+                        {
+                            let protocol_name = struct_name.strip_prefix("existential.").unwrap_or("");
+                            let val_alloca = self.builder.build_alloca(arg_val.get_type(), "")?;
+                            self.builder.build_store(val_alloca, arg_val)?;
+                            let container = self.builder.build_alloca(struct_ty, "")?;
+                            let value_ptr_ptr = self.builder.build_struct_gep(struct_ty, container, 0, "")?;
+                            self.builder.build_store(value_ptr_ptr, val_alloca)?;
+                            let wt_ptr_ptr = self.builder.build_struct_gep(struct_ty, container, 1, "")?;
+                            let wt_global = self.protocol_witness_tables.borrow().iter().find_map(|((pn, ts), gv)| {
+                                if pn == protocol_name { Some(*gv) } else { None }
+                            });
+                            if let Some(wt_gv) = wt_global {
+                                self.builder.build_store(wt_ptr_ptr, wt_gv.as_pointer_value())?;
+                            } else {
+                                let wt_null = self.context.ptr_type(inkwell::AddressSpace::from(0)).const_null();
+                                self.builder.build_store(wt_ptr_ptr, wt_null)?;
+                            }
+                            let container_val = self.builder.build_load(struct_ty, container, "")?;
+                            args.push(container_val.into());
+                        } else {
+                            args.push(arg_val.into());
+                        }
                     } else {
                         args.push(arg_val.into());
                     }
