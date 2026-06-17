@@ -2139,8 +2139,12 @@ impl<'ctx> IRGenerator<'ctx> {
         let own_method_names: Vec<String> = methods
             .iter()
             .filter_map(|m| m.borrow().name().ok())
+            .filter(|n| n != "deinit")
             .collect();
-        let _has_destrcutor = destrcutor.is_some();
+
+        let own_deinit_name: Option<String> = destrcutor
+            .as_ref()
+            .and_then(|d| d.borrow().name().ok());
 
         let mut own_property_entry_names: Vec<String> = Vec::new();
         for field in properties {
@@ -2227,30 +2231,39 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                     merged
                 } else {
-                    let mut all: Vec<(String, String)> = own_method_names
-                        .iter()
-                        .map(|n| (n.clone(), class_name.to_string()))
-                        .collect();
+                    let mut all: Vec<(String, String)> = Vec::new();
+                    if let Some(deinit_name) = &own_deinit_name {
+                        all.push((deinit_name.clone(), class_name.to_string()));
+                    }
+                    for mn in &own_method_names {
+                        all.push((mn.clone(), class_name.to_string()));
+                    }
                     for pe in &own_property_entry_names {
                         all.push((pe.clone(), class_name.to_string()));
                     }
                     all
                 }
             } else {
-                let mut all: Vec<(String, String)> = own_method_names
-                    .iter()
-                    .map(|n| (n.clone(), class_name.to_string()))
-                    .collect();
+                let mut all: Vec<(String, String)> = Vec::new();
+                if let Some(deinit_name) = &own_deinit_name {
+                    all.push((deinit_name.clone(), class_name.to_string()));
+                }
+                for mn in &own_method_names {
+                    all.push((mn.clone(), class_name.to_string()));
+                }
                 for pe in &own_property_entry_names {
                     all.push((pe.clone(), class_name.to_string()));
                 }
                 all
             }
         } else {
-            let mut all: Vec<(String, String)> = own_method_names
-                .iter()
-                .map(|n| (n.clone(), class_name.to_string()))
-                .collect();
+            let mut all: Vec<(String, String)> = Vec::new();
+            if let Some(deinit_name) = &own_deinit_name {
+                all.push((deinit_name.clone(), class_name.to_string()));
+            }
+            for mn in &own_method_names {
+                all.push((mn.clone(), class_name.to_string()));
+            }
             for pe in &own_property_entry_names {
                 all.push((pe.clone(), class_name.to_string()));
             }
@@ -2364,8 +2377,18 @@ impl<'ctx> IRGenerator<'ctx> {
             let mut const_vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
 
             for (method_name, owner) in &method_list {
-                let fn_name = format!("{}.{}", owner, method_name);
-                if let Some(func) = self.module.get_function(&fn_name) {
+                let base_name = format!("{}.{}", owner, method_name);
+                let fn_name = self
+                    .mangled_fn_names
+                    .borrow()
+                    .get(&base_name)
+                    .cloned()
+                    .unwrap_or_else(|| base_name.clone());
+                let func = self.module.get_function(&fn_name).or_else(|| {
+                    let mangled = self.mangle_fn_name(&base_name, &[]);
+                    self.module.get_function(&mangled)
+                });
+                if let Some(func) = func {
                     let fn_ptr = func.as_global_value().as_pointer_value();
                     const_vals.push(fn_ptr.as_basic_value_enum());
                 } else {
@@ -6351,18 +6374,52 @@ impl<'ctx> IRGenerator<'ctx> {
 
                             let object_val = self.resolve_expression(object.clone())?.unwrap();
 
-                            let class_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
-                                ptr
+                            let class_ptr = if matches!(&*object.borrow(), Expression::SelfKeyword { .. }) {
+                                if let BasicValueEnum::PointerValue(p) = object_val {
+                                    p
+                                } else {
+                                    let p = self.builder.build_alloca(object_val.get_type(), "").unwrap();
+                                    self.builder.build_store(p, object_val).unwrap();
+                                    p
+                                }
+                            } else if let Expression::Variable { name, .. } =
+                                &*object.borrow()
+                            {
+                                if let Some(var_ptr) = self.lookup_variable(&name.value) {
+                                    let is_in_self = name.value == "self";
+                                    if is_in_self {
+                                        var_ptr
+                                    } else {
+                                        let loaded = self.builder.build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            var_ptr,
+                                            "",
+                                        )?;
+                                        loaded.into_pointer_value()
+                                    }
+                                } else {
+                                    if let BasicValueEnum::PointerValue(p) = object_val {
+                                        p
+                                    } else {
+                                        let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                        self.builder.build_store(p, object_val)?;
+                                        p
+                                    }
+                                }
+                            } else if let BasicValueEnum::PointerValue(p) = object_val {
+                                p
                             } else {
-                                let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
-                                self.builder.build_store(ptr, object_val)?;
-                                ptr
+                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(p, object_val)?;
+                                p
                             };
 
                             let setter_entry = format!("{}.setter", field_name);
                             let is_super =
                                 matches!(&*object.borrow(), Expression::SuperKeyword { .. });
-                            if !is_super {
+                            let is_self =
+                                matches!(&*object.borrow(), Expression::SelfKeyword { .. });
+                            if !is_super && !is_self {
                                 if let Some(slot_idx) =
                                     self.get_vtable_slot_index(&class_name, &setter_entry)
                                 {
@@ -6520,12 +6577,36 @@ impl<'ctx> IRGenerator<'ctx> {
                     {
                         let class_name = class_name.clone();
                         let object_val = self.resolve_expression(sub_object.clone())?.unwrap();
-                        let class_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
-                            ptr
+                        let class_ptr = if let Expression::Variable { name, .. } =
+                            &*sub_object.borrow()
+                        {
+                            if let Some(var_ptr) = self.lookup_variable(&name.value) {
+                                let is_in_self = name.value == "self";
+                                if is_in_self {
+                                    var_ptr
+                                } else {
+                                    let loaded = self.builder.build_load(
+                                        self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                        var_ptr,
+                                        "",
+                                    )?;
+                                    loaded.into_pointer_value()
+                                }
+                            } else {
+                                if let BasicValueEnum::PointerValue(p) = object_val {
+                                    p
+                                } else {
+                                    let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                    self.builder.build_store(p, object_val)?;
+                                    p
+                                }
+                            }
+                        } else if let BasicValueEnum::PointerValue(p) = object_val {
+                            p
                         } else {
-                            let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
-                            self.builder.build_store(ptr, object_val)?;
-                            ptr
+                            let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                            self.builder.build_store(p, object_val)?;
+                            p
                         };
                         let setter_entry = "subscript.setter";
                         if let Some(slot_idx) =
@@ -7476,17 +7557,42 @@ impl<'ctx> IRGenerator<'ctx> {
 
                     let object_val = self.resolve_expression(object.clone())?.unwrap();
 
-                    let class_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
-                        ptr
+                    let class_ptr = if let Expression::Variable { name, .. } =
+                        &*object.borrow()
+                    {
+                        if let Some(var_ptr) = self.lookup_variable(&name.value) {
+                            let is_in_self = name.value == "self";
+                            if is_in_self {
+                                var_ptr
+                            } else {
+                                let loaded = self.builder.build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    var_ptr,
+                                    "",
+                                )?;
+                                loaded.into_pointer_value()
+                            }
+                        } else {
+                            if let BasicValueEnum::PointerValue(p) = object_val {
+                                p
+                            } else {
+                                let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                self.builder.build_store(p, object_val)?;
+                                p
+                            }
+                        }
+                    } else if let BasicValueEnum::PointerValue(p) = object_val {
+                        p
                     } else {
-                        let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
-                        self.builder.build_store(ptr, object_val)?;
-                        ptr
+                        let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                        self.builder.build_store(p, object_val)?;
+                        p
                     };
 
                     let getter_entry = format!("{}.getter", field_name);
                     let is_super = matches!(&*object.borrow(), Expression::SuperKeyword { .. });
-                    if !is_super {
+                    let is_self = matches!(&*object.borrow(), Expression::SelfKeyword { .. });
+                    if !is_super && !is_self {
                         if let Some(slot_idx) =
                             self.get_vtable_slot_index(&class_name, &getter_entry)
                         {
@@ -8217,11 +8323,21 @@ impl<'ctx> IRGenerator<'ctx> {
                                 && let Type::Class(class_name, ..) = &*ty.borrow()
                             {
                                 let object_val = self.resolve_expression(object.clone())?.unwrap();
-                                let ptr = if let Expression::Variable { name, .. } =
+                                let raw_ptr = if let Expression::Variable { name, .. } =
                                     &*object.borrow()
                                 {
                                     if let Some(var_ptr) = self.lookup_variable(&name.value) {
-                                        var_ptr
+                                        let is_in_self = name.value == "self";
+                                        if is_in_self {
+                                            var_ptr
+                                        } else {
+                                            let loaded = self.builder.build_load(
+                                                self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                                var_ptr,
+                                                "",
+                                            )?;
+                                            loaded.into_pointer_value()
+                                        }
                                     } else {
                                         if let BasicValueEnum::PointerValue(p) = object_val {
                                             p
@@ -8238,6 +8354,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     self.builder.build_store(p, object_val)?;
                                     p
                                 };
+                                let ptr = raw_ptr;
                                 let method_name = &member.value;
 
                                 let is_super =
@@ -10386,6 +10503,15 @@ impl<'ctx> IRGenerator<'ctx> {
             .build_load(ptr_ty, vtable_ptr, "")
             .unwrap()
             .into_pointer_value();
+        let deinit_null = self
+            .builder
+            .build_is_null(deinit_fn, "")
+            .unwrap();
+        let skip_deinit = self.context.append_basic_block(f, "skip_deinit");
+        self.builder
+            .build_conditional_branch(deinit_null, free_block, skip_deinit)
+            .unwrap();
+        self.builder.position_at_end(skip_deinit);
         self.builder
             .build_indirect_call(void_fn_ty, deinit_fn, &[obj.into()], "")
             .unwrap();

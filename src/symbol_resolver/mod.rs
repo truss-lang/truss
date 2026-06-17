@@ -2506,7 +2506,31 @@ impl SymbolResolver {
     }
 
     fn resolve_conformance(&mut self, conformance: Rc<RefCell<Expression>>) {
-        self.resolve_expression(conformance.clone());
+        match &*conformance.borrow() {
+            Expression::Type {
+                name,
+                type_parameters,
+                ..
+            } => {
+                if let Some(current_scope) = self.current_scope.clone()
+                    && let Ok(Some(_)) = self.resolve_symbol_in_scope(name.value.clone(), current_scope.clone())
+                {
+                }
+                if let Some(type_parameters) = type_parameters {
+                    for tp in type_parameters {
+                        self.resolve_expression(tp.clone());
+                    }
+                }
+            }
+            Expression::CompoundType { types, .. } => {
+                for t in types {
+                    self.resolve_conformance(t.clone());
+                }
+            }
+            _ => {
+                self.resolve_expression(conformance.clone());
+            }
+        }
     }
 
     fn resolve_variable_pattern(
