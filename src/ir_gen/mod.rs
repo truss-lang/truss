@@ -1227,6 +1227,39 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn contains_generic_param(ty: &Type) -> bool {
+        match ty {
+            Type::GenericParam(_) => true,
+            Type::Function(params, ret, _, _) => {
+                params.iter().any(|p| Self::contains_generic_param(&*p.borrow()))
+                    || Self::contains_generic_param(&*ret.borrow())
+            }
+            Type::Pointer(inner) | Type::NonNullPointer(inner) => {
+                Self::contains_generic_param(&*inner.borrow())
+            }
+            Type::Struct(_, _, params)
+            | Type::Class(_, _, params)
+            | Type::Enum(_, _, params)
+            | Type::Protocol(_, _, params) => {
+                params.iter().any(|p| Self::contains_generic_param(&*p.borrow()))
+            }
+            Type::Tuple(elems) => {
+                elems.iter().any(|(_, t)| Self::contains_generic_param(&*t.borrow()))
+            }
+            Type::Compound(types) => {
+                types.iter().any(|t| Self::contains_generic_param(&*t.borrow()))
+            }
+            Type::AssociatedType(base, _) => Self::contains_generic_param(&*base.borrow()),
+            Type::ConstGeneric(_, inner) => Self::contains_generic_param(&*inner.borrow()),
+            Type::Inline(inner, _) => Self::contains_generic_param(&*inner.borrow()),
+            Type::Closure(params, ret) => {
+                params.iter().any(|p| Self::contains_generic_param(&*p.borrow()))
+                    || Self::contains_generic_param(&*ret.borrow())
+            }
+            _ => false,
+        }
+    }
+
     fn type_args_to_abbreviation(
         &self,
         type_arguments: Option<&Vec<Rc<RefCell<Expression>>>>,
@@ -2110,7 +2143,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 self.module.add_function(&mangled, function_type, None);
                 self.mangled_fn_names
                     .borrow_mut()
-                    .insert(name.value.clone(), mangled);
+                    .insert(name.value.clone(), mangled.clone());
             }
         }
     }
@@ -3898,7 +3931,9 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                         _ => return None,
                     };
-                    self.module.get_function(&format!("{}.next", type_name))
+                    let key = format!("{}.next", type_name);
+                    self.mangled_fn_names.borrow().get(&key)
+                        .and_then(|mangled| self.module.get_function(mangled))
                 });
 
                 if let Some(next_fn) = next_fn {
@@ -3977,6 +4012,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 attributes,
                 ..
             } => {
+                if Self::contains_generic_param(&*ty.borrow()) {
+                    return Ok(false);
+                }
                 if let Type::Function(_parameter_types, return_type, _, throws_types) =
                     &*ty.borrow()
                 {
@@ -10332,7 +10370,7 @@ impl<'ctx> IRGenerator<'ctx> {
             param_basic_types.push(self.resolve_type(param_type.clone())?.into());
         }
 
-        let is_void = matches!(&*return_type.borrow(), Type::Void);
+        let is_void = matches!(&*return_type.borrow(), Type::Void | Type::Never);
         if is_void {
             let void_type = self.context.void_type();
             Ok(void_type.fn_type(&param_basic_types, is_vararg))
@@ -10765,6 +10803,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     struct_type.as_basic_type_enum()
                 } else if name == "Array" || name == "String" {
                     self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+                } else if self.class_types.borrow().contains_key(name) {
+                    self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+                } else if self.enum_types.borrow().contains_key(name) {
+                    self.enum_types.borrow().get(name).unwrap().as_basic_type_enum()
                 } else {
                     self.emit_error(
                         TrussDiagnosticCode::StructTypeNotSupported,
