@@ -5363,14 +5363,20 @@ impl TypeResolver {
             }
         }
 
-        if let Expression::NullptrLiteral { ty, .. } = &*expression.borrow() {
-            if ty.is_none() {
-                let mut expr_mut = expression.borrow_mut();
-                if let Expression::NullptrLiteral { ty: nullptr_ty, .. } = &mut *expr_mut {
-                    *nullptr_ty = Some(expected_type.clone());
+        {
+            let expr_borrow = expression.borrow();
+            if let Expression::NullptrLiteral { ty, .. } = &*expr_borrow {
+                if ty.is_some() {
+                    return Some(expected_type);
                 }
             }
-            return Some(expected_type);
+        }
+        {
+            let mut expr_mut = expression.borrow_mut();
+            if let Expression::NullptrLiteral { ty: nullptr_ty, .. } = &mut *expr_mut {
+                *nullptr_ty = Some(expected_type.clone());
+                return Some(expected_type);
+            }
         }
 
         self.infer_type(expression)
