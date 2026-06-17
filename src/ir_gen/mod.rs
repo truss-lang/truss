@@ -9586,6 +9586,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 self.builder.position_at_end(exit_bb);
+                let _ = self.builder.build_unreachable();
                 Ok(None)
             }
             Expression::Closure {
