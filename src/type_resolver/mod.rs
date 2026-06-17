@@ -5391,7 +5391,7 @@ impl TypeResolver {
                 let left_ty = left.borrow().clone();
                 let right_ty = right.borrow().clone();
 
-                if !Self::is_numeric_type(&left_ty) {
+                if !Self::is_numeric_type(&left_ty) || matches!(&left_ty, Type::GenericParam(_)) {
                     return None;
                 }
                 if left_ty != right_ty {
@@ -5405,6 +5405,9 @@ impl TypeResolver {
             | BinaryOperator::LessEqual
             | BinaryOperator::Greater
             | BinaryOperator::GreaterEqual => {
+                if matches!(&*left.borrow(), Type::GenericParam(_)) {
+                    return None;
+                }
                 if left.borrow().clone() != right.borrow().clone() {
                     return None;
                 }

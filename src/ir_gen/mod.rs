@@ -5511,6 +5511,18 @@ impl<'ctx> IRGenerator<'ctx> {
                                     .build_float_compare(inkwell::FloatPredicate::OEQ, l, r, "")?
                                     .into(),
                             ))
+                        } else if let (
+                            BasicValueEnum::PointerValue(l),
+                            BasicValueEnum::PointerValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            let l_int = self.builder.build_ptr_to_int(l, self.context.i64_type(), "")?;
+                            let r_int = self.builder.build_ptr_to_int(r, self.context.i64_type(), "")?;
+                            Ok(Some(
+                                self.builder
+                                    .build_int_compare(inkwell::IntPredicate::EQ, l_int, r_int, "")?
+                                    .into(),
+                            ))
                         } else {
                             anyhow::bail!("Invalid types for equality comparison");
                         }
@@ -5532,6 +5544,18 @@ impl<'ctx> IRGenerator<'ctx> {
                             Ok(Some(
                                 self.builder
                                     .build_float_compare(inkwell::FloatPredicate::ONE, l, r, "")?
+                                    .into(),
+                            ))
+                        } else if let (
+                            BasicValueEnum::PointerValue(l),
+                            BasicValueEnum::PointerValue(r),
+                        ) = (left_val, right_val)
+                        {
+                            let l_int = self.builder.build_ptr_to_int(l, self.context.i64_type(), "")?;
+                            let r_int = self.builder.build_ptr_to_int(r, self.context.i64_type(), "")?;
+                            Ok(Some(
+                                self.builder
+                                    .build_int_compare(inkwell::IntPredicate::NE, l_int, r_int, "")?
                                     .into(),
                             ))
                         } else {
