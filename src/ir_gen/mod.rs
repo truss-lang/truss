@@ -2505,6 +2505,7 @@ impl<'ctx> IRGenerator<'ctx> {
         let Symbol::Protocol {
             methods,
             properties,
+            subscripts,
             ..
         } = &*sym_borrow
         else {
@@ -2533,6 +2534,19 @@ impl<'ctx> IRGenerator<'ctx> {
                         if has_set {
                             entries.push((format!("{}.setter", name), "setter"));
                         }
+                    }
+                }
+            }
+        }
+        for s in subscripts {
+            if let Ok(name) = s.borrow().name() {
+                let sb = s.borrow();
+                if let Symbol::ProtocolSubscript { accessors, .. } = &*sb {
+                    if accessors.get {
+                        entries.push((format!("{}.getter", name), "getter"));
+                    }
+                    if accessors.set {
+                        entries.push((format!("{}.setter", name), "setter"));
                     }
                 }
             }

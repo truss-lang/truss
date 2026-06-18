@@ -33,11 +33,15 @@
 ### Completed
 27. ✅ **Custom operator declarations** - Support `operator prefix/infix/postfix` declarations with precedence groups and user-defined operator symbols (identifiers and operator tokens)
 
+### Completed
+28. ✅ **Protocol constraint subscript** - Process ProtocolMember::Subscript in type resolver (parameter types, return type), check required subscripts in conformance checking, add subscript entries to protocol witness tables
+
 ### In Progress
-1. 🚧 **Protocol constraint subscript** - Process ProtocolMember::Subscript in type resolver, check required subscripts in conformance checking
+1. 🚧 **Protocol subscript/computed property default implementations** - Allow bodies on protocol subscripts/properties, use as default in witness tables
 
 ### Planned
-2. ⏳ **Protocol subscript/computed property default implementations** - Allow bodies on protocol subscripts/properties, use as default in witness tables
+2. ⏳ **Generic parameter forwarding** - Propagate generic params from outer to inner scopes
+3. ⏳ **A::f / ::g as closure types** - Reference methods/functions as closure values
 3. ⏳ **Generic parameter forwarding** - Propagate generic params from outer to inner scopes
 4. ⏳ **A::f / ::g as closure types** - Reference methods/functions as closure values
 

@@ -1059,7 +1059,24 @@ impl TypeResolver {
                                 }
                             }
                         }
-                        ProtocolMember::Subscript { .. } => {}
+                        ProtocolMember::Subscript {
+                            parameters,
+                            return_type_expression,
+                            ..
+                        } => {
+                            let cloned_params: Vec<_> = parameters
+                                .iter()
+                                .map(|p| {
+                                    (p.borrow().type_expression.clone(), p.clone())
+                                })
+                                .collect();
+                            for (type_expr, param) in cloned_params {
+                                if let Some(param_type) = self.infer_type(type_expr) {
+                                    param.borrow_mut().ty = Some(param_type);
+                                }
+                            }
+                            self.infer_type(return_type_expression.clone());
+                        }
                     }
                 }
                 self.leave_scope();
@@ -1777,7 +1794,24 @@ impl TypeResolver {
                                 }
                             }
                         }
-                        ProtocolMember::Subscript { .. } => {}
+                        ProtocolMember::Subscript {
+                            parameters,
+                            return_type_expression,
+                            ..
+                        } => {
+                            let cloned_params: Vec<_> = parameters
+                                .iter()
+                                .map(|p| {
+                                    (p.borrow().type_expression.clone(), p.clone())
+                                })
+                                .collect();
+                            for (type_expr, param) in cloned_params {
+                                if let Some(param_type) = self.infer_type(type_expr) {
+                                    param.borrow_mut().ty = Some(param_type);
+                                }
+                            }
+                            self.infer_type(return_type_expression.clone());
+                        }
                     }
                 }
                 self.leave_scope();
@@ -7736,6 +7770,77 @@ impl TypeResolver {
                                 type_token,
                             );
                         }
+                    }
+                }
+            }
+
+            let required_subscripts: Vec<ProtocolAccessorSet> = {
+                let sym = protocol_symbol.borrow();
+                let Symbol::Protocol { subscripts, .. } = &*sym else {
+                    continue;
+                };
+                subscripts
+                    .iter()
+                    .filter_map(|s| {
+                        let sb = s.borrow();
+                        if let Symbol::ProtocolSubscript { accessors, .. } = &*sb {
+                            Some(*accessors)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            };
+
+            for req_sub in &required_subscripts {
+                let type_has_sub = {
+                    let type_sym = type_symbol.borrow();
+                    match &*type_sym {
+                        Symbol::Struct { subscripts, .. }
+                        | Symbol::Class { subscripts, .. } => !subscripts.is_empty(),
+                        _ => false,
+                    }
+                };
+                if !type_has_sub {
+                    self.emit_error(
+                        TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+                        format!(
+                            "Type '{}' does not implement protocol '{}' requirement: 'subscript'",
+                            type_name, protocol_name
+                        ),
+                        type_token,
+                    );
+                } else if req_sub.set {
+                    let has_setter = {
+                        let type_sym = type_symbol.borrow();
+                        let subs = match &*type_sym {
+                            Symbol::Struct { subscripts, .. }
+                            | Symbol::Class { subscripts, .. } => subscripts.clone(),
+                            _ => vec![],
+                        };
+                        drop(type_sym);
+                        subs.iter().any(|s| {
+                            if let Some(decl) = s.borrow().get_decl().ok().flatten() {
+                                let stmt = decl.borrow();
+                                if let Statement::SubscriptDecl { accessors, .. } = &*stmt {
+                                    accessors.iter().any(|a| a.kind == AccessorKind::Set)
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        })
+                    };
+                    if !has_setter {
+                        self.emit_error(
+                            TrussDiagnosticCode::ProtocolRequirementNotImplemented,
+                            format!(
+                                "Type '{}' does not implement protocol '{}' requirement: 'subscript {{ get set }}' — subscript is not settable",
+                                type_name, protocol_name
+                            ),
+                            type_token,
+                        );
                     }
                 }
             }
