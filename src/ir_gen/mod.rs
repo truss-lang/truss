@@ -4147,7 +4147,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 } else {
                     self.mangle_fn_name(&name.value, parameters)
                 };
-                if Self::contains_generic_param(&*ty.borrow()) || *self.current_struct_has_generics.borrow() {
+                if *self.current_struct_has_generics.borrow() {
                     if let Some(func) = self.module.get_function(&fn_name) {
                         let entry_block = self.context.append_basic_block(func, "entry");
                         self.builder.position_at_end(entry_block);
@@ -11108,6 +11108,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
                 }
             }
+            Type::GenericParam(_) | Type::ConstGeneric(_, _) => {
+                self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
+            }
             Type::Tuple(elements) => {
                 let type_key = self.get_tuple_struct_key(elements);
                 if let Some(struct_type) = self.struct_types.borrow().get(&type_key) {
@@ -11125,9 +11128,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     struct_type.as_basic_type_enum()
                 }
             }
-            Type::GenericParam(_) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
-            Type::ConstGeneric(_, ct) => self.resolve_type(ct.clone())?,
-            Type::AssociatedType(_, _) => {
+                        Type::AssociatedType(_, _) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
             Type::Inline(inner, _) => {
