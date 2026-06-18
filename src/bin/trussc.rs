@@ -183,7 +183,7 @@ fn main() {
         let has_std_errors = {
             let engine = std_engine.borrow();
             if engine.has_errors() {
-                let formatted = duck_diagnostic::format_all_smart(&*engine, false);
+                let formatted = engine.format_all_compact_plain();
                 if !formatted.is_empty() {
                     println!("{}", formatted);
                 }
@@ -200,8 +200,6 @@ fn main() {
         }
 
         if !has_std_errors {
-            // Build a proper program with stdlib statements and resolve it fully
-            // (both register_symbols and resolve_statement) so scopes and types are populated
             let std_prog = Program {
                 file: Rc::new("stdlib".to_string()),
                 statements: stdlib_stmts.clone(),
@@ -210,8 +208,6 @@ fn main() {
                 SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
             let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
 
-            // Use a separate engine for stdlib type resolution so errors in generic
-            // function bodies don't pollute the main diagnostics
             let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
             let mut std_type_resolver =
                 TypeResolver::new(packages.clone(), "Truss".to_string(), stdlib_ty_engine.clone());
@@ -219,6 +215,7 @@ fn main() {
         }
     }
 
+    let src_content = source_contents.first().map(|(_, c)| c.as_str()).unwrap_or("");
     let first_file = cli.files.first().cloned().unwrap_or_default();
     let combined_prog = Program {
         file: Rc::new(first_file),
@@ -229,7 +226,7 @@ fn main() {
         SymbolResolver::new(packages.clone(), "main".to_string(), engine.clone());
     let module = symbol_resolver.resolve(&combined_prog, "main".to_string());
 
-    if emit_diagnostics(&engine.borrow(), "") {
+    if emit_diagnostics(&engine.borrow(), src_content) {
         return;
     }
 
@@ -241,7 +238,7 @@ fn main() {
     let mut type_resolver = TypeResolver::new(packages.clone(), "main".to_string(), engine.clone());
     type_resolver.resolve(&combined_prog, module.clone());
 
-    if emit_diagnostics(&engine.borrow(), "") {
+    if emit_diagnostics(&engine.borrow(), src_content) {
         return;
     }
 
@@ -259,7 +256,7 @@ fn main() {
         module.borrow().scope.clone().unwrap(),
     );
 
-    if emit_diagnostics(&ir_engine.borrow(), "") {
+    if emit_diagnostics(&ir_engine.borrow(), src_content) {
         return;
     }
 
