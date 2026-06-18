@@ -1248,7 +1248,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::AssociatedType(_, name) => name.clone(),
             Type::Compound(_) => "C".into(),
             Type::Function(_, _, _, _) => "F".into(),
-            Type::Closure(_, _) => "CC".into(),
+            Type::Closure(_, _, _) => "CC".into(),
             Type::Inline(inner, _) => {
                 format!("inline{}", self.type_to_abbreviation(&inner.borrow()))
             }
@@ -1280,7 +1280,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::AssociatedType(base, _) => Self::contains_generic_param(&*base.borrow()),
             Type::ConstGeneric(_, inner) => Self::contains_generic_param(&*inner.borrow()),
             Type::Inline(inner, _) => Self::contains_generic_param(&*inner.borrow()),
-            Type::Closure(params, ret) => {
+            Type::Closure(params, ret, _) => {
                 params.iter().any(|p| Self::contains_generic_param(&*p.borrow()))
                     || Self::contains_generic_param(&*ret.borrow())
             }
@@ -9311,9 +9311,13 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Some(ty) = callee_ty
                     && self.module.get_function(&function_name).is_none()
                 {
+                    let captures_count = match &*ty.borrow() {
+                        Type::Closure(_, _, cc) => *cc,
+                        _ => 0,
+                    };
                     let (param_tys, ret_ty, is_vararg, throws_types) = match &*ty.borrow() {
                         Type::Function(pt, rt, iv, tt) => (pt.clone(), rt.clone(), *iv, tt.clone()),
-                        Type::Closure(pt, rt) => (pt.clone(), rt.clone(), false, None),
+                        Type::Closure(pt, rt, _) => (pt.clone(), rt.clone(), false, None),
                         _ => {
                             anyhow::bail!("Unsupported callee type for indirect call");
                         }
@@ -9334,7 +9338,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.get_function_type(ret_ty.clone(), all_param_tys, is_vararg)?;
 
                     let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
-                    let captures_count = param_tys.len().saturating_sub(parameters.len());
 
                     let (actual_fn_ptr, mut closure_args):
                         (PointerValue, Vec<inkwell::values::BasicMetadataValueEnum<'ctx>>) =
@@ -9349,7 +9352,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 self.context.struct_type(&ctx_fields, false);
                             let ctx_ptr = self.builder.build_pointer_cast(
                                 ctx_i8,
-                                ctx_struct_ty.as_basic_type_enum().into_pointer_type(),
+                                ptr_ty,
                                 "ctx_ptr",
                             )?;
 
@@ -9374,14 +9377,9 @@ impl<'ctx> IRGenerator<'ctx> {
                                     .into_pointer_value();
                                 let capture_llvm_ty =
                                     self.resolve_type(param_tys[i].clone())?;
-                                let typed_cell_ptr = self.builder.build_pointer_cast(
-                                    cell_ptr,
-                                    capture_llvm_ty.into_pointer_type(),
-                                    "typed_cell",
-                                )?;
                                 let capture_val = self.builder.build_load(
                                     capture_llvm_ty,
-                                    typed_cell_ptr,
+                                    cell_ptr,
                                     "capture_val",
                                 )?;
                                 args.push(capture_val.into());
@@ -10057,7 +10055,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         ty.as_ref().and_then(|t| {
                             let t_borrow = t.borrow();
                             match &*t_borrow {
-                                Type::Function(_, ret_ty, _, None) | Type::Closure(_, ret_ty) => {
+                                Type::Function(_, ret_ty, _, None) | Type::Closure(_, ret_ty, _) => {
                                     Some(ret_ty.clone())
                                 }
                                 _ => None,
@@ -10088,7 +10086,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     .and_then(|t| {
                         let t_borrow = t.borrow();
                         match &*t_borrow {
-                            Type::Function(pts, _, _, None) | Type::Closure(pts, _) => {
+                            Type::Function(pts, _, _, None) | Type::Closure(pts, _, _) => {
                                 Some(pts.clone())
                             }
                             _ => None,
@@ -11012,7 +11010,7 @@ impl<'ctx> IRGenerator<'ctx> {
             Type::Function(_, _, _, _) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }
-            Type::Closure(_, _) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
+            Type::Closure(_, _, _) => self.context.ptr_type(inkwell::AddressSpace::from(0)).into(),
             Type::Pointer(_) | Type::NonNullPointer(_) => {
                 self.context.ptr_type(inkwell::AddressSpace::from(0)).into()
             }

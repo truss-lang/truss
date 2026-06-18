@@ -24,7 +24,7 @@ pub enum Type {
     GenericParam(String),
     ConstGeneric(String, Rc<RefCell<Type>>),
     AssociatedType(Rc<RefCell<Type>>, String),
-    Closure(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>),
+    Closure(Vec<Rc<RefCell<Type>>>, Rc<RefCell<Type>>, usize),
 }
 
 impl fmt::Display for Type {
@@ -150,7 +150,7 @@ impl fmt::Display for Type {
             Type::GenericParam(name) => write!(f, "GenericParam({})", name),
             Type::ConstGeneric(name, ty) => write!(f, "ConstGeneric({}, {})", name, ty.borrow()),
             Type::AssociatedType(base, name) => write!(f, "{}.{}", base.borrow(), name),
-            Type::Closure(params, ret) => {
+            Type::Closure(params, ret, _) => {
                 write!(f, "(")?;
                 for (i, param) in params.iter().enumerate() {
                     if i > 0 {
@@ -184,7 +184,7 @@ impl PartialEq for Type {
             (Type::ConstGeneric(n1, t1), Type::ConstGeneric(n2, t2)) => n1 == n2 && t1 == t2,
             (Type::GenericParam(n1), Type::GenericParam(n2)) => n1 == n2,
             (Type::AssociatedType(b1, n1), Type::AssociatedType(b2, n2)) => b1 == b2 && n1 == n2,
-            (Type::Closure(p1, r1), Type::Closure(p2, r2)) => p1 == p2 && r1 == r2,
+            (Type::Closure(p1, r1, _), Type::Closure(p2, r2, _)) => p1 == p2 && r1 == r2,
             _ => false,
         }
     }

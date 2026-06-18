@@ -832,7 +832,7 @@ impl TypeResolver {
                                 }
                             };
                             if let Some((param_count, sc)) = closure_info {
-                                if let Type::Closure(expected_param_tys, _) = &*annotated.borrow()
+                                if let Type::Closure(expected_param_tys, _, _) = &*annotated.borrow()
                                     && !expected_param_tys.is_empty()
                                 {
                                     for (i, pt) in
@@ -3025,13 +3025,14 @@ impl TypeResolver {
                             callee_type.clone()
                         }
                     }
-                    Type::Closure(param_tys, ret_ty) => {
-                        if parameters.len() != param_tys.len() {
+                    Type::Closure(param_tys, ret_ty, captures_count) => {
+                        let explicit_tys = &param_tys[*captures_count..];
+                        if parameters.len() != explicit_tys.len() {
                             self.emit_error(
                                 TrussDiagnosticCode::ArgumentCountMismatch,
                                 format!(
                                     "Expected {} arguments but got {}",
-                                    param_tys.len(),
+                                    explicit_tys.len(),
                                     parameters.len()
                                 ),
                                 &callee.borrow().token(),
@@ -3039,7 +3040,7 @@ impl TypeResolver {
                             return None;
                         }
                         for (i, param) in parameters.iter().enumerate() {
-                            let expected_ty = param_tys[i].clone();
+                            let expected_ty = explicit_tys[i].clone();
                             self.infer_expression_type(param.expression.clone(), expected_ty);
                         }
                         ret_ty.clone()
@@ -4556,7 +4557,7 @@ impl TypeResolver {
                                     expected_params_opt = Some(expected_params.clone());
                                     expected_ret_opt = Some(expected_ret.clone());
                                 }
-                                Type::Closure(expected_params, expected_ret) => {
+                                Type::Closure(expected_params, expected_ret, _) => {
                                     expected_params_opt = Some(expected_params.clone());
                                     expected_ret_opt = Some(expected_ret.clone());
                                 }
@@ -4597,6 +4598,7 @@ impl TypeResolver {
                     }
                 }
 
+                let mut captured_types: Vec<Rc<RefCell<Type>>> = Vec::new();
                 if let Some(sc) = scope {
                     self.enter_scope(sc.clone());
 
@@ -4621,7 +4623,8 @@ impl TypeResolver {
                                 .as_ref()
                                 .unwrap()
                                 .borrow_mut()
-                                .set_type(cap_name, cap_type);
+                                .set_type(cap_name.clone(), cap_type.clone());
+                            captured_types.push(cap_type);
                         }
                     }
 
@@ -4685,9 +4688,12 @@ impl TypeResolver {
                     self.leave_scope();
                 }
 
+                let mut all_closure_param_types = captured_types.clone();
+                all_closure_param_types.extend(param_types.clone());
                 let fn_type = Rc::new(RefCell::new(Type::Closure(
-                    param_types.clone(),
+                    all_closure_param_types,
                     ret_type.clone(),
+                    captures.len(),
                 )));
                 *ty = Some(fn_type.clone());
                 fn_type
@@ -4705,7 +4711,7 @@ impl TypeResolver {
                 let ret = self
                     .infer_type(return_type.clone())
                     .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
-                let fn_type = Rc::new(RefCell::new(Type::Closure(params, ret)));
+                let fn_type = Rc::new(RefCell::new(Type::Closure(params, ret, 0)));
                 *ty = Some(fn_type.clone());
                 fn_type
             }

@@ -5174,7 +5174,7 @@ fn test_closure_type_resolved() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Closure(param_types, ret_type) = t {
+        if let Type::Closure(param_types, ret_type, _) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*param_types[1].borrow(), type_of("Int32"));
@@ -5215,7 +5215,7 @@ fn test_closure_no_params_no_return_type() {
     {
         assert!(ty.is_some(), "Empty closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Closure(param_types, ret_type) = t {
+        if let Type::Closure(param_types, ret_type, _) = t {
             assert_eq!(param_types.len(), 0);
             assert_eq!(*ret_type.borrow(), type_of("Int32"));
         } else {
@@ -5306,7 +5306,7 @@ fn test_function_type_expression_resolved() {
     {
         assert!(ty.is_some(), "ClosureType should have a resolved type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Closure(param_types, ret_type) = t {
+        if let Type::Closure(param_types, ret_type, _) = t {
             assert_eq!(param_types.len(), 1);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*ret_type.borrow(), type_of("Bool"));
@@ -5386,7 +5386,7 @@ fn test_closure_untyped_params_inferred() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Closure(param_types, ret_type) = t {
+        if let Type::Closure(param_types, ret_type, _) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*ret_type.borrow(), Type::Void);
         } else {
@@ -5479,7 +5479,7 @@ fn test_closure_shorthand_with_context() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Closure(param_types, ret_type) = t {
+        if let Type::Closure(param_types, ret_type, _) = t {
             assert_eq!(param_types.len(), 1);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*ret_type.borrow(), type_of("Int32"));
@@ -5517,7 +5517,7 @@ fn test_closure_shorthand_binary_with_context() {
     {
         assert!(ty.is_some(), "Closure should have a type");
         let t = ty.as_ref().unwrap().borrow().clone();
-        if let Type::Closure(param_types, ret_type) = t {
+        if let Type::Closure(param_types, ret_type, _) = t {
             assert_eq!(param_types.len(), 2);
             assert_eq!(*param_types[0].borrow(), type_of("Int32"));
             assert_eq!(*param_types[1].borrow(), type_of("Int32"));
@@ -8231,10 +8231,11 @@ fn test_closure_implicit_capture_type_resolved() {
             assert_eq!(captures.len(), 1, "Should have 1 capture");
             assert_eq!(captures[0].name.value, "a");
             let fn_ty = ty.as_ref().unwrap().borrow().clone();
-            if let Type::Closure(params, ret_type) = fn_ty {
+            if let Type::Closure(params, ret_type, captures_count) = fn_ty {
                 assert_eq!(*ret_type.borrow(), type_of("Int32"));
-                assert_eq!(params.len(), 1);
-                assert_eq!(*params[0].borrow(), type_of("Int32"));
+                assert_eq!(params.len(), 2);
+                assert_eq!(captures_count, 1);
+                assert_eq!(*params[1].borrow(), type_of("Int32"));
             } else {
                 panic!("Expected Type::Closure for captured closure");
             }
