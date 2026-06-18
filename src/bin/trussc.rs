@@ -274,9 +274,14 @@ fn main() {
         println!("{}", ir);
     }
 
+    // For standalone executables, only link the main module.
+    // Stdlib module may have incomplete functions (generics, etc.),
+    // so it is provided for shared/static library builds only.
+    let link_stdlib = if cli.shared || cli.r#static { modules.stdlib.as_deref() } else { None };
+
     match emit::emit_output(
         &modules.main,
-        modules.stdlib.as_deref(),
+        link_stdlib,
         &target_triple,
         &output_path,
         kind,
