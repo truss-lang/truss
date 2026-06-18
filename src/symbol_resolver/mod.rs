@@ -123,12 +123,40 @@ impl SymbolResolver {
 
     pub fn register_symbols(&mut self, stmt: Rc<RefCell<Statement>>) {
         match &mut *stmt.borrow_mut() {
-            Statement::FunctionDecl { name, body, .. } => {
+            Statement::FunctionDecl {
+                name,
+                body,
+                generic_parameters,
+                scope: fn_scope,
+                ..
+            } => {
                 let symbol = Rc::new(RefCell::new(Symbol::Function {
                     name: name.value.clone(),
                     decl: stmt.clone(),
                 }));
                 self.enter(symbol, name);
+                *fn_scope = Some(self.enter_scope(None));
+                for gp in generic_parameters {
+                    let gp_type = match &gp.kind {
+                        GenericParameterKind::Type { .. } => {
+                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                        }
+                        GenericParameterKind::Const { .. } => {
+                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                gp.name.value.clone(),
+                                Rc::new(RefCell::new(Type::Never)),
+                            )))
+                        }
+                    };
+                    fn_scope
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_type(gp.name.value.clone(), gp_type);
+                    if let Some(default_value) = &gp.default_value {
+                        self.resolve_expression(default_value.clone());
+                    }
+                }
                 match &*body.borrow() {
                     FunctionBody::Statements(stmts) => {
                         for s in stmts {
@@ -140,6 +168,7 @@ impl SymbolResolver {
                     }
                     FunctionBody::None => {}
                 }
+                self.leave_scope();
             }
             Statement::StructDecl {
                 name,
@@ -884,7 +913,9 @@ impl SymbolResolver {
                         } => {
                             self.resolve_expression(type_expression.clone());
                         }
-                        ProtocolMember::Subscript { accessors, .. } => {
+                        ProtocolMember::Subscript {
+                            accessors, ..
+                        } => {
                             let sub = Rc::new(RefCell::new(Symbol::ProtocolSubscript {
                                 name: "subscript".to_string(),
                                 parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
@@ -1407,7 +1438,11 @@ impl SymbolResolver {
                 where_clause,
                 ..
             } => {
-                *scope = Some(self.enter_scope(None));
+                if scope.is_none() {
+                    *scope = Some(self.enter_scope(None));
+                } else {
+                    self.enter_scope(scope.clone());
+                }
                 for gp in generic_parameters {
                     let gp_type = match &gp.kind {
                         GenericParameterKind::Type { .. } => {
@@ -2643,7 +2678,9 @@ impl SymbolResolver {
     }
 
     fn leave_scope(&mut self) {
-        self.current_scope = self.current_scope.clone().unwrap().borrow().parent.clone();
+        if let Some(scope) = self.current_scope.clone() {
+            self.current_scope = scope.borrow().parent.clone();
+        }
     }
 
     fn has_modifier(modifiers: &[Modifier], target: ModifierType) -> bool {

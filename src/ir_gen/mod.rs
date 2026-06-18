@@ -514,6 +514,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     .borrow_mut()
                     .insert(struct_name.clone(), struct_type);
             }
+        } else if let Statement::FunctionDecl { body, .. } = &*statement.borrow() {
+            if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                for stmt in stmts {
+                    self.declare_struct_types(stmt.clone());
+                }
+            }
         } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
             for stmt in body {
                 self.declare_struct_types(stmt.clone());
@@ -568,6 +574,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     .collect();
 
                 struct_type.set_body(&field_types, false);
+            }
+        } else if let Statement::FunctionDecl { body, .. } = &*statement.borrow() {
+            if let FunctionBody::Statements(stmts) = &*body.borrow() {
+                for stmt in stmts {
+                    self.create_struct_type_bodies(stmt.clone());
+                }
             }
         } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
             for stmt in body {
