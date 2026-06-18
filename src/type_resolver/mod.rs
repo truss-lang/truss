@@ -2371,8 +2371,40 @@ impl TypeResolver {
                 *ty = Some(t.clone());
                 t
             }
-            Expression::Type { name, ty, .. } => {
+            Expression::Type {
+                name,
+                type_parameters,
+                ty,
+                ..
+            } => {
                 let t = self.resolve_type_name(&name.value, name.as_ref())?;
+                let t = if let Some(params) = type_parameters {
+                    let resolved_params: Vec<Rc<RefCell<Type>>> = params
+                        .iter()
+                        .filter_map(|p| self.infer_type(p.clone()))
+                        .collect();
+                    let tb = t.borrow();
+                    match &*tb {
+                        Type::Struct(n, sym, _) => Rc::new(RefCell::new(Type::Struct(
+                            n.clone(),
+                            sym.clone(),
+                            resolved_params,
+                        ))),
+                        Type::Class(n, sym, _) => Rc::new(RefCell::new(Type::Class(
+                            n.clone(),
+                            sym.clone(),
+                            resolved_params,
+                        ))),
+                        Type::Enum(n, sym, _) => Rc::new(RefCell::new(Type::Enum(
+                            n.clone(),
+                            sym.clone(),
+                            resolved_params,
+                        ))),
+                        _ => t.clone(),
+                    }
+                } else {
+                    t
+                };
                 *ty = Some(t.clone());
                 t
             }
