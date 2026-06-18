@@ -4931,6 +4931,7 @@ impl Parser {
                         let type_expression = self.parse_type_expression()?;
                         let mut get = false;
                         let mut set = false;
+                        let mut default_accessors = Vec::new();
                         if let Some(next) = self.peek()
                             && SeparatorType::is_separator(&next, SeparatorType::OpenBrace)
                         {
@@ -4941,25 +4942,75 @@ impl Parser {
                                 }
                                 if let TokenType::Identifier = t.ty {
                                     match t.value.as_str() {
-                                        "get" => {
-                                            get = true;
-                                            self.index += 1;
-                                        }
-                                        "set" => {
-                                            set = true;
-                                            self.index += 1;
-                                        }
-                                        _ => {
-                                            self.emit_error(
-                                                TrussDiagnosticCode::UnexpectedToken,
-                                                format!(
-                                                    "Expected 'get' or 'set' in protocol property accessor, found '{}'",
-                                                    t.value
-                                                ),
-                                                &t,
-                                            );
-                                            return Err(());
-                                        }
+                        "get" => {
+                            get = true;
+                            self.index += 1;
+                            if let Some(open) = self.peek()
+                                && SeparatorType::is_separator(&open, SeparatorType::OpenBrace)
+                            {
+                                self.index += 1;
+                                let mut body = Vec::new();
+                                self.scope_nesting += 1;
+                                while let Some(bt) = self.peek() {
+                                    if SeparatorType::is_separator(&bt, SeparatorType::CloseBrace) {
+                                        break;
+                                    }
+                                    if let Ok(s) = self.parse_statement() {
+                                        body.push(Rc::new(RefCell::new(s)));
+                                    } else {
+                                        self.skip();
+                                    }
+                                }
+                                self.scope_nesting -= 1;
+                                let _ = self.next();
+                                default_accessors.push(Accessor {
+                                    kind: AccessorKind::Get,
+                                    parameter: None,
+                                    body,
+                                    set_access_modifier: None,
+                                });
+                            }
+                        }
+                        "set" => {
+                            set = true;
+                            self.index += 1;
+                            if let Some(open) = self.peek()
+                                && SeparatorType::is_separator(&open, SeparatorType::OpenBrace)
+                            {
+                                self.index += 1;
+                                let mut body = Vec::new();
+                                self.scope_nesting += 1;
+                                while let Some(bt) = self.peek() {
+                                    if SeparatorType::is_separator(&bt, SeparatorType::CloseBrace) {
+                                        break;
+                                    }
+                                    if let Ok(s) = self.parse_statement() {
+                                        body.push(Rc::new(RefCell::new(s)));
+                                    } else {
+                                        self.skip();
+                                    }
+                                }
+                                self.scope_nesting -= 1;
+                                let _ = self.next();
+                                default_accessors.push(Accessor {
+                                    kind: AccessorKind::Set,
+                                    parameter: None,
+                                    body,
+                                    set_access_modifier: None,
+                                });
+                            }
+                        }
+                        _ => {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnexpectedToken,
+                                format!(
+                                    "Expected 'get' or 'set' in protocol property accessor, found '{}'",
+                                    t.value
+                                ),
+                                &t,
+                            );
+                            return Err(());
+                        }
                                     }
                                 } else {
                                     self.emit_error(
@@ -4999,6 +5050,7 @@ impl Parser {
                             name: Box::new(prop_name),
                             type_expression: Rc::new(RefCell::new(type_expression)),
                             accessors: ProtocolAccessorSet { get, set },
+                            default_accessors,
                         });
                     }
                     TokenType::Keyword { keyword } if keyword == KeywordType::Typealias => {
@@ -5176,6 +5228,7 @@ impl Parser {
                         let return_type_expression = self.parse_type_expression()?;
                         let mut get = false;
                         let mut set = false;
+                        let mut default_accessors = Vec::new();
                         if let Some(next) = self.peek()
                             && SeparatorType::is_separator(&next, SeparatorType::OpenBrace)
                         {
@@ -5189,10 +5242,60 @@ impl Parser {
                                         "get" => {
                                             get = true;
                                             self.index += 1;
+                                            if let Some(open) = self.peek()
+                                                && SeparatorType::is_separator(&open, SeparatorType::OpenBrace)
+                                            {
+                                                self.index += 1;
+                                                let mut body = Vec::new();
+                                                self.scope_nesting += 1;
+                                                while let Some(bt) = self.peek() {
+                                                    if SeparatorType::is_separator(&bt, SeparatorType::CloseBrace) {
+                                                        break;
+                                                    }
+                                                    if let Ok(s) = self.parse_statement() {
+                                                        body.push(Rc::new(RefCell::new(s)));
+                                                    } else {
+                                                        self.skip();
+                                                    }
+                                                }
+                                                self.scope_nesting -= 1;
+                                                let _ = self.next();
+                                                default_accessors.push(Accessor {
+                                                    kind: AccessorKind::Get,
+                                                    parameter: None,
+                                                    body,
+                                                    set_access_modifier: None,
+                                                });
+                                            }
                                         }
                                         "set" => {
                                             set = true;
                                             self.index += 1;
+                                            if let Some(open) = self.peek()
+                                                && SeparatorType::is_separator(&open, SeparatorType::OpenBrace)
+                                            {
+                                                self.index += 1;
+                                                let mut body = Vec::new();
+                                                self.scope_nesting += 1;
+                                                while let Some(bt) = self.peek() {
+                                                    if SeparatorType::is_separator(&bt, SeparatorType::CloseBrace) {
+                                                        break;
+                                                    }
+                                                    if let Ok(s) = self.parse_statement() {
+                                                        body.push(Rc::new(RefCell::new(s)));
+                                                    } else {
+                                                        self.skip();
+                                                    }
+                                                }
+                                                self.scope_nesting -= 1;
+                                                let _ = self.next();
+                                                default_accessors.push(Accessor {
+                                                    kind: AccessorKind::Set,
+                                                    parameter: None,
+                                                    body,
+                                                    set_access_modifier: None,
+                                                });
+                                            }
                                         }
                                         _ => {
                                             self.emit_error(
@@ -5239,6 +5342,7 @@ impl Parser {
                             parameters,
                             return_type_expression: Rc::new(RefCell::new(return_type_expression)),
                             accessors: ProtocolAccessorSet { get, set },
+                            default_accessors,
                         });
                     }
                     _ => {

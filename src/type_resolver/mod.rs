@@ -7589,6 +7589,34 @@ impl TypeResolver {
                     .collect()
             };
 
+            let proto_decl_members: Vec<ProtocolMember> = protocol_symbol
+                .borrow()
+                .get_decl()
+                .ok()
+                .flatten()
+                .map(|d| {
+                    let stmt = d.borrow();
+                    match &*stmt {
+                        Statement::ProtocolDecl { members, .. } => members.clone(),
+                        _ => vec![],
+                    }
+                })
+                .unwrap_or_default();
+            let has_default_property = |name: &str| -> bool {
+                proto_decl_members.iter().any(|m| {
+                    if let ProtocolMember::Property { name: n, default_accessors, .. } = m {
+                        n.value == name && !default_accessors.is_empty()
+                    } else {
+                        false
+                    }
+                })
+            };
+            let has_default_subscript = || -> bool {
+                proto_decl_members.iter().any(|m| {
+                    matches!(m, ProtocolMember::Subscript { default_accessors, .. } if !default_accessors.is_empty())
+                })
+            };
+
             let required_prop_accessors: Vec<(String, ProtocolAccessorSet)> = {
                 let sym = protocol_symbol.borrow();
                 let Symbol::Protocol { properties, .. } = &*sym else {
@@ -7602,7 +7630,11 @@ impl TypeResolver {
                             name, accessors, ..
                         } = &*pb
                         {
-                            Some((name.clone(), *accessors))
+                            if has_default_property(name) {
+                                None
+                            } else {
+                                Some((name.clone(), *accessors))
+                            }
                         } else {
                             None
                         }
@@ -7764,7 +7796,7 @@ impl TypeResolver {
                             self.emit_error(
                                 TrussDiagnosticCode::ProtocolRequirementNotImplemented,
                                 format!(
-                                    "Type '{}' does not implement protocol '{}' requirement: 'var {{ get set }} {}' — property is not settable",
+                                    "Type '{}' does not implement protocol '{}' requirement: 'var {} {{ get set }}' — property is not settable",
                                     type_name, protocol_name, req_prop
                                 ),
                                 type_token,
@@ -7779,17 +7811,21 @@ impl TypeResolver {
                 let Symbol::Protocol { subscripts, .. } = &*sym else {
                     continue;
                 };
-                subscripts
-                    .iter()
-                    .filter_map(|s| {
-                        let sb = s.borrow();
-                        if let Symbol::ProtocolSubscript { accessors, .. } = &*sb {
-                            Some(*accessors)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
+                if has_default_subscript() {
+                    vec![]
+                } else {
+                    subscripts
+                        .iter()
+                        .filter_map(|s| {
+                            let sb = s.borrow();
+                            if let Symbol::ProtocolSubscript { accessors, .. } = &*sb {
+                                Some(*accessors)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                }
             };
 
             for req_sub in &required_subscripts {

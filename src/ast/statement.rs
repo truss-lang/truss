@@ -519,6 +519,7 @@ pub enum ProtocolMember {
         name: Box<Token>,
         type_expression: Rc<RefCell<Expression>>,
         accessors: ProtocolAccessorSet,
+        default_accessors: Vec<Accessor>,
     },
     AssociatedType {
         token: Box<Token>,
@@ -537,6 +538,7 @@ pub enum ProtocolMember {
         parameters: Vec<Rc<RefCell<Parameter>>>,
         return_type_expression: Rc<RefCell<Expression>>,
         accessors: ProtocolAccessorSet,
+        default_accessors: Vec<Accessor>,
     },
 }
 
