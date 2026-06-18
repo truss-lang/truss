@@ -9412,7 +9412,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             let value_ptr_ptr = self.builder.build_struct_gep(struct_ty, container, 0, "")?;
                             self.builder.build_store(value_ptr_ptr, val_alloca)?;
                             let wt_ptr_ptr = self.builder.build_struct_gep(struct_ty, container, 1, "")?;
-                            let wt_global = self.protocol_witness_tables.borrow().iter().find_map(|((pn, ts), gv)| {
+                            let wt_global = self.protocol_witness_tables.borrow().iter().find_map(|((pn, _ts), gv)| {
                                 if pn == protocol_name { Some(*gv) } else { None }
                             });
                             if let Some(wt_gv) = wt_global {
