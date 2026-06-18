@@ -6868,11 +6868,12 @@ impl TypeResolver {
         let decl = binding.get_decl().ok().flatten()?;
         drop(binding);
         drop(scope_ref);
-        let conformances = match &*decl.borrow() {
-            Statement::StructDecl { conformances, .. }
-            | Statement::ClassDecl { conformances, .. } => conformances.clone(),
+        let (body, conformances) = match &*decl.borrow() {
+            Statement::StructDecl { body, conformances, .. }
+            | Statement::ClassDecl { body, conformances, .. } => (body.clone(), conformances.clone()),
             _ => return None,
         };
+        // Check explicit type parameters on Iterator conformance (e.g. Iterator<Int64>)
         for conf in &conformances {
             if let Expression::Type {
                 name,
@@ -6886,11 +6887,85 @@ impl TypeResolver {
                             return self.infer_type(first_param.clone());
                         }
                     }
-                    return None;
+                    break;
+                }
+            }
+        }
+        // Infer Item by looking at the Iterator protocol's method requirements.
+        // The protocol has a generic param (e.g. Item), and methods using it
+        // (e.g. next() -> Item?). Find the concrete type's implementation of
+        // any such method and extract the concrete type from its return type.
+        let scope_ref = self.current_scope.as_ref()?.borrow();
+        let iterator_sym = scope_ref.get_symbol("Iterator")?;
+        let iterator_binding = iterator_sym.borrow();
+        let Symbol::Protocol { decl, methods, .. } = &*iterator_binding else {
+            return None;
+        };
+        // Get the name of the first generic param (e.g. "Item") from the protocol decl
+        let item_param_name = match &*decl.borrow() {
+            Statement::ProtocolDecl { generic_parameters, .. } => {
+                generic_parameters.first()?.name.value.clone()
+            }
+            _ => return None,
+        };
+        // Find protocol methods whose return type references the Item param
+        for method in methods {
+            let decl_ref = method.borrow().get_decl().ok().flatten()?;
+            let ty = match &*decl_ref.borrow() {
+                Statement::FunctionDecl { ty: Some(t), .. } => t.clone(),
+                _ => continue,
+            };
+            let ret_ty = match &*ty.borrow() {
+                Type::Function(_, ret, _, _) => ret.clone(),
+                _ => continue,
+            };
+            // Check if the return type contains the Item param (e.g. Optional<Item>)
+            if !Self::type_uses_generic_param(&ret_ty.borrow(), &item_param_name) {
+                continue;
+            }
+            // Find the concrete type's method that matches this protocol requirement
+            let proto_method_name = method.borrow().name().ok();
+            for stmt in &body {
+                if let Statement::FunctionDecl {
+                    name: method_name,
+                    ty: Some(method_ty),
+                    ..
+                } = &*stmt.borrow()
+                    && proto_method_name.as_deref() == Some(&method_name.value)
+                {
+                    if let Type::Function(_, concrete_ret_ty, _, _) = &*method_ty.borrow()
+                        && let Type::Enum(_, _, params) = &*concrete_ret_ty.borrow()
+                        && !params.is_empty()
+                    {
+                        return Some(params[0].clone());
+                    }
                 }
             }
         }
         None
+    }
+
+    fn type_uses_generic_param(ty: &Type, param_name: &str) -> bool {
+        match ty {
+            Type::GenericParam(name) => name == param_name,
+            Type::Pointer(inner) | Type::NonNullPointer(inner) | Type::Inline(inner, _) => {
+                Self::type_uses_generic_param(&inner.borrow(), param_name)
+            }
+            Type::Struct(_, _, params)
+            | Type::Class(_, _, params)
+            | Type::Enum(_, _, params)
+            | Type::Protocol(_, _, params) => {
+                params.iter().any(|p| Self::type_uses_generic_param(&p.borrow(), param_name))
+            }
+            Type::Function(params, ret, _, _) => {
+                params.iter().any(|p| Self::type_uses_generic_param(&p.borrow(), param_name))
+                    || Self::type_uses_generic_param(&ret.borrow(), param_name)
+            }
+            Type::Tuple(elems) => {
+                elems.iter().any(|(_, t)| Self::type_uses_generic_param(&t.borrow(), param_name))
+            }
+            _ => false,
+        }
     }
 
     fn set_binding_types(
