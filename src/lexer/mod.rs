@@ -935,7 +935,16 @@ impl Lexer {
         self.input.inc_pos();
         let mut value = String::new();
         while !self.is_empty() && self.input.peek() != '"' {
-            value += self.input.next().unwrap().to_string().as_str();
+            if self.input.peek() == '\\' {
+                if let Some(parsed) = self.parse_a_char() {
+                    value.push(parsed);
+                } else {
+                    value.push('\\');
+                }
+            } else {
+                let c = self.input.next().unwrap();
+                value.push(c);
+            }
         }
         if self.input.peek() == '"' {
             self.input.inc_pos();
