@@ -2738,24 +2738,18 @@ impl<'ctx> IRGenerator<'ctx> {
     fn create_protocol_witness_tables(&self, statement: Rc<RefCell<Statement>>) {
         let (type_name, type_arguments_opt) =
             if let Statement::ClassDecl {
-                name,
-                conformances,
-                where_clause,
-                ..
+                name, conformances, ..
             } = &*statement.borrow()
             {
-                if conformances.is_empty() || where_clause.is_some() {
+                if conformances.is_empty() {
                     return;
                 }
                 (name.value.clone(), None)
             } else if let Statement::StructDecl {
-                name,
-                conformances,
-                where_clause,
-                ..
+                name, conformances, ..
             } = &*statement.borrow()
             {
-                if conformances.is_empty() || where_clause.is_some() {
+                if conformances.is_empty() {
                     return;
                 }
                 (name.value.clone(), None)
@@ -2763,11 +2757,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 type_name,
                 conformances,
                 type_arguments,
-                where_clause,
                 ..
             } = &*statement.borrow()
             {
-                if conformances.is_empty() || where_clause.is_some() {
+                if conformances.is_empty() {
                     return;
                 }
                 (type_name.value.clone(), type_arguments.clone())
