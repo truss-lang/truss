@@ -36,6 +36,7 @@ impl Precedence {
                 OperatorType::And => Some(Precedence::And),
                 OperatorType::NullCoalescing => Some(Precedence::NullCoalescing),
                 OperatorType::BitOr => Some(Precedence::BitOr),
+                OperatorType::BitXor => Some(Precedence::BitOr),
                 OperatorType::BitAnd => Some(Precedence::BitAnd),
                 OperatorType::Equal | OperatorType::NotEqual => Some(Precedence::Equality),
                 OperatorType::Less

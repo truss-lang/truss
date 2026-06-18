@@ -1,6 +1,6 @@
 pub mod precedence;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
@@ -13,8 +13,9 @@ use crate::{
             AccessModifier, Accessor, AccessorKind, AsmDirection, AsmOperand, Attribute,
             CatchClause, Condition, ConditionalClause, EnumCase, EnumCaseParameter, FunctionBody,
             GenericParameter, GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType,
-            MacroPatternFragment, MatchCase, Modifier, ModifierType, OperatorFixity,
-            OwnershipModifier, Parameter, Pattern, ProtocolAccessorSet, ProtocolMember,
+            MacroPatternFragment, MatchCase, Modifier, ModifierType, OperatorDeclFixity,
+            OperatorFixity, OwnershipModifier, Parameter, Pattern, PrecedenceAssociativity,
+            ProtocolAccessorSet, ProtocolMember,
             SelectiveAlias, SelectiveMember, Statement, VariadicKind, WhereRequirement,
             WhereRequirementKind,
         },
@@ -33,6 +34,8 @@ pub struct Parser {
     pending_greater_count: u32,
     scope_nesting: usize,
     suppress_trailing_closure: bool,
+    precedence_groups: HashMap<String, Precedence>,
+    registered_operators: HashMap<String, OperatorDeclFixity>,
 }
 
 impl Parser {
@@ -49,6 +52,8 @@ impl Parser {
             pending_greater_count: 0,
             scope_nesting: 0,
             suppress_trailing_closure: false,
+            precedence_groups: HashMap::new(),
+            registered_operators: HashMap::new(),
         }
     }
 
@@ -251,6 +256,26 @@ impl Parser {
                 KeywordType::Module => self.parse_module_decl(modifiers),
                 KeywordType::Import => self.parse_import(),
                 KeywordType::Subscript => self.parse_subscript_decl(modifiers),
+                KeywordType::Precedencegroup => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_precedencegroup_decl()
+                }
+                KeywordType::Operator => {
+                    if !modifiers.is_empty() {
+                        self.emit_error(
+                            TrussDiagnosticCode::ModifierNotAllowedHere,
+                            format!("Modifiers are not allowed on '{}' declaration", token.value),
+                            &modifiers[0].token,
+                        );
+                    }
+                    self.parse_operator_decl()
+                }
                 KeywordType::Macro => {
                     if !modifiers.is_empty() {
                         self.emit_error(
@@ -393,60 +418,103 @@ impl Parser {
                 return Err(());
             };
             let mut token = token;
-            while !self.is_empty()
-                && let Some(prec) = Precedence::get_precedence(&token)
-                && prec > precedence
-            {
+            while !self.is_empty() {
+                let prec = Precedence::get_precedence(&token)
+                    .or_else(|| self.precedence_groups.get(&token.value).copied());
+                let Some(prec) = prec else { break };
+                if prec <= precedence { break; }
                 self.index += 1;
                 if let TokenType::Operator { operator } = token.ty {
                     let right = self.parse_binary(prec)?;
-                    let op = BinaryOperator::from_operator(operator);
-                    let Some(op) = op else {
-                        self.emit_error(
-                            TrussDiagnosticCode::InvalidOperator,
-                            format!("Invalid binary operator '{}'", token.value),
-                            &token,
-                        );
-                        return Err(());
-                    };
-                    if matches!(
-                        op,
-                        BinaryOperator::RangeTo
-                            | BinaryOperator::RangeUntil
-                            | BinaryOperator::OpenRange
-                    ) {
-                        let range_token = Token::new(
-                            "range".to_string(),
+                    if let Some(op) = BinaryOperator::from_operator(operator) {
+                        if matches!(
+                            op,
+                            BinaryOperator::RangeTo
+                                | BinaryOperator::RangeUntil
+                                | BinaryOperator::OpenRange
+                        ) {
+                            let range_token = Token::new(
+                                "range".to_string(),
+                                TokenType::Identifier,
+                                token.position.clone(),
+                                token.file.clone(),
+                            );
+                            let from_label = Token::new(
+                                "from".to_string(),
+                                TokenType::Identifier,
+                                token.position.clone(),
+                                token.file.clone(),
+                            );
+                            let to_label = Token::new(
+                                "to".to_string(),
+                                TokenType::Identifier,
+                                token.position.clone(),
+                                token.file.clone(),
+                            );
+                            left = Expression::Call {
+                                callee: Rc::new(RefCell::new(Expression::Variable {
+                                    name: Box::new(range_token),
+                                    ty: None,
+                                    symbol: None,
+                                })),
+                                type_parameters: None,
+                                parameters: vec![
+                                    crate::ast::expression::CallParameter {
+                                        label: Some(Box::new(from_label)),
+                                        expression: Rc::new(RefCell::new(left)),
+                                    },
+                                    crate::ast::expression::CallParameter {
+                                        label: Some(Box::new(to_label)),
+                                        expression: Rc::new(RefCell::new(right)),
+                                    },
+                                ],
+                                overloads: vec![],
+                                selected_index: None,
+                                ty: None,
+                            };
+                        } else {
+                            left = Expression::Binary {
+                                left: Rc::new(RefCell::new(left)),
+                                operator: op,
+                                right: Rc::new(RefCell::new(right)),
+                                overloads: vec![],
+                                selected_index: None,
+                            };
+                        }
+                    } else {
+                        let op_name = token.value.clone();
+                        let left_label = Token::new(
+                            "left".to_string(),
                             TokenType::Identifier,
                             token.position.clone(),
                             token.file.clone(),
                         );
-                        let from_label = Token::new(
-                            "from".to_string(),
+                        let right_label = Token::new(
+                            "right".to_string(),
                             TokenType::Identifier,
                             token.position.clone(),
                             token.file.clone(),
                         );
-                        let to_label = Token::new(
-                            "to".to_string(),
+                        let callee_name = Token::new(
+                            op_name.clone(),
                             TokenType::Identifier,
                             token.position.clone(),
                             token.file.clone(),
                         );
                         left = Expression::Call {
                             callee: Rc::new(RefCell::new(Expression::Variable {
-                                name: Box::new(range_token),
+                                name: Box::new(callee_name),
                                 ty: None,
                                 symbol: None,
                             })),
                             type_parameters: None,
                             parameters: vec![
                                 crate::ast::expression::CallParameter {
-                                    label: Some(Box::new(from_label)),
+                                    label: Some(Box::new(left_label)),
                                     expression: Rc::new(RefCell::new(left)),
                                 },
                                 crate::ast::expression::CallParameter {
-                                    label: Some(Box::new(to_label)),
+                                    label: Some(Box::new(right_label)),
                                     expression: Rc::new(RefCell::new(right)),
                                 },
                             ],
@@ -454,15 +522,51 @@ impl Parser {
                             selected_index: None,
                             ty: None,
                         };
-                    } else {
-                        left = Expression::Binary {
-                            left: Rc::new(RefCell::new(left)),
-                            operator: op,
-                            right: Rc::new(RefCell::new(right)),
-                            overloads: vec![],
-                            selected_index: None,
-                        };
                     }
+                } else if let TokenType::Identifier = token.ty
+                    && self.registered_operators.get(&token.value) == Some(&OperatorDeclFixity::Infix)
+                {
+                    let right = self.parse_binary(prec)?;
+                    let op_name = token.value.clone();
+                    let left_label = Token::new(
+                        "left".to_string(),
+                        TokenType::Identifier,
+                        token.position.clone(),
+                        token.file.clone(),
+                    );
+                    let right_label = Token::new(
+                        "right".to_string(),
+                        TokenType::Identifier,
+                        token.position.clone(),
+                        token.file.clone(),
+                    );
+                    let callee_name = Token::new(
+                        op_name,
+                        TokenType::Identifier,
+                        token.position.clone(),
+                        token.file.clone(),
+                    );
+                    left = Expression::Call {
+                        callee: Rc::new(RefCell::new(Expression::Variable {
+                            name: Box::new(callee_name),
+                            ty: None,
+                            symbol: None,
+                        })),
+                        type_parameters: None,
+                        parameters: vec![
+                            crate::ast::expression::CallParameter {
+                                label: Some(Box::new(left_label)),
+                                expression: Rc::new(RefCell::new(left)),
+                            },
+                            crate::ast::expression::CallParameter {
+                                label: Some(Box::new(right_label)),
+                                expression: Rc::new(RefCell::new(right)),
+                            },
+                        ],
+                        overloads: vec![],
+                        selected_index: None,
+                        ty: None,
+                    };
                 } else if let TokenType::Keyword { keyword } = token.ty
                     && keyword == KeywordType::As
                 {
@@ -564,6 +668,41 @@ impl Parser {
                 overloads: vec![],
                 selected_index: None,
             })
+        } else if let Some(token) = self.peek()
+            && let TokenType::Identifier = token.ty
+            && self.registered_operators.get(&token.value) == Some(&OperatorDeclFixity::Prefix)
+        {
+            self.index += 1;
+            let expression = self.parse_unary()?;
+            let op_name = token.value.clone();
+            let arg_label = Token::new(
+                "value".to_string(),
+                TokenType::Identifier,
+                token.position.clone(),
+                token.file.clone(),
+            );
+            Ok(Expression::Call {
+                callee: Rc::new(RefCell::new(Expression::Variable {
+                    name: Box::new(Token::new(
+                        op_name,
+                        TokenType::Identifier,
+                        token.position.clone(),
+                        token.file.clone(),
+                    )),
+                    ty: None,
+                    symbol: None,
+                })),
+                type_parameters: None,
+                parameters: vec![
+                    crate::ast::expression::CallParameter {
+                        label: Some(Box::new(arg_label)),
+                        expression: Rc::new(RefCell::new(expression)),
+                    },
+                ],
+                overloads: vec![],
+                selected_index: None,
+                ty: None,
+            })
         } else {
             let expression = self.parse_primary()?;
             if let Some(token) = self.peek()
@@ -589,8 +728,79 @@ impl Parser {
                         })
                     }
                     OperatorType::Not => Ok(expression),
-                    _ => Ok(expression),
+                    _ => {
+                        if let TokenType::Identifier = token.ty
+                            && self.registered_operators.get(&token.value) == Some(&OperatorDeclFixity::Postfix)
+                        {
+                            self.index += 1;
+                            let op_name = token.value.clone();
+                            let arg_label = Token::new(
+                                "value".to_string(),
+                                TokenType::Identifier,
+                                token.position.clone(),
+                                token.file.clone(),
+                            );
+                            Ok(Expression::Call {
+                                callee: Rc::new(RefCell::new(Expression::Variable {
+                                    name: Box::new(Token::new(
+                                        op_name,
+                                        TokenType::Identifier,
+                                        token.position.clone(),
+                                        token.file.clone(),
+                                    )),
+                                    ty: None,
+                                    symbol: None,
+                                })),
+                                type_parameters: None,
+                                parameters: vec![
+                                    crate::ast::expression::CallParameter {
+                                        label: Some(Box::new(arg_label)),
+                                        expression: Rc::new(RefCell::new(expression)),
+                                    },
+                                ],
+                                overloads: vec![],
+                                selected_index: None,
+                                ty: None,
+                            })
+                        } else {
+                            Ok(expression)
+                        }
+                    }
                 }
+            } else if let Some(token) = self.peek()
+                && let TokenType::Identifier = token.ty
+                && self.registered_operators.get(&token.value) == Some(&OperatorDeclFixity::Postfix)
+            {
+                self.index += 1;
+                let op_name = token.value.clone();
+                let arg_label = Token::new(
+                    "value".to_string(),
+                    TokenType::Identifier,
+                    token.position.clone(),
+                    token.file.clone(),
+                );
+                Ok(Expression::Call {
+                    callee: Rc::new(RefCell::new(Expression::Variable {
+                        name: Box::new(Token::new(
+                            op_name,
+                            TokenType::Identifier,
+                            token.position.clone(),
+                            token.file.clone(),
+                        )),
+                        ty: None,
+                        symbol: None,
+                    })),
+                    type_parameters: None,
+                    parameters: vec![
+                        crate::ast::expression::CallParameter {
+                            label: Some(Box::new(arg_label)),
+                            expression: Rc::new(RefCell::new(expression)),
+                        },
+                    ],
+                    overloads: vec![],
+                    selected_index: None,
+                    ty: None,
+                })
             } else {
                 Ok(expression)
             }
@@ -2304,6 +2514,219 @@ impl Parser {
             body: Rc::new(RefCell::new(body)),
             scope: None,
             ty: None,
+        })
+    }
+
+    fn parse_operator_decl(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        let fixity = match self.peek() {
+            Some(t) if KeywordType::is_keyword(&t, KeywordType::Prefix) => {
+                self.index += 1;
+                OperatorDeclFixity::Prefix
+            }
+            Some(t) if KeywordType::is_keyword(&t, KeywordType::Postfix) => {
+                self.index += 1;
+                OperatorDeclFixity::Postfix
+            }
+            Some(t) if KeywordType::is_keyword(&t, KeywordType::Infix) => {
+                self.index += 1;
+                OperatorDeclFixity::Infix
+            }
+            Some(t) => {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    format!("Expected 'prefix', 'postfix', or 'infix' after 'operator', found '{}'", t.value),
+                    &t,
+                );
+                return Err(());
+            }
+            None => {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected 'prefix', 'postfix', or 'infix' after 'operator'".to_string(),
+                    &token,
+                );
+                return Err(());
+            }
+        };
+        let symbol = if let Some(t) = self.peek()
+            && matches!(t.ty, TokenType::Identifier)
+        {
+            let sym = self.next().unwrap().value.clone();
+            sym
+        } else {
+            let mut sym = String::new();
+            while let Some(t) = self.peek() {
+                if matches!(t.ty, TokenType::Operator { .. }) {
+                    sym.push_str(&self.next().unwrap().value);
+                } else {
+                    break;
+                }
+            }
+            if sym.is_empty() {
+                self.emit_error(
+                    TrussDiagnosticCode::ExpectedIdentifier,
+                    "Expected operator symbol (identifier or operator tokens) after fixity keyword".to_string(),
+                    &token,
+                );
+                return Err(());
+            }
+            sym
+        };
+        self.registered_operators.insert(symbol.clone(), fixity);
+        let precedence_group = if fixity == OperatorDeclFixity::Infix {
+            if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Colon)
+            {
+                self.index += 1;
+                let Some(group) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        "Expected precedence group name after ':'".to_string(),
+                        &token,
+                    );
+                    return Err(());
+                };
+                if !matches!(group.ty, TokenType::Identifier) {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!("Expected precedence group name but found '{}'", group.value),
+                        &group,
+                    );
+                    return Err(());
+                }
+                Some(group.value)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some(ref group) = precedence_group {
+            if let Some(prec) = self.precedence_groups.get(group) {
+                self.precedence_groups.insert(symbol.clone(), *prec);
+            }
+        }
+        Ok(Statement::OperatorDecl {
+            token: Box::new(token),
+            fixity,
+            symbol,
+            precedence_group,
+        })
+    }
+
+    fn parse_precedencegroup_decl(&mut self) -> Result<Statement, ()> {
+        let token = self.next().unwrap();
+        let Some(name) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                "Expected precedence group name".to_string(),
+                &token,
+            );
+            return Err(());
+        };
+        if !matches!(name.ty, TokenType::Identifier) {
+            self.emit_error(
+                TrussDiagnosticCode::ExpectedIdentifier,
+                format!("Expected precedence group name but found '{}'", name.value),
+                &name,
+            );
+            return Err(());
+        }
+        let Some(open) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '{' to open precedence group body".to_string(),
+                &name,
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&open, SeparatorType::OpenBrace) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '{{' but found '{}'", open.value),
+                &open,
+            );
+            return Err(());
+        }
+        let mut precedence: u32 = 100;
+        let mut associativity = PrecedenceAssociativity::Left;
+        loop {
+            let Some(peek) = self.peek() else { break };
+            if SeparatorType::is_separator(&peek, SeparatorType::CloseBrace) {
+                break;
+            }
+            if let TokenType::Identifier = peek.ty {
+                match peek.value.as_str() {
+                    "precedence" => {
+                        self.index += 1;
+                        let Some(colon) = self.next() else { break };
+                        if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
+                            break;
+                        }
+                        let Some(val) = self.next() else { break };
+                        if let TokenType::IntegerLiteral { value } = val.ty {
+                            precedence = value as u32;
+                        }
+                    }
+                    "associativity" => {
+                        self.index += 1;
+                        let Some(colon) = self.next() else { break };
+                        if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
+                            break;
+                        }
+                        if let Some(val) = self.next() {
+                            match val.value.as_str() {
+                                "left" => associativity = PrecedenceAssociativity::Left,
+                                "right" => associativity = PrecedenceAssociativity::Right,
+                                "none" => associativity = PrecedenceAssociativity::None,
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => { self.index += 1; }
+                }
+            } else {
+                self.index += 1;
+            }
+        }
+        let Some(close) = self.next() else {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                "Expected '}' to close precedence group body".to_string(),
+                &name,
+            );
+            return Err(());
+        };
+        if !SeparatorType::is_separator(&close, SeparatorType::CloseBrace) {
+            self.emit_error(
+                TrussDiagnosticCode::MissingSeparator,
+                format!("Expected '}}' but found '{}'", close.value),
+                &close,
+            );
+            return Err(());
+        }
+        let prec_enum = match precedence {
+            0..=20 => Precedence::Assignment,
+            21..=40 => Precedence::Or,
+            41..=60 => Precedence::And,
+            61..=80 => Precedence::NullCoalescing,
+            81..=100 => Precedence::BitOr,
+            101..=120 => Precedence::BitAnd,
+            121..=140 => Precedence::Equality,
+            141..=160 => Precedence::Relational,
+            161..=180 => Precedence::Range,
+            181..=200 => Precedence::Shift,
+            201..=220 => Precedence::Additive,
+            221..=240 => Precedence::Multiplicative,
+            _ => Precedence::Multiplicative,
+        };
+        self.precedence_groups.insert(name.value.clone(), prec_enum);
+        Ok(Statement::PrecedenceGroupDecl {
+            token: Box::new(token),
+            name: Box::new(name),
+            precedence,
+            associativity,
         })
     }
 

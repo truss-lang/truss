@@ -92,6 +92,9 @@ pub enum KeywordType {
     Catch,
     Throws,
     Finally,
+    Operator,
+    Infix,
+    Precedencegroup,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -138,8 +141,10 @@ pub enum OperatorType {
     Not,              // !
     BitAnd,           // &
     BitOr,            // |
+    BitXor,           // ^
     BitAndAssign,     // &=
     BitOrAssign,      // |=
+    BitXorAssign,     // ^=
     BitNot,           // ~
     LeftShift,        // <<
     RightShift,       // >>
@@ -221,6 +226,9 @@ impl KeywordType {
             KeywordType::Catch => "catch",
             KeywordType::Throws => "throws",
             KeywordType::Finally => "finally",
+            KeywordType::Operator => "operator",
+            KeywordType::Infix => "infix",
+            KeywordType::Precedencegroup => "precedencegroup",
         }
         .to_string()
     }

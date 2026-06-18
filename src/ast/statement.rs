@@ -210,6 +210,18 @@ pub enum Statement {
         scope: Option<Rc<RefCell<Scope>>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    OperatorDecl {
+        token: Box<Token>,
+        fixity: OperatorDeclFixity,
+        symbol: String,
+        precedence_group: Option<String>,
+    },
+    PrecedenceGroupDecl {
+        token: Box<Token>,
+        name: Box<Token>,
+        precedence: u32,
+        associativity: PrecedenceAssociativity,
+    },
     MacroDecl {
         token: Box<Token>,
         name: Box<Token>,
@@ -267,6 +279,8 @@ impl Statement {
             Self::ModuleDecl { token, .. } => (**token).clone(),
             Self::ImportDecl { token, .. } => (**token).clone(),
             Self::SubscriptDecl { token, .. } => (**token).clone(),
+            Self::OperatorDecl { token, .. } => (**token).clone(),
+            Self::PrecedenceGroupDecl { token, .. } => (**token).clone(),
             Self::MacroDecl { token, .. } => (**token).clone(),
             Self::ConditionalBlock { clauses } => {
                 clauses.first().map(|c| c.token.as_ref().clone()).unwrap()
@@ -295,6 +309,8 @@ impl Statement {
             Self::ModuleDecl { modifiers, .. } => Ok(modifiers.clone()),
             Self::ImportDecl { .. } => Ok(vec![]),
             Self::SubscriptDecl { modifiers, .. } => Ok(modifiers.clone()),
+            Self::OperatorDecl { .. } => Ok(vec![]),
+            Self::PrecedenceGroupDecl { .. } => Ok(vec![]),
             Self::ConditionalBlock { .. } => Ok(vec![]),
             Self::PragmaError { .. } => Ok(vec![]),
             Self::PragmaWarning { .. } => Ok(vec![]),
@@ -322,6 +338,20 @@ pub struct Modifier {
 pub enum OperatorFixity {
     Prefix,
     Postfix,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OperatorDeclFixity {
+    Prefix,
+    Postfix,
+    Infix,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PrecedenceAssociativity {
+    Left,
+    Right,
+    None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

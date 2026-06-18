@@ -831,6 +831,30 @@ impl Lexer {
                     self.input.file.clone(),
                 ))
             }
+        } else if c == '^' {
+            let begin_pos = self.input.get_current_position();
+            self.input.inc_pos();
+            if self.input.peek() == '=' {
+                let position = self.get_position_with_begin(begin_pos, None);
+                self.input.inc_pos();
+                Some(Token::new(
+                    "^=".to_string(),
+                    TokenType::Operator {
+                        operator: OperatorType::BitXorAssign,
+                    },
+                    position,
+                    self.input.file.clone(),
+                ))
+            } else {
+                Some(Token::new(
+                    '^'.to_string(),
+                    TokenType::Operator {
+                        operator: OperatorType::BitXor,
+                    },
+                    begin_pos,
+                    self.input.file.clone(),
+                ))
+            }
         } else {
             Some(self.parse_identifier())
         }

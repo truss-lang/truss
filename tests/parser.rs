@@ -9,7 +9,7 @@ use truss::{
         statement::{
             AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
             GenericParameterKind, ImportKind, MacroMetaVarType, MacroPatternFragment, Modifier,
-            ModifierType, OperatorFixity, OwnershipModifier, Parameter, Pattern, ProtocolMember,
+            ModifierType, OperatorDeclFixity, OperatorFixity, OwnershipModifier, Parameter, Pattern, ProtocolMember,
             SelectiveAlias, Statement, VariadicKind, WhereRequirementKind,
         },
     },
@@ -10051,6 +10051,176 @@ fn test_parse_compound_assignment_operator_function_decl() {
         assert_eq!(name.value, "+=");
     } else {
         panic!("Expected FunctionDecl");
+    }
+}
+
+#[test]
+fn test_parse_operator_prefix_decl() {
+    let engine = create_engine();
+    let code = "operator prefix myNegate";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    drop(engine_ref);
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::OperatorDecl {
+        fixity, symbol, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(*fixity, OperatorDeclFixity::Prefix);
+        assert_eq!(symbol, "myNegate");
+    } else {
+        panic!("Expected OperatorDecl");
+    }
+}
+
+#[test]
+fn test_parse_operator_postfix_decl() {
+    let engine = create_engine();
+    let code = "operator postfix myIncrement";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    drop(engine_ref);
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::OperatorDecl {
+        fixity, symbol, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(*fixity, OperatorDeclFixity::Postfix);
+        assert_eq!(symbol, "myIncrement");
+    } else {
+        panic!("Expected OperatorDecl");
+    }
+}
+
+#[test]
+fn test_parse_operator_infix_decl() {
+    let engine = create_engine();
+    let code = "operator infix myAdd";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    drop(engine_ref);
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::OperatorDecl {
+        fixity, symbol, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(*fixity, OperatorDeclFixity::Infix);
+        assert_eq!(symbol, "myAdd");
+    } else {
+        panic!("Expected OperatorDecl");
+    }
+}
+
+#[test]
+fn test_parse_operator_infix_decl_with_precedence() {
+    let engine = create_engine();
+    let code = "operator infix myAdd: MyPrecedence";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    drop(engine_ref);
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::OperatorDecl {
+        fixity,
+        symbol,
+        precedence_group,
+        ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(*fixity, OperatorDeclFixity::Infix);
+        assert_eq!(symbol, "myAdd");
+        assert_eq!(precedence_group.as_deref(), Some("MyPrecedence"));
+    } else {
+        panic!("Expected OperatorDecl");
+    }
+}
+
+#[test]
+fn test_parse_precedencegroup_decl() {
+    let engine = create_engine();
+    let code = "precedencegroup MyPrecedence { precedence: 150 associativity: left }";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    drop(engine_ref);
+    assert_eq!(program.statements.len(), 1);
+    if let Statement::PrecedenceGroupDecl {
+        name, precedence, ..
+    } = &*program.statements[0].borrow()
+    {
+        assert_eq!(name.value, "MyPrecedence");
+        assert_eq!(*precedence, 150);
+    } else {
+        panic!("Expected PrecedenceGroupDecl");
+    }
+}
+
+#[test]
+fn test_parse_operator_infix_with_precedencegroup() {
+    let engine = create_engine();
+    let code = "precedencegroup G { precedence: 200 associativity: left } operator infix ^: G";
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    drop(engine_ref);
+    assert_eq!(program.statements.len(), 2);
+    if let Statement::OperatorDecl {
+        fixity,
+        symbol,
+        precedence_group,
+        ..
+    } = &*program.statements[1].borrow()
+    {
+        assert_eq!(*fixity, OperatorDeclFixity::Infix);
+        assert_eq!(symbol, "^");
+        assert_eq!(precedence_group.as_deref(), Some("G"));
+    } else {
+        panic!("Expected OperatorDecl");
     }
 }
 
