@@ -7039,3 +7039,76 @@ fn test_irgen_optional_chaining() {
     );
     assert!(llvm_ir.contains("chain_some") || llvm_ir.contains("chain_cont"));
 }
+
+#[test]
+fn test_irgen_closure_with_captures() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        "func test() -> Int32 {
+            var x = 42
+            let closure = { x }
+            return closure()
+        }",
+        &[
+            "#[builtintype] public struct Int32 {}",
+            "#[builtintype] public struct Bool {}",
+        ],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "closure with captures should generate IR without errors"
+    );
+    assert!(llvm_ir.contains("__closure_ctx_0") || llvm_ir.contains("closure_fn_ptr"));
+}
+
+#[test]
+fn test_irgen_do_catch_with_try() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        r#"
+        func test() throws {
+            do {
+                try callee()
+            } catch {
+            }
+        }
+        func callee() throws {}
+        "#,
+        &[
+            "#[builtintype] public struct Int32 {}",
+            "#[builtintype] public struct Bool {}",
+        ],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "do-catch should generate IR without errors"
+    );
+    assert!(llvm_ir.contains("do_catch") || llvm_ir.contains("do_after"));
+}
+
+#[test]
+fn test_irgen_catch_block_reachable() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        r#"
+        func test() throws -> Int32 {
+            do {
+                try callee()
+            } catch {
+                return 1
+            }
+            return 0
+        }
+        func callee() throws {}
+        "#,
+        &[
+            "#[builtintype] public struct Int32 {}",
+            "#[builtintype] public struct Bool {}",
+        ],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "catch block should be reachable without errors"
+    );
+    assert!(llvm_ir.contains("do_catch"));
+}

@@ -10382,12 +10382,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         if let Some(outer_err) = saved_error_ptr {
                             self.builder.build_store(outer_err, err_val)?;
                         }
-                        let ret_type = fn_val.get_type().get_return_type();
-                        if let Some(ret_ty) = ret_type {
-                            self.builder.build_return(Some(&ret_ty.const_zero()))?;
-                        } else {
-                            self.builder.build_return(None)?;
-                        }
+                        self.builder.build_unconditional_branch(continue_bb)?;
 
                         self.builder.position_at_end(continue_bb);
                         if let Some(val) = result {
