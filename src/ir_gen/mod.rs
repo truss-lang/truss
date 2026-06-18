@@ -4041,27 +4041,47 @@ impl<'ctx> IRGenerator<'ctx> {
                         .build_conditional_branch(cond, body_bb, exit_bb)?;
 
                     self.builder.position_at_end(body_bb);
-                    let payload_ptr = self.builder.build_struct_gep(
-                        enum_llvm_type.into_struct_type(),
+                    let enum_struct_type = enum_llvm_type.into_struct_type();
+                    let payload_union_ptr = self.builder.build_struct_gep(
+                        enum_struct_type,
                         alloca,
                         1,
                         "",
                     )?;
-                    let payload_ty = enum_llvm_type
-                        .into_struct_type()
+                    let payloads_type = enum_struct_type
                         .get_field_type_at_index(1)
-                        .unwrap();
-                    let payload_val = self.builder.build_load(payload_ty, payload_ptr, "")?;
+                        .ok_or_else(|| anyhow::anyhow!("Payload union field not found"))?
+                        .into_struct_type();
+                    let some_payload_ptr = self.builder.build_struct_gep(
+                        payloads_type,
+                        payload_union_ptr,
+                        1,
+                        "",
+                    )?;
+                    let some_payload_ty = payloads_type
+                        .get_field_type_at_index(1)
+                        .ok_or_else(|| anyhow::anyhow!("Some payload field not found"))?
+                        .into_struct_type();
+                    let some_value_ptr = self.builder.build_struct_gep(
+                        some_payload_ty,
+                        some_payload_ptr,
+                        0,
+                        "",
+                    )?;
+                    let some_value_ty = some_payload_ty
+                        .get_field_type_at_index(0)
+                        .ok_or_else(|| anyhow::anyhow!("Some value field not found"))?;
+                    let payload_val = self.builder.build_load(some_value_ty, some_value_ptr, "")?;
                     if let Pattern::Identifier(name) = pattern.as_ref() {
                         if name.value != "_" {
-                            let var_ptr = self.builder.build_alloca(payload_ty, &name.value)?;
+                            let var_ptr = self.builder.build_alloca(some_value_ty, &name.value)?;
                             self.builder.build_store(var_ptr, payload_val)?;
                             self.declare_variable(name.value.clone(), var_ptr);
                         }
                     } else if let Pattern::ValueBinding(inner) = pattern.as_ref() {
                         if let Pattern::Identifier(name) = inner.as_ref() {
                             if name.value != "_" {
-                                let var_ptr = self.builder.build_alloca(payload_ty, &name.value)?;
+                                let var_ptr = self.builder.build_alloca(some_value_ty, &name.value)?;
                                 self.builder.build_store(var_ptr, payload_val)?;
                                 self.declare_variable(name.value.clone(), var_ptr);
                             }
