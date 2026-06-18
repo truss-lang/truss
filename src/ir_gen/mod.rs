@@ -9332,26 +9332,82 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                     let fn_llvm_type =
                         self.get_function_type(ret_ty.clone(), all_param_tys, is_vararg)?;
-                    let fn_ptr = fn_ptr_val.into_pointer_value();
 
-                    let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+                    let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                    let captures_count = param_tys.len().saturating_sub(parameters.len());
+
+                    let (actual_fn_ptr, mut closure_args):
+                        (PointerValue, Vec<inkwell::values::BasicMetadataValueEnum<'ctx>>) =
+                    {
+                        let mut args = Vec::new();
+                        if captures_count > 0 {
+                            let ctx_i8 = fn_ptr_val.into_pointer_value();
+                            let ctx_fields: Vec<BasicTypeEnum> = (0..=captures_count)
+                                .map(|_| ptr_ty.into())
+                                .collect();
+                            let ctx_struct_ty =
+                                self.context.struct_type(&ctx_fields, false);
+                            let ctx_ptr = self.builder.build_pointer_cast(
+                                ctx_i8,
+                                ctx_struct_ty.as_basic_type_enum().into_pointer_type(),
+                                "ctx_ptr",
+                            )?;
+
+                            let fn_ptr_field = self.builder.build_struct_gep(
+                                ctx_struct_ty, ctx_ptr, 0, "fn_ptr_field",
+                            )?;
+                            let fn_ptr_loaded = self
+                                .builder
+                                .build_load(ptr_ty, fn_ptr_field, "closure_fn_ptr")?
+                                .into_pointer_value();
+
+                            for i in 0..captures_count {
+                                let cell_ptr_field = self.builder.build_struct_gep(
+                                    ctx_struct_ty,
+                                    ctx_ptr,
+                                    (i + 1) as u32,
+                                    "cell_ptr_field",
+                                )?;
+                                let cell_ptr = self
+                                    .builder
+                                    .build_load(ptr_ty, cell_ptr_field, "cell_ptr")?
+                                    .into_pointer_value();
+                                let capture_llvm_ty =
+                                    self.resolve_type(param_tys[i].clone())?;
+                                let typed_cell_ptr = self.builder.build_pointer_cast(
+                                    cell_ptr,
+                                    capture_llvm_ty.into_pointer_type(),
+                                    "typed_cell",
+                                )?;
+                                let capture_val = self.builder.build_load(
+                                    capture_llvm_ty,
+                                    typed_cell_ptr,
+                                    "capture_val",
+                                )?;
+                                args.push(capture_val.into());
+                            }
+                            (fn_ptr_loaded, args)
+                        } else {
+                            (fn_ptr_val.into_pointer_value(), args)
+                        }
+                    };
+
                     let err_slot_ptr = if is_throwing_call {
-                        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                         let err_slot = self.builder.build_alloca(ptr_ty, "call_err")?;
                         self.builder.build_store(err_slot, ptr_ty.const_null())?;
-                        args.push(err_slot.into());
+                        closure_args.push(err_slot.into());
                         Some(err_slot)
                     } else {
                         None
                     };
                     for param in parameters {
                         let arg_val = self.resolve_expression(param.expression.clone())?.unwrap();
-                        args.push(arg_val.into());
+                        closure_args.push(arg_val.into());
                     }
 
                     let call_result =
                         self.builder
-                            .build_indirect_call(fn_llvm_type, fn_ptr, &args, "")?;
+                            .build_indirect_call(fn_llvm_type, actual_fn_ptr, &closure_args, "")?;
                     if let Some(err_slot) = err_slot_ptr {
                         if let Some(err_ptr) = *self.error_ptr.borrow() {
                             let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
@@ -10181,7 +10237,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 if has_captures {
                     // Create context struct with fn_ptr and captured values
                     // For each capture, allocate heap cell, copy value, store cell ptr in context
-                    let context_struct_type = self.context.opaque_struct_type("__closure_ctx");
+                    let ctx_type_name = format!("__closure_ctx_{}", counter);
+                    let context_struct_type = self.context.opaque_struct_type(&ctx_type_name);
                     let mut field_types: Vec<BasicTypeEnum> = Vec::new();
                     let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
                     field_types.push(ptr_ty.into()); // fn_ptr
