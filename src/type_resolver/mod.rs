@@ -5113,6 +5113,44 @@ impl TypeResolver {
                     return None;
                 }
             }
+            Expression::MethodReference {
+                type_name,
+                method_name,
+                ty,
+                method_token,
+                ..
+            } => {
+                let fn_type = if let Some(type_n) = type_name {
+                    self.resolve_type_method_ref(type_n, method_name)
+                } else {
+                    let scope = self.current_scope.as_ref()?;
+                    let scope_ref = scope.borrow();
+                    let sym = scope_ref.get_symbol(method_name)?;
+                    let decl = sym.borrow().get_decl().ok().flatten()?;
+                    let decl_ref = decl.borrow();
+                    if let Statement::FunctionDecl { ty: fn_ty, .. } = &*decl_ref {
+                        fn_ty.clone()
+                    } else {
+                        None
+                    }
+                };
+                if let Some(ref ft) = fn_type {
+                    *ty = Some(ft.clone());
+                    ft.clone()
+                } else {
+                    let err_msg = if type_name.is_some() {
+                        format!("Method '{}' not found", method_name)
+                    } else {
+                        format!("Function '{}' not found", method_name)
+                    };
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedFunction,
+                        err_msg,
+                        method_token,
+                    );
+                    return None;
+                }
+            }
         };
         Some(result)
     }
@@ -8316,5 +8354,64 @@ impl TypeResolver {
             .with_label(primary)
             .with_label(secondary);
         self.engine.borrow_mut().emit(diag);
+    }
+
+    fn resolve_type_method_ref(
+        &self,
+        type_name: &str,
+        method_name: &str,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let scope = self.current_scope.as_ref()?;
+        let sym = scope.borrow().get_symbol(type_name)?;
+        let (methods, is_class): (Vec<Rc<RefCell<Symbol>>>, bool) = match &*sym.borrow() {
+            Symbol::Struct { methods, .. } => (methods.clone(), false),
+            Symbol::Class { methods, .. } => (methods.clone(), true),
+            Symbol::Enum { methods, .. } => (methods.clone(), false),
+            Symbol::Protocol { methods, .. } => (methods.clone(), false),
+            _ => return None,
+        };
+        for m in &methods {
+            if m.borrow().name().ok().as_deref() == Some(method_name) {
+                if let Some(decl) = m.borrow().get_decl().ok().flatten() {
+                    let decl_ref = decl.borrow();
+                    if let Statement::FunctionDecl {
+                        ty, static_method, ..
+                    } = &*decl_ref
+                    {
+                        if let Some(ty) = ty {
+                            if *static_method {
+                                return Some(ty.clone());
+                            }
+                            let ty_borrow = ty.borrow();
+                            if let Type::Function(param_tys, ret_ty, is_vararg, throws) =
+                                &*ty_borrow
+                            {
+                                let self_ty = if is_class {
+                                    Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                                        Type::Struct(type_name.to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
+                                    )))))
+                                } else {
+                                    Rc::new(RefCell::new(Type::Struct(
+                                        type_name.to_string(),
+                                        WeakSymbol(std::rc::Weak::new()),
+                                        vec![],
+                                    )))
+                                };
+                                let mut new_params = vec![self_ty];
+                                new_params.extend(param_tys.iter().cloned());
+                                return Some(Rc::new(RefCell::new(Type::Function(
+                                    new_params,
+                                    ret_ty.clone(),
+                                    *is_vararg,
+                                    throws.clone(),
+                                ))));
+                            }
+                            return Some(ty.clone());
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 }

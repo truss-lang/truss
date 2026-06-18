@@ -1076,6 +1076,32 @@ impl Parser {
                         }
                     }
                 }
+                SeparatorType::DoubleColon => {
+                    self.index += 1;
+                    let Some(method_token) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedExpression,
+                            "Expected function name after '::'".to_string(),
+                            &token,
+                        );
+                        return Err(());
+                    };
+                    if !matches!(method_token.ty, TokenType::Identifier) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!("Expected function name but found '{}'", method_token.value),
+                            &method_token,
+                        );
+                        return Err(());
+                    }
+                    Ok(Expression::MethodReference {
+                        type_name: None,
+                        method_name: method_token.value.clone(),
+                        method_token: Box::new(method_token),
+                        is_static: true,
+                        ty: None,
+                    })
+                }
                 _ => {
                     self.emit_error(
                         TrussDiagnosticCode::ExpectedExpression,
@@ -1147,6 +1173,35 @@ impl Parser {
             },
             TokenType::Identifier => {
                 self.index += 1;
+                if let Some(next) = self.peek()
+                    && SeparatorType::is_separator(&next, SeparatorType::DoubleColon)
+                {
+                    let type_name = token.value.clone();
+                    self.index += 1;
+                    let Some(method_token) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            "Expected method name after '::'".to_string(),
+                            &token,
+                        );
+                        return Err(());
+                    };
+                    if !matches!(method_token.ty, TokenType::Identifier) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!("Expected method name but found '{}'", method_token.value),
+                            &method_token,
+                        );
+                        return Err(());
+                    }
+                    return Ok(Expression::MethodReference {
+                        type_name: Some(type_name),
+                        method_name: method_token.value.clone(),
+                        method_token: Box::new(method_token),
+                        is_static: false,
+                        ty: None,
+                    });
+                }
                 if let Some(next) = self.peek()
                     && OperatorType::is_operator(&next, OperatorType::Not)
                 {

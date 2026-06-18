@@ -103,6 +103,13 @@ pub enum Expression {
         member: Box<Token>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    MethodReference {
+        type_name: Option<String>,
+        method_name: String,
+        method_token: Box<Token>,
+        is_static: bool,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
     Binary {
         left: Rc<RefCell<Expression>>,
         operator: BinaryOperator,
@@ -480,6 +487,7 @@ impl Expression {
             Expression::OptionalType { inner, .. } => inner.borrow().token(),
             Expression::OptionalChain { token, .. } => (**token).clone(),
             Expression::ArrayType { inner, .. } => inner.borrow().token(),
+            Expression::MethodReference { method_token, .. } => (**method_token).clone(),
         }
     }
 }
