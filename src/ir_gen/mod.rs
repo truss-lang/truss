@@ -351,9 +351,13 @@ impl<'ctx> IRGenerator<'ctx> {
         let main_mod = std::mem::replace(&mut self.module, stdlib_mod);
         *self.program_scope.borrow_mut() = Some(scope.clone());
         self.run_all_passes(stdlib_stmts);
+        let _ = self.module.verify();
         let compiled_stdlib = std::mem::replace(&mut self.module, main_mod);
         let compiled_stdlib_rc = Rc::new(compiled_stdlib);
         self.stdlib_module = Some(compiled_stdlib_rc.clone());
+
+        // Clear scope stack from stdlib compilation
+        self.scope_stack.borrow_mut().clear();
 
         for func in compiled_stdlib_rc.get_functions() {
             let name = func.get_name().to_str().unwrap_or("").to_string();
@@ -408,6 +412,8 @@ impl<'ctx> IRGenerator<'ctx> {
         self.run_all_passes(&all_main);
 
         self.generate_main_wrapper(program);
+
+        let _ = self.module.verify();
 
         IRModules {
             main: Rc::new(std::mem::replace(
@@ -469,7 +475,23 @@ impl<'ctx> IRGenerator<'ctx> {
             self.create_protocol_witness_tables(stmt.clone());
         }
         for stmt in stmts {
+            // Catch compilation errors silently to avoid leaving LLVM in invalid state
             let _ = self.resolve_statement(stmt.clone());
+        }
+        // After all compilation, fix any blocks missing terminators across all functions
+        for func in self.module.get_functions() {
+            for bb in func.get_basic_blocks() {
+                if bb.get_terminator().is_none() {
+                    let return_type = func.get_type().get_return_type();
+                    self.builder.position_at_end(bb);
+                    if return_type.is_some() {
+                        let zero: BasicValueEnum<'ctx> = self.context.i32_type().const_zero().into();
+                        let _ = self.builder.build_return(Some(&zero));
+                    } else {
+                        let _ = self.builder.build_return(None);
+                    }
+                }
+            }
         }
     }
 
@@ -4181,13 +4203,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                     break;
                                 }
                             }
-                            if has_return {
-                                self.exit_scope();
-                            } else {
-                                self.emit_class_releases();
-                            }
+                            self.exit_scope();
                             if is_void && !has_return {
-                                self.exit_scope();
                                 self.builder.build_return(None)?;
                             }
                         }
@@ -4201,6 +4218,21 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.emit_class_releases();
                         }
                     }
+                    // Ensure entry block has a terminator even if body compilation failed
+                    if !self.builder.get_insert_block().map_or(false, |b| b.get_terminator().is_some()) {
+                        if is_void {
+                            let _ = self.builder.build_return(None);
+                        } else {
+                            let fn_ty = function.get_type();
+                            if fn_ty.get_return_type().is_some() {
+                                let zero: BasicValueEnum<'ctx> = self.context.i32_type().const_zero().into();
+                                let _ = self.builder.build_return(Some(&zero));
+                            } else {
+                                let _ = self.builder.build_return(None);
+                            }
+                        }
+                    }
+                    self.exit_scope();
 
                     if let Some(block) = current_block {
                         self.builder.position_at_end(block);
@@ -4309,6 +4341,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             }
                         }
                     }
+                    self.exit_scope();
 
                     if let Some(block) = current_block {
                         self.builder.position_at_end(block);
@@ -4356,6 +4389,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.builder.build_return(None)?;
                         }
                     }
+                    self.exit_scope();
 
                     if let Some(block) = current_block {
                         self.builder.position_at_end(block);

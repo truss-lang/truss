@@ -24,7 +24,7 @@ fn create_target_machine(triple: &str) -> Result<inkwell::targets::TargetMachine
             &inkwell::targets::TargetTriple::create(triple),
             "generic",
             "",
-            inkwell::OptimizationLevel::Default,
+            inkwell::OptimizationLevel::None,
             inkwell::targets::RelocMode::Default,
             inkwell::targets::CodeModel::Default,
         )
