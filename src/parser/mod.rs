@@ -5273,6 +5273,63 @@ impl Parser {
             let cond = self.parse_if_let_condition()?;
             self.suppress_trailing_closure = saved_suppress;
             cond
+        } else if let Some(t) = self.peek()
+            && SeparatorType::is_separator(&t, SeparatorType::OpenParen)
+            && self.peek2().map_or(false, |t2| KeywordType::is_keyword(&t2, KeywordType::Let))
+        {
+            // Handle `if (let x = ...) && ...` - parenthesized if-let condition
+            self.index += 1; // consume `(`
+            let cond = self.parse_if_let_condition()?;
+            // Expect closing paren
+            if let Some(close) = self.peek()
+                && !SeparatorType::is_separator(&close, SeparatorType::CloseParen)
+            {
+                self.emit_error(
+                    TrussDiagnosticCode::MissingSeparator,
+                    "Expected ')' after if-let condition",
+                    &close,
+                );
+                return Err(());
+            }
+            self.index += 1; // consume `)`
+            // Handle `&&` continuation after the parenthesized if-let
+            if let Some(t) = self.peek()
+                && OperatorType::is_operator(&t, OperatorType::And)
+            {
+                self.index += 1; // consume `&&`
+                let right = if let Some(next) = self.peek()
+                    && SeparatorType::is_separator(&next, SeparatorType::OpenParen)
+                    && self.peek2().map_or(false, |t2| KeywordType::is_keyword(&t2, KeywordType::Let))
+                {
+                    self.index += 1; // consume `(`
+                    let inner = self.parse_if_let_condition()?;
+                    if let Some(close) = self.peek()
+                        && !SeparatorType::is_separator(&close, SeparatorType::CloseParen)
+                    {
+                        self.emit_error(
+                            TrussDiagnosticCode::MissingSeparator,
+                            "Expected ')' after if-let condition",
+                            &close,
+                        );
+                        return Err(());
+                    }
+                    self.index += 1; // consume `)`
+                    inner
+                } else {
+                    self.parse_expression()?
+                };
+                self.suppress_trailing_closure = saved_suppress;
+                Expression::Binary {
+                    left: Rc::new(RefCell::new(cond)),
+                    operator: crate::ast::expression::BinaryOperator::And,
+                    right: Rc::new(RefCell::new(right)),
+                    overloads: vec![],
+                    selected_index: None,
+                }
+            } else {
+                self.suppress_trailing_closure = saved_suppress;
+                cond
+            }
         } else {
             let cond = self.parse_expression()?;
             self.suppress_trailing_closure = saved_suppress;

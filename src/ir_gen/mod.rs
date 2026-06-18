@@ -92,6 +92,7 @@ pub struct IRGenerator<'ctx> {
     extern_fn_c_names: Rc<RefCell<HashMap<String, String>>>,
     mangled_fn_names: Rc<RefCell<HashMap<String, String>>>,
     stdlib_module: Option<Rc<Module<'ctx>>>,
+    current_struct_has_generics: Rc<RefCell<bool>>,
 }
 
 impl<'ctx> IRGenerator<'ctx> {
@@ -131,6 +132,7 @@ impl<'ctx> IRGenerator<'ctx> {
             extern_fn_c_names: Rc::new(RefCell::new(HashMap::new())),
             mangled_fn_names: Rc::new(RefCell::new(HashMap::new())),
             stdlib_module: None,
+            current_struct_has_generics: Rc::new(RefCell::new(false)),
         }
     }
 
@@ -2455,7 +2457,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     let mangled = self.mangle_fn_name(&base_name, &[]);
                     self.module.get_function(&mangled)
                 });
-                if let Some(func) = func {
+                if let Some(func) = func
+                    && func.get_first_basic_block().is_some()
+                {
                     let fn_ptr = func.as_global_value().as_pointer_value();
                     const_vals.push(fn_ptr.as_basic_value_enum());
                 } else {
@@ -2467,7 +2471,8 @@ impl<'ctx> IRGenerator<'ctx> {
             let global = self.module.add_global(vtable_type, None, &vtable_name);
             global.set_initializer(&init_val);
             global.set_constant(true);
-            global.set_linkage(inkwell::module::Linkage::Internal);
+            // Use External linkage so vtables are visible when linking stdlib module
+            global.set_linkage(inkwell::module::Linkage::External);
 
             self.vtable_globals
                 .borrow_mut()
@@ -2882,7 +2887,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             .unwrap_or(generic_base)
                     }
                 };
-                if let Some(func) = self.module.get_function(&fn_name) {
+                if let Some(func) = self.module.get_function(&fn_name)
+                    && func.get_first_basic_block().is_some()
+                {
                     const_vals.push(
                         func.as_global_value()
                             .as_pointer_value()
@@ -2896,7 +2903,7 @@ impl<'ctx> IRGenerator<'ctx> {
             let global = self.module.add_global(wt_type, None, &wt_global_name);
             global.set_initializer(&init_val);
             global.set_constant(true);
-            global.set_linkage(inkwell::module::Linkage::Internal);
+            global.set_linkage(inkwell::module::Linkage::External);
             self.protocol_witness_tables
                 .borrow_mut()
                 .insert(key, global);
@@ -3728,6 +3735,35 @@ impl<'ctx> IRGenerator<'ctx> {
                 ty: Some(ty),
                 ..
             } => {
+                if *self.current_struct_has_generics.borrow() {
+                    if let Some(ref sname) = *self.current_struct.borrow() {
+                        for accessor in accessors {
+                            let fn_name = match accessor.kind {
+                                AccessorKind::Get => {
+                                    self.mangle_fn_name(&format!("{}.subscript.getter", sname), parameters)
+                                }
+                                AccessorKind::Set => {
+                                    self.mangle_fn_name(&format!("{}.subscript.setter", sname), parameters)
+                                }
+                                _ => continue,
+                            };
+                            if let Some(func) = self.module.get_function(&fn_name) {
+                                if func.get_first_basic_block().is_some() {
+                                    continue;
+                                }
+                                let entry = self.context.append_basic_block(func, "entry");
+                                self.builder.position_at_end(entry);
+                                let ret_type = func.get_type().get_return_type();
+                                if let Some(ret_ty) = ret_type {
+                                    self.builder.build_return(Some(&ret_ty.const_zero()))?;
+                                } else {
+                                    self.builder.build_return(None)?;
+                                }
+                            }
+                        }
+                    }
+                    return Ok(false);
+                }
                 if let Some(ref sname) = *self.current_struct.borrow() {
                     for accessor in accessors {
                         let fn_name = match accessor.kind {
@@ -4052,28 +4088,41 @@ impl<'ctx> IRGenerator<'ctx> {
                 attributes,
                 ..
             } => {
-                if Self::contains_generic_param(&*ty.borrow()) {
+                let saved_struct = self.current_struct.borrow_mut().take();
+                let fn_name = if let Some(cname) = attributes
+                    .iter()
+                    .find(|a| a.name == "cname")
+                    .and_then(|a| a.value.as_deref())
+                {
+                    cname.to_string()
+                } else if let Some(struct_name) = &saved_struct {
+                    let base = format!("{}.{}", struct_name, name.value);
+                    self.mangle_fn_name(&base, parameters)
+                } else {
+                    self.mangle_fn_name(&name.value, parameters)
+                };
+                if Self::contains_generic_param(&*ty.borrow()) || *self.current_struct_has_generics.borrow() {
+                    if let Some(func) = self.module.get_function(&fn_name) {
+                        let entry_block = self.context.append_basic_block(func, "entry");
+                        self.builder.position_at_end(entry_block);
+                        let ret_type = func.get_type().get_return_type();
+                        if let Some(ret_ty) = ret_type {
+                            self.builder.build_return(Some(&ret_ty.const_zero()))?;
+                        } else {
+                            self.builder.build_return(None)?;
+                        }
+                    }
+                    if let Some(s) = saved_struct {
+                        *self.current_struct.borrow_mut() = Some(s);
+                    }
                     return Ok(false);
                 }
                 if let Type::Function(_parameter_types, return_type, _, throws_types) =
                     &*ty.borrow()
                 {
                     let is_throwing = throws_types.is_some();
-                    let saved_struct = self.current_struct.borrow_mut().take();
                     self.class_refs.borrow_mut().clear();
                     self.container_refs.borrow_mut().clear();
-                    let fn_name = if let Some(cname) = attributes
-                        .iter()
-                        .find(|a| a.name == "cname")
-                        .and_then(|a| a.value.as_deref())
-                    {
-                        cname.to_string()
-                    } else if let Some(struct_name) = &saved_struct {
-                        let base = format!("{}.{}", struct_name, name.value);
-                        self.mangle_fn_name(&base, parameters)
-                    } else {
-                        self.mangle_fn_name(&name.value, parameters)
-                    };
                     let function = self.module.get_function(&fn_name).unwrap();
 
                     let current_block = self.builder.get_insert_block();
@@ -4250,7 +4299,21 @@ impl<'ctx> IRGenerator<'ctx> {
                 is_failable,
                 ..
             } => {
-                if Self::contains_generic_param(&*ty.borrow()) {
+                if Self::contains_generic_param(&*ty.borrow()) || *self.current_struct_has_generics.borrow() {
+                    let struct_name = self.current_struct.borrow().clone().unwrap();
+                    let base = format!("{}.init", struct_name);
+                    if let Some(fn_name) = self.mangled_fn_names.borrow().get(&base).cloned() {
+                        if let Some(func) = self.module.get_function(&fn_name) {
+                            let entry = self.context.append_basic_block(func, "entry");
+                            self.builder.position_at_end(entry);
+                            let ret_type = func.get_type().get_return_type();
+                            if let Some(ret_ty) = ret_type {
+                                self.builder.build_return(Some(&ret_ty.const_zero()))?;
+                            } else {
+                                self.builder.build_return(None)?;
+                            }
+                        }
+                    }
                     return Ok(false);
                 }
                 if let Type::Function(_parameter_types, return_type, _, throws_types) =
@@ -4352,7 +4415,14 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::DeinitDecl {
                 ty: Some(ty), body, ..
             } => {
-                if Self::contains_generic_param(&*ty.borrow()) {
+                if Self::contains_generic_param(&*ty.borrow()) || *self.current_struct_has_generics.borrow() {
+                    let struct_name = self.current_struct.borrow().clone().unwrap();
+                    let fn_name = self.mangle_fn_name(&format!("{}.deinit", struct_name), &[]);
+                    if let Some(func) = self.module.get_function(&fn_name) {
+                        let entry = self.context.append_basic_block(func, "entry");
+                        self.builder.position_at_end(entry);
+                        self.builder.build_return(None)?;
+                    }
                     return Ok(false);
                 }
                 if let Type::Function(_, _return_type, _, None) = &*ty.borrow() {
@@ -4491,8 +4561,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 Ok(false)
             }
             Statement::ExternDecl { .. } => Ok(false),
-            Statement::StructDecl { name, body, .. } => {
+            Statement::StructDecl { name, body, generic_parameters, .. } => {
                 let prev = self.current_struct.borrow_mut().take();
+                let prev_has_generics = *self.current_struct_has_generics.borrow();
+                *self.current_struct_has_generics.borrow_mut() = !generic_parameters.is_empty();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
                     for stmt in body {
@@ -4501,13 +4573,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     Ok(false)
                 })();
                 *self.current_struct.borrow_mut() = prev;
+                *self.current_struct_has_generics.borrow_mut() = prev_has_generics;
                 result
             }
             Statement::ClassDecl { name, body, generic_parameters, .. } => {
-                if !generic_parameters.is_empty() {
-                    return Ok(false);
-                }
                 let prev = self.current_struct.borrow_mut().take();
+                let prev_has_generics = *self.current_struct_has_generics.borrow();
+                *self.current_struct_has_generics.borrow_mut() = !generic_parameters.is_empty();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
                     for stmt in body {
@@ -4516,6 +4588,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     Ok(false)
                 })();
                 *self.current_struct.borrow_mut() = prev;
+                *self.current_struct_has_generics.borrow_mut() = prev_has_generics;
                 result
             }
             Statement::EnumDecl { name, body, .. } => {
@@ -4542,9 +4615,6 @@ impl<'ctx> IRGenerator<'ctx> {
                             // Skip protocol method default implementations that have no type
                             // info or contain generic parameters
                             match ty {
-                                Some(fn_ty) if Self::contains_generic_param(&*fn_ty.borrow()) => {
-                                    continue;
-                                }
                                 None => {
                                     continue;
                                 }

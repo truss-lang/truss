@@ -45,6 +45,10 @@ pub struct TypeResolver {
     is_mutating: Vec<bool>,
     yield_context_depth: usize,
     superclass_map: HashMap<String, Rc<RefCell<Type>>>,
+    // Raw generic parameter constraints (expressions), populated during process_decl
+    // and resolved into types between process_decl and resolve_statement phases.
+    generic_param_constraint_exprs: HashMap<String, Vec<Rc<RefCell<Expression>>>>,
+    generic_param_constraints: HashMap<String, Vec<Rc<RefCell<Type>>>>,
 }
 
 impl TypeResolver {
@@ -69,6 +73,8 @@ impl TypeResolver {
             is_mutating: Vec::new(),
             yield_context_depth: 0,
             superclass_map: HashMap::new(),
+            generic_param_constraint_exprs: HashMap::new(),
+            generic_param_constraints: HashMap::new(),
         }
     }
 
@@ -80,6 +86,9 @@ impl TypeResolver {
         for stmt in &program.statements {
             self.process_decl(stmt.clone());
         }
+
+        // Resolve generic parameter constraints after all symbol table entries exist
+        self.resolve_generic_constraints();
 
         for stmt in &program.statements {
             self.resolve_statement(stmt.clone());
@@ -125,7 +134,13 @@ impl TypeResolver {
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = match &gp.kind {
-                        GenericParameterKind::Type { .. } => {
+                        GenericParameterKind::Type { constraints } => {
+                            if !constraints.is_empty() {
+                                self.generic_param_constraint_exprs.insert(
+                                    gp.name.value.clone(),
+                                    constraints.clone(),
+                                );
+                            }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
@@ -264,7 +279,13 @@ impl TypeResolver {
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = match &gp.kind {
-                        GenericParameterKind::Type { .. } => {
+                        GenericParameterKind::Type { constraints } => {
+                            if !constraints.is_empty() {
+                                self.generic_param_constraint_exprs.insert(
+                                    gp.name.value.clone(),
+                                    constraints.clone(),
+                                );
+                            }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
@@ -413,7 +434,13 @@ impl TypeResolver {
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = match &gp.kind {
-                        GenericParameterKind::Type { .. } => {
+                        GenericParameterKind::Type { constraints } => {
+                            if !constraints.is_empty() {
+                                self.generic_param_constraint_exprs.insert(
+                                    gp.name.value.clone(),
+                                    constraints.clone(),
+                                );
+                            }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
@@ -542,7 +569,13 @@ impl TypeResolver {
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = match &gp.kind {
-                        GenericParameterKind::Type { .. } => {
+                        GenericParameterKind::Type { constraints } => {
+                            if !constraints.is_empty() {
+                                self.generic_param_constraint_exprs.insert(
+                                    gp.name.value.clone(),
+                                    constraints.clone(),
+                                );
+                            }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
@@ -890,7 +923,13 @@ impl TypeResolver {
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
                     let gp_type = match &gp.kind {
-                        GenericParameterKind::Type { .. } => {
+                        GenericParameterKind::Type { constraints } => {
+                            if !constraints.is_empty() {
+                                self.generic_param_constraint_exprs.insert(
+                                    gp.name.value.clone(),
+                                    constraints.clone(),
+                                );
+                            }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
                         GenericParameterKind::Const { const_type } => {
@@ -1286,6 +1325,27 @@ impl TypeResolver {
                 self.process_decl(stmt.clone());
             }
         }
+    }
+
+    /// Resolve generic parameter constraint expressions into types.
+    /// This runs after process_decl (so all symbols exist) but before resolve_statement.
+    fn resolve_generic_constraints(&mut self) {
+        // Clone all constraint expressions first to avoid borrow conflicts
+        let entries: Vec<(String, Vec<Rc<RefCell<Expression>>>)> =
+            self.generic_param_constraint_exprs.drain().collect();
+        let mut resolved: HashMap<String, Vec<Rc<RefCell<Type>>>> = HashMap::new();
+        for (name, exprs) in entries {
+            let mut types = Vec::new();
+            for expr in exprs {
+                if let Some(t) = self.infer_type(expr.clone()) {
+                    types.push(t);
+                }
+            }
+            if !types.is_empty() {
+                resolved.insert(name, types);
+            }
+        }
+        self.generic_param_constraints = resolved;
     }
 
     fn resolve_statement(&mut self, statement: Rc<RefCell<Statement>>) {
@@ -4038,6 +4098,60 @@ impl TypeResolver {
                                 return None;
                             }
                         }
+                    }
+                    Type::GenericParam(param_name) => {
+                        let scope = self.current_scope.as_ref().unwrap().borrow();
+                        let matching_protocols: Vec<String> = scope
+                            .name_table
+                            .iter()
+                            .filter_map(|(name, sym)| {
+                                if let Symbol::Protocol { methods, .. } = &*sym.borrow() {
+                                    if methods.iter().any(|m| m.borrow().name().as_ref().ok() == Some(&member.value)) {
+                                        Some(name.clone())
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        for protocol_name in &matching_protocols {
+                            if let Some(symbol) = scope.get_symbol(protocol_name)
+                                && let Symbol::Protocol { methods, .. } = &*symbol.borrow()
+                            {
+                                for method in methods {
+                                    if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                        && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                    {
+                                        let method_ty = {
+                                            let decl_ref = decl.borrow();
+                                            if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                                ty.clone()
+                                            } else {
+                                                continue;
+                                            }
+                                        };
+                                        if let Some(t) = method_ty {
+                                            *ty = Some(t.clone());
+                                            return Some(t.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        drop(scope);
+                        let token = &*member;
+                        self.emit_error(
+                            TrussDiagnosticCode::FieldNotFound,
+                            format!(
+                                "Cannot access member '{}' of generic type '{}'",
+                                member.value,
+                                object_ty.borrow()
+                            ),
+                            token,
+                        );
+                        return None;
                     }
                     _ => {
                         let token = &*member;

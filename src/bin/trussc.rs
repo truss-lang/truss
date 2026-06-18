@@ -274,10 +274,10 @@ fn main() {
         println!("{}", ir);
     }
 
-    // For standalone executables, only link the main module.
-    // Stdlib module may have incomplete functions (generics, etc.),
-    // so it is provided for shared/static library builds only.
-    let link_stdlib = if cli.shared || cli.r#static { modules.stdlib.as_deref() } else { None };
+    // Link stdlib module when available. Generic function bodies are skipped
+    // during compilation, but vtables use null entries for them, so linking
+    // non-generic stdlib functions is safe.
+    let link_stdlib = modules.stdlib.as_deref();
 
     match emit::emit_output(
         &modules.main,
