@@ -180,18 +180,7 @@ fn main() {
         let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
         let (file_programs, _std_sources) = parse_std_lib(stdlib_path, std_engine.clone());
 
-        let has_std_errors = {
-            let engine = std_engine.borrow();
-            if engine.has_errors() {
-                let formatted = engine.format_all_compact_plain();
-                if !formatted.is_empty() {
-                    println!("{}", formatted);
-                }
-                true
-            } else {
-                false
-            }
-        };
+        let has_std_errors = std_engine.borrow().has_errors();
 
         for file_stmts in file_programs {
             for stmt in &file_stmts {
@@ -209,13 +198,19 @@ fn main() {
             let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
 
             let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-            let mut std_type_resolver =
-                TypeResolver::new(packages.clone(), "Truss".to_string(), stdlib_ty_engine.clone());
+            let mut std_type_resolver = TypeResolver::new(
+                packages.clone(),
+                "Truss".to_string(),
+                stdlib_ty_engine.clone(),
+            );
             std_type_resolver.resolve(&std_prog, std_module);
         }
     }
 
-    let src_content = source_contents.first().map(|(_, c)| c.as_str()).unwrap_or("");
+    let src_content = source_contents
+        .first()
+        .map(|(_, c)| c.as_str())
+        .unwrap_or("");
     let first_file = cli.files.first().cloned().unwrap_or_default();
     let combined_prog = Program {
         file: Rc::new(first_file),
@@ -321,21 +316,31 @@ fn parse_std_lib(
         let file_path = path.to_string_lossy().to_string();
         let file_rc = Rc::new(file_path.clone());
 
+        let file_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
         let char_stream = CharStream::new(content.clone(), file_rc.clone());
-        let mut lexer = Lexer::new(char_stream, engine.clone());
+        let mut lexer = Lexer::new(char_stream, file_engine.clone());
         let tokens = lexer.parse();
-
-        if engine.borrow().has_errors() {
+        if file_engine.borrow().has_errors() {
+            let formatted = file_engine.borrow().format_all_plain(&content);
+            if !formatted.is_empty() {
+                println!("{}", formatted);
+            }
+            engine.borrow_mut().extend(file_engine.take());
             return (results, sources);
         }
 
-        let mut parser = TrussParser::new(file_rc.clone(), tokens, engine.clone());
+        let mut parser = TrussParser::new(file_rc.clone(), tokens, file_engine.clone());
         let program = parser.parse();
-
-        if engine.borrow().has_errors() {
+        if file_engine.borrow().has_errors() {
+            let formatted = file_engine.borrow().format_all_plain(&content);
+            if !formatted.is_empty() {
+                println!("{}", formatted);
+            }
+            engine.borrow_mut().extend(file_engine.take());
             return (results, sources);
         }
 
+        engine.borrow_mut().extend(file_engine.take());
         results.push(program.statements);
         sources.push((file_path, content));
     }
