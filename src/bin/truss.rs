@@ -1,4 +1,8 @@
-use std::{fs, path::Path};
+use std::{cell::RefCell, fs, path::Path, rc::Rc};
+
+use truss::diag::TrussDiagnosticEngine;
+use truss::trusspm::manifest::Manifest;
+use truss::trusspm::resolver::DependencyResolver;
 
 use clap::{Parser, Subcommand};
 
@@ -16,6 +20,7 @@ enum Commands {
     Init { name: String },
     Build,
     Run,
+    Check,
 }
 
 fn main() {
@@ -24,6 +29,7 @@ fn main() {
         Commands::Init { name } => cmd_init(&name),
         Commands::Build => cmd_build(),
         Commands::Run => cmd_run(),
+        Commands::Check => cmd_check(),
     }
 }
 
@@ -131,4 +137,80 @@ fn cmd_run() {
         });
 
     std::process::exit(status.code().unwrap_or(0));
+}
+
+fn cmd_check() {
+    let root = Path::new(".");
+    let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+    let manifest = match Manifest::from_project_dir(".", engine) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut has_errors = false;
+
+    if manifest.name.is_empty() {
+        eprintln!("Error: project name is empty");
+        has_errors = true;
+    }
+
+    if manifest.version.is_empty() {
+        eprintln!("Error: project version is empty");
+        has_errors = true;
+    }
+
+    for target in &manifest.targets {
+        let src_dir = root.join("Sources").join(&target.name);
+        if !src_dir.exists() {
+            eprintln!(
+                "Error: Target '{}' has no source directory Sources/{}",
+                target.name, target.name
+            );
+            has_errors = true;
+            continue;
+        }
+        let files = DependencyResolver::discover_source_files(&target.name, root);
+        if files.is_empty() {
+            eprintln!(
+                "Error: Target '{}' has no source files in Sources/{}",
+                target.name, target.name
+            );
+            has_errors = true;
+        }
+    }
+
+    for product in &manifest.products {
+        for target_name in &product.targets {
+            if !manifest.targets.iter().any(|t| &t.name == target_name) {
+                eprintln!(
+                    "Error: Product '{}' references unknown target '{}'",
+                    product.name, target_name
+                );
+                has_errors = true;
+            }
+        }
+    }
+
+    for target in &manifest.targets {
+        for dep in &target.dependencies {
+            let is_target = manifest.targets.iter().any(|t| &t.name == dep);
+            let is_dependency = manifest.dependencies.iter().any(|d| &d.name == dep);
+            if !is_target && !is_dependency {
+                eprintln!(
+                    "Error: Target '{}' has unknown dependency '{}'",
+                    target.name, dep
+                );
+                has_errors = true;
+            }
+        }
+    }
+
+    if has_errors {
+        std::process::exit(1);
+    }
+
+    println!("Project check passed");
 }
