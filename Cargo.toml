@@ -11,6 +11,10 @@ path = "src/bin/truss.rs"
 name = "trussc"
 path = "src/bin/trussc.rs"
 
+[[bin]]
+name = "trussup"
+path = "src/bin/trussup.rs"
+
 [dependencies]
 strum = { version = "0.28.0", features = ["derive"] }
 anyhow = "1.0.102"
