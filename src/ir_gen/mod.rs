@@ -4687,7 +4687,7 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let prev = self.current_struct.borrow_mut().take();
                 let prev_has_generics = *self.current_struct_has_generics.borrow();
-                *self.current_struct_has_generics.borrow_mut() = !generic_parameters.is_empty();
+                *self.current_struct_has_generics.borrow_mut() = prev_has_generics || !generic_parameters.is_empty();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
                     for stmt in body {
@@ -4707,7 +4707,7 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let prev = self.current_struct.borrow_mut().take();
                 let prev_has_generics = *self.current_struct_has_generics.borrow();
-                *self.current_struct_has_generics.borrow_mut() = !generic_parameters.is_empty();
+                *self.current_struct_has_generics.borrow_mut() = prev_has_generics || !generic_parameters.is_empty();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
                     for stmt in body {
@@ -4731,8 +4731,10 @@ impl<'ctx> IRGenerator<'ctx> {
                 *self.current_struct.borrow_mut() = prev;
                 result
             }
-            Statement::ProtocolDecl { name, members, .. } => {
+            Statement::ProtocolDecl { name, members, generic_parameters, .. } => {
                 let prev = self.current_struct.borrow_mut().take();
+                let prev_has_generics = *self.current_struct_has_generics.borrow();
+                *self.current_struct_has_generics.borrow_mut() = prev_has_generics || !generic_parameters.is_empty();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
                     for member in members {
@@ -4754,6 +4756,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     Ok(false)
                 })();
                 *self.current_struct.borrow_mut() = prev;
+                *self.current_struct_has_generics.borrow_mut() = prev_has_generics;
                 result
             }
             Statement::ExtensionDecl {
