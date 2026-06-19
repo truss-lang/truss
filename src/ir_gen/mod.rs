@@ -8592,13 +8592,67 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 }
                 let mut method_self_ptr: Option<PointerValue<'ctx>> = None;
+                let call_as_fn_base_name: Option<String> = {
+                    if let Some(idx) = *selected_index
+                        && idx < overloads.len()
+                    {
+                        if let Some(callee_ty) =
+                            callee.borrow().get_ty_ref().ok().and_then(|t| t.clone())
+                        {
+                            let tb = callee_ty.borrow();
+                            match &*tb {
+                                Type::Struct(n, ..)
+                                | Type::Class(n, ..)
+                                | Type::Enum(n, ..) => {
+                                    Some(format!("{}.callAsFunction", n))
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+                if call_as_fn_base_name.is_some() {
+                    let object_val = self.resolve_expression(callee.clone())?.unwrap();
+                    let ptr = if let Expression::Variable { name, .. } = &*callee.borrow() {
+                        if let Some(var_ptr) = self.lookup_variable(&name.value) {
+                            var_ptr
+                        } else if let BasicValueEnum::PointerValue(p) = object_val {
+                            p
+                        } else {
+                            let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                            self.builder.build_store(p, object_val)?;
+                            p
+                        }
+                    } else if let BasicValueEnum::PointerValue(p) = object_val {
+                        p
+                    } else {
+                        let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                        self.builder.build_store(p, object_val)?;
+                        p
+                    };
+                    method_self_ptr = Some(ptr);
+                }
                 let (function_name, is_init_call) = match &*callee.borrow() {
                     Expression::Variable { name, .. } => {
                         let name = name.value.clone();
                         if let Some(idx) = *selected_index
                             && idx < overloads.len()
                         {
-                            if let Some(mangled) =
+                            if let Some(ref base_name) = call_as_fn_base_name {
+                                if let Some(mangled) = self.mangle_from_overload(
+                                    base_name,
+                                    &overloads[idx],
+                                    parameters,
+                                ) {
+                                    (mangled, false)
+                                } else {
+                                    (name, false)
+                                }
+                            } else if let Some(mangled) =
                                 self.mangle_from_overload(&name, &overloads[idx], parameters)
                             {
                                 (mangled, false)
@@ -9468,6 +9522,32 @@ impl<'ctx> IRGenerator<'ctx> {
                                     None,
                                 );
                                 anyhow::bail!("Self type not resolved");
+                            }
+                        } else if let Some(ref base_name) = call_as_fn_base_name {
+                            if let Some(idx) = *selected_index
+                                && idx < overloads.len()
+                            {
+                                if let Some(mangled) =
+                                    self.mangle_from_overload(base_name, &overloads[idx], parameters)
+                                {
+                                    (mangled, false)
+                                } else {
+                                    let mangled = self
+                                        .mangled_fn_names
+                                        .borrow()
+                                        .get(base_name)
+                                        .cloned()
+                                        .unwrap_or_else(|| self.mangle_fn_name(base_name, &[]));
+                                    (mangled, false)
+                                }
+                            } else {
+                                let mangled = self
+                                    .mangled_fn_names
+                                    .borrow()
+                                    .get(base_name)
+                                    .cloned()
+                                    .unwrap_or_else(|| self.mangle_fn_name(base_name, &[]));
+                                (mangled, false)
                             }
                         } else {
                             self.emit_error(

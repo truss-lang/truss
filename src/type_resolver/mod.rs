@@ -2962,6 +2962,26 @@ impl TypeResolver {
                             }
                         }
                         if !has_match {
+                            if !matches!(&*callee.borrow(), Expression::Type { .. }) {
+                                if let Some(methods) = self.collect_method_overloads(
+                                    callee.clone(),
+                                    "callAsFunction",
+                                ) {
+                                    if !methods.is_empty() {
+                                        *overloads = methods;
+                                        if let Some(best) = self.resolve_overloaded_call(
+                                            callee.clone(),
+                                            parameters,
+                                            overloads,
+                                            selected_index,
+                                        ) {
+                                            *call_ty = Some(best.clone());
+                                            return Some(best);
+                                        }
+                                        return None;
+                                    }
+                                }
+                            }
                             let callee_token = callee.borrow().token();
                             self.emit_error(
                                 TrussDiagnosticCode::ArgumentCountMismatch,
@@ -3018,6 +3038,27 @@ impl TypeResolver {
                                 (None, false)
                             }
                         };
+                        if init_params_info.is_none()
+                            && !matches!(&*callee.borrow(), Expression::Type { .. })
+                        {
+                            if let Some(methods) =
+                                self.collect_method_overloads(callee.clone(), "callAsFunction")
+                            {
+                                if !methods.is_empty() {
+                                    *overloads = methods;
+                                    if let Some(best) = self.resolve_overloaded_call(
+                                        callee.clone(),
+                                        parameters,
+                                        overloads,
+                                        selected_index,
+                                    ) {
+                                        *call_ty = Some(best.clone());
+                                        return Some(best);
+                                    }
+                                    return None;
+                                }
+                            }
+                        }
                         if let Some((decl, param_tys, is_vararg)) = init_params_info {
                             let callee_token = callee.borrow().token();
                             let decl_params = match &*decl.borrow() {
