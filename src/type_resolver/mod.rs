@@ -2979,6 +2979,14 @@ impl TypeResolver {
                                         return None;
                                     }
                                 }
+                                if let Some(ret_ty) = self.try_resolve_dynamic_callable(
+                                    callee.clone(),
+                                    parameters,
+                                    callee_type.clone(),
+                                    call_ty,
+                                ) {
+                                    return Some(ret_ty);
+                                }
                             }
                             let callee_token = callee.borrow().token();
                             self.emit_error(
@@ -3056,6 +3064,14 @@ impl TypeResolver {
                                     return None;
                                 }
                             }
+                            if let Some(ret_ty) = self.try_resolve_dynamic_callable(
+                                callee.clone(),
+                                parameters,
+                                callee_type.clone(),
+                                call_ty,
+                            ) {
+                                return Some(ret_ty);
+                            }
                         }
                         if let Some((decl, param_tys, is_vararg)) = init_params_info {
                             let callee_token = callee.borrow().token();
@@ -3132,6 +3148,14 @@ impl TypeResolver {
                         ret_ty.clone()
                     }
                     _ => {
+                        if let Some(ret_ty) = self.try_resolve_dynamic_callable(
+                            callee.clone(),
+                            parameters,
+                            callee_type.clone(),
+                            call_ty,
+                        ) {
+                            return Some(ret_ty);
+                        }
                         self.emit_error(
                             TrussDiagnosticCode::CallingNonFunction,
                             format!("Cannot call non-function type {}", callee_type.borrow()),
@@ -6337,6 +6361,66 @@ impl TypeResolver {
             }
             _ => operand_ty.map(|t| Rc::new(RefCell::new(Type::Pointer(t)))),
         }
+    }
+
+    fn try_resolve_dynamic_callable(
+        &mut self,
+        callee: Rc<RefCell<Expression>>,
+        parameters: &[CallParameter],
+        callee_type: Rc<RefCell<Type>>,
+        call_ty: &mut Option<Rc<RefCell<Type>>>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let type_name = match &*callee_type.borrow() {
+            Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => n.clone(),
+            _ => return None,
+        };
+        let has_dcl = {
+            let scope = self.current_scope.as_ref().unwrap().borrow();
+            let symbol = scope.get_symbol(&type_name);
+            let Some(symbol) = symbol else {
+                return None;
+            };
+            let binding = symbol.borrow();
+            let result = match &*binding {
+                Symbol::Struct {
+                    has_dynamic_callable,
+                    ..
+                }
+                | Symbol::Class {
+                    has_dynamic_callable,
+                    ..
+                }
+                | Symbol::Enum {
+                    has_dynamic_callable,
+                    ..
+                } => *has_dynamic_callable,
+                _ => false,
+            };
+            result
+        };
+        if !has_dcl {
+            return None;
+        }
+        if let Some(methods) = self.collect_method_overloads(callee.clone(), "dynamicallyCall") {
+            for method in &methods {
+                if let Ok(Some(decl)) = method.borrow().get_decl() {
+                    if let Statement::FunctionDecl {
+                        ty: Some(method_ty),
+                        ..
+                    } = &*decl.borrow()
+                    {
+                        if let Type::Function(_, ret_ty, _, _) = &*method_ty.borrow() {
+                            for param in parameters {
+                                self.infer_type(param.expression.clone());
+                            }
+                            *call_ty = Some(ret_ty.clone());
+                            return Some(ret_ty.clone());
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn collect_method_overloads(

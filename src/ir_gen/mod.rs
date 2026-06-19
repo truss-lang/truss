@@ -1008,6 +1008,28 @@ impl<'ctx> IRGenerator<'ctx> {
         false
     }
 
+    fn has_dynamic_callable(&self, type_name: &str) -> bool {
+        if let Some(scope) = self.program_scope.borrow().as_ref()
+            && let Some(symbol) = scope.borrow().get_symbol(type_name)
+        {
+            let binding = symbol.borrow();
+            return matches!(
+                &*binding,
+                Symbol::Struct {
+                    has_dynamic_callable: true,
+                    ..
+                } | Symbol::Class {
+                    has_dynamic_callable: true,
+                    ..
+                } | Symbol::Enum {
+                    has_dynamic_callable: true,
+                    ..
+                }
+            );
+        }
+        false
+    }
+
     fn get_stored_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
@@ -8882,6 +8904,68 @@ impl<'ctx> IRGenerator<'ctx> {
                             "",
                         )?;
                         return Ok(Some(val));
+                    }
+                }
+                if selected_index.is_none() || overloads.is_empty() {
+                    if let Some(callee_ty) =
+                        callee.borrow().get_ty_ref().ok().and_then(|t| t.clone())
+                    {
+                        let type_name = match &*callee_ty.borrow() {
+                            Type::Struct(n, ..)
+                            | Type::Class(n, ..)
+                            | Type::Enum(n, ..) => Some(n.clone()),
+                            _ => None,
+                        };
+                        if let Some(ref type_name) = type_name {
+                            if self.has_dynamic_callable(type_name) {
+                                let object_val =
+                                    self.resolve_expression(callee.clone())?.unwrap();
+                                let self_ptr =
+                                    if let BasicValueEnum::PointerValue(p) = object_val {
+                                        p
+                                    } else {
+                                        let p = self
+                                            .builder
+                                            .build_alloca(object_val.get_type(), "")?;
+                                        self.builder.build_store(p, object_val)?;
+                                        p
+                                    };
+                                for param in parameters {
+                                    self.resolve_expression(param.expression.clone())?;
+                                }
+                                let key = format!("{}.dynamicallyCall", type_name);
+                                let mangled = self
+                                    .mangled_fn_names
+                                    .borrow()
+                                    .get(&key)
+                                    .cloned()
+                                    .unwrap_or_else(|| self.mangle_fn_name(&key, &[]));
+                                if let Some(f) = self.module.get_function(&mangled) {
+                                    let fn_type = f.get_type();
+                                    let param_count =
+                                        fn_type.get_param_types().len();
+                                    let null_ptr = self
+                                        .context
+                                        .ptr_type(inkwell::AddressSpace::from(0))
+                                        .const_null();
+                                    let mut args: Vec<
+                                        inkwell::values::BasicMetadataValueEnum<'ctx>,
+                                    > = Vec::new();
+                                    args.push(self_ptr.into());
+                                    for _ in 1..param_count {
+                                        args.push(null_ptr.into());
+                                    }
+                                    let call_result =
+                                        self.builder.build_call(f, &args, "")?;
+                                    match call_result.try_as_basic_value() {
+                                        inkwell::values::ValueKind::Basic(val) => {
+                                            return Ok(Some(val));
+                                        }
+                                        _ => return Ok(None),
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 let mut method_self_ptr: Option<PointerValue<'ctx>> = None;

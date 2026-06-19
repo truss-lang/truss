@@ -180,11 +180,13 @@ impl SymbolResolver {
             } => {
                 let is_builtin = attributes.iter().any(|a| a.name == "builtintype");
                 let has_dml = attributes.iter().any(|a| a.name == "dynamicMemberLookup");
+                let has_dcl = attributes.iter().any(|a| a.name == "dynamicCallable");
                 let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
                     name: name.value.clone(),
                     decl: stmt.clone(),
                     is_builtin_type: is_builtin,
                     has_dynamic_member_lookup: has_dml,
+                    has_dynamic_callable: has_dcl,
                     properties: vec![],
                     methods: vec![],
                     constructors: vec![],
@@ -427,10 +429,12 @@ impl SymbolResolver {
                 let is_abstract = Self::has_modifier(modifiers, ModifierType::Abstract);
                 let is_final = Self::has_modifier(modifiers, ModifierType::Final);
                 let has_dml = attributes.iter().any(|a| a.name == "dynamicMemberLookup");
+                let has_dcl = attributes.iter().any(|a| a.name == "dynamicCallable");
                 let class_symbol = Rc::new(RefCell::new(Symbol::Class {
                     name: name.value.clone(),
                     decl: stmt.clone(),
                     has_dynamic_member_lookup: has_dml,
+                    has_dynamic_callable: has_dcl,
                     properties: vec![],
                     methods: vec![],
                     constructors: vec![],
@@ -707,10 +711,12 @@ impl SymbolResolver {
                 ..
             } => {
                 let has_dml = attributes.iter().any(|a| a.name == "dynamicMemberLookup");
+                let has_dcl = attributes.iter().any(|a| a.name == "dynamicCallable");
                 let enum_symbol = Rc::new(RefCell::new(Symbol::Enum {
                     name: name.value.clone(),
                     decl: stmt.clone(),
                     has_dynamic_member_lookup: has_dml,
+                    has_dynamic_callable: has_dcl,
                     cases: vec![],
                     methods: vec![],
                 }));
