@@ -1470,19 +1470,23 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Type::Function(param_types, return_type, is_vararg, throws_types) =
                         &*ty.borrow()
                     {
-                        let mut all_params = param_types.clone();
-                        if throws_types.is_some() {
-                            let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(
-                                RefCell::new(Type::Struct(
-                                    "Int8".to_string(),
-                                    WeakSymbol(std::rc::Weak::new()),
-                                    vec![],
-                                )),
-                            ))));
-                            all_params.insert(0, err_ty);
-                        }
-                        if let Ok(function_type) =
-                            self.get_function_type(return_type.clone(), all_params, *is_vararg)
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    let mut all_params = vec![self_param];
+                    if throws_types.is_some() {
+                        let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                            Type::Struct(
+                                "Int8".to_string(),
+                                WeakSymbol(std::rc::Weak::new()),
+                                vec![],
+                            ),
+                        )))));
+                        all_params.push(err_ty);
+                    }
+                    all_params.extend(param_types.iter().cloned());
+                    if let Ok(function_type) =
+                        self.get_function_type(return_type.clone(), all_params, *is_vararg)
                         {
                             self.module.add_function(cname, function_type, None);
                         }
