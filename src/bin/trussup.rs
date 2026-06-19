@@ -13,9 +13,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Install { version: String },
+    InstallStd,
     List,
     Current,
     Remove { version: String },
+    RemoveStd,
     Use { version: String },
 }
 
@@ -23,9 +25,11 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Commands::Install { version } => cmd_install(&version),
+        Commands::InstallStd => cmd_install_std(),
         Commands::List => cmd_list(),
         Commands::Current => cmd_current(),
         Commands::Remove { version } => cmd_remove(&version),
+        Commands::RemoveStd => cmd_remove_std(),
         Commands::Use { version } => cmd_use(&version),
     }
 }
@@ -119,6 +123,45 @@ fn cmd_install(version: &str) {
             std::process::exit(1);
         }
     }
+}
+
+fn cmd_install_std() {
+    let std_dir = home_dir().join(".trussup").join("stdlib");
+    if std_dir.exists() {
+        eprintln!("Error: std library is already installed at {}", std_dir.display());
+        std::process::exit(1);
+    }
+    std::fs::create_dir_all(std_dir.parent().unwrap()).ok();
+    let url = "https://github.com/truss-lang/truss-std.git";
+    let status = Command::new("git")
+        .args(["clone", "--depth", "1", url, &std_dir.to_string_lossy()])
+        .status();
+    match status {
+        Ok(s) if s.success() => {
+            println!("Installed std library to {}", std_dir.display());
+        }
+        Ok(s) => {
+            eprintln!("Error: git clone failed with status: {}", s);
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: failed to run git: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_remove_std() {
+    let std_dir = home_dir().join(".trussup").join("stdlib");
+    if !std_dir.exists() {
+        eprintln!("Error: std library is not installed");
+        std::process::exit(1);
+    }
+    std::fs::remove_dir_all(&std_dir).unwrap_or_else(|e| {
+        eprintln!("Error: failed to remove std library: {}", e);
+        std::process::exit(1);
+    });
+    println!("Removed std library");
 }
 
 fn cmd_list() {

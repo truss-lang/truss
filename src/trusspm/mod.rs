@@ -9,19 +9,21 @@ pub mod resolver;
 /// Returns `Some(path)` if the toolchain version is set and its stdlib directory exists.
 pub fn find_stdlib_path() -> Option<String> {
     let home = std::env::var("HOME").ok()?;
-    let current_file = std::path::Path::new(&home)
-        .join(".trussup")
-        .join("current.txt");
-    let version = std::fs::read_to_string(current_file).ok()?;
-    let version = version.trim().to_string();
-    let std_dir = std::path::Path::new(&home)
-        .join(".trussup")
-        .join("toolchains")
-        .join(&version)
-        .join("stdlib");
-    if std_dir.exists() {
-        Some(std_dir.to_string_lossy().to_string())
-    } else {
-        None
+    let trussup_dir = std::path::Path::new(&home).join(".trussup");
+
+    let current_file = trussup_dir.join("current.txt");
+    if let Ok(version) = std::fs::read_to_string(&current_file) {
+        let version = version.trim().to_string();
+        let toolchain_std = trussup_dir.join("toolchains").join(&version).join("stdlib");
+        if toolchain_std.exists() {
+            return Some(toolchain_std.to_string_lossy().to_string());
+        }
     }
+
+    let standalone_std = trussup_dir.join("stdlib");
+    if standalone_std.exists() {
+        return Some(standalone_std.to_string_lossy().to_string());
+    }
+
+    None
 }
