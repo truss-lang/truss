@@ -51,6 +51,93 @@ impl BuildOrchestrator {
         let _build_directives =
             crate::trusspm::cli::process_build_truss(project_path, &self.packages);
 
+        // Auto-detect and load standard library from active toolchain
+        let mut stdlib_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+        if let Some(std_path) = crate::trusspm::find_stdlib_path() {
+            let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+            self.packages.insert("Truss".to_string(), truss_pkg.clone());
+
+            let std_dir = std::path::Path::new(&std_path);
+            let project_file = std_dir.join("Project.truss");
+
+            // Discover std source files (project structure or flat)
+            let mut std_files: Vec<std::path::PathBuf> = Vec::new();
+            if project_file.exists() {
+                let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                if let Ok(manifest) = Manifest::from_project_dir(&std_path, std_engine) {
+                    std_files =
+                        DependencyResolver::discover_source_files(&manifest.name, std_dir);
+                }
+            }
+            if std_files.is_empty() {
+                let mut entries: Vec<_> = match std_dir.read_dir() {
+                    Ok(entries) => entries
+                        .filter_map(|e| e.ok())
+                        .filter(|e| e.path().extension().is_some_and(|ext| ext == "truss"))
+                        .collect(),
+                    Err(_) => Vec::new(),
+                };
+                entries.sort_by_key(|e| e.file_name());
+                std_files = entries.into_iter().map(|e| e.path()).collect();
+            }
+
+            if !std_files.is_empty() {
+                // Parse std files
+                let mut file_programs: Vec<Vec<Rc<RefCell<Statement>>>> = Vec::new();
+                for path in &std_files {
+                    if let Ok(content) = std::fs::read_to_string(path) {
+                        let file_path = path.to_string_lossy().to_string();
+                        let file_rc = Rc::new(file_path);
+                        let file_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                        let char_stream = CharStream::new(content, file_rc.clone());
+                        let mut lexer = Lexer::new(char_stream, file_engine.clone());
+                        let tokens = lexer.parse();
+                        if file_engine.borrow().has_errors() {
+                            continue;
+                        }
+                        let mut parser = Parser::new(file_rc, tokens, file_engine.clone());
+                        let program = parser.parse();
+                        if file_engine.borrow().has_errors() {
+                            continue;
+                        }
+                        self.engine.borrow_mut().extend(file_engine.take());
+                        file_programs.push(program.statements);
+                    }
+                }
+
+                if !file_programs.is_empty() {
+                    // Collect all std statements
+                    for file_stmts in &file_programs {
+                        for stmt in file_stmts {
+                            stdlib_stmts.push(stmt.clone());
+                        }
+                    }
+
+                    // Symbol resolve std library
+                    let std_prog = Program {
+                        file: Rc::new("stdlib".to_string()),
+                        statements: stdlib_stmts.clone(),
+                    };
+                    let std_engine2 = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                    let mut std_resolver = SymbolResolver::new(
+                        self.packages.clone(),
+                        "Truss".to_string(),
+                        std_engine2.clone(),
+                    );
+                    let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
+
+                    // Type resolve std library
+                    let std_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                    let mut std_type_resolver = TypeResolver::new(
+                        self.packages.clone(),
+                        "Truss".to_string(),
+                        std_ty_engine.clone(),
+                    );
+                    std_type_resolver.resolve(&std_prog, std_module);
+                }
+            }
+        }
+
         for (pkg_name, _pkg) in self.packages.clone() {
             let is_main = pkg_name == self.manifest.name;
 
@@ -168,7 +255,7 @@ impl BuildOrchestrator {
                 let file_ir_gen = IRGenerator::new(&context, ir_engine.clone())
                     .with_namespace(&pkg_name, &pkg_name);
                 let file_modules_result =
-                    file_ir_gen.generate_with_stdlib(&program, &[], main_scope.clone());
+                    file_ir_gen.generate_with_stdlib(&program, &stdlib_stmts, main_scope.clone());
                 file_modules.push((
                     file.to_string_lossy().to_string(),
                     (*file_modules_result.main).clone(),
@@ -186,7 +273,7 @@ impl BuildOrchestrator {
             let combined_module = if file_modules.is_empty() {
                 let single_ir_gen = IRGenerator::new(&context, ir_engine.clone())
                     .with_namespace(&pkg_name, &pkg_name);
-                let modules = single_ir_gen.generate_with_stdlib(&prog, &[], main_scope);
+                let modules = single_ir_gen.generate_with_stdlib(&prog, &stdlib_stmts, main_scope);
                 if ir_engine.borrow().has_errors() {
                     let formatted = duck_diagnostic::format_all_smart(&*ir_engine.borrow(), false);
                     if !formatted.is_empty() {

@@ -77,9 +77,14 @@ fn collect_diagnostics_from_engine(
 }
 
 pub fn start_server() {
+    let stdlib_path = crate::trusspm::find_stdlib_path();
+    if let Some(ref path) = stdlib_path {
+        eprintln!("truss-lsp: detected std library at {}", path);
+    }
     let mut server = LanguageServer {
         documents: HashMap::new(),
         exit: false,
+        stdlib_path,
     };
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin.lock());
@@ -99,6 +104,7 @@ pub fn start_server() {
 struct LanguageServer {
     documents: HashMap<String, String>,
     exit: bool,
+    stdlib_path: Option<String>,
 }
 
 impl LanguageServer {
@@ -180,7 +186,8 @@ impl LanguageServer {
                 },
                 "serverInfo": {
                     "name": "truss-lsp",
-                    "version": "0.1.0"
+                    "version": "0.1.0",
+                    "stdlibPath": self.stdlib_path
                 }
             }
         })

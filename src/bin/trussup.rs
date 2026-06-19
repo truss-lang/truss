@@ -89,6 +89,24 @@ fn cmd_install(version: &str) {
                 std::process::exit(1);
             });
 
+            // Download standard library
+            let std_dir = toolchains_dir.join("stdlib");
+            let std_url = "https://github.com/truss-lang/truss-std.git";
+            let std_status = Command::new("git")
+                .args(["clone", "--depth", "1", std_url, &std_dir.to_string_lossy()])
+                .status();
+            match std_status {
+                Ok(s) if s.success() => {
+                    println!("Downloaded std library");
+                }
+                _ => {
+                    eprintln!(
+                        "Warning: failed to download std library from {}",
+                        std_url
+                    );
+                }
+            }
+
             println!("Installed toolchain '{}'", version);
             set_current_version(version);
         }
