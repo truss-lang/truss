@@ -986,6 +986,28 @@ impl<'ctx> IRGenerator<'ctx> {
         }
     }
 
+    fn has_dynamic_member_lookup(&self, type_name: &str) -> bool {
+        if let Some(scope) = self.program_scope.borrow().as_ref()
+            && let Some(symbol) = scope.borrow().get_symbol(type_name)
+        {
+            let binding = symbol.borrow();
+            return matches!(
+                &*binding,
+                Symbol::Struct {
+                    has_dynamic_member_lookup: true,
+                    ..
+                } | Symbol::Class {
+                    has_dynamic_member_lookup: true,
+                    ..
+                } | Symbol::Enum {
+                    has_dynamic_member_lookup: true,
+                    ..
+                }
+            );
+        }
+        false
+    }
+
     fn get_stored_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<usize> {
         if let Some(scope) = self.program_scope.borrow().as_ref()
             && let Some(symbol) = scope.borrow().get_symbol(struct_name)
@@ -6595,6 +6617,47 @@ impl<'ctx> IRGenerator<'ctx> {
                             let struct_name = struct_name.clone();
                             let field_name = member.value.clone();
 
+                            if self.has_dynamic_member_lookup(&struct_name) {
+                                let string_expr = Rc::new(RefCell::new(Expression::StringLiteral {
+                                    token: Box::new(Token::new(
+                                        field_name.clone(),
+                                        TokenType::Identifier,
+                                        member.position.clone(),
+                                        member.file.clone(),
+                                    )),
+                                    value: field_name.clone(),
+                                    ty: None,
+                                }));
+                                let object_val = self.resolve_expression(object.clone())?.unwrap();
+                                let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                                    ptr
+                                } else {
+                                    let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                                    self.builder.build_store(ptr, object_val)?;
+                                    ptr
+                                };
+                                let string_val = self.resolve_expression(string_expr)?.unwrap();
+                                let setter_name = self
+                                    .mangled_fn_names
+                                    .borrow()
+                                    .get(&format!("{}.subscript.setter", struct_name))
+                                    .cloned()
+                                    .unwrap_or_else(|| {
+                                        self.mangle_fn_name(
+                                            &format!("{}.subscript.setter", struct_name),
+                                            &[],
+                                        )
+                                    });
+                                if let Some(setter_fn) = self.module.get_function(&setter_name) {
+                                    self.builder.build_call(
+                                        setter_fn,
+                                        &[struct_ptr.into(), string_val.into(), right_val.into()],
+                                        "",
+                                    )?;
+                                    return Ok(Some(right_val));
+                                }
+                            }
+
                             let object_val = self.resolve_expression(object.clone())?.unwrap();
 
                             let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
@@ -6698,6 +6761,89 @@ impl<'ctx> IRGenerator<'ctx> {
                         } else if let Type::Class(class_name, ..) = &*ty.borrow() {
                             let class_name = class_name.clone();
                             let field_name = member.value.clone();
+
+                            if self.has_dynamic_member_lookup(&class_name) {
+                                let string_expr = Rc::new(RefCell::new(Expression::StringLiteral {
+                                    token: Box::new(Token::new(
+                                        field_name.clone(),
+                                        TokenType::Identifier,
+                                        member.position.clone(),
+                                        member.file.clone(),
+                                    )),
+                                    value: field_name.clone(),
+                                    ty: None,
+                                }));
+                                let object_val = self.resolve_expression(object.clone())?.unwrap();
+                                let class_ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                    p
+                                } else {
+                                    let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                    self.builder.build_store(p, object_val)?;
+                                    p
+                                };
+                                let string_val = self.resolve_expression(string_expr)?.unwrap();
+                                let setter_entry = "subscript.setter";
+                                if let Some(slot_idx) =
+                                    self.get_vtable_slot_index(&class_name, setter_entry)
+                                {
+                                    let class_type =
+                                        *self.class_types.borrow().get(&class_name).unwrap();
+                                    let vtable_ptr_ptr = self
+                                        .builder
+                                        .build_struct_gep(class_type, class_ptr, 0, "")?;
+                                    let vtable_ptr = self
+                                        .builder
+                                        .build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            vtable_ptr_ptr,
+                                            "",
+                                        )?
+                                        .into_pointer_value();
+                                    let vtable_type =
+                                        *self.vtable_types.borrow().get(&class_name).unwrap();
+                                    let fn_ptr_ptr = self.builder.build_struct_gep(
+                                        vtable_type,
+                                        vtable_ptr,
+                                        slot_idx,
+                                        "",
+                                    )?;
+                                    let fn_ptr_val = self
+                                        .builder
+                                        .build_load(
+                                            self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                            fn_ptr_ptr,
+                                            "",
+                                        )?
+                                        .into_pointer_value();
+                                    let method_list =
+                                        self.compute_vtable_method_list(&class_name);
+                                    let (_, owner) = method_list
+                                        .iter()
+                                        .find(|(n, _)| n == &setter_entry)
+                                        .unwrap();
+                                    let declared_fn_name = self.mangle_fn_name(
+                                        &format!("{}.subscript.setter", owner),
+                                        &[],
+                                    );
+                                    let declared_fn = self
+                                        .module
+                                        .get_function(&declared_fn_name)
+                                        .ok_or_else(|| {
+                                            anyhow::anyhow!(
+                                                "Subscript setter function {} not found",
+                                                declared_fn_name
+                                            )
+                                        })?;
+                                    let fn_type = declared_fn.get_type();
+                                    self.builder.build_indirect_call(
+                                        fn_type,
+                                        fn_ptr_val,
+                                        &[class_ptr.into(), string_val.into(), right_val.into()],
+                                        "",
+                                    )?;
+                                    return Ok(Some(right_val));
+                                }
+                            }
 
                             let object_val = self.resolve_expression(object.clone())?.unwrap();
 
@@ -7866,6 +8012,49 @@ impl<'ctx> IRGenerator<'ctx> {
                     let struct_name = struct_name.clone();
                     let field_name = member.value.clone();
 
+                    if self.has_dynamic_member_lookup(&struct_name) {
+                        let string_expr = Rc::new(RefCell::new(Expression::StringLiteral {
+                            token: Box::new(Token::new(
+                                field_name.clone(),
+                                TokenType::Identifier,
+                                member.position.clone(),
+                                member.file.clone(),
+                            )),
+                            value: field_name.clone(),
+                            ty: None,
+                        }));
+                        let object_val = self.resolve_expression(object.clone())?.unwrap();
+                        let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
+                            ptr
+                        } else {
+                            let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
+                            self.builder.build_store(ptr, object_val)?;
+                            ptr
+                        };
+                        let string_val = self.resolve_expression(string_expr)?.unwrap();
+                        let getter_name = self
+                            .mangled_fn_names
+                            .borrow()
+                            .get(&format!("{}.subscript.getter", struct_name))
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                self.mangle_fn_name(
+                                    &format!("{}.subscript.getter", struct_name),
+                                    &[],
+                                )
+                            });
+                        if let Some(getter_fn) = self.module.get_function(&getter_name) {
+                            let result = self
+                                .builder
+                                .build_call(getter_fn, &[struct_ptr.into(), string_val.into()], "")?;
+                            let result_val = match result.try_as_basic_value() {
+                                inkwell::values::ValueKind::Basic(val) => val,
+                                _ => anyhow::bail!("Subscript getter call did not return a value"),
+                            };
+                            return Ok(Some(result_val));
+                        }
+                    }
+
                     let object_val = self.resolve_expression(object.clone())?.unwrap();
 
                     let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
@@ -7909,6 +8098,94 @@ impl<'ctx> IRGenerator<'ctx> {
                 {
                     let class_name = class_name.clone();
                     let field_name = member.value.clone();
+
+                    if self.has_dynamic_member_lookup(&class_name) {
+                        let string_expr = Rc::new(RefCell::new(Expression::StringLiteral {
+                            token: Box::new(Token::new(
+                                field_name.clone(),
+                                TokenType::Identifier,
+                                member.position.clone(),
+                                member.file.clone(),
+                            )),
+                            value: field_name.clone(),
+                            ty: None,
+                        }));
+                        let object_val = self.resolve_expression(object.clone())?.unwrap();
+                        let class_ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                            p
+                        } else {
+                            let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                            self.builder.build_store(p, object_val)?;
+                            p
+                        };
+                        let string_val = self.resolve_expression(string_expr)?.unwrap();
+                        let getter_entry = "subscript.getter";
+                        if let Some(slot_idx) =
+                            self.get_vtable_slot_index(&class_name, getter_entry)
+                        {
+                            let class_type = *self.class_types.borrow().get(&class_name).unwrap();
+                            let vtable_ptr_ptr = self
+                                .builder
+                                .build_struct_gep(class_type, class_ptr, 0, "")?;
+                            let vtable_ptr = self
+                                .builder
+                                .build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    vtable_ptr_ptr,
+                                    "",
+                                )?
+                                .into_pointer_value();
+                            let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
+                            let fn_ptr_ptr =
+                                self.builder
+                                    .build_struct_gep(vtable_type, vtable_ptr, slot_idx, "")?;
+                            let fn_ptr_val = self
+                                .builder
+                                .build_load(
+                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                    fn_ptr_ptr,
+                                    "",
+                                )?
+                                .into_pointer_value();
+                            let method_list = self.compute_vtable_method_list(&class_name);
+                            let (_, owner) = method_list
+                                .iter()
+                                .find(|(n, _)| n == &getter_entry)
+                                .unwrap();
+                            let declared_fn_name = self
+                                .mangled_fn_names
+                                .borrow()
+                                .get(&format!("{}.subscript.getter", owner))
+                                .cloned()
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Subscript getter function '{}' not found",
+                                        format!("{}.subscript.getter", owner)
+                                    )
+                                })?;
+                            let declared_fn =
+                                self.module.get_function(&declared_fn_name).ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Subscript getter LLVM function {} not found",
+                                        declared_fn_name
+                                    )
+                                })?;
+                            let fn_type = declared_fn.get_type();
+                            let result = self.builder.build_indirect_call(
+                                fn_type,
+                                fn_ptr_val,
+                                &[class_ptr.into(), string_val.into()],
+                                "",
+                            )?;
+                            let result_val = match result.try_as_basic_value() {
+                                inkwell::values::ValueKind::Basic(val) => val,
+                                _ => anyhow::bail!(
+                                    "Subscript getter call did not return a value"
+                                ),
+                            };
+                            return Ok(Some(result_val));
+                        }
+                    }
 
                     let object_val = self.resolve_expression(object.clone())?.unwrap();
 

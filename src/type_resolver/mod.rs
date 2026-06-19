@@ -3684,6 +3684,41 @@ impl TypeResolver {
                                 }
                             }
                         }
+                        drop(binding);
+                        if matches!(&*symbol.borrow(), Symbol::Struct { has_dynamic_member_lookup: true, .. }) {
+                            let member_name = member.value.clone();
+                            let string_token = Token::new(
+                                member_name.clone(),
+                                TokenType::Identifier,
+                                member.position.clone(),
+                                member.file.clone(),
+                            );
+                            let string_lit = Rc::new(RefCell::new(Expression::StringLiteral {
+                                token: Box::new(string_token),
+                                value: member_name,
+                                ty: Some(Rc::new(RefCell::new(Type::Struct(
+                                    "String".to_string(),
+                                    WeakSymbol(std::rc::Weak::new()),
+                                    vec![],
+                                )))),
+                            }));
+                            let label_token = Box::new(Token::new(
+                                "dynamicMember".to_string(),
+                                TokenType::Identifier,
+                                member.position.clone(),
+                                member.file.clone(),
+                            ));
+                            let param = CallParameter {
+                                label: Some(label_token),
+                                expression: string_lit,
+                            };
+                            let subscript_expr = Rc::new(RefCell::new(Expression::SubscriptAccess {
+                                object: object.clone(),
+                                parameters: vec![param],
+                                ty: None,
+                            }));
+                            return self.infer_type(subscript_expr);
+                        }
                         let token = &*member;
                         self.emit_error(
                             TrussDiagnosticCode::FieldNotFound,
@@ -3879,6 +3914,40 @@ impl TypeResolver {
                             return self.infer_type(member_expr);
                         }
 
+                        if matches!(&*symbol.borrow(), Symbol::Class { has_dynamic_member_lookup: true, .. }) {
+                            let member_name = member.value.clone();
+                            let string_token = Token::new(
+                                member_name.clone(),
+                                TokenType::Identifier,
+                                member.position.clone(),
+                                member.file.clone(),
+                            );
+                            let string_lit = Rc::new(RefCell::new(Expression::StringLiteral {
+                                token: Box::new(string_token),
+                                value: member_name,
+                                ty: Some(Rc::new(RefCell::new(Type::Struct(
+                                    "String".to_string(),
+                                    WeakSymbol(std::rc::Weak::new()),
+                                    vec![],
+                                )))),
+                            }));
+                            let label_token = Box::new(Token::new(
+                                "dynamicMember".to_string(),
+                                TokenType::Identifier,
+                                member.position.clone(),
+                                member.file.clone(),
+                            ));
+                            let param = CallParameter {
+                                label: Some(label_token),
+                                expression: string_lit,
+                            };
+                            let subscript_expr = Rc::new(RefCell::new(Expression::SubscriptAccess {
+                                object: object.clone(),
+                                parameters: vec![param],
+                                ty: None,
+                            }));
+                            return self.infer_type(subscript_expr);
+                        }
                         let token = &*member;
                         self.emit_error(
                             TrussDiagnosticCode::FieldNotFound,
@@ -3892,43 +3961,17 @@ impl TypeResolver {
                     }
                     Type::Enum(enum_name, ..) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
-                        if let Some(symbol) = scope.get_symbol(enum_name)
-                            && let Symbol::Enum { cases, .. } = &*symbol.borrow()
-                        {
-                            for case in cases {
-                                if case.borrow().name().as_ref().ok() == Some(&member.value) {
-                                    if let Symbol::EnumCase {
-                                        parameter_types, ..
-                                    } = &*case.borrow()
-                                    {
-                                        if parameter_types.is_empty() {
-                                            *ty = Some(object_ty.clone());
-                                            return Some(object_ty.clone());
-                                        } else {
-                                            let case_fn_type =
-                                                Rc::new(RefCell::new(Type::Function(
-                                                    parameter_types.clone(),
-                                                    object_ty.clone(),
-                                                    false,
-                                                    None,
-                                                )));
-                                            *ty = Some(case_fn_type.clone());
-                                            return Some(case_fn_type);
-                                        }
-                                    }
-                                }
+                        let symbol = scope.get_symbol(enum_name);
+                        let enum_data = symbol.as_ref().and_then(|sym| {
+                            let binding = sym.borrow();
+                            if let Symbol::Enum { cases, has_dynamic_member_lookup, .. } = &*binding {
+                                Some((cases.clone(), *has_dynamic_member_lookup))
+                            } else {
+                                None
                             }
-                            let token = &*member;
-                            self.emit_error(
-                                TrussDiagnosticCode::FieldNotFound,
-                                format!(
-                                    "Case '{}' not found on enum '{}'",
-                                    member.value, enum_name
-                                ),
-                                token,
-                            );
-                            return None;
-                        } else {
+                        });
+                        drop(scope);
+                        let Some((cases, has_dml)) = enum_data else {
                             let token = &*member;
                             self.emit_error(
                                 TrussDiagnosticCode::FieldNotFound,
@@ -3936,7 +3979,74 @@ impl TypeResolver {
                                 token,
                             );
                             return None;
+                        };
+                        for case in &cases {
+                            if case.borrow().name().as_ref().ok() == Some(&member.value) {
+                                if let Symbol::EnumCase {
+                                    parameter_types, ..
+                                } = &*case.borrow()
+                                {
+                                    if parameter_types.is_empty() {
+                                        *ty = Some(object_ty.clone());
+                                        return Some(object_ty.clone());
+                                    } else {
+                                        let case_fn_type =
+                                            Rc::new(RefCell::new(Type::Function(
+                                                parameter_types.clone(),
+                                                object_ty.clone(),
+                                                false,
+                                                None,
+                                            )));
+                                        *ty = Some(case_fn_type.clone());
+                                        return Some(case_fn_type);
+                                    }
+                                }
+                            }
                         }
+                        if has_dml {
+                            let member_name = member.value.clone();
+                            let string_token = Token::new(
+                                member_name.clone(),
+                                TokenType::Identifier,
+                                member.position.clone(),
+                                member.file.clone(),
+                            );
+                            let string_lit = Rc::new(RefCell::new(Expression::StringLiteral {
+                                token: Box::new(string_token),
+                                value: member_name,
+                                ty: Some(Rc::new(RefCell::new(Type::Struct(
+                                    "String".to_string(),
+                                    WeakSymbol(std::rc::Weak::new()),
+                                    vec![],
+                                )))),
+                            }));
+                            let label_token = Box::new(Token::new(
+                                "dynamicMember".to_string(),
+                                TokenType::Identifier,
+                                member.position.clone(),
+                                member.file.clone(),
+                            ));
+                            let param = CallParameter {
+                                label: Some(label_token),
+                                expression: string_lit,
+                            };
+                            let subscript_expr = Rc::new(RefCell::new(Expression::SubscriptAccess {
+                                object: object.clone(),
+                                parameters: vec![param],
+                                ty: None,
+                            }));
+                            return self.infer_type(subscript_expr);
+                        }
+                        let token = &*member;
+                        self.emit_error(
+                            TrussDiagnosticCode::FieldNotFound,
+                            format!(
+                                "Case '{}' not found on enum '{}'",
+                                member.value, enum_name
+                            ),
+                            token,
+                        );
+                        return None;
                     }
                     Type::Tuple(elements) => {
                         let member_name = &member.value;

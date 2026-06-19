@@ -125,9 +125,9 @@ impl Parser {
                 KeywordType::Func => self.parse_function_decl(false, attributes, modifiers),
                 KeywordType::Let | KeywordType::Var => self.parse_variable_decl(false, modifiers),
                 KeywordType::Struct => self.parse_struct_decl(attributes, modifiers),
-                KeywordType::Class => self.parse_class_decl(modifiers),
+                KeywordType::Class => self.parse_class_decl(attributes, modifiers),
                 KeywordType::Protocol => self.parse_protocol_decl(modifiers),
-                KeywordType::Enum => self.parse_enum_decl(modifiers),
+                KeywordType::Enum => self.parse_enum_decl(attributes, modifiers),
                 KeywordType::Extern => self.parse_extern(attributes, modifiers),
                 KeywordType::Init => self.parse_function_decl(false, attributes, modifiers),
                 KeywordType::Deinit => self.parse_deinit_decl(modifiers),
@@ -4044,7 +4044,11 @@ impl Parser {
         })
     }
 
-    fn parse_class_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+    fn parse_class_decl(
+        &mut self,
+        attributes: Vec<Attribute>,
+        modifiers: Vec<Modifier>,
+    ) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -4084,6 +4088,7 @@ impl Parser {
         let body = self.parse_brace_body()?;
         self.scope_nesting -= 1;
         Ok(Statement::ClassDecl {
+            attributes,
             modifiers,
             token: Box::new(token),
             name: Box::new(name),
@@ -4655,7 +4660,11 @@ impl Parser {
         })
     }
 
-    fn parse_enum_decl(&mut self, modifiers: Vec<Modifier>) -> Result<Statement, ()> {
+    fn parse_enum_decl(
+        &mut self,
+        attributes: Vec<Attribute>,
+        modifiers: Vec<Modifier>,
+    ) -> Result<Statement, ()> {
         let Some(token) = self.next() else {
             return Err(());
         };
@@ -4828,6 +4837,7 @@ impl Parser {
             return Err(());
         }
         Ok(Statement::EnumDecl {
+            attributes,
             modifiers,
             token: Box::new(token),
             name: Box::new(name),

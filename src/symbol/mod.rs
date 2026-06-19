@@ -28,6 +28,7 @@ pub enum Symbol {
         name: String,
         decl: Rc<RefCell<Statement>>,
         is_builtin_type: bool,
+        has_dynamic_member_lookup: bool,
         properties: Vec<Rc<RefCell<Symbol>>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
         constructors: Vec<Rc<RefCell<Symbol>>>,
@@ -54,6 +55,7 @@ pub enum Symbol {
     Class {
         name: String,
         decl: Rc<RefCell<Statement>>,
+        has_dynamic_member_lookup: bool,
         properties: Vec<Rc<RefCell<Symbol>>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
         constructors: Vec<Rc<RefCell<Symbol>>>,
@@ -89,6 +91,7 @@ pub enum Symbol {
     Enum {
         name: String,
         decl: Rc<RefCell<Statement>>,
+        has_dynamic_member_lookup: bool,
         cases: Vec<Rc<RefCell<Symbol>>>,
         methods: Vec<Rc<RefCell<Symbol>>>,
     },

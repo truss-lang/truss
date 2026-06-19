@@ -54,6 +54,7 @@ pub enum Statement {
         ty: Option<Rc<RefCell<Type>>>,
     },
     ClassDecl {
+        attributes: Vec<Attribute>,
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
@@ -77,6 +78,7 @@ pub enum Statement {
         ty: Option<Rc<RefCell<Type>>>,
     },
     EnumDecl {
+        attributes: Vec<Attribute>,
         modifiers: Vec<Modifier>,
         token: Box<Token>,
         name: Box<Token>,
