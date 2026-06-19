@@ -2152,7 +2152,7 @@ impl TypeResolver {
     fn create_parameterized_type_from_truss(
         &self,
         type_name: &str,
-        inner_ty: Rc<RefCell<Type>>,
+        type_params: Vec<Rc<RefCell<Type>>>,
     ) -> Option<Rc<RefCell<Type>>> {
         let truss_type = self.lookup_type_from_truss_package(type_name);
         let (name, symbol) = if let Some(ty) = truss_type {
@@ -2166,11 +2166,9 @@ impl TypeResolver {
             (type_name.to_string(), WeakSymbol(std::rc::Weak::new()))
         };
         let variant = if type_name == "Optional" {
-            Type::Enum(name, symbol, vec![inner_ty])
-        } else if type_name == "Array" {
-            Type::Struct(name, symbol, vec![inner_ty])
+            Type::Enum(name, symbol, type_params)
         } else {
-            Type::Struct(name, symbol, vec![inner_ty])
+            Type::Struct(name, symbol, type_params)
         };
         Some(Rc::new(RefCell::new(variant)))
     }
@@ -5143,6 +5141,36 @@ impl TypeResolver {
                     array_ty
                 }
             }
+            Expression::DictionaryLiteral { elements, ty, .. } => {
+                for (key, value) in elements {
+                    self.infer_type(key.clone());
+                    self.infer_type(value.clone());
+                }
+                if let Some(t) = ty.as_ref() {
+                    t.clone()
+                } else if let Some(current_scope) = &self.current_scope {
+                    if let Some(t) = current_scope.borrow().get_type("Dictionary") {
+                        *ty = Some(t.clone());
+                        t
+                    } else {
+                        let dict_ty = Rc::new(RefCell::new(Type::Struct(
+                            "Dictionary".to_string(),
+                            WeakSymbol(std::rc::Weak::new()),
+                            vec![],
+                        )));
+                        *ty = Some(dict_ty.clone());
+                        dict_ty
+                    }
+                } else {
+                    let dict_ty = Rc::new(RefCell::new(Type::Struct(
+                        "Dictionary".to_string(),
+                        WeakSymbol(std::rc::Weak::new()),
+                        vec![],
+                    )));
+                    *ty = Some(dict_ty.clone());
+                    dict_ty
+                }
+            }
             Expression::InlineType {
                 base, ty, token, ..
             } => {
@@ -5163,12 +5191,18 @@ impl TypeResolver {
             }
             Expression::OptionalType { inner, ty } => {
                 let inner_ty = self.infer_type(inner.clone())?;
-                *ty = self.create_parameterized_type_from_truss("Optional", inner_ty.clone());
+                *ty = self.create_parameterized_type_from_truss("Optional", vec![inner_ty.clone()]);
                 ty.clone().unwrap()
             }
             Expression::ArrayType { inner, ty } => {
                 let inner_ty = self.infer_type(inner.clone())?;
-                *ty = self.create_parameterized_type_from_truss("Array", inner_ty.clone());
+                *ty = self.create_parameterized_type_from_truss("Array", vec![inner_ty.clone()]);
+                ty.clone().unwrap()
+            }
+            Expression::DictionaryType { key, value, ty } => {
+                let key_ty = self.infer_type(key.clone())?;
+                let val_ty = self.infer_type(value.clone())?;
+                *ty = self.create_parameterized_type_from_truss("Dictionary", vec![key_ty, val_ty]);
                 ty.clone().unwrap()
             }
             Expression::Try {
@@ -5181,7 +5215,7 @@ impl TypeResolver {
                 match kind {
                     TryKind::Optional => {
                         let opt_ty =
-                            self.create_parameterized_type_from_truss("Optional", inner_ty)?;
+                            self.create_parameterized_type_from_truss("Optional", vec![inner_ty])?;
                         *ty = Some(opt_ty.clone());
                         opt_ty
                     }
@@ -5267,7 +5301,7 @@ impl TypeResolver {
                 drop(scope);
                 let member_ty = member_ty_opt?;
                 if let Some(result) =
-                    self.create_parameterized_type_from_truss("Optional", member_ty)
+                    self.create_parameterized_type_from_truss("Optional", vec![member_ty])
                 {
                     *ty = Some(result.clone());
                     result
@@ -5553,6 +5587,27 @@ impl TypeResolver {
                     TrussDiagnosticCode::TypeMismatch,
                     format!(
                         "Type mismatch: expected {}, found array literal",
+                        expected.borrow()
+                    ),
+                    token,
+                );
+            }
+        } else if matches!(&*expression.borrow(), Expression::DictionaryLiteral { .. }) {
+            let is_expected_dict = match &*expected.borrow() {
+                Type::Class(name, ..) | Type::Struct(name, ..) => name == "Dictionary",
+                _ => false,
+            };
+            if is_expected_dict {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::DictionaryLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+            } else {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeMismatch,
+                    format!(
+                        "Type mismatch: expected {}, found dictionary literal",
                         expected.borrow()
                     ),
                     token,

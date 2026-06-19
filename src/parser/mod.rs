@@ -947,51 +947,141 @@ impl Parser {
                 SeparatorType::OpenBracket => {
                     self.index += 1;
                     let left = token;
-                    let mut elements = Vec::new();
 
-                    if let Some(t) = self.peek()
+                    let result = if let Some(t) = self.peek()
                         && !SeparatorType::is_separator(&t, SeparatorType::CloseBracket)
                     {
                         let first_expr = self.parse_expression()?;
-                        elements.push(Rc::new(RefCell::new(first_expr)));
 
-                        while let Some(t) = self.peek()
-                            && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                        if let Some(t) = self.peek()
+                            && SeparatorType::is_separator(&t, SeparatorType::Colon)
                         {
                             self.index += 1;
-                            if let Some(next) = self.peek()
-                                && SeparatorType::is_separator(&next, SeparatorType::CloseBracket)
+                            let second_expr = self.parse_expression()?;
+                            let mut dict_elements = Vec::new();
+                            dict_elements.push((Rc::new(RefCell::new(first_expr)), Rc::new(RefCell::new(second_expr))));
+
+                            while let Some(t) = self.peek()
+                                && SeparatorType::is_separator(&t, SeparatorType::Comma)
                             {
-                                break;
+                                self.index += 1;
+                                if let Some(next) = self.peek()
+                                    && SeparatorType::is_separator(&next, SeparatorType::CloseBracket)
+                                {
+                                    break;
+                                }
+                                let key_expr = self.parse_expression()?;
+                                let Some(colon) = self.next() else {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::UnexpectedToken,
+                                        "Expected ':' in dictionary literal",
+                                        &left,
+                                    );
+                                    return Err(());
+                                };
+                                if !SeparatorType::is_separator(&colon, SeparatorType::Colon) {
+                                    self.emit_error(
+                                        TrussDiagnosticCode::UnexpectedToken,
+                                        format!("Expected ':' but found '{}'", colon.value),
+                                        &colon,
+                                    );
+                                    return Err(());
+                                }
+                                let val_expr = self.parse_expression()?;
+                                dict_elements.push((Rc::new(RefCell::new(key_expr)), Rc::new(RefCell::new(val_expr))));
                             }
-                            let expr = self.parse_expression()?;
-                            elements.push(Rc::new(RefCell::new(expr)));
+
+                            let Some(right) = self.next() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnexpectedToken,
+                                    "Expected closing bracket",
+                                    &left,
+                                );
+                                return Err(());
+                            };
+                            if !SeparatorType::is_separator(&right, SeparatorType::CloseBracket) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnexpectedToken,
+                                    format!("Expected ']' but found '{}'", right.value),
+                                    &right,
+                                );
+                                return Err(());
+                            }
+
+                            Expression::DictionaryLiteral {
+                                left: Box::new(left),
+                                elements: dict_elements,
+                                right: Box::new(right),
+                                ty: None,
+                            }
+                        } else {
+                            let mut elements = Vec::new();
+                            elements.push(Rc::new(RefCell::new(first_expr)));
+
+                            while let Some(t) = self.peek()
+                                && SeparatorType::is_separator(&t, SeparatorType::Comma)
+                            {
+                                self.index += 1;
+                                if let Some(next) = self.peek()
+                                    && SeparatorType::is_separator(&next, SeparatorType::CloseBracket)
+                                {
+                                    break;
+                                }
+                                let expr = self.parse_expression()?;
+                                elements.push(Rc::new(RefCell::new(expr)));
+                            }
+
+                            let Some(right) = self.next() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnexpectedToken,
+                                    "Expected closing bracket",
+                                    &left,
+                                );
+                                return Err(());
+                            };
+                            if !SeparatorType::is_separator(&right, SeparatorType::CloseBracket) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::UnexpectedToken,
+                                    format!("Expected ']' but found '{}'", right.value),
+                                    &right,
+                                );
+                                return Err(());
+                            }
+
+                            Expression::ArrayLiteral {
+                                left: Box::new(left),
+                                elements,
+                                right: Box::new(right),
+                                ty: None,
+                            }
                         }
-                    }
+                    } else {
+                        let Some(right) = self.next() else {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnexpectedToken,
+                                "Expected closing bracket",
+                                &left,
+                            );
+                            return Err(());
+                        };
+                        if !SeparatorType::is_separator(&right, SeparatorType::CloseBracket) {
+                            self.emit_error(
+                                TrussDiagnosticCode::UnexpectedToken,
+                                format!("Expected ']' but found '{}'", right.value),
+                                &right,
+                            );
+                            return Err(());
+                        }
 
-                    let Some(right) = self.next() else {
-                        self.emit_error(
-                            TrussDiagnosticCode::UnexpectedToken,
-                            "Expected closing bracket",
-                            &left,
-                        );
-                        return Err(());
+                        Expression::ArrayLiteral {
+                            left: Box::new(left),
+                            elements: Vec::new(),
+                            right: Box::new(right),
+                            ty: None,
+                        }
                     };
-                    if !SeparatorType::is_separator(&right, SeparatorType::CloseBracket) {
-                        self.emit_error(
-                            TrussDiagnosticCode::UnexpectedToken,
-                            format!("Expected ']' but found '{}'", right.value),
-                            &right,
-                        );
-                        return Err(());
-                    }
 
-                    Ok(Expression::ArrayLiteral {
-                        left: Box::new(left),
-                        elements,
-                        right: Box::new(right),
-                        ty: None,
-                    })
+                    Ok(result)
                 }
                 SeparatorType::OpenParen => {
                     self.index += 1;
@@ -1540,7 +1630,36 @@ impl Parser {
             && SeparatorType::is_separator(&token, SeparatorType::OpenBracket)
         {
             self.index += 1;
-            let element = self.parse_type_expression()?;
+            let first = self.parse_type_expression()?;
+
+            if let Some(t) = self.peek()
+                && SeparatorType::is_separator(&t, SeparatorType::Colon)
+            {
+                self.index += 1;
+                let second = self.parse_type_expression()?;
+                let Some(close) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedType,
+                        "Expected ']' in dictionary type",
+                        &token,
+                    );
+                    return Err(());
+                };
+                if !SeparatorType::is_separator(&close, SeparatorType::CloseBracket) {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedType,
+                        format!("Expected ']' but found '{}'", close.value),
+                        &close,
+                    );
+                    return Err(());
+                }
+                return Ok(Expression::DictionaryType {
+                    key: Rc::new(RefCell::new(first)),
+                    value: Rc::new(RefCell::new(second)),
+                    ty: None,
+                });
+            }
+
             let Some(close) = self.next() else {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedType,
@@ -1558,7 +1677,7 @@ impl Parser {
                 return Err(());
             }
             return Ok(Expression::ArrayType {
-                inner: Rc::new(RefCell::new(element)),
+                inner: Rc::new(RefCell::new(first)),
                 ty: None,
             });
         }

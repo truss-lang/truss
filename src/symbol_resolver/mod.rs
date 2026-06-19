@@ -2195,6 +2195,12 @@ impl SymbolResolver {
                     self.resolve_expression(element.clone());
                 }
             }
+            Expression::DictionaryLiteral { elements, .. } => {
+                for (key, value) in elements {
+                    self.resolve_expression(key.clone());
+                    self.resolve_expression(value.clone());
+                }
+            }
             Expression::TupleType { elements, .. } => {
                 for (_, element) in elements {
                     self.resolve_expression(element.clone());
@@ -2511,6 +2517,10 @@ impl SymbolResolver {
             }
             Expression::ArrayType { inner, .. } => {
                 self.resolve_expression(inner.clone());
+            }
+            Expression::DictionaryType { key, value, .. } => {
+                self.resolve_expression(key.clone());
+                self.resolve_expression(value.clone());
             }
             _ => {}
         }

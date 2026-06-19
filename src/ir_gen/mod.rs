@@ -5136,6 +5136,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::Cast { ty, .. }
                 | Expression::TupleLiteral { ty, .. }
                 | Expression::ArrayLiteral { ty, .. }
+                | Expression::DictionaryLiteral { ty, .. }
                 | Expression::TupleIndexAccess { ty, .. }
                 | Expression::SelfKeyword { ty, .. }
                 | Expression::SuperKeyword { ty, .. }
@@ -5153,7 +5154,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::Type { ty, .. }
                 | Expression::Do { ty, .. }
                 | Expression::OptionalType { ty, .. }
-                | Expression::ArrayType { ty, .. } => ty.clone(),
+                | Expression::ArrayType { ty, .. }
+                | Expression::DictionaryType { ty, .. } => ty.clone(),
                 _ => None,
             };
             let ty = self.resolve_type(
@@ -5201,6 +5203,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::Cast { ty, .. }
                 | Expression::TupleLiteral { ty, .. }
                 | Expression::ArrayLiteral { ty, .. }
+                | Expression::DictionaryLiteral { ty, .. }
                 | Expression::TupleIndexAccess { ty, .. }
                 | Expression::SelfKeyword { ty, .. }
                 | Expression::SuperKeyword { ty, .. }
@@ -5218,7 +5221,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 | Expression::Type { ty, .. }
                 | Expression::Do { ty, .. }
                 | Expression::OptionalType { ty, .. }
-                | Expression::ArrayType { ty, .. } => ty.clone(),
+                | Expression::ArrayType { ty, .. }
+                | Expression::DictionaryType { ty, .. } => ty.clone(),
                 _ => None,
             };
             let out_ty = self.resolve_type(
@@ -5450,6 +5454,18 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::ArrayLiteral { elements, .. } => {
                 for element in elements {
                     self.resolve_expression(element.clone())?;
+                }
+                Ok(Some(
+                    self.context
+                        .ptr_type(inkwell::AddressSpace::from(0))
+                        .const_null()
+                        .into(),
+                ))
+            }
+            Expression::DictionaryLiteral { elements, .. } => {
+                for (key, value) in elements {
+                    self.resolve_expression(key.clone())?;
+                    self.resolve_expression(value.clone())?;
                 }
                 Ok(Some(
                     self.context

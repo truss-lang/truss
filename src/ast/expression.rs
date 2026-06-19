@@ -277,6 +277,17 @@ pub enum Expression {
         inner: Rc<RefCell<Expression>>,
         ty: Option<Rc<RefCell<Type>>>,
     },
+    DictionaryType {
+        key: Rc<RefCell<Expression>>,
+        value: Rc<RefCell<Expression>>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
+    DictionaryLiteral {
+        left: Box<Token>,
+        elements: Vec<(Rc<RefCell<Expression>>, Rc<RefCell<Expression>>)>,
+        right: Box<Token>,
+        ty: Option<Rc<RefCell<Type>>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -295,6 +306,7 @@ impl Expression {
             Self::Cast { ty, .. } => Ok(ty.clone()),
             Self::TupleLiteral { ty, .. } => Ok(ty.clone()),
             Self::ArrayLiteral { ty, .. } => Ok(ty.clone()),
+            Self::DictionaryLiteral { ty, .. } => Ok(ty.clone()),
             Self::SelfKeyword { ty, .. } => Ok(ty.clone()),
             Self::SuperKeyword { ty, .. } => Ok(ty.clone()),
             Self::SelfType { ty, .. } => Ok(ty.clone()),
@@ -312,6 +324,8 @@ impl Expression {
             Self::SizeOf { ty, .. } => Ok(ty.clone()),
             Self::Do { ty, .. } => Ok(ty.clone()),
             Self::InlineType { ty, .. } => Ok(ty.clone()),
+            Self::ArrayType { ty, .. } => Ok(ty.clone()),
+            Self::DictionaryType { ty, .. } => Ok(ty.clone()),
             Self::StringLiteral { ty, .. } => Ok(ty.clone()),
             Self::Try { ty, .. } => Ok(ty.clone()),
             _ => Err(anyhow!("")),
@@ -325,6 +339,7 @@ impl Expression {
             Self::Cast { ty, .. } => Ok(ty),
             Self::TupleLiteral { ty, .. } => Ok(ty),
             Self::ArrayLiteral { ty, .. } => Ok(ty),
+            Self::DictionaryLiteral { ty, .. } => Ok(ty),
             Self::SelfKeyword { ty, .. } => Ok(ty),
             Self::SuperKeyword { ty, .. } => Ok(ty),
             Self::SelfType { ty, .. } => Ok(ty),
@@ -345,6 +360,7 @@ impl Expression {
             Self::OptionalType { ty, .. } => Ok(ty),
             Self::OptionalChain { ty, .. } => Ok(ty),
             Self::ArrayType { ty, .. } => Ok(ty),
+            Self::DictionaryType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
             Self::Try { ty, .. } => Ok(ty),
             Self::Call { ty, .. } => Ok(ty),
@@ -359,6 +375,7 @@ impl Expression {
             Self::Cast { ty, .. } => Ok(ty),
             Self::TupleLiteral { ty, .. } => Ok(ty),
             Self::ArrayLiteral { ty, .. } => Ok(ty),
+            Self::DictionaryLiteral { ty, .. } => Ok(ty),
             Self::SelfKeyword { ty, .. } => Ok(ty),
             Self::SuperKeyword { ty, .. } => Ok(ty),
             Self::SelfType { ty, .. } => Ok(ty),
@@ -379,6 +396,7 @@ impl Expression {
             Self::OptionalType { ty, .. } => Ok(ty),
             Self::OptionalChain { ty, .. } => Ok(ty),
             Self::ArrayType { ty, .. } => Ok(ty),
+            Self::DictionaryType { ty, .. } => Ok(ty),
             Self::StringLiteral { ty, .. } => Ok(ty),
             Self::Try { ty, .. } => Ok(ty),
             Self::Call { ty, .. } => Ok(ty),
@@ -424,6 +442,7 @@ impl Expression {
             Expression::TupleLiteral { left, .. } => (**left).clone(),
             Expression::TupleType { left, .. } => (**left).clone(),
             Expression::ArrayLiteral { left, .. } => (**left).clone(),
+            Expression::DictionaryLiteral { left, .. } => (**left).clone(),
             Expression::TupleIndexAccess { index, .. } => (**index).clone(),
             Expression::SelfKeyword { token, .. } => (**token).clone(),
             Expression::SuperKeyword { token, .. } => (**token).clone(),
@@ -487,6 +506,7 @@ impl Expression {
             Expression::OptionalType { inner, .. } => inner.borrow().token(),
             Expression::OptionalChain { token, .. } => (**token).clone(),
             Expression::ArrayType { inner, .. } => inner.borrow().token(),
+            Expression::DictionaryType { key, .. } => key.borrow().token(),
             Expression::MethodReference { method_token, .. } => (**method_token).clone(),
         }
     }
