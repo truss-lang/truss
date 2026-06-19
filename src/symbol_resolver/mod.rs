@@ -913,9 +913,7 @@ impl SymbolResolver {
                         } => {
                             self.resolve_expression(type_expression.clone());
                         }
-                        ProtocolMember::Subscript {
-                            accessors, ..
-                        } => {
+                        ProtocolMember::Subscript { accessors, .. } => {
                             let sub = Rc::new(RefCell::new(Symbol::ProtocolSubscript {
                                 name: "subscript".to_string(),
                                 parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
@@ -1836,6 +1834,28 @@ impl SymbolResolver {
                                         self.enter(symbol, &parameter.borrow().name);
                                     }
                                 }
+                                {
+                                    let self_sym = Rc::new(RefCell::new(Symbol::Variable {
+                                        name: "self".to_string(),
+                                        decl: None,
+                                        parameter: None,
+                                        is_var: true,
+                                        ownership: OwnershipModifier::Strong,
+                                    }));
+                                    self.enter(self_sym, &Token::new(
+                                        "self".to_string(),
+                                        TokenType::Keyword {
+                                            keyword: KeywordType::SelfKw,
+                                        },
+                                        Position {
+                                            pos: 0,
+                                            line: 0,
+                                            col: 0,
+                                            len: 0,
+                                        },
+                                        Rc::new("".to_string()),
+                                    ));
+                                }
                                 if let Some(return_type) = return_type {
                                     self.resolve_expression(return_type.clone());
                                 }
@@ -1952,7 +1972,9 @@ impl SymbolResolver {
                     Self::resolve_pattern_bindings(&bindings, self);
                 }
             }
-            Statement::Fallthrough { .. } | Statement::Break { .. } | Statement::Continue { .. } => {}
+            Statement::Fallthrough { .. }
+            | Statement::Break { .. }
+            | Statement::Continue { .. } => {}
             Statement::For {
                 pattern,
                 iterator,
@@ -2548,7 +2570,8 @@ impl SymbolResolver {
                 ..
             } => {
                 if let Some(current_scope) = self.current_scope.clone()
-                    && let Ok(Some(_)) = self.resolve_symbol_in_scope(name.value.clone(), current_scope.clone())
+                    && let Ok(Some(_)) =
+                        self.resolve_symbol_in_scope(name.value.clone(), current_scope.clone())
                 {
                 }
                 if let Some(type_parameters) = type_parameters {
