@@ -5140,14 +5140,71 @@ impl TypeResolver {
                     self.resolve_type_method_ref(type_n, method_name)
                 } else {
                     let scope = self.current_scope.as_ref()?;
-                    let scope_ref = scope.borrow();
-                    let sym = scope_ref.get_symbol(method_name)?;
-                    let decl = sym.borrow().get_decl().ok().flatten()?;
-                    let decl_ref = decl.borrow();
-                    if let Statement::FunctionDecl { ty: fn_ty, .. } = &*decl_ref {
-                        fn_ty.clone()
+                    let sym = scope.borrow().get_symbol(method_name);
+                    if let Some(sym) = sym {
+                        let decl = sym.borrow().get_decl().ok().flatten()?;
+                        let decl_ref = decl.borrow();
+                        if let Statement::FunctionDecl { ty: fn_ty, .. } = &*decl_ref {
+                            fn_ty.clone().map(|ft| {
+                                let ft_ref = ft.borrow();
+                                if let Type::Function(pt, rt, _, _) = &*ft_ref {
+                                    Rc::new(RefCell::new(Type::Closure(
+                                        pt.clone(),
+                                        rt.clone(),
+                                        0,
+                                    )))
+                                } else {
+                                    ft.clone()
+                                }
+                            })
+                        } else {
+                            None
+                        }
                     } else {
-                        None
+                        let self_ty = scope.borrow().get_type("self");
+                        if let Some(self_ty) = self_ty {
+                            let type_name = match &*self_ty.borrow() {
+                                Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => {
+                                    Some(n.clone())
+                                }
+                                Type::Pointer(inner) => match &*inner.borrow() {
+                                    Type::Struct(n, ..) | Type::Class(n, ..) => Some(n.clone()),
+                                    _ => None,
+                                },
+                                _ => None,
+                            };
+                            if let Some(tn) = type_name {
+                                self.resolve_type_method_ref(&tn, method_name).map(
+                                    |closure_ty| {
+                                        let ct = closure_ty.borrow();
+                                        if let Type::Closure(params, ret, _) = &*ct {
+                                            if params.len() > 1
+                                                || (params.len() == 1
+                                                    && !matches!(&*params[0].borrow(), Type::Void))
+                                            {
+                                                let self_first = matches!(
+                                                    &*params[0].borrow(),
+                                                    Type::Struct(..) | Type::Pointer(..)
+                                                );
+                                                if self_first {
+                                                    let actual = params[1..].to_vec();
+                                                    return Rc::new(RefCell::new(Type::Closure(
+                                                        actual,
+                                                        ret.clone(),
+                                                        1,
+                                                    )));
+                                                }
+                                            }
+                                        }
+                                        closure_ty.clone()
+                                    },
+                                )
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
                     }
                 };
                 if let Some(ref ft) = fn_type {
@@ -8414,6 +8471,13 @@ impl TypeResolver {
                     {
                         if let Some(ty) = ty {
                             if *static_method {
+                                if let Type::Function(pt, rt, _, _) = &*ty.borrow() {
+                                    return Some(Rc::new(RefCell::new(Type::Closure(
+                                        pt.clone(),
+                                        rt.clone(),
+                                        0,
+                                    ))));
+                                }
                                 return Some(ty.clone());
                             }
                             let ty_borrow = ty.borrow();
@@ -8437,11 +8501,17 @@ impl TypeResolver {
                                 };
                                 let mut new_params = vec![self_ty];
                                 new_params.extend(param_tys.iter().cloned());
-                                return Some(Rc::new(RefCell::new(Type::Function(
+                                return Some(Rc::new(RefCell::new(Type::Closure(
                                     new_params,
                                     ret_ty.clone(),
-                                    *is_vararg,
-                                    throws.clone(),
+                                    0,
+                                ))));
+                            }
+                            if let Type::Function(pt, rt, _, _) = &*ty.borrow() {
+                                return Some(Rc::new(RefCell::new(Type::Closure(
+                                    pt.clone(),
+                                    rt.clone(),
+                                    0,
                                 ))));
                             }
                             return Some(ty.clone());

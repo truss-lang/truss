@@ -2222,6 +2222,57 @@ impl SymbolResolver {
                     );
                 }
             }
+            Expression::MethodReference {
+                type_name,
+                method_name,
+                method_token,
+                ..
+            } => {
+                if let Some(type_n) = type_name {
+                    let found = self.current_scope.as_ref().map_or(false, |scope| {
+                        let scope_ref = scope.borrow();
+                        if let Some(sym) = scope_ref.get_symbol(type_n) {
+                            let methods = match &*sym.borrow() {
+                                Symbol::Struct { methods, .. }
+                                | Symbol::Class { methods, .. }
+                                | Symbol::Enum { methods, .. }
+                                | Symbol::Protocol { methods, .. } => methods.clone(),
+                                _ => return false,
+                            };
+                            methods.iter().any(|m| {
+                                m.borrow().name().ok().as_deref() == Some(method_name)
+                            })
+                        } else {
+                            false
+                        }
+                    });
+                    if !found {
+                        self.emit_error(
+                            TrussDiagnosticCode::UndefinedFunction,
+                            format!("Method '{}' not found on type '{}'", method_name, type_n),
+                            method_token.as_ref(),
+                        );
+                    }
+                } else {
+                    let found = self.current_scope.as_ref().and_then(|scope| {
+                        scope.borrow().get_symbol(method_name)
+                    });
+                    if found.is_none() {
+                        let in_method = self
+                            .current_scope
+                            .as_ref()
+                            .and_then(|scope| scope.borrow().get_type("self"))
+                            .is_some();
+                        if !in_method {
+                            self.emit_error(
+                                TrussDiagnosticCode::UndefinedFunction,
+                                format!("Function '{}' not found", method_name),
+                                method_token.as_ref(),
+                            );
+                        }
+                    }
+                }
+            }
             Expression::Binary { left, right, .. } => {
                 self.resolve_expression(left.clone());
                 self.resolve_expression(right.clone())

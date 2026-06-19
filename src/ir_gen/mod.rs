@@ -9382,6 +9382,66 @@ impl<'ctx> IRGenerator<'ctx> {
                             }
                         }
                     }
+                    Expression::MethodReference {
+                        type_name,
+                        method_name,
+                        ..
+                    } => {
+                        if let Some(type_n) = type_name {
+                            let base_name = format!("{}.{}", type_n, method_name);
+                            let mangled = self
+                                .mangled_fn_names
+                                .borrow()
+                                .get(&base_name)
+                                .cloned()
+                                .unwrap_or_else(|| self.mangle_fn_name(&base_name, &[]));
+                            (mangled, false)
+                        } else if self.module.get_function(method_name).is_some()
+                            || self.mangled_fn_names.borrow().contains_key(method_name)
+                        {
+                            let mangled = self
+                                .mangled_fn_names
+                                .borrow()
+                                .get(method_name)
+                                .cloned()
+                                .unwrap_or_else(|| method_name.clone());
+                            (mangled, false)
+                        } else {
+                            let self_base =
+                                self.program_scope.borrow().as_ref().and_then(|scope| {
+                                    let scope_ref = scope.borrow();
+                                    scope_ref.get_type("self").and_then(|self_ty| {
+                                        let tn = match &*self_ty.borrow() {
+                                            Type::Struct(n, ..)
+                                            | Type::Class(n, ..)
+                                            | Type::Enum(n, ..) => Some(n.clone()),
+                                            Type::Pointer(inner) => match &*inner.borrow() {
+                                                Type::Struct(n, ..) | Type::Class(n, ..) => {
+                                                    Some(n.clone())
+                                                }
+                                                _ => None,
+                                            },
+                                            _ => None,
+                                        };
+                                        tn.map(|t| format!("{}.{}", t, method_name))
+                                    })
+                                });
+                            if let Some(base) = self_base {
+                                let mangled = self
+                                    .mangled_fn_names
+                                    .borrow()
+                                    .get(&base)
+                                    .cloned()
+                                    .unwrap_or_else(|| self.mangle_fn_name(&base, &[]));
+                                (mangled, false)
+                            } else {
+                                (
+                                    method_name.clone(),
+                                    false,
+                                )
+                            }
+                        }
+                    }
                     _ => {
                         if let Expression::SelfType { ty, .. } = &*callee.borrow() {
                             if let Some(ty) = ty {
@@ -9424,6 +9484,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     Expression::Variable { ty, .. } => ty.clone(),
                     Expression::MemberAccess { ty, .. } => ty.clone(),
                     Expression::SelfType { ty, .. } => ty.clone(),
+                    Expression::MethodReference { ty, .. } => ty.clone(),
                     _ => None,
                 };
                 let is_throwing_call = callee_ty.as_ref().map_or(false, |t| {
@@ -10455,6 +10516,136 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             Expression::ClosureType { .. } => Ok(None),
             Expression::FunctionType { .. } => Ok(None),
+            Expression::MethodReference {
+                type_name,
+                method_name,
+                ty,
+                ..
+            } => {
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+
+                let captures_count = ty.as_ref().map_or(0, |t| {
+                    if let Type::Closure(_, _, cc) = &*t.borrow() {
+                        *cc
+                    } else {
+                        0
+                    }
+                });
+
+                let fn_base_name = if let Some(type_n) = type_name {
+                    format!("{}.{}", type_n, method_name)
+                } else if captures_count > 0 {
+                    self.program_scope.borrow().as_ref().and_then(|scope| {
+                        let scope_ref = scope.borrow();
+                        scope_ref.get_type("self").and_then(|self_ty| {
+                            let tn = match &*self_ty.borrow() {
+                                Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => {
+                                    Some(n.clone())
+                                }
+                                Type::Pointer(inner) => match &*inner.borrow() {
+                                    Type::Struct(n, ..) | Type::Class(n, ..) => Some(n.clone()),
+                                    _ => None,
+                                },
+                                _ => None,
+                            };
+                            tn.map(|t| format!("{}.{}", t, method_name))
+                        })
+                    })
+                    .unwrap_or_else(|| method_name.clone())
+                } else {
+                    method_name.clone()
+                };
+
+                let mangled_name = self
+                    .mangled_fn_names
+                    .borrow()
+                    .get(&fn_base_name)
+                    .cloned()
+                    .unwrap_or_else(|| fn_base_name.clone());
+
+                let function =
+                    self.module
+                        .get_function(&mangled_name)
+                        .ok_or_else(|| {
+                            self.emit_error(
+                                TrussDiagnosticCode::UndefinedFunction,
+                                format!("Function '{}' not found", method_name),
+                                None,
+                            );
+                            anyhow::anyhow!("Function not found: {}", mangled_name)
+                        })?;
+
+                if captures_count > 0 {
+                    let counter = {
+                        let mut c = self.closure_counter.borrow_mut();
+                        let val = *c;
+                        *c += 1;
+                        val
+                    };
+                    let ctx_type_name = format!("__method_ref_ctx_{}", counter);
+                    let context_struct_type =
+                        self.context.opaque_struct_type(&ctx_type_name);
+                    let field_types: Vec<BasicTypeEnum> =
+                        vec![ptr_ty.into(), ptr_ty.into()];
+                    context_struct_type.set_body(&field_types, false);
+
+                    let ctx_ptr =
+                        self.heap_allocate(context_struct_type.as_basic_type_enum())?;
+
+                    let fn_ptr = function.as_global_value().as_pointer_value();
+                    let fn_field_ptr = self.builder.build_struct_gep(
+                        context_struct_type,
+                        ctx_ptr,
+                        0,
+                        "",
+                    )?;
+                    let fn_bitcast =
+                        self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?;
+                    self.builder.build_store(fn_field_ptr, fn_bitcast)?;
+
+                    if let Some(self_ptr) = self.lookup_variable("self") {
+                        let self_ty = ty.as_ref().and_then(|t| {
+                            if let Type::Closure(params, _, _) = &*t.borrow() {
+                                params.first().cloned()
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| {
+                            Rc::new(RefCell::new(Type::Void))
+                        });
+                        let self_llvm_ty = self.resolve_type(self_ty)?;
+                        let self_val = self.builder.build_load(
+                            self_llvm_ty,
+                            self_ptr,
+                            "method_ref_self",
+                        )?;
+                        let heap_cell = self.heap_allocate(self_llvm_ty)?;
+                        self.builder.build_store(heap_cell, self_val)?;
+
+                        let cell_field_ptr = self.builder.build_struct_gep(
+                            context_struct_type,
+                            ctx_ptr,
+                            1,
+                            "",
+                        )?;
+                        let cell_ptr_i8 =
+                            self.builder.build_bit_cast(heap_cell, ptr_ty, "")?;
+                        self.builder.build_store(cell_field_ptr, cell_ptr_i8)?;
+                    }
+
+                    let ctx_ptr_i8 =
+                        self.builder.build_bit_cast(ctx_ptr, ptr_ty, "")?;
+                    Ok(Some(ctx_ptr_i8))
+                } else {
+                    let fn_ptr = function.as_global_value().as_pointer_value();
+                    Ok(Some(
+                        self.builder
+                            .build_bit_cast(fn_ptr, ptr_ty, "")?
+                            .into(),
+                    ))
+                }
+            }
             Expression::ShorthandArgument { index, ty } => {
                 let var_name = format!("${}", index);
                 if let Some(ptr) = self.lookup_variable(&var_name) {
