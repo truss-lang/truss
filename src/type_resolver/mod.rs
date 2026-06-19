@@ -1722,7 +1722,12 @@ impl TypeResolver {
                     }
                 }
             }
-            Statement::ProtocolDecl { scope, members, name, .. } => {
+            Statement::ProtocolDecl {
+                scope,
+                members,
+                name,
+                ..
+            } => {
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for member in members {
                     match member {
@@ -2961,10 +2966,9 @@ impl TypeResolver {
                         }
                         if !has_match {
                             if !matches!(&*callee.borrow(), Expression::Type { .. }) {
-                                if let Some(methods) = self.collect_method_overloads(
-                                    callee.clone(),
-                                    "callAsFunction",
-                                ) {
+                                if let Some(methods) =
+                                    self.collect_method_overloads(callee.clone(), "callAsFunction")
+                                {
                                     if !methods.is_empty() {
                                         *overloads = methods;
                                         if let Some(best) = self.resolve_overloaded_call(
@@ -3707,7 +3711,13 @@ impl TypeResolver {
                             }
                         }
                         drop(binding);
-                        if matches!(&*symbol.borrow(), Symbol::Struct { has_dynamic_member_lookup: true, .. }) {
+                        if matches!(
+                            &*symbol.borrow(),
+                            Symbol::Struct {
+                                has_dynamic_member_lookup: true,
+                                ..
+                            }
+                        ) {
                             let member_name = member.value.clone();
                             let string_token = Token::new(
                                 member_name.clone(),
@@ -3734,11 +3744,12 @@ impl TypeResolver {
                                 label: Some(label_token),
                                 expression: string_lit,
                             };
-                            let subscript_expr = Rc::new(RefCell::new(Expression::SubscriptAccess {
-                                object: object.clone(),
-                                parameters: vec![param],
-                                ty: None,
-                            }));
+                            let subscript_expr =
+                                Rc::new(RefCell::new(Expression::SubscriptAccess {
+                                    object: object.clone(),
+                                    parameters: vec![param],
+                                    ty: None,
+                                }));
                             return self.infer_type(subscript_expr);
                         }
                         let token = &*member;
@@ -3936,7 +3947,13 @@ impl TypeResolver {
                             return self.infer_type(member_expr);
                         }
 
-                        if matches!(&*symbol.borrow(), Symbol::Class { has_dynamic_member_lookup: true, .. }) {
+                        if matches!(
+                            &*symbol.borrow(),
+                            Symbol::Class {
+                                has_dynamic_member_lookup: true,
+                                ..
+                            }
+                        ) {
                             let member_name = member.value.clone();
                             let string_token = Token::new(
                                 member_name.clone(),
@@ -3963,11 +3980,12 @@ impl TypeResolver {
                                 label: Some(label_token),
                                 expression: string_lit,
                             };
-                            let subscript_expr = Rc::new(RefCell::new(Expression::SubscriptAccess {
-                                object: object.clone(),
-                                parameters: vec![param],
-                                ty: None,
-                            }));
+                            let subscript_expr =
+                                Rc::new(RefCell::new(Expression::SubscriptAccess {
+                                    object: object.clone(),
+                                    parameters: vec![param],
+                                    ty: None,
+                                }));
                             return self.infer_type(subscript_expr);
                         }
                         let token = &*member;
@@ -3986,7 +4004,12 @@ impl TypeResolver {
                         let symbol = scope.get_symbol(enum_name);
                         let enum_data = symbol.as_ref().and_then(|sym| {
                             let binding = sym.borrow();
-                            if let Symbol::Enum { cases, has_dynamic_member_lookup, .. } = &*binding {
+                            if let Symbol::Enum {
+                                cases,
+                                has_dynamic_member_lookup,
+                                ..
+                            } = &*binding
+                            {
                                 Some((cases.clone(), *has_dynamic_member_lookup))
                             } else {
                                 None
@@ -4012,13 +4035,12 @@ impl TypeResolver {
                                         *ty = Some(object_ty.clone());
                                         return Some(object_ty.clone());
                                     } else {
-                                        let case_fn_type =
-                                            Rc::new(RefCell::new(Type::Function(
-                                                parameter_types.clone(),
-                                                object_ty.clone(),
-                                                false,
-                                                None,
-                                            )));
+                                        let case_fn_type = Rc::new(RefCell::new(Type::Function(
+                                            parameter_types.clone(),
+                                            object_ty.clone(),
+                                            false,
+                                            None,
+                                        )));
                                         *ty = Some(case_fn_type.clone());
                                         return Some(case_fn_type);
                                     }
@@ -4052,20 +4074,18 @@ impl TypeResolver {
                                 label: Some(label_token),
                                 expression: string_lit,
                             };
-                            let subscript_expr = Rc::new(RefCell::new(Expression::SubscriptAccess {
-                                object: object.clone(),
-                                parameters: vec![param],
-                                ty: None,
-                            }));
+                            let subscript_expr =
+                                Rc::new(RefCell::new(Expression::SubscriptAccess {
+                                    object: object.clone(),
+                                    parameters: vec![param],
+                                    ty: None,
+                                }));
                             return self.infer_type(subscript_expr);
                         }
                         let token = &*member;
                         self.emit_error(
                             TrussDiagnosticCode::FieldNotFound,
-                            format!(
-                                "Case '{}' not found on enum '{}'",
-                                member.value, enum_name
-                            ),
+                            format!("Case '{}' not found on enum '{}'", member.value, enum_name),
                             token,
                         );
                         return None;
@@ -5357,11 +5377,7 @@ impl TypeResolver {
                             fn_ty.clone().map(|ft| {
                                 let ft_ref = ft.borrow();
                                 if let Type::Function(pt, rt, _, _) = &*ft_ref {
-                                    Rc::new(RefCell::new(Type::Closure(
-                                        pt.clone(),
-                                        rt.clone(),
-                                        0,
-                                    )))
+                                    Rc::new(RefCell::new(Type::Closure(pt.clone(), rt.clone(), 0)))
                                 } else {
                                     ft.clone()
                                 }
@@ -5383,8 +5399,8 @@ impl TypeResolver {
                                 _ => None,
                             };
                             if let Some(tn) = type_name {
-                                self.resolve_type_method_ref(&tn, method_name).map(
-                                    |closure_ty| {
+                                self.resolve_type_method_ref(&tn, method_name)
+                                    .map(|closure_ty| {
                                         let ct = closure_ty.borrow();
                                         if let Type::Closure(params, ret, _) = &*ct {
                                             if params.len() > 1
@@ -5406,8 +5422,7 @@ impl TypeResolver {
                                             }
                                         }
                                         closure_ty.clone()
-                                    },
-                                )
+                                    })
                             } else {
                                 None
                             }
@@ -5523,7 +5538,8 @@ impl TypeResolver {
         let is_nullptr = matches!(&*expression.borrow(), Expression::NullptrLiteral { .. });
         let is_null = matches!(&*expression.borrow(), Expression::NullLiteral { .. });
         let is_array_literal = matches!(&*expression.borrow(), Expression::ArrayLiteral { .. });
-        let is_expected_protocol = matches!(&*expected.borrow(), Type::Protocol(..) | Type::Compound(..));
+        let is_expected_protocol =
+            matches!(&*expected.borrow(), Type::Protocol(..) | Type::Compound(..));
 
         if is_int_literal {
             if is_expected_protocol {

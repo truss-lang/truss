@@ -1514,23 +1514,23 @@ impl<'ctx> IRGenerator<'ctx> {
                     if let Type::Function(param_types, return_type, is_vararg, throws_types) =
                         &*ty.borrow()
                     {
-                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                        Type::Void,
-                    )))));
-                    let mut all_params = vec![self_param];
-                    if throws_types.is_some() {
-                        let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                            Type::Struct(
-                                "Int8".to_string(),
-                                WeakSymbol(std::rc::Weak::new()),
-                                vec![],
-                            ),
-                        )))));
-                        all_params.push(err_ty);
-                    }
-                    all_params.extend(param_types.iter().cloned());
-                    if let Ok(function_type) =
-                        self.get_function_type(return_type.clone(), all_params, *is_vararg)
+                        let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(
+                            RefCell::new(Type::Void),
+                        ))));
+                        let mut all_params = vec![self_param];
+                        if throws_types.is_some() {
+                            let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(
+                                RefCell::new(Type::Struct(
+                                    "Int8".to_string(),
+                                    WeakSymbol(std::rc::Weak::new()),
+                                    vec![],
+                                )),
+                            ))));
+                            all_params.push(err_ty);
+                        }
+                        all_params.extend(param_types.iter().cloned());
+                        if let Ok(function_type) =
+                            self.get_function_type(return_type.clone(), all_params, *is_vararg)
                         {
                             self.module.add_function(cname, function_type, None);
                         }
@@ -4270,7 +4270,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                 if let Some(param_value) =
                                     function.get_nth_param(i as u32 + param_offset)
                                 {
-                                self.builder.build_store(ptr, param_value)?;
+                                    self.builder.build_store(ptr, param_value)?;
                                 }
                                 self.declare_variable(param_name.clone(), ptr);
                             }
@@ -4687,7 +4687,8 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let prev = self.current_struct.borrow_mut().take();
                 let prev_has_generics = *self.current_struct_has_generics.borrow();
-                *self.current_struct_has_generics.borrow_mut() = prev_has_generics || !generic_parameters.is_empty();
+                *self.current_struct_has_generics.borrow_mut() =
+                    prev_has_generics || !generic_parameters.is_empty();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
                     for stmt in body {
@@ -4707,7 +4708,8 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let prev = self.current_struct.borrow_mut().take();
                 let prev_has_generics = *self.current_struct_has_generics.borrow();
-                *self.current_struct_has_generics.borrow_mut() = prev_has_generics || !generic_parameters.is_empty();
+                *self.current_struct_has_generics.borrow_mut() =
+                    prev_has_generics || !generic_parameters.is_empty();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
                     for stmt in body {
@@ -4731,10 +4733,16 @@ impl<'ctx> IRGenerator<'ctx> {
                 *self.current_struct.borrow_mut() = prev;
                 result
             }
-            Statement::ProtocolDecl { name, members, generic_parameters, .. } => {
+            Statement::ProtocolDecl {
+                name,
+                members,
+                generic_parameters,
+                ..
+            } => {
                 let prev = self.current_struct.borrow_mut().take();
                 let prev_has_generics = *self.current_struct_has_generics.borrow();
-                *self.current_struct_has_generics.borrow_mut() = prev_has_generics || !generic_parameters.is_empty();
+                *self.current_struct_has_generics.borrow_mut() =
+                    prev_has_generics || !generic_parameters.is_empty();
                 self.current_struct.borrow_mut().replace(name.value.clone());
                 let result = (|| -> Result<bool> {
                     for member in members {
@@ -6659,24 +6667,27 @@ impl<'ctx> IRGenerator<'ctx> {
                             let field_name = member.value.clone();
 
                             if self.has_dynamic_member_lookup(&struct_name) {
-                                let string_expr = Rc::new(RefCell::new(Expression::StringLiteral {
-                                    token: Box::new(Token::new(
-                                        field_name.clone(),
-                                        TokenType::Identifier,
-                                        member.position.clone(),
-                                        member.file.clone(),
-                                    )),
-                                    value: field_name.clone(),
-                                    ty: None,
-                                }));
+                                let string_expr =
+                                    Rc::new(RefCell::new(Expression::StringLiteral {
+                                        token: Box::new(Token::new(
+                                            field_name.clone(),
+                                            TokenType::Identifier,
+                                            member.position.clone(),
+                                            member.file.clone(),
+                                        )),
+                                        value: field_name.clone(),
+                                        ty: None,
+                                    }));
                                 let object_val = self.resolve_expression(object.clone())?.unwrap();
-                                let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = object_val {
-                                    ptr
-                                } else {
-                                    let ptr = self.builder.build_alloca(object_val.get_type(), "")?;
-                                    self.builder.build_store(ptr, object_val)?;
-                                    ptr
-                                };
+                                let struct_ptr =
+                                    if let BasicValueEnum::PointerValue(ptr) = object_val {
+                                        ptr
+                                    } else {
+                                        let ptr =
+                                            self.builder.build_alloca(object_val.get_type(), "")?;
+                                        self.builder.build_store(ptr, object_val)?;
+                                        ptr
+                                    };
                                 let string_val = self.resolve_expression(string_expr)?.unwrap();
                                 let setter_name = self
                                     .mangled_fn_names
@@ -6804,18 +6815,20 @@ impl<'ctx> IRGenerator<'ctx> {
                             let field_name = member.value.clone();
 
                             if self.has_dynamic_member_lookup(&class_name) {
-                                let string_expr = Rc::new(RefCell::new(Expression::StringLiteral {
-                                    token: Box::new(Token::new(
-                                        field_name.clone(),
-                                        TokenType::Identifier,
-                                        member.position.clone(),
-                                        member.file.clone(),
-                                    )),
-                                    value: field_name.clone(),
-                                    ty: None,
-                                }));
+                                let string_expr =
+                                    Rc::new(RefCell::new(Expression::StringLiteral {
+                                        token: Box::new(Token::new(
+                                            field_name.clone(),
+                                            TokenType::Identifier,
+                                            member.position.clone(),
+                                            member.file.clone(),
+                                        )),
+                                        value: field_name.clone(),
+                                        ty: None,
+                                    }));
                                 let object_val = self.resolve_expression(object.clone())?.unwrap();
-                                let class_ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                let class_ptr = if let BasicValueEnum::PointerValue(p) = object_val
+                                {
                                     p
                                 } else {
                                     let p = self.builder.build_alloca(object_val.get_type(), "")?;
@@ -6856,8 +6869,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                             "",
                                         )?
                                         .into_pointer_value();
-                                    let method_list =
-                                        self.compute_vtable_method_list(&class_name);
+                                    let method_list = self.compute_vtable_method_list(&class_name);
                                     let (_, owner) = method_list
                                         .iter()
                                         .find(|(n, _)| n == &setter_entry)
@@ -6870,11 +6882,11 @@ impl<'ctx> IRGenerator<'ctx> {
                                         .module
                                         .get_function(&declared_fn_name)
                                         .ok_or_else(|| {
-                                            anyhow::anyhow!(
-                                                "Subscript setter function {} not found",
-                                                declared_fn_name
-                                            )
-                                        })?;
+                                        anyhow::anyhow!(
+                                            "Subscript setter function {} not found",
+                                            declared_fn_name
+                                        )
+                                    })?;
                                     let fn_type = declared_fn.get_type();
                                     self.builder.build_indirect_call(
                                         fn_type,
@@ -7886,7 +7898,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 let target_llvm_ty = self.resolve_type(target_ty.clone())?;
 
                 // Handle existential container boxing for Any/AnyObject protocol targets
-                if matches!(&*target_ty.borrow(), Type::Protocol(name, ..) if name == "Any" || name == "AnyObject") {
+                if matches!(&*target_ty.borrow(), Type::Protocol(name, ..) if name == "Any" || name == "AnyObject")
+                {
                     let protocol_name = match &*target_ty.borrow() {
                         Type::Protocol(name, ..) => name.clone(),
                         _ => unreachable!(),
@@ -7906,9 +7919,11 @@ impl<'ctx> IRGenerator<'ctx> {
                             }
                         };
                         let container_alloca = self.builder.build_alloca(ct, "")?;
-                        let value_field = self.builder.build_struct_gep(ct, container_alloca, 0, "")?;
+                        let value_field =
+                            self.builder.build_struct_gep(ct, container_alloca, 0, "")?;
                         self.builder.build_store(value_field, data_ptr)?;
-                        let wt_field = self.builder.build_struct_gep(ct, container_alloca, 1, "")?;
+                        let wt_field =
+                            self.builder.build_struct_gep(ct, container_alloca, 1, "")?;
                         let wt_null = self
                             .context
                             .ptr_type(inkwell::AddressSpace::from(0))
@@ -8119,9 +8134,11 @@ impl<'ctx> IRGenerator<'ctx> {
                                 )
                             });
                         if let Some(getter_fn) = self.module.get_function(&getter_name) {
-                            let result = self
-                                .builder
-                                .build_call(getter_fn, &[struct_ptr.into(), string_val.into()], "")?;
+                            let result = self.builder.build_call(
+                                getter_fn,
+                                &[struct_ptr.into(), string_val.into()],
+                                "",
+                            )?;
                             let result_val = match result.try_as_basic_value() {
                                 inkwell::values::ValueKind::Basic(val) => val,
                                 _ => anyhow::bail!("Subscript getter call did not return a value"),
@@ -8211,9 +8228,12 @@ impl<'ctx> IRGenerator<'ctx> {
                                 )?
                                 .into_pointer_value();
                             let vtable_type = *self.vtable_types.borrow().get(&class_name).unwrap();
-                            let fn_ptr_ptr =
-                                self.builder
-                                    .build_struct_gep(vtable_type, vtable_ptr, slot_idx, "")?;
+                            let fn_ptr_ptr = self.builder.build_struct_gep(
+                                vtable_type,
+                                vtable_ptr,
+                                slot_idx,
+                                "",
+                            )?;
                             let fn_ptr_val = self
                                 .builder
                                 .build_load(
@@ -8254,9 +8274,7 @@ impl<'ctx> IRGenerator<'ctx> {
                             )?;
                             let result_val = match result.try_as_basic_value() {
                                 inkwell::values::ValueKind::Basic(val) => val,
-                                _ => anyhow::bail!(
-                                    "Subscript getter call did not return a value"
-                                ),
+                                _ => anyhow::bail!("Subscript getter call did not return a value"),
                             };
                             return Ok(Some(result_val));
                         }
@@ -8948,25 +8966,21 @@ impl<'ctx> IRGenerator<'ctx> {
                         callee.borrow().get_ty_ref().ok().and_then(|t| t.clone())
                     {
                         let type_name = match &*callee_ty.borrow() {
-                            Type::Struct(n, ..)
-                            | Type::Class(n, ..)
-                            | Type::Enum(n, ..) => Some(n.clone()),
+                            Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => {
+                                Some(n.clone())
+                            }
                             _ => None,
                         };
                         if let Some(ref type_name) = type_name {
                             if self.has_dynamic_callable(type_name) {
-                                let object_val =
-                                    self.resolve_expression(callee.clone())?.unwrap();
-                                let self_ptr =
-                                    if let BasicValueEnum::PointerValue(p) = object_val {
-                                        p
-                                    } else {
-                                        let p = self
-                                            .builder
-                                            .build_alloca(object_val.get_type(), "")?;
-                                        self.builder.build_store(p, object_val)?;
-                                        p
-                                    };
+                                let object_val = self.resolve_expression(callee.clone())?.unwrap();
+                                let self_ptr = if let BasicValueEnum::PointerValue(p) = object_val {
+                                    p
+                                } else {
+                                    let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                    self.builder.build_store(p, object_val)?;
+                                    p
+                                };
                                 for param in parameters {
                                     self.resolve_expression(param.expression.clone())?;
                                 }
@@ -8979,8 +8993,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     .unwrap_or_else(|| self.mangle_fn_name(&key, &[]));
                                 if let Some(f) = self.module.get_function(&mangled) {
                                     let fn_type = f.get_type();
-                                    let param_count =
-                                        fn_type.get_param_types().len();
+                                    let param_count = fn_type.get_param_types().len();
                                     let null_ptr = self
                                         .context
                                         .ptr_type(inkwell::AddressSpace::from(0))
@@ -8992,8 +9005,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     for _ in 1..param_count {
                                         args.push(null_ptr.into());
                                     }
-                                    let call_result =
-                                        self.builder.build_call(f, &args, "")?;
+                                    let call_result = self.builder.build_call(f, &args, "")?;
                                     match call_result.try_as_basic_value() {
                                         inkwell::values::ValueKind::Basic(val) => {
                                             return Ok(Some(val));
@@ -9015,9 +9027,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         {
                             let tb = callee_ty.borrow();
                             match &*tb {
-                                Type::Struct(n, ..)
-                                | Type::Class(n, ..)
-                                | Type::Enum(n, ..) => {
+                                Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => {
                                     Some(format!("{}.callAsFunction", n))
                                 }
                                 _ => None,
@@ -9903,10 +9913,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     .unwrap_or_else(|| self.mangle_fn_name(&base, &[]));
                                 (mangled, false)
                             } else {
-                                (
-                                    method_name.clone(),
-                                    false,
-                                )
+                                (method_name.clone(), false)
                             }
                         }
                     }
@@ -9941,9 +9948,11 @@ impl<'ctx> IRGenerator<'ctx> {
                             if let Some(idx) = *selected_index
                                 && idx < overloads.len()
                             {
-                                if let Some(mangled) =
-                                    self.mangle_from_overload(base_name, &overloads[idx], parameters)
-                                {
+                                if let Some(mangled) = self.mangle_from_overload(
+                                    base_name,
+                                    &overloads[idx],
+                                    parameters,
+                                ) {
                                     (mangled, false)
                                 } else {
                                     let mangled = self
@@ -11029,23 +11038,26 @@ impl<'ctx> IRGenerator<'ctx> {
                 let fn_base_name = if let Some(type_n) = type_name {
                     format!("{}.{}", type_n, method_name)
                 } else if captures_count > 0 {
-                    self.program_scope.borrow().as_ref().and_then(|scope| {
-                        let scope_ref = scope.borrow();
-                        scope_ref.get_type("self").and_then(|self_ty| {
-                            let tn = match &*self_ty.borrow() {
-                                Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => {
-                                    Some(n.clone())
-                                }
-                                Type::Pointer(inner) => match &*inner.borrow() {
-                                    Type::Struct(n, ..) | Type::Class(n, ..) => Some(n.clone()),
+                    self.program_scope
+                        .borrow()
+                        .as_ref()
+                        .and_then(|scope| {
+                            let scope_ref = scope.borrow();
+                            scope_ref.get_type("self").and_then(|self_ty| {
+                                let tn = match &*self_ty.borrow() {
+                                    Type::Struct(n, ..)
+                                    | Type::Class(n, ..)
+                                    | Type::Enum(n, ..) => Some(n.clone()),
+                                    Type::Pointer(inner) => match &*inner.borrow() {
+                                        Type::Struct(n, ..) | Type::Class(n, ..) => Some(n.clone()),
+                                        _ => None,
+                                    },
                                     _ => None,
-                                },
-                                _ => None,
-                            };
-                            tn.map(|t| format!("{}.{}", t, method_name))
+                                };
+                                tn.map(|t| format!("{}.{}", t, method_name))
+                            })
                         })
-                    })
-                    .unwrap_or_else(|| method_name.clone())
+                        .unwrap_or_else(|| method_name.clone())
                 } else {
                     method_name.clone()
                 };
@@ -11057,17 +11069,14 @@ impl<'ctx> IRGenerator<'ctx> {
                     .cloned()
                     .unwrap_or_else(|| fn_base_name.clone());
 
-                let function =
-                    self.module
-                        .get_function(&mangled_name)
-                        .ok_or_else(|| {
-                            self.emit_error(
-                                TrussDiagnosticCode::UndefinedFunction,
-                                format!("Function '{}' not found", method_name),
-                                None,
-                            );
-                            anyhow::anyhow!("Function not found: {}", mangled_name)
-                        })?;
+                let function = self.module.get_function(&mangled_name).ok_or_else(|| {
+                    self.emit_error(
+                        TrussDiagnosticCode::UndefinedFunction,
+                        format!("Function '{}' not found", method_name),
+                        None,
+                    );
+                    anyhow::anyhow!("Function not found: {}", mangled_name)
+                })?;
 
                 if captures_count > 0 {
                     let counter = {
@@ -11077,66 +11086,50 @@ impl<'ctx> IRGenerator<'ctx> {
                         val
                     };
                     let ctx_type_name = format!("__method_ref_ctx_{}", counter);
-                    let context_struct_type =
-                        self.context.opaque_struct_type(&ctx_type_name);
-                    let field_types: Vec<BasicTypeEnum> =
-                        vec![ptr_ty.into(), ptr_ty.into()];
+                    let context_struct_type = self.context.opaque_struct_type(&ctx_type_name);
+                    let field_types: Vec<BasicTypeEnum> = vec![ptr_ty.into(), ptr_ty.into()];
                     context_struct_type.set_body(&field_types, false);
 
-                    let ctx_ptr =
-                        self.heap_allocate(context_struct_type.as_basic_type_enum())?;
+                    let ctx_ptr = self.heap_allocate(context_struct_type.as_basic_type_enum())?;
 
                     let fn_ptr = function.as_global_value().as_pointer_value();
-                    let fn_field_ptr = self.builder.build_struct_gep(
-                        context_struct_type,
-                        ctx_ptr,
-                        0,
-                        "",
-                    )?;
-                    let fn_bitcast =
-                        self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?;
+                    let fn_field_ptr =
+                        self.builder
+                            .build_struct_gep(context_struct_type, ctx_ptr, 0, "")?;
+                    let fn_bitcast = self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?;
                     self.builder.build_store(fn_field_ptr, fn_bitcast)?;
 
                     if let Some(self_ptr) = self.lookup_variable("self") {
-                        let self_ty = ty.as_ref().and_then(|t| {
-                            if let Type::Closure(params, _, _) = &*t.borrow() {
-                                params.first().cloned()
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_else(|| {
-                            Rc::new(RefCell::new(Type::Void))
-                        });
+                        let self_ty = ty
+                            .as_ref()
+                            .and_then(|t| {
+                                if let Type::Closure(params, _, _) = &*t.borrow() {
+                                    params.first().cloned()
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)));
                         let self_llvm_ty = self.resolve_type(self_ty)?;
-                        let self_val = self.builder.build_load(
-                            self_llvm_ty,
-                            self_ptr,
-                            "method_ref_self",
-                        )?;
+                        let self_val =
+                            self.builder
+                                .build_load(self_llvm_ty, self_ptr, "method_ref_self")?;
                         let heap_cell = self.heap_allocate(self_llvm_ty)?;
                         self.builder.build_store(heap_cell, self_val)?;
 
-                        let cell_field_ptr = self.builder.build_struct_gep(
-                            context_struct_type,
-                            ctx_ptr,
-                            1,
-                            "",
-                        )?;
-                        let cell_ptr_i8 =
-                            self.builder.build_bit_cast(heap_cell, ptr_ty, "")?;
+                        let cell_field_ptr =
+                            self.builder
+                                .build_struct_gep(context_struct_type, ctx_ptr, 1, "")?;
+                        let cell_ptr_i8 = self.builder.build_bit_cast(heap_cell, ptr_ty, "")?;
                         self.builder.build_store(cell_field_ptr, cell_ptr_i8)?;
                     }
 
-                    let ctx_ptr_i8 =
-                        self.builder.build_bit_cast(ctx_ptr, ptr_ty, "")?;
+                    let ctx_ptr_i8 = self.builder.build_bit_cast(ctx_ptr, ptr_ty, "")?;
                     Ok(Some(ctx_ptr_i8))
                 } else {
                     let fn_ptr = function.as_global_value().as_pointer_value();
                     Ok(Some(
-                        self.builder
-                            .build_bit_cast(fn_ptr, ptr_ty, "")?
-                            .into(),
+                        self.builder.build_bit_cast(fn_ptr, ptr_ty, "")?.into(),
                     ))
                 }
             }

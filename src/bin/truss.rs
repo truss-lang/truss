@@ -85,8 +85,7 @@ fn cmd_build() {
 
     println!(
         "Building project '{}' v{}",
-        orchestrator.manifest.name,
-        orchestrator.manifest.version
+        orchestrator.manifest.name, orchestrator.manifest.version
     );
 
     orchestrator.run_all_passes(".");
@@ -108,8 +107,7 @@ fn cmd_run() {
 
     println!(
         "Building project '{}' v{}",
-        orchestrator.manifest.name,
-        orchestrator.manifest.version
+        orchestrator.manifest.name, orchestrator.manifest.version
     );
 
     orchestrator.run_all_passes(".");

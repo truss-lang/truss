@@ -240,8 +240,7 @@ fn extract_product_type(param: &crate::ast::expression::CallParameter) -> Option
                     if let Some(lib_param) = parameters.first() {
                         let lib_expr = lib_param.expression.borrow();
                         if let Expression::ImplicitMemberAccess { member, .. } = &*lib_expr {
-                            return LibraryType::from_str(&member.value)
-                                .map(ProductType::Library);
+                            return LibraryType::from_str(&member.value).map(ProductType::Library);
                         }
                     }
                 }

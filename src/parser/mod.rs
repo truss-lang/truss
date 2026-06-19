@@ -15,9 +15,8 @@ use crate::{
             GenericParameter, GenericParameterKind, ImportKind, MacroArm, MacroMetaVarType,
             MacroPatternFragment, MatchCase, Modifier, ModifierType, OperatorDeclFixity,
             OperatorFixity, OwnershipModifier, Parameter, Pattern, PrecedenceAssociativity,
-            ProtocolAccessorSet, ProtocolMember,
-            SelectiveAlias, SelectiveMember, Statement, VariadicKind, WhereRequirement,
-            WhereRequirementKind,
+            ProtocolAccessorSet, ProtocolMember, SelectiveAlias, SelectiveMember, Statement,
+            VariadicKind, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -422,7 +421,9 @@ impl Parser {
                 let prec = Precedence::get_precedence(&token)
                     .or_else(|| self.precedence_groups.get(&token.value).copied());
                 let Some(prec) = prec else { break };
-                if prec <= precedence { break; }
+                if prec <= precedence {
+                    break;
+                }
                 self.index += 1;
                 if let TokenType::Operator { operator } = token.ty {
                     let right = self.parse_binary(prec)?;
@@ -524,7 +525,8 @@ impl Parser {
                         };
                     }
                 } else if let TokenType::Identifier = token.ty
-                    && self.registered_operators.get(&token.value) == Some(&OperatorDeclFixity::Infix)
+                    && self.registered_operators.get(&token.value)
+                        == Some(&OperatorDeclFixity::Infix)
                 {
                     let right = self.parse_binary(prec)?;
                     let op_name = token.value.clone();
@@ -693,12 +695,10 @@ impl Parser {
                     symbol: None,
                 })),
                 type_parameters: None,
-                parameters: vec![
-                    crate::ast::expression::CallParameter {
-                        label: Some(Box::new(arg_label)),
-                        expression: Rc::new(RefCell::new(expression)),
-                    },
-                ],
+                parameters: vec![crate::ast::expression::CallParameter {
+                    label: Some(Box::new(arg_label)),
+                    expression: Rc::new(RefCell::new(expression)),
+                }],
                 overloads: vec![],
                 selected_index: None,
                 ty: None,
@@ -730,7 +730,8 @@ impl Parser {
                     OperatorType::Not => Ok(expression),
                     _ => {
                         if let TokenType::Identifier = token.ty
-                            && self.registered_operators.get(&token.value) == Some(&OperatorDeclFixity::Postfix)
+                            && self.registered_operators.get(&token.value)
+                                == Some(&OperatorDeclFixity::Postfix)
                         {
                             self.index += 1;
                             let op_name = token.value.clone();
@@ -752,12 +753,10 @@ impl Parser {
                                     symbol: None,
                                 })),
                                 type_parameters: None,
-                                parameters: vec![
-                                    crate::ast::expression::CallParameter {
-                                        label: Some(Box::new(arg_label)),
-                                        expression: Rc::new(RefCell::new(expression)),
-                                    },
-                                ],
+                                parameters: vec![crate::ast::expression::CallParameter {
+                                    label: Some(Box::new(arg_label)),
+                                    expression: Rc::new(RefCell::new(expression)),
+                                }],
                                 overloads: vec![],
                                 selected_index: None,
                                 ty: None,
@@ -791,12 +790,10 @@ impl Parser {
                         symbol: None,
                     })),
                     type_parameters: None,
-                    parameters: vec![
-                        crate::ast::expression::CallParameter {
-                            label: Some(Box::new(arg_label)),
-                            expression: Rc::new(RefCell::new(expression)),
-                        },
-                    ],
+                    parameters: vec![crate::ast::expression::CallParameter {
+                        label: Some(Box::new(arg_label)),
+                        expression: Rc::new(RefCell::new(expression)),
+                    }],
                     overloads: vec![],
                     selected_index: None,
                     ty: None,
@@ -959,14 +956,20 @@ impl Parser {
                             self.index += 1;
                             let second_expr = self.parse_expression()?;
                             let mut dict_elements = Vec::new();
-                            dict_elements.push((Rc::new(RefCell::new(first_expr)), Rc::new(RefCell::new(second_expr))));
+                            dict_elements.push((
+                                Rc::new(RefCell::new(first_expr)),
+                                Rc::new(RefCell::new(second_expr)),
+                            ));
 
                             while let Some(t) = self.peek()
                                 && SeparatorType::is_separator(&t, SeparatorType::Comma)
                             {
                                 self.index += 1;
                                 if let Some(next) = self.peek()
-                                    && SeparatorType::is_separator(&next, SeparatorType::CloseBracket)
+                                    && SeparatorType::is_separator(
+                                        &next,
+                                        SeparatorType::CloseBracket,
+                                    )
                                 {
                                     break;
                                 }
@@ -988,7 +991,10 @@ impl Parser {
                                     return Err(());
                                 }
                                 let val_expr = self.parse_expression()?;
-                                dict_elements.push((Rc::new(RefCell::new(key_expr)), Rc::new(RefCell::new(val_expr))));
+                                dict_elements.push((
+                                    Rc::new(RefCell::new(key_expr)),
+                                    Rc::new(RefCell::new(val_expr)),
+                                ));
                             }
 
                             let Some(right) = self.next() else {
@@ -1023,7 +1029,10 @@ impl Parser {
                             {
                                 self.index += 1;
                                 if let Some(next) = self.peek()
-                                    && SeparatorType::is_separator(&next, SeparatorType::CloseBracket)
+                                    && SeparatorType::is_separator(
+                                        &next,
+                                        SeparatorType::CloseBracket,
+                                    )
                                 {
                                     break;
                                 }
@@ -2709,7 +2718,10 @@ impl Parser {
             Some(t) => {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedIdentifier,
-                    format!("Expected 'prefix', 'postfix', or 'infix' after 'operator', found '{}'", t.value),
+                    format!(
+                        "Expected 'prefix', 'postfix', or 'infix' after 'operator', found '{}'",
+                        t.value
+                    ),
                     &t,
                 );
                 return Err(());
@@ -2740,7 +2752,8 @@ impl Parser {
             if sym.is_empty() {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedIdentifier,
-                    "Expected operator symbol (identifier or operator tokens) after fixity keyword".to_string(),
+                    "Expected operator symbol (identifier or operator tokens) after fixity keyword"
+                        .to_string(),
                     &token,
                 );
                 return Err(());
@@ -2858,7 +2871,9 @@ impl Parser {
                             }
                         }
                     }
-                    _ => { self.index += 1; }
+                    _ => {
+                        self.index += 1;
+                    }
                 }
             } else {
                 self.index += 1;
@@ -5126,66 +5141,78 @@ impl Parser {
                                 }
                                 if let TokenType::Identifier = t.ty {
                                     match t.value.as_str() {
-                        "get" => {
-                            get = true;
-                            self.index += 1;
-                            if let Some(open) = self.peek()
-                                && SeparatorType::is_separator(&open, SeparatorType::OpenBrace)
-                            {
-                                self.index += 1;
-                                let mut body = Vec::new();
-                                self.scope_nesting += 1;
-                                while let Some(bt) = self.peek() {
-                                    if SeparatorType::is_separator(&bt, SeparatorType::CloseBrace) {
-                                        break;
-                                    }
-                                    if let Ok(s) = self.parse_statement() {
-                                        body.push(Rc::new(RefCell::new(s)));
-                                    } else {
-                                        self.skip();
-                                    }
-                                }
-                                self.scope_nesting -= 1;
-                                let _ = self.next();
-                                default_accessors.push(Accessor {
-                                    kind: AccessorKind::Get,
-                                    parameter: None,
-                                    body,
-                                    set_access_modifier: None,
-                                });
-                            }
-                        }
-                        "set" => {
-                            set = true;
-                            self.index += 1;
-                            if let Some(open) = self.peek()
-                                && SeparatorType::is_separator(&open, SeparatorType::OpenBrace)
-                            {
-                                self.index += 1;
-                                let mut body = Vec::new();
-                                self.scope_nesting += 1;
-                                while let Some(bt) = self.peek() {
-                                    if SeparatorType::is_separator(&bt, SeparatorType::CloseBrace) {
-                                        break;
-                                    }
-                                    if let Ok(s) = self.parse_statement() {
-                                        body.push(Rc::new(RefCell::new(s)));
-                                    } else {
-                                        self.skip();
-                                    }
-                                }
-                                self.scope_nesting -= 1;
-                                let _ = self.next();
-                                default_accessors.push(Accessor {
-                                    kind: AccessorKind::Set,
-                                    parameter: None,
-                                    body,
-                                    set_access_modifier: None,
-                                });
-                            }
-                        }
-                        _ => {
-                            self.emit_error(
+                                        "get" => {
+                                            get = true;
+                                            self.index += 1;
+                                            if let Some(open) = self.peek()
+                                                && SeparatorType::is_separator(
+                                                    &open,
+                                                    SeparatorType::OpenBrace,
+                                                )
+                                            {
+                                                self.index += 1;
+                                                let mut body = Vec::new();
+                                                self.scope_nesting += 1;
+                                                while let Some(bt) = self.peek() {
+                                                    if SeparatorType::is_separator(
+                                                        &bt,
+                                                        SeparatorType::CloseBrace,
+                                                    ) {
+                                                        break;
+                                                    }
+                                                    if let Ok(s) = self.parse_statement() {
+                                                        body.push(Rc::new(RefCell::new(s)));
+                                                    } else {
+                                                        self.skip();
+                                                    }
+                                                }
+                                                self.scope_nesting -= 1;
+                                                let _ = self.next();
+                                                default_accessors.push(Accessor {
+                                                    kind: AccessorKind::Get,
+                                                    parameter: None,
+                                                    body,
+                                                    set_access_modifier: None,
+                                                });
+                                            }
+                                        }
+                                        "set" => {
+                                            set = true;
+                                            self.index += 1;
+                                            if let Some(open) = self.peek()
+                                                && SeparatorType::is_separator(
+                                                    &open,
+                                                    SeparatorType::OpenBrace,
+                                                )
+                                            {
+                                                self.index += 1;
+                                                let mut body = Vec::new();
+                                                self.scope_nesting += 1;
+                                                while let Some(bt) = self.peek() {
+                                                    if SeparatorType::is_separator(
+                                                        &bt,
+                                                        SeparatorType::CloseBrace,
+                                                    ) {
+                                                        break;
+                                                    }
+                                                    if let Ok(s) = self.parse_statement() {
+                                                        body.push(Rc::new(RefCell::new(s)));
+                                                    } else {
+                                                        self.skip();
+                                                    }
+                                                }
+                                                self.scope_nesting -= 1;
+                                                let _ = self.next();
+                                                default_accessors.push(Accessor {
+                                                    kind: AccessorKind::Set,
+                                                    parameter: None,
+                                                    body,
+                                                    set_access_modifier: None,
+                                                });
+                                            }
+                                        }
+                                        _ => {
+                                            self.emit_error(
                                 TrussDiagnosticCode::UnexpectedToken,
                                 format!(
                                     "Expected 'get' or 'set' in protocol property accessor, found '{}'",
@@ -5193,8 +5220,8 @@ impl Parser {
                                 ),
                                 &t,
                             );
-                            return Err(());
-                        }
+                                            return Err(());
+                                        }
                                     }
                                 } else {
                                     self.emit_error(
@@ -5427,13 +5454,19 @@ impl Parser {
                                             get = true;
                                             self.index += 1;
                                             if let Some(open) = self.peek()
-                                                && SeparatorType::is_separator(&open, SeparatorType::OpenBrace)
+                                                && SeparatorType::is_separator(
+                                                    &open,
+                                                    SeparatorType::OpenBrace,
+                                                )
                                             {
                                                 self.index += 1;
                                                 let mut body = Vec::new();
                                                 self.scope_nesting += 1;
                                                 while let Some(bt) = self.peek() {
-                                                    if SeparatorType::is_separator(&bt, SeparatorType::CloseBrace) {
+                                                    if SeparatorType::is_separator(
+                                                        &bt,
+                                                        SeparatorType::CloseBrace,
+                                                    ) {
                                                         break;
                                                     }
                                                     if let Ok(s) = self.parse_statement() {
@@ -5456,13 +5489,19 @@ impl Parser {
                                             set = true;
                                             self.index += 1;
                                             if let Some(open) = self.peek()
-                                                && SeparatorType::is_separator(&open, SeparatorType::OpenBrace)
+                                                && SeparatorType::is_separator(
+                                                    &open,
+                                                    SeparatorType::OpenBrace,
+                                                )
                                             {
                                                 self.index += 1;
                                                 let mut body = Vec::new();
                                                 self.scope_nesting += 1;
                                                 while let Some(bt) = self.peek() {
-                                                    if SeparatorType::is_separator(&bt, SeparatorType::CloseBrace) {
+                                                    if SeparatorType::is_separator(
+                                                        &bt,
+                                                        SeparatorType::CloseBrace,
+                                                    ) {
                                                         break;
                                                     }
                                                     if let Ok(s) = self.parse_statement() {
@@ -5986,7 +6025,9 @@ impl Parser {
             cond
         } else if let Some(t) = self.peek()
             && SeparatorType::is_separator(&t, SeparatorType::OpenParen)
-            && self.peek2().map_or(false, |t2| KeywordType::is_keyword(&t2, KeywordType::Let))
+            && self
+                .peek2()
+                .map_or(false, |t2| KeywordType::is_keyword(&t2, KeywordType::Let))
         {
             // Handle `if (let x = ...) && ...` - parenthesized if-let condition
             self.index += 1; // consume `(`
@@ -6010,7 +6051,9 @@ impl Parser {
                 self.index += 1; // consume `&&`
                 let right = if let Some(next) = self.peek()
                     && SeparatorType::is_separator(&next, SeparatorType::OpenParen)
-                    && self.peek2().map_or(false, |t2| KeywordType::is_keyword(&t2, KeywordType::Let))
+                    && self
+                        .peek2()
+                        .map_or(false, |t2| KeywordType::is_keyword(&t2, KeywordType::Let))
                 {
                     self.index += 1; // consume `(`
                     let inner = self.parse_if_let_condition()?;

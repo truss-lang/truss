@@ -2154,7 +2154,12 @@ fn test_irgen_protocol_default_impl_with_self() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should have no errors with self in protocol default impl, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should have no errors with self in protocol default impl, got: {:?}",
+        errors
+    );
     drop(engine_ref);
 
     let context = Context::create();
@@ -2193,7 +2198,12 @@ fn test_irgen_protocol_default_impl_self_no_crash() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Should have no errors with self in multiple protocol default impls, got: {:?}", errors);
+    assert_eq!(
+        errors.len(),
+        0,
+        "Should have no errors with self in multiple protocol default impls, got: {:?}",
+        errors
+    );
     drop(engine_ref);
 
     let context = Context::create();

@@ -1865,19 +1865,22 @@ impl SymbolResolver {
                                         is_var: true,
                                         ownership: OwnershipModifier::Strong,
                                     }));
-                                    self.enter(self_sym, &Token::new(
-                                        "self".to_string(),
-                                        TokenType::Keyword {
-                                            keyword: KeywordType::SelfKw,
-                                        },
-                                        Position {
-                                            pos: 0,
-                                            line: 0,
-                                            col: 0,
-                                            len: 0,
-                                        },
-                                        Rc::new("".to_string()),
-                                    ));
+                                    self.enter(
+                                        self_sym,
+                                        &Token::new(
+                                            "self".to_string(),
+                                            TokenType::Keyword {
+                                                keyword: KeywordType::SelfKw,
+                                            },
+                                            Position {
+                                                pos: 0,
+                                                line: 0,
+                                                col: 0,
+                                                len: 0,
+                                            },
+                                            Rc::new("".to_string()),
+                                        ),
+                                    );
                                 }
                                 if let Some(return_type) = return_type {
                                     self.resolve_expression(return_type.clone());
@@ -2268,9 +2271,9 @@ impl SymbolResolver {
                                 | Symbol::Protocol { methods, .. } => methods.clone(),
                                 _ => return false,
                             };
-                            methods.iter().any(|m| {
-                                m.borrow().name().ok().as_deref() == Some(method_name)
-                            })
+                            methods
+                                .iter()
+                                .any(|m| m.borrow().name().ok().as_deref() == Some(method_name))
                         } else {
                             false
                         }
@@ -2283,9 +2286,10 @@ impl SymbolResolver {
                         );
                     }
                 } else {
-                    let found = self.current_scope.as_ref().and_then(|scope| {
-                        scope.borrow().get_symbol(method_name)
-                    });
+                    let found = self
+                        .current_scope
+                        .as_ref()
+                        .and_then(|scope| scope.borrow().get_symbol(method_name));
                     if found.is_none() {
                         let in_method = self
                             .current_scope

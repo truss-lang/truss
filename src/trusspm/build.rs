@@ -65,8 +65,7 @@ impl BuildOrchestrator {
             if project_file.exists() {
                 let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
                 if let Ok(manifest) = Manifest::from_project_dir(&std_path, std_engine) {
-                    std_files =
-                        DependencyResolver::discover_source_files(&manifest.name, std_dir);
+                    std_files = DependencyResolver::discover_source_files(&manifest.name, std_dir);
                 }
             }
             if std_files.is_empty() {
@@ -318,7 +317,9 @@ impl BuildOrchestrator {
 
             let output_name = match kind {
                 ProductType::Executable => self.manifest.name.clone(),
-                ProductType::Library(LibraryType::Dynamic) => format!("lib{}.so", self.manifest.name),
+                ProductType::Library(LibraryType::Dynamic) => {
+                    format!("lib{}.so", self.manifest.name)
+                }
                 ProductType::Library(LibraryType::Static) => format!("lib{}.a", self.manifest.name),
             };
             let output_path = build_dir.join(&output_name);

@@ -78,8 +78,12 @@ pub fn emit_output(
 
     match kind {
         ProductType::Executable => link_executable(&object_files, output_path, triple)?,
-        ProductType::Library(LibraryType::Dynamic) => link_dynamic_library(&object_files, output_path, triple)?,
-        ProductType::Library(LibraryType::Static) => create_static_library(&object_files, output_path)?,
+        ProductType::Library(LibraryType::Dynamic) => {
+            link_dynamic_library(&object_files, output_path, triple)?
+        }
+        ProductType::Library(LibraryType::Static) => {
+            create_static_library(&object_files, output_path)?
+        }
     }
 
     let _ = std::fs::remove_dir_all(&temp_dir);

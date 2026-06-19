@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::rc::Rc;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use duck_diagnostic::DiagnosticCode;
 
@@ -41,10 +41,7 @@ fn write_message(writer: &mut dyn Write, content: &str) {
     let _ = writer.flush();
 }
 
-fn collect_diagnostics_from_engine(
-    engine: &TrussDiagnosticEngine,
-    _content: &str,
-) -> Vec<Value> {
+fn collect_diagnostics_from_engine(engine: &TrussDiagnosticEngine, _content: &str) -> Vec<Value> {
     let mut diagnostics = Vec::new();
     for diag in engine.get_diagnostics() {
         let severity = match diag.severity {
@@ -387,11 +384,7 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
             let col = token.position.col as u64;
             let length = token.value.len() as u64;
             let delta_line = line - prev_line;
-            let delta_col = if delta_line == 0 {
-                col - prev_col
-            } else {
-                col
-            };
+            let delta_col = if delta_line == 0 { col - prev_col } else { col };
             encoded.push(delta_line);
             encoded.push(delta_col);
             encoded.push(length);
@@ -409,10 +402,7 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
     encoded
 }
 
-fn semantic_token_info(
-    token: &Token,
-    prev_keyword: Option<KeywordType>,
-) -> Option<(u64, u64)> {
+fn semantic_token_info(token: &Token, prev_keyword: Option<KeywordType>) -> Option<(u64, u64)> {
     match &token.ty {
         TokenType::Keyword { keyword } => {
             let type_idx = match keyword {
@@ -433,9 +423,9 @@ fn semantic_token_info(
         }
         TokenType::StringLiteral { .. } | TokenType::CharLiteral { .. } => Some((5, 0)),
         TokenType::IntegerLiteral { .. } | TokenType::DecimalLiteral { .. } => Some((6, 0)),
-        TokenType::BooleanLiteral { .. }
-        | TokenType::NullLiteral
-        | TokenType::NullptrLiteral => Some((0, 0)),
+        TokenType::BooleanLiteral { .. } | TokenType::NullLiteral | TokenType::NullptrLiteral => {
+            Some((0, 0))
+        }
         TokenType::Operator { .. } => Some((8, 0)),
         TokenType::Separator { .. } => None,
     }

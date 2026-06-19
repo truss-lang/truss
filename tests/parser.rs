@@ -9,8 +9,8 @@ use truss::{
         statement::{
             AccessModifier, AccessorKind, AsmDirection, Condition, FunctionBody,
             GenericParameterKind, ImportKind, MacroMetaVarType, MacroPatternFragment, Modifier,
-            ModifierType, OperatorDeclFixity, OperatorFixity, OwnershipModifier, Parameter, Pattern, ProtocolMember,
-            SelectiveAlias, Statement, VariadicKind, WhereRequirementKind,
+            ModifierType, OperatorDeclFixity, OperatorFixity, OwnershipModifier, Parameter,
+            Pattern, ProtocolMember, SelectiveAlias, Statement, VariadicKind, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine},
@@ -10070,10 +10070,7 @@ fn test_parse_operator_prefix_decl() {
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
     drop(engine_ref);
     assert_eq!(program.statements.len(), 1);
-    if let Statement::OperatorDecl {
-        fixity, symbol, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::OperatorDecl { fixity, symbol, .. } = &*program.statements[0].borrow() {
         assert_eq!(*fixity, OperatorDeclFixity::Prefix);
         assert_eq!(symbol, "myNegate");
     } else {
@@ -10097,10 +10094,7 @@ fn test_parse_operator_postfix_decl() {
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
     drop(engine_ref);
     assert_eq!(program.statements.len(), 1);
-    if let Statement::OperatorDecl {
-        fixity, symbol, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::OperatorDecl { fixity, symbol, .. } = &*program.statements[0].borrow() {
         assert_eq!(*fixity, OperatorDeclFixity::Postfix);
         assert_eq!(symbol, "myIncrement");
     } else {
@@ -10124,10 +10118,7 @@ fn test_parse_operator_infix_decl() {
     assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
     drop(engine_ref);
     assert_eq!(program.statements.len(), 1);
-    if let Statement::OperatorDecl {
-        fixity, symbol, ..
-    } = &*program.statements[0].borrow()
-    {
+    if let Statement::OperatorDecl { fixity, symbol, .. } = &*program.statements[0].borrow() {
         assert_eq!(*fixity, OperatorDeclFixity::Infix);
         assert_eq!(symbol, "myAdd");
     } else {

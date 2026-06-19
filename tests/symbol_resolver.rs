@@ -1106,8 +1106,7 @@ fn test_undefined_protocol_conformance_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    if !errors.is_empty() {
-    }
+    if !errors.is_empty() {}
 }
 
 #[test]
@@ -1312,8 +1311,7 @@ fn test_struct_undefined_protocol_conformance_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    if !errors.is_empty() {
-    }
+    if !errors.is_empty() {}
 }
 
 #[test]
@@ -1380,8 +1378,7 @@ fn test_enum_undefined_protocol_conformance_error() {
 
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    if !errors.is_empty() {
-    }
+    if !errors.is_empty() {}
 }
 
 #[test]
