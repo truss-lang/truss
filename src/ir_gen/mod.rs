@@ -7882,6 +7882,40 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 let target_llvm_ty = self.resolve_type(target_ty.clone())?;
 
+                // Handle existential container boxing for Any/AnyObject protocol targets
+                if matches!(&*target_ty.borrow(), Type::Protocol(name, ..) if name == "Any" || name == "AnyObject") {
+                    let protocol_name = match &*target_ty.borrow() {
+                        Type::Protocol(name, ..) => name.clone(),
+                        _ => unreachable!(),
+                    };
+                    if let Some(ct) = self
+                        .existential_container_types
+                        .borrow()
+                        .get(&protocol_name)
+                        .copied()
+                    {
+                        let (data_ptr, _is_class_ref) = match source_val {
+                            BasicValueEnum::PointerValue(p) => (p, true),
+                            val => {
+                                let heap = self.heap_allocate(val.get_type())?;
+                                self.builder.build_store(heap, val)?;
+                                (heap, false)
+                            }
+                        };
+                        let container_alloca = self.builder.build_alloca(ct, "")?;
+                        let value_field = self.builder.build_struct_gep(ct, container_alloca, 0, "")?;
+                        self.builder.build_store(value_field, data_ptr)?;
+                        let wt_field = self.builder.build_struct_gep(ct, container_alloca, 1, "")?;
+                        let wt_null = self
+                            .context
+                            .ptr_type(inkwell::AddressSpace::from(0))
+                            .const_null();
+                        self.builder.build_store(wt_field, wt_null)?;
+                        let container_val = self.builder.build_load(ct, container_alloca, "")?;
+                        return Ok(Some(container_val));
+                    }
+                }
+
                 let result = match kind {
                     CastKind::ForceBitcast => {
                         self.builder

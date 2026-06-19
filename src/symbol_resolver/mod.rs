@@ -817,14 +817,23 @@ impl SymbolResolver {
                 members,
                 scope,
                 generic_parameters,
+                conformances,
                 ..
             } => {
+                let is_any_object = conformances.iter().any(|c| {
+                    if let Expression::Type { name: cn, .. } = &*c.borrow() {
+                        cn.value == "AnyObject"
+                    } else {
+                        false
+                    }
+                });
                 let protocol_symbol = Rc::new(RefCell::new(Symbol::Protocol {
                     name: name.value.clone(),
                     decl: stmt.clone(),
                     methods: vec![],
                     properties: vec![],
                     subscripts: vec![],
+                    is_any_object_protocol: is_any_object,
                 }));
                 self.enter(protocol_symbol.clone(), name);
                 let Symbol::Protocol {

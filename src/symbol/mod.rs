@@ -110,6 +110,7 @@ pub enum Symbol {
         methods: Vec<Rc<RefCell<Symbol>>>,
         properties: Vec<Rc<RefCell<Symbol>>>,
         subscripts: Vec<Rc<RefCell<Symbol>>>,
+        is_any_object_protocol: bool,
     },
     ProtocolMethod {
         name: String,

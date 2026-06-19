@@ -5474,6 +5474,14 @@ impl TypeResolver {
         matches!(ty, Type::Class(_, _, _))
     }
 
+    fn is_any_type(ty: &Type) -> bool {
+        matches!(ty, Type::Protocol(name, _, _) if name == "Any")
+    }
+
+    fn is_any_object_type(ty: &Type) -> bool {
+        matches!(ty, Type::Protocol(name, _, _) if name == "AnyObject")
+    }
+
     fn validate_ownership_type(
         &mut self,
         ownership: OwnershipModifier,
@@ -5515,8 +5523,12 @@ impl TypeResolver {
         let is_nullptr = matches!(&*expression.borrow(), Expression::NullptrLiteral { .. });
         let is_null = matches!(&*expression.borrow(), Expression::NullLiteral { .. });
         let is_array_literal = matches!(&*expression.borrow(), Expression::ArrayLiteral { .. });
+        let is_expected_protocol = matches!(&*expected.borrow(), Type::Protocol(..) | Type::Compound(..));
 
         if is_int_literal {
+            if is_expected_protocol {
+                return;
+            }
             let is_expected_optional =
                 matches!(&*expected.borrow(), Type::Enum(name, ..) if name == "Optional");
             if Self::is_integer_type(&expected.borrow()) {
@@ -5542,6 +5554,14 @@ impl TypeResolver {
                 );
             }
         } else if is_float_literal {
+            if is_expected_protocol {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::DecimalLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+                return;
+            }
             let is_expected_optional =
                 matches!(&*expected.borrow(), Type::Enum(name, ..) if name == "Optional");
             if Self::is_float_type(&expected.borrow()) {
@@ -5567,6 +5587,14 @@ impl TypeResolver {
                 );
             }
         } else if is_nullptr {
+            if is_expected_protocol {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::NullptrLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+                return;
+            }
             if matches!(&*expected.borrow(), Type::NonNullPointer(_)) {
                 self.emit_error(
                     TrussDiagnosticCode::TypeMismatch,
@@ -5581,6 +5609,14 @@ impl TypeResolver {
             }
             drop(expr_mut);
         } else if is_null {
+            if is_expected_protocol {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::NullLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+                return;
+            }
             let is_expected_optional = matches!(&*expected.borrow(), Type::Enum(_, ..));
             if is_expected_optional {
                 let mut expr_mut = expression.borrow_mut();
@@ -5596,6 +5632,14 @@ impl TypeResolver {
                 );
             }
         } else if is_array_literal {
+            if is_expected_protocol {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::ArrayLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+                return;
+            }
             let is_expected_array = match &*expected.borrow() {
                 Type::Class(name, ..) | Type::Struct(name, ..) => name == "Array",
                 _ => false,
@@ -5617,6 +5661,14 @@ impl TypeResolver {
                 );
             }
         } else if matches!(&*expression.borrow(), Expression::DictionaryLiteral { .. }) {
+            if is_expected_protocol {
+                let mut expr_mut = expression.borrow_mut();
+                if let Expression::DictionaryLiteral { ty, .. } = &mut *expr_mut {
+                    *ty = Some(expected.clone());
+                }
+                drop(expr_mut);
+                return;
+            }
             let is_expected_dict = match &*expected.borrow() {
                 Type::Class(name, ..) | Type::Struct(name, ..) => name == "Dictionary",
                 _ => false,
@@ -6071,6 +6123,10 @@ impl TypeResolver {
             (s, Type::Struct(n2, _, _)) if n2 == "Bool" && Self::is_float_type(s) => false,
             (Type::Struct(n1, _, _), t) if n1 == "Char" && Self::is_integer_type(t) => true,
             (s, Type::Struct(n2, _, _)) if n2 == "Char" && Self::is_integer_type(s) => true,
+            (_, t) if Self::is_any_type(t) => true,
+            (s, _) if Self::is_any_type(s) => true,
+            (s, t) if Self::is_any_object_type(t) && Self::is_class_type(s) => true,
+            (s, t) if Self::is_any_object_type(s) && Self::is_class_type(t) => true,
             _ => false,
         }
     }
@@ -7901,6 +7957,11 @@ impl TypeResolver {
                 continue;
             };
 
+            // Any protocol: implicit conformance for all types, skip checking
+            if protocol_name == "Any" {
+                continue;
+            }
+
             let Some(protocol_symbol) = self
                 .current_scope
                 .as_ref()
@@ -7908,6 +7969,27 @@ impl TypeResolver {
             else {
                 continue;
             };
+
+            // AnyObject constraint: only class types can conform
+            if !is_class
+                && matches!(
+                    &*protocol_symbol.borrow(),
+                    Symbol::Protocol {
+                        is_any_object_protocol: true,
+                        ..
+                    }
+                )
+            {
+                self.emit_error(
+                    TrussDiagnosticCode::TypeError,
+                    format!(
+                        "Non-class type '{}' cannot conform to class-only protocol '{}'",
+                        type_name, protocol_name
+                    ),
+                    type_token,
+                );
+                continue;
+            }
 
             let protocol_generic_params: Vec<String> = protocol_symbol
                 .borrow()
