@@ -11,7 +11,7 @@ use truss::{
     macro_expander::MacroExpander,
     parser::Parser as TrussParser,
     symbol_resolver::SymbolResolver,
-    trusspm::manifest::TargetKind,
+    trusspm::manifest::ProductType,
     type_resolver::TypeResolver,
 };
 
@@ -52,17 +52,17 @@ fn emit_diagnostics(engine: &TrussDiagnosticEngine, content: &str) -> bool {
     }
 }
 
-fn get_target_kind(cli: &Cli) -> TargetKind {
+fn get_product_type(cli: &Cli) -> ProductType {
     if cli.r#static {
-        TargetKind::StaticLibrary
+        ProductType::Library(truss::trusspm::manifest::LibraryType::Static)
     } else if cli.shared {
-        TargetKind::DynamicLibrary
+        ProductType::Library(truss::trusspm::manifest::LibraryType::Dynamic)
     } else {
-        TargetKind::Executable
+        ProductType::Executable
     }
 }
 
-fn get_output_path(cli: &Cli, kind: TargetKind) -> String {
+fn get_output_path(cli: &Cli, kind: ProductType) -> String {
     if let Some(ref path) = cli.output {
         return path.clone();
     }
@@ -72,9 +72,9 @@ fn get_output_path(cli: &Cli, kind: TargetKind) -> String {
         .and_then(|s| s.to_str())
         .unwrap_or("a");
     match kind {
-        TargetKind::Executable => format!("{}.out", stem),
-        TargetKind::DynamicLibrary => format!("lib{}.so", stem),
-        TargetKind::StaticLibrary => format!("lib{}.a", stem),
+        ProductType::Executable => format!("{}.out", stem),
+        ProductType::Library(truss::trusspm::manifest::LibraryType::Dynamic) => format!("lib{}.so", stem),
+        ProductType::Library(truss::trusspm::manifest::LibraryType::Static) => format!("lib{}.a", stem),
     }
 }
 
@@ -86,7 +86,7 @@ fn main() {
         return;
     }
 
-    let kind = get_target_kind(&cli);
+    let kind = get_product_type(&cli);
     let output_path = get_output_path(&cli, kind);
 
     let target_triple = match &cli.target {

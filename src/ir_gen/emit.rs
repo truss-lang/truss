@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::trusspm::manifest::TargetKind;
+use crate::trusspm::manifest::{LibraryType, ProductType};
 
 pub fn initialize_targets() {
     use std::sync::Once;
@@ -51,7 +51,7 @@ pub fn emit_output(
     stdlib_module: Option<&inkwell::module::Module>,
     triple: &str,
     output_path: &str,
-    kind: TargetKind,
+    kind: ProductType,
 ) -> Result<()> {
     initialize_targets();
     let target_machine = create_target_machine(triple)?;
@@ -77,9 +77,9 @@ pub fn emit_output(
     }
 
     match kind {
-        TargetKind::Executable => link_executable(&object_files, output_path, triple)?,
-        TargetKind::DynamicLibrary => link_dynamic_library(&object_files, output_path, triple)?,
-        TargetKind::StaticLibrary => create_static_library(&object_files, output_path)?,
+        ProductType::Executable => link_executable(&object_files, output_path, triple)?,
+        ProductType::Library(LibraryType::Dynamic) => link_dynamic_library(&object_files, output_path, triple)?,
+        ProductType::Library(LibraryType::Static) => create_static_library(&object_files, output_path)?,
     }
 
     let _ = std::fs::remove_dir_all(&temp_dir);

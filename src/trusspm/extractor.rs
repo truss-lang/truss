@@ -2,7 +2,9 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{expression::Expression, node::Program, statement::Statement},
-    trusspm::manifest::{Manifest, ManifestDependency, ManifestTarget, TargetKind},
+    trusspm::manifest::{
+        LibraryType, Manifest, ManifestDependency, ManifestProduct, ManifestTarget, ProductType,
+    },
 };
 
 pub fn extract_manifest(program: &Program) -> Option<Manifest> {
@@ -42,8 +44,7 @@ pub fn extract_manifest(program: &Program) -> Option<Manifest> {
 
 fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) -> Option<Manifest> {
     let mut name = None;
-    let mut version = None;
-    let mut target_triple = None;
+    let mut products = Vec::new();
     let mut targets = Vec::new();
     let mut dependencies = Vec::new();
 
@@ -53,17 +54,20 @@ fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) ->
             Some("name") => {
                 name = extract_string(param);
             }
-            Some("version") => {
-                version = extract_string(param);
-            }
-            Some("target_triple") | Some("target") => {
-                target_triple = extract_string(param);
-            }
             Some("targets") => {
                 if let Some(items) = extract_array(param) {
                     for item in items {
                         if let Some(t) = extract_target(&item) {
                             targets.push(t);
+                        }
+                    }
+                }
+            }
+            Some("products") => {
+                if let Some(items) = extract_array(param) {
+                    for item in items {
+                        if let Some(p) = extract_product(&item) {
+                            products.push(p);
                         }
                     }
                 }
@@ -82,12 +86,10 @@ fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) ->
     }
 
     let name = name?;
-    let version = version.unwrap_or_else(|| "0.1.0".to_string());
 
     Some(Manifest {
         name,
-        version,
-        target_triple,
+        products,
         targets,
         dependencies,
     })
@@ -133,7 +135,6 @@ fn extract_target_call(
     parameters: &[crate::ast::expression::CallParameter],
 ) -> Option<ManifestTarget> {
     let mut name = None;
-    let mut kind = None;
     let mut deps = Vec::new();
 
     for param in parameters {
@@ -141,9 +142,6 @@ fn extract_target_call(
         match label {
             Some("name") => {
                 name = extract_string(param);
-            }
-            Some("kind") => {
-                kind = extract_target_kind(param);
             }
             Some("dependencies") => {
                 if let Some(items) = extract_array(param) {
@@ -161,17 +159,90 @@ fn extract_target_call(
 
     Some(ManifestTarget {
         name: name?,
-        kind: kind.unwrap_or(TargetKind::Executable),
         dependencies: deps,
     })
 }
 
-fn extract_target_kind(param: &crate::ast::expression::CallParameter) -> Option<TargetKind> {
+fn extract_product(expr: &Rc<RefCell<Expression>>) -> Option<ManifestProduct> {
+    let e = expr.borrow();
+    if let Expression::Call {
+        callee, parameters, ..
+    } = &*e
+    {
+        let callee_borrow = callee.borrow();
+        if let Expression::Variable { name, .. } = &*callee_borrow {
+            if name.value == "Product" {
+                return extract_product_call(parameters);
+            }
+        }
+    }
+    None
+}
+
+fn extract_product_call(
+    parameters: &[crate::ast::expression::CallParameter],
+) -> Option<ManifestProduct> {
+    let mut name = None;
+    let mut product_type = None;
+    let mut target_names = Vec::new();
+
+    for param in parameters {
+        let label = param.label.as_ref().map(|t| t.value.as_str());
+        match label {
+            Some("name") => {
+                name = extract_string(param);
+            }
+            Some("type") => {
+                product_type = extract_product_type(param);
+            }
+            Some("targets") => {
+                if let Some(items) = extract_array(param) {
+                    for item in items {
+                        let item_borrow = item.borrow();
+                        if let Expression::StringLiteral { value, .. } = &*item_borrow {
+                            target_names.push(value.clone());
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Some(ManifestProduct {
+        name: name?,
+        product_type: product_type.unwrap_or(ProductType::Executable),
+        targets: target_names,
+    })
+}
+
+fn extract_product_type(param: &crate::ast::expression::CallParameter) -> Option<ProductType> {
     let expr = param.expression.borrow();
-    if let Expression::ImplicitMemberAccess { member, .. } = &*expr {
-        TargetKind::from_str(&member.value)
-    } else {
-        None
+    match &*expr {
+        Expression::ImplicitMemberAccess { member, .. } => match member.value.as_str() {
+            "Executable" => Some(ProductType::Executable),
+            "StaticLibrary" => Some(ProductType::Library(LibraryType::Static)),
+            "DynamicLibrary" => Some(ProductType::Library(LibraryType::Dynamic)),
+            _ => None,
+        },
+        Expression::Call {
+            callee, parameters, ..
+        } => {
+            let callee_borrow = callee.borrow();
+            if let Expression::Variable { name, .. } = &*callee_borrow {
+                if name.value == "Library" {
+                    if let Some(lib_param) = parameters.first() {
+                        let lib_expr = lib_param.expression.borrow();
+                        if let Expression::ImplicitMemberAccess { member, .. } = &*lib_expr {
+                            return LibraryType::from_str(&member.value)
+                                .map(ProductType::Library);
+                        }
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
     }
 }
 
@@ -254,9 +325,11 @@ mod tests {
     fn test_extract_full() {
         let code = r#"let project = Project(
             name: "my-app",
-            version: "0.1.0",
             targets: [
-                Target(name: "my-app", kind: .Executable)
+                Target(name: "my-app")
+            ],
+            products: [
+                Product(name: "my-app", type: .Executable, targets: ["my-app"])
             ],
             dependencies: [
                 Dependency(name: "http", url: "https://github.com/truss-lang/http", version: "0.1.0")
@@ -264,10 +337,12 @@ mod tests {
         )"#;
         let m = parse_project(code).expect("should parse");
         assert_eq!(m.name, "my-app");
-        assert_eq!(m.version, "0.1.0");
         assert_eq!(m.targets.len(), 1);
         assert_eq!(m.targets[0].name, "my-app");
-        assert_eq!(m.targets[0].kind, TargetKind::Executable);
+        assert_eq!(m.products.len(), 1);
+        assert_eq!(m.products[0].name, "my-app");
+        assert!(m.products[0].product_type.is_executable());
+        assert_eq!(m.products[0].targets, vec!["my-app"]);
         assert_eq!(m.dependencies.len(), 1);
         assert_eq!(m.dependencies[0].name, "http");
         assert_eq!(
@@ -280,14 +355,14 @@ mod tests {
     fn test_extract_minimal() {
         let code = r#"let project = Project(
             name: "my-app",
-            version: "0.1.0",
             targets: [
-                Target(name: "my-app", kind: .Executable)
+                Target(name: "my-app")
             ]
         )"#;
         let m = parse_project(code).expect("should parse");
         assert_eq!(m.name, "my-app");
         assert!(m.dependencies.is_empty());
+        assert!(m.products.is_empty());
     }
 
     #[test]
@@ -295,24 +370,14 @@ mod tests {
         let code = r#"let project = Project(
             name: "my-app",
             targets: [
-                Target(name: "my-app", kind: .Executable)
+                Target(name: "my-app")
+            ],
+            products: [
+                Product(name: "my-app", type: .Executable, targets: ["my-app"])
             ]
         )"#;
         let m = parse_project(code).expect("should parse");
-        assert_eq!(m.version, "0.1.0");
         assert!(m.dependencies.is_empty());
-    }
-
-    #[test]
-    fn test_extract_no_version() {
-        let code = r#"let project = Project(
-            name: "my-app",
-            targets: [
-                Target(name: "my-app", kind: .Executable)
-            ]
-        )"#;
-        let m = parse_project(code).expect("should parse");
-        assert_eq!(m.version, "0.1.0");
     }
 
     #[test]
@@ -320,7 +385,10 @@ mod tests {
         let code = r#"let project = Project(
             name: "my-app",
             targets: [
-                Target(name: "my-app", kind: .Executable, dependencies: ["http", "json"])
+                Target(name: "my-app", dependencies: ["http", "json"])
+            ],
+            products: [
+                Product(name: "my-app", type: .Executable, targets: ["my-app"])
             ],
             dependencies: [
                 Dependency(name: "http", url: "https://github.com/truss-lang/http"),
@@ -337,7 +405,7 @@ mod tests {
     fn test_extract_dep_auto_path() {
         let code = r#"let project = Project(
             name: "my-app",
-            targets: [Target(name: "my-app", kind: .Executable)],
+            targets: [Target(name: "my-app")],
             dependencies: [Dependency(name: "json")]
         )"#;
         let m = parse_project(code).expect("should parse");
@@ -346,64 +414,99 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_dynamic_library() {
+    fn test_extract_products_executable() {
+        let code = r#"let project = Project(
+            name: "my-app",
+            targets: [Target(name: "my-app")],
+            products: [
+                Product(name: "my-app", type: .Executable, targets: ["my-app"])
+            ]
+        )"#;
+        let m = parse_project(code).expect("should parse");
+        assert_eq!(m.products.len(), 1);
+        assert_eq!(m.products[0].name, "my-app");
+        assert!(m.products[0].product_type.is_executable());
+        assert_eq!(m.products[0].targets, vec!["my-app"]);
+    }
+
+    #[test]
+    fn test_extract_products_dynamic_library() {
         let code = r#"let project = Project(
             name: "my-lib",
-            targets: [Target(name: "my-lib", kind: .DynamicLibrary)]
+            targets: [Target(name: "my-lib")],
+            products: [
+                Product(name: "my-lib", type: .DynamicLibrary, targets: ["my-lib"])
+            ]
         )"#;
         let m = parse_project(code).expect("should parse");
-        assert_eq!(m.targets[0].kind, TargetKind::DynamicLibrary);
+        assert_eq!(m.products.len(), 1);
+        assert_eq!(m.products[0].name, "my-lib");
+        assert!(m.products[0].product_type.is_dynamic_library());
+        assert!(!m.products[0].product_type.is_static_library());
     }
 
     #[test]
-    fn test_extract_static_library() {
+    fn test_extract_products_static_library() {
         let code = r#"let project = Project(
             name: "my-lib",
-            targets: [Target(name: "my-lib", kind: .StaticLibrary)]
+            targets: [Target(name: "my-lib")],
+            products: [
+                Product(name: "my-lib", type: .StaticLibrary, targets: ["my-lib"])
+            ]
         )"#;
         let m = parse_project(code).expect("should parse");
-        assert_eq!(m.targets[0].kind, TargetKind::StaticLibrary);
+        assert_eq!(m.products.len(), 1);
+        assert_eq!(m.products[0].name, "my-lib");
+        assert!(m.products[0].product_type.is_static_library());
+        assert!(!m.products[0].product_type.is_dynamic_library());
     }
 
     #[test]
-    fn test_extract_default_kind() {
+    fn test_extract_products_library_call_syntax() {
         let code = r#"let project = Project(
-            name: "my-app",
-            targets: [Target(name: "my-app")]
+            name: "my-lib",
+            targets: [Target(name: "my-lib")],
+            products: [
+                Product(name: "my-lib", type: Library(.Dynamic), targets: ["my-lib"])
+            ]
         )"#;
         let m = parse_project(code).expect("should parse");
-        assert_eq!(m.targets[0].kind, TargetKind::Executable);
+        assert_eq!(m.products.len(), 1);
+        assert!(m.products[0].product_type.is_dynamic_library());
     }
 
     #[test]
-    fn test_extract_target_triple() {
+    fn test_extract_default_product_type() {
         let code = r#"let project = Project(
             name: "my-app",
-            target_triple: "x86_64-unknown-linux-gnu",
-            targets: [Target(name: "my-app", kind: .Executable)]
+            targets: [Target(name: "my-app")],
+            products: [
+                Product(name: "my-app", targets: ["my-app"])
+            ]
         )"#;
         let m = parse_project(code).expect("should parse");
-        assert_eq!(m.target_triple.as_deref(), Some("x86_64-unknown-linux-gnu"));
+        assert_eq!(m.products.len(), 1);
+        assert!(m.products[0].product_type.is_executable());
     }
 
     #[test]
-    fn test_extract_target_alias() {
+    fn test_extract_multiple_products() {
         let code = r#"let project = Project(
-            name: "my-app",
-            target: "aarch64-apple-darwin",
-            targets: [Target(name: "my-app", kind: .Executable)]
+            name: "my-package",
+            targets: [
+                Target(name: "my-lib"),
+                Target(name: "my-cli")
+            ],
+            products: [
+                Product(name: "my-lib", type: .StaticLibrary, targets: ["my-lib"]),
+                Product(name: "my-cli", type: .Executable, targets: ["my-cli"])
+            ]
         )"#;
         let m = parse_project(code).expect("should parse");
-        assert_eq!(m.target_triple.as_deref(), Some("aarch64-apple-darwin"));
-    }
-
-    #[test]
-    fn test_extract_target_triple_default() {
-        let code = r#"let project = Project(
-            name: "my-app",
-            targets: [Target(name: "my-app", kind: .Executable)]
-        )"#;
-        let m = parse_project(code).expect("should parse");
-        assert!(m.target_triple.is_none());
+        assert_eq!(m.products.len(), 2);
+        assert!(m.products[0].product_type.is_static_library());
+        assert_eq!(m.products[0].name, "my-lib");
+        assert!(m.products[1].product_type.is_executable());
+        assert_eq!(m.products[1].name, "my-cli");
     }
 }

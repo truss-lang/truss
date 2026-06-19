@@ -11,7 +11,7 @@ use crate::{
     symbol_resolver::SymbolResolver,
     trusspm::{
         lock::LockManager,
-        manifest::{Manifest, TargetKind},
+        manifest::{LibraryType, Manifest, ProductType},
         resolver::DependencyResolver,
     },
     type_resolver::TypeResolver,
@@ -217,26 +217,22 @@ impl BuildOrchestrator {
                 }
             };
 
-            let triple = self
-                .manifest
-                .target_triple
-                .clone()
-                .unwrap_or_else(|| TargetTriple::host().to_triple_string());
+            let triple = TargetTriple::host().to_triple_string();
 
             let kind = self
                 .manifest
-                .targets
+                .products
                 .first()
-                .map(|t| t.kind)
-                .unwrap_or(TargetKind::Executable);
+                .map(|p| p.product_type)
+                .unwrap_or(ProductType::Executable);
 
             let build_dir = project_path.join("build");
             std::fs::create_dir_all(&build_dir).ok();
 
             let output_name = match kind {
-                TargetKind::Executable => self.manifest.name.clone(),
-                TargetKind::DynamicLibrary => format!("lib{}.so", self.manifest.name),
-                TargetKind::StaticLibrary => format!("lib{}.a", self.manifest.name),
+                ProductType::Executable => self.manifest.name.clone(),
+                ProductType::Library(LibraryType::Dynamic) => format!("lib{}.so", self.manifest.name),
+                ProductType::Library(LibraryType::Static) => format!("lib{}.a", self.manifest.name),
             };
             let output_path = build_dir.join(&output_name);
             let output_str = output_path.to_string_lossy().to_string();
