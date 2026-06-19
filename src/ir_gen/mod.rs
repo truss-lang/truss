@@ -2090,7 +2090,10 @@ impl<'ctx> IRGenerator<'ctx> {
                         &*ty.borrow()
                     && !matches!(&*body.borrow(), FunctionBody::None)
                 {
-                    let mut all_params = param_types.clone();
+                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
+                        Type::Void,
+                    )))));
+                    let mut all_params = vec![self_param];
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                             Type::Struct(
@@ -2099,8 +2102,9 @@ impl<'ctx> IRGenerator<'ctx> {
                                 vec![],
                             ),
                         )))));
-                        all_params.insert(0, err_ty);
+                        all_params.push(err_ty);
                     }
+                    all_params.extend(param_types.iter().cloned());
                     if let Ok(function_type) =
                         self.get_function_type(return_type.clone(), all_params, *is_vararg)
                     {
@@ -4183,14 +4187,20 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.enter_scope();
                     let is_class_method;
                     let is_struct_method;
+                    let is_protocol_method;
                     if let Some(struct_name) = &saved_struct {
                         is_class_method = self.class_types.borrow().contains_key(struct_name);
                         is_struct_method = self.struct_types.borrow().contains_key(struct_name);
+                        is_protocol_method = self
+                            .existential_container_types
+                            .borrow()
+                            .contains_key(struct_name);
                     } else {
                         is_class_method = false;
                         is_struct_method = false;
+                        is_protocol_method = false;
                     }
-                    if is_struct_method || is_class_method {
+                    if is_struct_method || is_class_method || is_protocol_method {
                         if !static_method {
                             let self_ptr = function.get_nth_param(0).unwrap();
                             let self_ptr = self_ptr.into_pointer_value();
@@ -5581,6 +5591,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             return Ok(Some(ptr.into()));
                         }
                         if matches!(&*ty.borrow(), Type::Struct(..)) {
+                            return Ok(Some(ptr.into()));
+                        }
+                        if matches!(&*ty.borrow(), Type::Protocol(..)) {
                             return Ok(Some(ptr.into()));
                         }
                         let llvm_type = self.resolve_type(ty.clone())?;
