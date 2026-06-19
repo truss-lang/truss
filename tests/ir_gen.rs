@@ -2136,6 +2136,84 @@ fn test_irgen_protocol_only_requirement_no_default() {
 }
 
 #[test]
+fn test_irgen_protocol_default_impl_with_self() {
+    let code = "protocol Drawable { func getDefaultValue() -> Int32 { return 42 } func draw() -> Int32 { return self.getDefaultValue() * 2 } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should have no errors with self in protocol default impl, got: {:?}", errors);
+    drop(engine_ref);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("_T$Drawable$draw$$"),
+        "Default impl 'draw' should generate function:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("_T$Drawable$getDefaultValue$$"),
+        "Default impl 'getDefaultValue' should generate function:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_protocol_default_impl_self_no_crash() {
+    let code = "protocol Counter { func getValue() -> Int32 { return 0 } func increment() -> Int32 { return self.getValue() + 1 } func reset() -> Void { let _ = self.getValue() } }";
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let engine_ref = engine.borrow();
+    let errors = engine_ref.get_errors();
+    assert_eq!(errors.len(), 0, "Should have no errors with self in multiple protocol default impls, got: {:?}", errors);
+    drop(engine_ref);
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert!(
+        llvm_ir.contains("_T$Counter$increment$$"),
+        "Default impl 'increment' should generate function:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("_T$Counter$reset$$"),
+        "Default impl 'reset' should generate function:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
 fn test_irgen_protocol_existential_container() {
     let code = "protocol Drawable { func draw() -> Int32 { return 42 } }";
     let engine = create_engine();
