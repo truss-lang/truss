@@ -372,6 +372,8 @@ dependencies = [
  "clap",
  "duck-diagnostic",
  "inkwell",
+ "serde",
+ "serde_json",
  "strum",
 ]
 

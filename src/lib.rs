@@ -2,6 +2,7 @@ pub mod ast;
 pub mod condition_eval;
 pub mod diag;
 pub mod ir_gen;
+pub mod lsp;
 pub mod krate;
 pub mod lexer;
 pub mod macro_expander;
