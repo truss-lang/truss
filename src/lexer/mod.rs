@@ -272,12 +272,23 @@ impl Lexer {
         } else if c == '`' {
             let pos = self.input.get_current_position();
             self.input.inc_pos();
+            let mut inner = String::new();
+            loop {
+                let next = self.input.peek();
+                if next == '\0' || next == '`' {
+                    if next == '`' {
+                        self.input.inc_pos();
+                    }
+                    break;
+                }
+                inner.push(next);
+                self.input.inc_pos();
+            }
+            let len = inner.len();
             Some(Token::new(
-                '`'.to_string(),
-                TokenType::Separator {
-                    separator: SeparatorType::Backtick,
-                },
-                pos,
+                inner,
+                TokenType::Identifier,
+                self.get_position_with_begin(pos, Some(len)),
                 self.input.file.clone(),
             ))
         } else if c == '~' {
