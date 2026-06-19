@@ -61,6 +61,7 @@ pub struct ManifestProduct {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Manifest {
     pub name: String,
+    pub version: String,
     pub products: Vec<ManifestProduct>,
     pub targets: Vec<ManifestTarget>,
     pub dependencies: Vec<ManifestDependency>,

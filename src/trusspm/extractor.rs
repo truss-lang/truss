@@ -44,6 +44,7 @@ pub fn extract_manifest(program: &Program) -> Option<Manifest> {
 
 fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) -> Option<Manifest> {
     let mut name = None;
+    let mut version = None;
     let mut products = Vec::new();
     let mut targets = Vec::new();
     let mut dependencies = Vec::new();
@@ -53,6 +54,9 @@ fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) ->
         match label {
             Some("name") => {
                 name = extract_string(param);
+            }
+            Some("version") => {
+                version = extract_string(param);
             }
             Some("targets") => {
                 if let Some(items) = extract_array(param) {
@@ -86,9 +90,11 @@ fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) ->
     }
 
     let name = name?;
+    let version = version?;
 
     Some(Manifest {
         name,
+        version,
         products,
         targets,
         dependencies,
@@ -325,6 +331,7 @@ mod tests {
     fn test_extract_full() {
         let code = r#"let project = Project(
             name: "my-app",
+            version: "0.1.0",
             targets: [
                 Target(name: "my-app")
             ],
@@ -337,6 +344,7 @@ mod tests {
         )"#;
         let m = parse_project(code).expect("should parse");
         assert_eq!(m.name, "my-app");
+        assert_eq!(m.version, "0.1.0");
         assert_eq!(m.targets.len(), 1);
         assert_eq!(m.targets[0].name, "my-app");
         assert_eq!(m.products.len(), 1);
@@ -355,6 +363,7 @@ mod tests {
     fn test_extract_minimal() {
         let code = r#"let project = Project(
             name: "my-app",
+            version: "0.1.0",
             targets: [
                 Target(name: "my-app")
             ]
@@ -369,6 +378,7 @@ mod tests {
     fn test_extract_no_deps() {
         let code = r#"let project = Project(
             name: "my-app",
+            version: "0.1.0",
             targets: [
                 Target(name: "my-app")
             ],
@@ -384,6 +394,7 @@ mod tests {
     fn test_extract_target_with_deps() {
         let code = r#"let project = Project(
             name: "my-app",
+            version: "0.1.0",
             targets: [
                 Target(name: "my-app", dependencies: ["http", "json"])
             ],
@@ -405,6 +416,7 @@ mod tests {
     fn test_extract_dep_auto_path() {
         let code = r#"let project = Project(
             name: "my-app",
+            version: "0.1.0",
             targets: [Target(name: "my-app")],
             dependencies: [Dependency(name: "json")]
         )"#;
@@ -417,6 +429,7 @@ mod tests {
     fn test_extract_products_executable() {
         let code = r#"let project = Project(
             name: "my-app",
+            version: "0.1.0",
             targets: [Target(name: "my-app")],
             products: [
                 Product(name: "my-app", type: .Executable, targets: ["my-app"])
@@ -433,6 +446,7 @@ mod tests {
     fn test_extract_products_dynamic_library() {
         let code = r#"let project = Project(
             name: "my-lib",
+            version: "0.1.0",
             targets: [Target(name: "my-lib")],
             products: [
                 Product(name: "my-lib", type: .DynamicLibrary, targets: ["my-lib"])
@@ -449,6 +463,7 @@ mod tests {
     fn test_extract_products_static_library() {
         let code = r#"let project = Project(
             name: "my-lib",
+            version: "0.1.0",
             targets: [Target(name: "my-lib")],
             products: [
                 Product(name: "my-lib", type: .StaticLibrary, targets: ["my-lib"])
@@ -465,6 +480,7 @@ mod tests {
     fn test_extract_products_library_call_syntax() {
         let code = r#"let project = Project(
             name: "my-lib",
+            version: "0.1.0",
             targets: [Target(name: "my-lib")],
             products: [
                 Product(name: "my-lib", type: Library(.Dynamic), targets: ["my-lib"])
@@ -479,6 +495,7 @@ mod tests {
     fn test_extract_default_product_type() {
         let code = r#"let project = Project(
             name: "my-app",
+            version: "0.1.0",
             targets: [Target(name: "my-app")],
             products: [
                 Product(name: "my-app", targets: ["my-app"])
@@ -493,6 +510,7 @@ mod tests {
     fn test_extract_multiple_products() {
         let code = r#"let project = Project(
             name: "my-package",
+            version: "0.1.0",
             targets: [
                 Target(name: "my-lib"),
                 Target(name: "my-cli")

@@ -41,6 +41,7 @@ fn cmd_init(name: &str) {
     let project_content = format!(
         "let project = Project(\n\
          \x20   name: \"{name}\",\n\
+         \x20   version: \"0.1.0\",\n\
          \x20   targets: [\n\
          \x20       Target(name: \"{name}\")\n\
          \x20   ],\n\
@@ -77,8 +78,9 @@ fn cmd_build() {
     };
 
     println!(
-        "Building project '{}'",
-        orchestrator.manifest.name
+        "Building project '{}' v{}",
+        orchestrator.manifest.name,
+        orchestrator.manifest.version
     );
 
     orchestrator.run_all_passes(".");
@@ -99,8 +101,9 @@ fn cmd_run() {
     };
 
     println!(
-        "Building project '{}'",
-        orchestrator.manifest.name
+        "Building project '{}' v{}",
+        orchestrator.manifest.name,
+        orchestrator.manifest.version
     );
 
     orchestrator.run_all_passes(".");
