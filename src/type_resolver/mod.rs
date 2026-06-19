@@ -136,10 +136,8 @@ impl TypeResolver {
                     let gp_type = match &gp.kind {
                         GenericParameterKind::Type { constraints } => {
                             if !constraints.is_empty() {
-                                self.generic_param_constraint_exprs.insert(
-                                    gp.name.value.clone(),
-                                    constraints.clone(),
-                                );
+                                self.generic_param_constraint_exprs
+                                    .insert(gp.name.value.clone(), constraints.clone());
                             }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
@@ -281,10 +279,8 @@ impl TypeResolver {
                     let gp_type = match &gp.kind {
                         GenericParameterKind::Type { constraints } => {
                             if !constraints.is_empty() {
-                                self.generic_param_constraint_exprs.insert(
-                                    gp.name.value.clone(),
-                                    constraints.clone(),
-                                );
+                                self.generic_param_constraint_exprs
+                                    .insert(gp.name.value.clone(), constraints.clone());
                             }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
@@ -436,10 +432,8 @@ impl TypeResolver {
                     let gp_type = match &gp.kind {
                         GenericParameterKind::Type { constraints } => {
                             if !constraints.is_empty() {
-                                self.generic_param_constraint_exprs.insert(
-                                    gp.name.value.clone(),
-                                    constraints.clone(),
-                                );
+                                self.generic_param_constraint_exprs
+                                    .insert(gp.name.value.clone(), constraints.clone());
                             }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
@@ -571,10 +565,8 @@ impl TypeResolver {
                     let gp_type = match &gp.kind {
                         GenericParameterKind::Type { constraints } => {
                             if !constraints.is_empty() {
-                                self.generic_param_constraint_exprs.insert(
-                                    gp.name.value.clone(),
-                                    constraints.clone(),
-                                );
+                                self.generic_param_constraint_exprs
+                                    .insert(gp.name.value.clone(), constraints.clone());
                             }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
@@ -832,7 +824,8 @@ impl TypeResolver {
                                 }
                             };
                             if let Some((param_count, sc)) = closure_info {
-                                if let Type::Closure(expected_param_tys, _, _) = &*annotated.borrow()
+                                if let Type::Closure(expected_param_tys, _, _) =
+                                    &*annotated.borrow()
                                     && !expected_param_tys.is_empty()
                                 {
                                     for (i, pt) in
@@ -925,10 +918,8 @@ impl TypeResolver {
                     let gp_type = match &gp.kind {
                         GenericParameterKind::Type { constraints } => {
                             if !constraints.is_empty() {
-                                self.generic_param_constraint_exprs.insert(
-                                    gp.name.value.clone(),
-                                    constraints.clone(),
-                                );
+                                self.generic_param_constraint_exprs
+                                    .insert(gp.name.value.clone(), constraints.clone());
                             }
                             Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
                         }
@@ -1066,9 +1057,7 @@ impl TypeResolver {
                         } => {
                             let cloned_params: Vec<_> = parameters
                                 .iter()
-                                .map(|p| {
-                                    (p.borrow().type_expression.clone(), p.clone())
-                                })
+                                .map(|p| (p.borrow().type_expression.clone(), p.clone()))
                                 .collect();
                             for (type_expr, param) in cloned_params {
                                 if let Some(param_type) = self.infer_type(type_expr) {
@@ -1733,7 +1722,7 @@ impl TypeResolver {
                     }
                 }
             }
-            Statement::ProtocolDecl { scope, members, .. } => {
+            Statement::ProtocolDecl { scope, members, name, .. } => {
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for member in members {
                     match member {
@@ -1765,6 +1754,18 @@ impl TypeResolver {
                                     };
                                 self.current_return_type = Some(ret_type.clone());
                                 self.enter_scope(fn_scope.as_ref().unwrap().clone());
+                                {
+                                    let protocol_ty = Rc::new(RefCell::new(Type::Protocol(
+                                        name.value.clone(),
+                                        WeakSymbol(std::rc::Weak::new()),
+                                        vec![],
+                                    )));
+                                    self.current_scope
+                                        .as_ref()
+                                        .unwrap()
+                                        .borrow_mut()
+                                        .set_type("self".to_string(), protocol_ty);
+                                }
                                 self.initialized_lets.push(HashSet::new());
                                 for param in parameters.iter() {
                                     if let Some(param_ty) = param.borrow().ty.clone() {
@@ -1801,9 +1802,7 @@ impl TypeResolver {
                         } => {
                             let cloned_params: Vec<_> = parameters
                                 .iter()
-                                .map(|p| {
-                                    (p.borrow().type_expression.clone(), p.clone())
-                                })
+                                .map(|p| (p.borrow().type_expression.clone(), p.clone()))
                                 .collect();
                             for (type_expr, param) in cloned_params {
                                 if let Some(param_type) = self.infer_type(type_expr) {
@@ -1916,7 +1915,9 @@ impl TypeResolver {
                 }
                 self.resolve_block_expression(else_body);
             }
-            Statement::Fallthrough { .. } | Statement::Break { .. } | Statement::Continue { .. } => {}
+            Statement::Fallthrough { .. }
+            | Statement::Break { .. }
+            | Statement::Continue { .. } => {}
             Statement::Defer { body, .. } => {
                 self.resolve_block_expression(body);
             }
@@ -2720,7 +2721,9 @@ impl TypeResolver {
                                 }
                                 let callee_token = callee.borrow().token();
                                 let decl_params = match &*decl_ref {
-                                    Statement::FunctionDecl { parameters, .. } => parameters.clone(),
+                                    Statement::FunctionDecl { parameters, .. } => {
+                                        parameters.clone()
+                                    }
                                     Statement::InitDecl { parameters, .. } => parameters.clone(),
                                     _ => vec![],
                                 };
@@ -2736,24 +2739,34 @@ impl TypeResolver {
 
                         if !*is_vararg && parameters.len() != param_tys.len() {
                             // Allow fewer arguments when params have default values
-                            let has_defaults = callee.try_borrow().ok().and_then(|callee_ref| {
-                                if let Expression::Variable { name, .. } = &*callee_ref {
-                                    let scope_ref = self.current_scope.as_ref()?.borrow();
-                                    let sym = scope_ref.get_symbol(&name.value)?;
-                                    let binding = sym.borrow();
-                                    let decl = binding.get_decl().ok().flatten()?;
-                                    drop(binding);
-                                    drop(scope_ref);
-                                    let decl_ref = decl.try_borrow().ok()?;
-                                    if let Statement::FunctionDecl { parameters, .. } = &*decl_ref {
-                                        Some(parameters.iter().any(|p| p.borrow().default_value.is_some()))
+                            let has_defaults = callee
+                                .try_borrow()
+                                .ok()
+                                .and_then(|callee_ref| {
+                                    if let Expression::Variable { name, .. } = &*callee_ref {
+                                        let scope_ref = self.current_scope.as_ref()?.borrow();
+                                        let sym = scope_ref.get_symbol(&name.value)?;
+                                        let binding = sym.borrow();
+                                        let decl = binding.get_decl().ok().flatten()?;
+                                        drop(binding);
+                                        drop(scope_ref);
+                                        let decl_ref = decl.try_borrow().ok()?;
+                                        if let Statement::FunctionDecl { parameters, .. } =
+                                            &*decl_ref
+                                        {
+                                            Some(
+                                                parameters
+                                                    .iter()
+                                                    .any(|p| p.borrow().default_value.is_some()),
+                                            )
+                                        } else {
+                                            Some(false)
+                                        }
                                     } else {
                                         Some(false)
                                     }
-                                } else {
-                                    Some(false)
-                                }
-                            }).unwrap_or(false);
+                                })
+                                .unwrap_or(false);
                             if !has_defaults || parameters.len() > param_tys.len() {
                                 let token = &callee.borrow().token();
                                 self.emit_error(
@@ -4141,7 +4154,9 @@ impl TypeResolver {
                             .iter()
                             .filter_map(|(name, sym)| {
                                 if let Symbol::Protocol { methods, .. } = &*sym.borrow() {
-                                    if methods.iter().any(|m| m.borrow().name().as_ref().ok() == Some(&member.value)) {
+                                    if methods.iter().any(|m| {
+                                        m.borrow().name().as_ref().ok() == Some(&member.value)
+                                    }) {
                                         Some(name.clone())
                                     } else {
                                         None
@@ -4157,7 +4172,8 @@ impl TypeResolver {
                             {
                                 for method in methods {
                                     if method.borrow().name().as_ref().ok() == Some(&member.value)
-                                        && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                        && let Some(decl) =
+                                            method.borrow().get_decl().ok().flatten()
                                     {
                                         let method_ty = {
                                             let decl_ref = decl.borrow();
@@ -5889,9 +5905,10 @@ impl TypeResolver {
                 let object_ty = self.infer_type(object.clone());
                 if let Some(ref object_ty) = object_ty {
                     let type_name = match &*object_ty.borrow() {
-                        Type::Struct(n, _, _) | Type::Class(n, _, _) | Type::Enum(n, _, _) => {
-                            n.clone()
-                        }
+                        Type::Struct(n, _, _)
+                        | Type::Class(n, _, _)
+                        | Type::Enum(n, _, _)
+                        | Type::Protocol(n, ..) => n.clone(),
                         _ => return None,
                     };
                     let scope = self.current_scope.as_ref()?.borrow();
@@ -5920,6 +5937,11 @@ impl TypeResolver {
                             (props, meths, ctors, dtor)
                         }
                         Symbol::Enum { methods, .. } => {
+                            let meths = methods.clone();
+                            drop(binding);
+                            (vec![], meths, vec![], None)
+                        }
+                        Symbol::Protocol { methods, .. } => {
                             let meths = methods.clone();
                             drop(binding);
                             (vec![], meths, vec![], None)
@@ -6947,8 +6969,12 @@ impl TypeResolver {
         drop(binding);
         drop(scope_ref);
         let (body, conformances) = match &*decl.borrow() {
-            Statement::StructDecl { body, conformances, .. }
-            | Statement::ClassDecl { body, conformances, .. } => (body.clone(), conformances.clone()),
+            Statement::StructDecl {
+                body, conformances, ..
+            }
+            | Statement::ClassDecl {
+                body, conformances, ..
+            } => (body.clone(), conformances.clone()),
             _ => return None,
         };
         // Check explicit type parameters on Iterator conformance (e.g. Iterator<Int64>)
@@ -6981,9 +7007,9 @@ impl TypeResolver {
         };
         // Get the name of the first generic param (e.g. "Item") from the protocol decl
         let item_param_name = match &*decl.borrow() {
-            Statement::ProtocolDecl { generic_parameters, .. } => {
-                generic_parameters.first()?.name.value.clone()
-            }
+            Statement::ProtocolDecl {
+                generic_parameters, ..
+            } => generic_parameters.first()?.name.value.clone(),
             _ => return None,
         };
         // Find protocol methods whose return type references the Item param
@@ -7032,16 +7058,18 @@ impl TypeResolver {
             Type::Struct(_, _, params)
             | Type::Class(_, _, params)
             | Type::Enum(_, _, params)
-            | Type::Protocol(_, _, params) => {
-                params.iter().any(|p| Self::type_uses_generic_param(&p.borrow(), param_name))
-            }
+            | Type::Protocol(_, _, params) => params
+                .iter()
+                .any(|p| Self::type_uses_generic_param(&p.borrow(), param_name)),
             Type::Function(params, ret, _, _) => {
-                params.iter().any(|p| Self::type_uses_generic_param(&p.borrow(), param_name))
+                params
+                    .iter()
+                    .any(|p| Self::type_uses_generic_param(&p.borrow(), param_name))
                     || Self::type_uses_generic_param(&ret.borrow(), param_name)
             }
-            Type::Tuple(elems) => {
-                elems.iter().any(|(_, t)| Self::type_uses_generic_param(&t.borrow(), param_name))
-            }
+            Type::Tuple(elems) => elems
+                .iter()
+                .any(|(_, t)| Self::type_uses_generic_param(&t.borrow(), param_name)),
             _ => false,
         }
     }
@@ -7642,7 +7670,12 @@ impl TypeResolver {
                 .unwrap_or_default();
             let has_default_property = |name: &str| -> bool {
                 proto_decl_members.iter().any(|m| {
-                    if let ProtocolMember::Property { name: n, default_accessors, .. } = m {
+                    if let ProtocolMember::Property {
+                        name: n,
+                        default_accessors,
+                        ..
+                    } = m
+                    {
                         n.value == name && !default_accessors.is_empty()
                     } else {
                         false
@@ -7870,8 +7903,9 @@ impl TypeResolver {
                 let type_has_sub = {
                     let type_sym = type_symbol.borrow();
                     match &*type_sym {
-                        Symbol::Struct { subscripts, .. }
-                        | Symbol::Class { subscripts, .. } => !subscripts.is_empty(),
+                        Symbol::Struct { subscripts, .. } | Symbol::Class { subscripts, .. } => {
+                            !subscripts.is_empty()
+                        }
                         _ => false,
                     }
                 };
@@ -8388,7 +8422,11 @@ impl TypeResolver {
                             {
                                 let self_ty = if is_class {
                                     Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                                        Type::Struct(type_name.to_string(), WeakSymbol(std::rc::Weak::new()), vec![]),
+                                        Type::Struct(
+                                            type_name.to_string(),
+                                            WeakSymbol(std::rc::Weak::new()),
+                                            vec![],
+                                        ),
                                     )))))
                                 } else {
                                     Rc::new(RefCell::new(Type::Struct(
