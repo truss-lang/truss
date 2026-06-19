@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use duck_diagnostic::DiagnosticCode;
 
 use crate::diag::TrussDiagnosticEngine;
+use crate::lexer::token::{KeywordType, Token, TokenType};
 use crate::lexer::{CharStream, Lexer};
 use crate::parser::Parser;
 
@@ -139,6 +140,9 @@ impl LanguageServer {
             "textDocument/definition" => {
                 vec![self.handle_definition(id)]
             }
+            "textDocument/semanticTokens/full" => {
+                vec![self.handle_semantic_tokens(id, params)]
+            }
             "shutdown" => {
                 vec![json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string()]
             }
@@ -161,7 +165,18 @@ impl LanguageServer {
                         "triggerCharacters": ["."]
                     },
                     "hoverProvider": true,
-                    "definitionProvider": true
+                    "definitionProvider": true,
+                    "semanticTokensProvider": {
+                        "full": true,
+                        "legend": {
+                            "tokenTypes": [
+                                "keyword", "type", "function", "variable",
+                                "parameter", "string", "number", "comment",
+                                "operator", "property"
+                            ],
+                            "tokenModifiers": ["declaration", "definition", "readonly", "static"]
+                        }
+                    }
                 },
                 "serverInfo": {
                     "name": "truss-lsp",
@@ -320,5 +335,101 @@ impl LanguageServer {
             "result": null
         })
         .to_string()
+    }
+
+    fn handle_semantic_tokens(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": { "data": [] }
+                })
+                .to_string();
+            }
+        };
+        let file_rc = Rc::new(uri.to_string());
+        let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let char_stream = CharStream::new(content, file_rc);
+        let mut lexer = Lexer::new(char_stream, engine);
+        let tokens = lexer.parse();
+        let data = encode_semantic_tokens(&tokens);
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": { "data": data }
+        })
+        .to_string()
+    }
+}
+
+fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
+    let mut encoded = Vec::new();
+    let mut prev_line = 0u64;
+    let mut prev_col = 0u64;
+    let mut prev_keyword: Option<KeywordType> = None;
+    for token in tokens {
+        if let Some((type_idx, modifier_bits)) = semantic_token_info(token, prev_keyword) {
+            let line = token.position.line as u64;
+            let col = token.position.col as u64;
+            let length = token.value.len() as u64;
+            let delta_line = line - prev_line;
+            let delta_col = if delta_line == 0 {
+                col - prev_col
+            } else {
+                col
+            };
+            encoded.push(delta_line);
+            encoded.push(delta_col);
+            encoded.push(length);
+            encoded.push(type_idx);
+            encoded.push(modifier_bits);
+            prev_line = line;
+            prev_col = col;
+        }
+        if let TokenType::Keyword { keyword } = &token.ty {
+            prev_keyword = Some(*keyword);
+        } else {
+            prev_keyword = None;
+        }
+    }
+    encoded
+}
+
+fn semantic_token_info(
+    token: &Token,
+    prev_keyword: Option<KeywordType>,
+) -> Option<(u64, u64)> {
+    match &token.ty {
+        TokenType::Keyword { keyword } => {
+            let type_idx = match keyword {
+                KeywordType::SelfType => 1,
+                _ => 0,
+            };
+            Some((type_idx, 0))
+        }
+        TokenType::Identifier => {
+            let first_char = token.value.chars().next().unwrap_or(' ');
+            if first_char.is_uppercase() {
+                Some((1, 0))
+            } else if prev_keyword == Some(KeywordType::Func) {
+                Some((2, 0))
+            } else {
+                Some((3, 0))
+            }
+        }
+        TokenType::StringLiteral { .. } | TokenType::CharLiteral { .. } => Some((5, 0)),
+        TokenType::IntegerLiteral { .. } | TokenType::DecimalLiteral { .. } => Some((6, 0)),
+        TokenType::BooleanLiteral { .. }
+        | TokenType::NullLiteral
+        | TokenType::NullptrLiteral => Some((0, 0)),
+        TokenType::Operator { .. } => Some((8, 0)),
+        TokenType::Separator { .. } => None,
     }
 }
