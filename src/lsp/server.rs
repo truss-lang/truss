@@ -12,7 +12,7 @@ use crate::ast::node::Program;
 use crate::ast::statement::Statement;
 use crate::diag::TrussDiagnosticEngine;
 use crate::krate::{Module, Package};
-use crate::lexer::token::{KeywordType, Token, TokenType};
+use crate::lexer::token::{KeywordType, SeparatorType, Token, TokenType};
 use crate::lexer::{CharStream, Lexer};
 use crate::parser::Parser;
 use crate::scope::Scope;
@@ -213,11 +213,11 @@ impl LanguageServer {
                     "semanticTokensProvider": {
                         "full": true,
                         "legend": {
-                            "tokenTypes": [
-                                "keyword", "type", "function", "variable",
-                                "parameter", "string", "number", "comment",
-                                "operator", "property"
-                            ],
+                        "tokenTypes": [
+                            "keyword", "type", "function", "variable",
+                            "parameter", "string", "number", "comment",
+                            "operator", "property", "macro"
+                        ],
                             "tokenModifiers": ["declaration", "definition", "readonly", "static"]
                         }
                     }
@@ -1109,8 +1109,18 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
     let mut prev_line = 0u64;
     let mut prev_col = 0u64;
     let mut prev_keyword: Option<KeywordType> = None;
+    let mut prev_was_hash = false;
+    let mut inside_attribute = false;
     for token in tokens {
-        if let Some((type_idx, modifier_bits)) = semantic_token_info(token, prev_keyword) {
+        let is_hash = matches!(&token.ty, TokenType::Separator { separator: SeparatorType::Hash });
+        if prev_was_hash
+            && matches!(&token.ty, TokenType::Separator { separator: SeparatorType::OpenBracket })
+        {
+            inside_attribute = true;
+        }
+        if let Some((type_idx, modifier_bits)) =
+            semantic_token_info(token, prev_keyword, prev_was_hash, inside_attribute)
+        {
             let line = token.position.line as u64;
             let col = token.position.col as u64;
             let length = token.value.len() as u64;
@@ -1124,6 +1134,16 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
             prev_line = line;
             prev_col = col;
         }
+        if is_hash {
+            prev_was_hash = true;
+        } else if prev_was_hash {
+            prev_was_hash = false;
+        }
+        if let TokenType::Separator { separator: SeparatorType::CloseBracket } = &token.ty {
+            if inside_attribute {
+                inside_attribute = false;
+            }
+        }
         if let TokenType::Keyword { keyword } = &token.ty {
             prev_keyword = Some(*keyword);
         } else {
@@ -1133,7 +1153,12 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
     encoded
 }
 
-fn semantic_token_info(token: &Token, prev_keyword: Option<KeywordType>) -> Option<(u64, u64)> {
+fn semantic_token_info(
+    token: &Token,
+    prev_keyword: Option<KeywordType>,
+    prev_was_hash: bool,
+    inside_attribute: bool,
+) -> Option<(u64, u64)> {
     match &token.ty {
         TokenType::Keyword { keyword } => {
             let type_idx = match keyword {
@@ -1143,13 +1168,19 @@ fn semantic_token_info(token: &Token, prev_keyword: Option<KeywordType>) -> Opti
             Some((type_idx, 0))
         }
         TokenType::Identifier => {
-            let first_char = token.value.chars().next().unwrap_or(' ');
-            if first_char.is_uppercase() {
+            if prev_was_hash {
+                Some((10, 0))
+            } else if inside_attribute {
                 Some((1, 0))
-            } else if prev_keyword == Some(KeywordType::Func) {
-                Some((2, 0))
             } else {
-                Some((3, 0))
+                let first_char = token.value.chars().next().unwrap_or(' ');
+                if first_char.is_uppercase() {
+                    Some((1, 0))
+                } else if prev_keyword == Some(KeywordType::Func) {
+                    Some((2, 0))
+                } else {
+                    Some((3, 0))
+                }
             }
         }
         TokenType::StringLiteral { .. } | TokenType::CharLiteral { .. } => Some((5, 0)),
@@ -1158,6 +1189,11 @@ fn semantic_token_info(token: &Token, prev_keyword: Option<KeywordType>) -> Opti
             Some((0, 0))
         }
         TokenType::Operator { .. } => Some((8, 0)),
-        TokenType::Separator { .. } => None,
+        TokenType::Separator { separator } => match separator {
+            SeparatorType::Hash => Some((0, 0)),
+            SeparatorType::OpenBracket if inside_attribute => Some((0, 0)),
+            SeparatorType::CloseBracket if inside_attribute => Some((0, 0)),
+            _ => None,
+        },
     }
 }
