@@ -868,40 +868,40 @@ impl LanguageServer {
     }
 
     fn add_snippet_completions(&self, items: &mut Vec<Value>) {
-        items.push(json!({"label": "fn", "kind": 14, "detail": "→ func", "insertText": "func", "insertTextFormat": 1, "sortText": "0"}));
-        items.push(json!({"label": "func", "kind": 14, "detail": "function declaration", "insertText": "func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "struct", "kind": 14, "detail": "struct declaration", "insertText": "struct ${1:Name}${2:: ${3:Protocol}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "class", "kind": 14, "detail": "class declaration", "insertText": "class ${1:Name}${2:: ${3:SuperClass}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "enum", "kind": 14, "detail": "enum declaration", "insertText": "enum ${1:Name}${2:: ${3:RawType}} {\n\tcase ${4:value}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "protocol", "kind": 14, "detail": "protocol declaration", "insertText": "protocol ${1:Name}${2:: ${3:ParentProtocol}} {\n\t${4:members}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "extension", "kind": 14, "detail": "type extension", "insertText": "extension ${1:Type}${2:: ${3:Protocol}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "init", "kind": 14, "detail": "initializer declaration", "insertText": "init${1:?}(${2:params}) {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "deinit", "kind": 14, "detail": "deinitializer", "insertText": "deinit {\n\t${1:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "subscript", "kind": 14, "detail": "subscript declaration", "insertText": "subscript(${1:params}) -> ${2:Type} {\n\tget {\n\t\treturn ${3:val}\n\t}\n\t${4:set {\n\t\t${5:newValue}\n\t}}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "typealias", "kind": 14, "detail": "type alias", "insertText": "typealias ${1:Name} = ${2:Type}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "if", "kind": 14, "detail": "if statement", "insertText": "if ${1:condition} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "ifelse", "kind": 14, "detail": "if-else statement", "insertText": "if ${1:condition} {\n\t${2:body}\n} else {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "for", "kind": 14, "detail": "for-in loop", "insertText": "for ${1:item} in ${2:collection} {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "while", "kind": 14, "detail": "while loop", "insertText": "while ${1:condition} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "repeat", "kind": 14, "detail": "repeat-while loop", "insertText": "repeat {\n\t${1:body}\n} while ${2:condition}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "match", "kind": 14, "detail": "match expression", "insertText": "match ${1:value} {\n\tcase ${2:pattern} =>\n\t\t${3:body}\n\tdefault =>\n\t\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "guard", "kind": 14, "detail": "guard statement", "insertText": "guard ${1:condition} else {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "do", "kind": 14, "detail": "do-catch block", "insertText": "do {\n\t${1:body}\n} catch {\n\t${2:handler}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "defer", "kind": 14, "detail": "defer block", "insertText": "defer {\n\t${1:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "fn", "kind": 15, "detail": "→ func", "insertText": "func", "insertTextFormat": 1, "sortText": "0"}));
+        items.push(json!({"label": "func", "kind": 15, "detail": "function declaration", "insertText": "func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "struct", "kind": 15, "detail": "struct declaration", "insertText": "struct ${1:Name}${2:: ${3:Protocol}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "class", "kind": 15, "detail": "class declaration", "insertText": "class ${1:Name}${2:: ${3:SuperClass}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "enum", "kind": 15, "detail": "enum declaration", "insertText": "enum ${1:Name}${2:: ${3:RawType}} {\n\tcase ${4:value}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "protocol", "kind": 15, "detail": "protocol declaration", "insertText": "protocol ${1:Name}${2:: ${3:ParentProtocol}} {\n\t${4:members}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "extension", "kind": 15, "detail": "type extension", "insertText": "extension ${1:Type}${2:: ${3:Protocol}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "init", "kind": 15, "detail": "initializer declaration", "insertText": "init${1:?}(${2:params}) {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "deinit", "kind": 15, "detail": "deinitializer", "insertText": "deinit {\n\t${1:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "subscript", "kind": 15, "detail": "subscript declaration", "insertText": "subscript(${1:params}) -> ${2:Type} {\n\tget {\n\t\treturn ${3:val}\n\t}\n\t${4:set {\n\t\t${5:newValue}\n\t}}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "typealias", "kind": 15, "detail": "type alias", "insertText": "typealias ${1:Name} = ${2:Type}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "if", "kind": 15, "detail": "if statement", "insertText": "if ${1:condition} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "ifelse", "kind": 15, "detail": "if-else statement", "insertText": "if ${1:condition} {\n\t${2:body}\n} else {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "for", "kind": 15, "detail": "for-in loop", "insertText": "for ${1:item} in ${2:collection} {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "while", "kind": 15, "detail": "while loop", "insertText": "while ${1:condition} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "repeat", "kind": 15, "detail": "repeat-while loop", "insertText": "repeat {\n\t${1:body}\n} while ${2:condition}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "match", "kind": 15, "detail": "match expression", "insertText": "match ${1:value} {\n\tcase ${2:pattern} =>\n\t\t${3:body}\n\tdefault =>\n\t\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "guard", "kind": 15, "detail": "guard statement", "insertText": "guard ${1:condition} else {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "do", "kind": 15, "detail": "do-catch block", "insertText": "do {\n\t${1:body}\n} catch {\n\t${2:handler}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "defer", "kind": 15, "detail": "defer block", "insertText": "defer {\n\t${1:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
         items.push(json!({"label": "public", "kind": 14, "detail": "public access modifier", "insertText": "public ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
         items.push(json!({"label": "private", "kind": 14, "detail": "private access modifier", "insertText": "private ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
         items.push(json!({"label": "open", "kind": 14, "detail": "open access modifier", "insertText": "open ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
         items.push(json!({"label": "override", "kind": 14, "detail": "override modifier", "insertText": "override ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
         items.push(json!({"label": "static", "kind": 14, "detail": "static modifier", "insertText": "static ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
         items.push(json!({"label": "mutating", "kind": 14, "detail": "mutating modifier", "insertText": "mutating func ${1:name}($2) {\n\t$3\n}", "insertTextFormat": 2, "sortText": "2"}));
-        items.push(json!({"label": "associatedtype", "kind": 14, "detail": "associated type declaration", "insertText": "associatedtype ${1:Name}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "prefix func", "kind": 14, "detail": "prefix operator function", "insertText": "prefix func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "postfix func", "kind": 14, "detail": "postfix operator function", "insertText": "postfix func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "infix func", "kind": 14, "detail": "infix operator function", "insertText": "infix func ${1:name}(${2:lhs: Type}, ${3:rhs: Type}) -> ${4:ReturnType} {\n\t${5:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "operator", "kind": 14, "detail": "operator declaration", "insertText": "operator ${1:...}", "insertTextFormat": 2, "sortText": "1"}));
-        items.push(json!({"label": "precedencegroup", "kind": 14, "detail": "precedence group declaration", "insertText": "precedencegroup ${1:Name} {\n\tassociativity: ${2:left}\n\tprecedence: ${3:100}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "associatedtype", "kind": 15, "detail": "associated type declaration", "insertText": "associatedtype ${1:Name}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "prefix func", "kind": 15, "detail": "prefix operator function", "insertText": "prefix func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "postfix func", "kind": 15, "detail": "postfix operator function", "insertText": "postfix func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "infix func", "kind": 15, "detail": "infix operator function", "insertText": "infix func ${1:name}(${2:lhs: Type}, ${3:rhs: Type}) -> ${4:ReturnType} {\n\t${5:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "operator", "kind": 15, "detail": "operator declaration", "insertText": "operator ${1:...}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "precedencegroup", "kind": 15, "detail": "precedence group declaration", "insertText": "precedencegroup ${1:Name} {\n\tassociativity: ${2:left}\n\tprecedence: ${3:100}\n}", "insertTextFormat": 2, "sortText": "1"}));
         items.push(json!({"label": "throws", "kind": 14, "detail": "throws keyword", "insertText": "throws", "insertTextFormat": 1, "sortText": "2"}));
-        items.push(json!({"label": "catch", "kind": 14, "detail": "catch clause", "insertText": "catch ${1:error} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "catch", "kind": 15, "detail": "catch clause", "insertText": "catch ${1:error} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
         items.push(json!({"label": "fallthrough", "kind": 14, "detail": "fallthrough keyword", "insertText": "fallthrough", "insertTextFormat": 1, "sortText": "2"}));
         items.push(json!({"label": "where", "kind": 14, "detail": "where clause keyword", "insertText": "where ${1:condition}", "insertTextFormat": 2, "sortText": "2"}));
         items.push(json!({"label": "weak", "kind": 14, "detail": "weak modifier", "insertText": "weak", "insertTextFormat": 1, "sortText": "2"}));
@@ -914,19 +914,19 @@ impl LanguageServer {
         if let Some(ref scope) = self.stdlib_scope {
             let sb = scope.borrow();
             for (name, _) in &sb.type_env {
-                items.push(json!({"label": name, "kind": 5, "detail": "builtin type", "sortText": "3"}));
+                items.push(json!({"label": name, "kind": 22, "detail": "builtin type", "sortText": "3"}));
             }
             for (name, symbol) in &sb.name_table {
                 let (kind, detail) = match &*symbol.borrow() {
                     Symbol::Function { .. } => (3, "function"),
                     Symbol::Variable { .. } => (6, "variable"),
-                    Symbol::Struct { .. } => (5, "struct"),
-                    Symbol::Class { .. } => (5, "class"),
-                    Symbol::Enum { .. } => (10, "enum"),
+                    Symbol::Struct { .. } => (22, "struct"),
+                    Symbol::Class { .. } => (7, "class"),
+                    Symbol::Enum { .. } => (13, "enum"),
                     Symbol::Protocol { .. } => (8, "protocol"),
-                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => (6, "property"),
-                    Symbol::StructMethod { .. } | Symbol::ClassMethod { .. } => (3, "method"),
-                    Symbol::EnumCase { .. } => (21, "enum case"),
+                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => (10, "property"),
+                    Symbol::StructMethod { .. } | Symbol::ClassMethod { .. } => (2, "method"),
+                    Symbol::EnumCase { .. } => (20, "enum case"),
                     Symbol::Module { .. } => (9, "module"),
                     Symbol::Macro { .. } => (14, "macro"),
                     _ => continue,
@@ -944,19 +944,19 @@ impl LanguageServer {
         if let Some(analysis) = self.project_analyses.get(file_path) {
             let sb = analysis.scope.borrow();
             for (name, _) in &sb.type_env {
-                items.push(json!({"label": name, "kind": 5, "detail": "type", "sortText": "4"}));
+                items.push(json!({"label": name, "kind": 22, "detail": "type", "sortText": "4"}));
             }
             for (name, symbol) in &sb.name_table {
                 let (kind, detail) = match &*symbol.borrow() {
                     Symbol::Function { .. } => (3, "function"),
                     Symbol::Variable { .. } => (6, "variable"),
-                    Symbol::Struct { .. } => (5, "struct"),
-                    Symbol::Class { .. } => (5, "class"),
-                    Symbol::Enum { .. } => (10, "enum"),
+                    Symbol::Struct { .. } => (22, "struct"),
+                    Symbol::Class { .. } => (7, "class"),
+                    Symbol::Enum { .. } => (13, "enum"),
                     Symbol::Protocol { .. } => (8, "protocol"),
-                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => (6, "property"),
-                    Symbol::StructMethod { .. } | Symbol::ClassMethod { .. } => (3, "method"),
-                    Symbol::EnumCase { .. } => (21, "enum case"),
+                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => (10, "property"),
+                    Symbol::StructMethod { .. } | Symbol::ClassMethod { .. } => (2, "method"),
+                    Symbol::EnumCase { .. } => (20, "enum case"),
                     Symbol::Module { .. } => (9, "module"),
                     Symbol::Macro { .. } => (14, "macro"),
                     _ => continue,
