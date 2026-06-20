@@ -5292,6 +5292,157 @@ fn test_irgen_class_subscript_getter() {
 }
 
 #[test]
+fn test_irgen_struct_subscript_labeled_param() {
+    let code = r#"
+        struct MyArray {
+            subscript(key: Int32) -> Int32 {
+                get { return 42 }
+            }
+        }
+        func test(a: MyArray) -> Int32 {
+            return a[key: 5]
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("_T$MyArray$subscript$getter$key$Int32"),
+        "Expected subscript.getter with label key in IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_struct_subscript_labeled_get_set() {
+    let code = r#"
+        struct Buffer {
+            var val: Int32
+            subscript(key: Int32) -> Int32 {
+                get { return val }
+                set { val = newValue }
+            }
+        }
+        func test(b: Buffer) -> Int32 {
+            b[key: 42] = 10
+            return b[key: 0]
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("_T$Buffer$subscript$getter$key$Int32"),
+        "Expected subscript.getter with label key in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("_T$Buffer$subscript$setter$key$Int32"),
+        "Expected subscript.setter with label key in IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_struct_subscript_multiple_overloads() {
+    let code = r#"
+        struct Multi {
+            subscript(key: Int32) -> Int32 {
+                get { return 1 }
+            }
+            subscript(value: Int32) -> Int32 {
+                get { return 2 }
+            }
+        }
+        func test(m: Multi) -> Int32 {
+            return m[key: 5]
+        }
+        func test2(m: Multi) -> Int32 {
+            return m[value: 10]
+        }
+    "#;
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(code.to_string(), Rc::new("".to_string())),
+        engine.clone(),
+    );
+    let mut parser = Parser::new(lexer.get_file(), lexer.parse(), engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "Expected no errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("_T$Multi$subscript$getter$key$Int32"),
+        "Expected key subscript.getter in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("_T$Multi$subscript$getter$value$Int32"),
+        "Expected value subscript.getter in IR:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
 fn test_irgen_address_of_deref() {
     let code = "func test(p: Int32*) -> Int32* { return &*p }";
     let engine = create_engine();

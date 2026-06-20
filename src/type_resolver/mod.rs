@@ -5080,10 +5080,26 @@ impl TypeResolver {
                                         _ => vec![],
                                     };
                                     drop(scope);
+                                    let call_labels: Vec<Option<String>> = parameters
+                                        .iter()
+                                        .map(|p| {
+                                            p.label
+                                                .as_ref()
+                                                .map(|l| l.value.clone())
+                                        })
+                                        .collect();
+                                    let has_labels =
+                                        call_labels.iter().any(|l| l.is_some());
+                                    let mut matched_ret_type = None;
+                                    let mut matched_count = 0;
                                     for sub in subscripts {
-                                        if let Some(decl) = sub.borrow().get_decl().ok().flatten()
-                                            && let Statement::SubscriptDecl { ty: sub_ty, .. } =
-                                                &*decl.borrow()
+                                        if let Some(decl) =
+                                            sub.borrow().get_decl().ok().flatten()
+                                            && let Statement::SubscriptDecl {
+                                                ty: sub_ty,
+                                                parameters: decl_params,
+                                                ..
+                                            } = &*decl.borrow()
                                             && let Some(t) = sub_ty
                                         {
                                             if !self.is_member_symbol_accessible(
@@ -5094,8 +5110,7 @@ impl TypeResolver {
                                                     TrussDiagnosticCode::InaccessibleMember,
                                                     format!(
                                                         "subscript is inaccessible due to '{}' level",
-                                                        sub
-                                                            .borrow()
+                                                        sub.borrow()
                                                             .get_decl()
                                                             .ok()
                                                             .flatten()
@@ -5120,12 +5135,46 @@ impl TypeResolver {
                                                 );
                                                 return None;
                                             }
-                                            if let Type::Function(_, ret_type, _, None) = &*t.borrow() {
-                                                return Some(ret_type.clone());
+                                            if let Type::Function(
+                                                param_types,
+                                                ret_type,
+                                                _is_vararg,
+                                                None,
+                                            ) = &*t.borrow()
+                                            {
+                                                if has_labels {
+                                                    let mut labels_match = true;
+                                                    for (i, call_p) in
+                                                        parameters.iter().enumerate()
+                                                    {
+                                                        if i < decl_params.len() {
+                                                            let decl_label = Self::get_effective_label(
+                                                                &decl_params[i].borrow(),
+                                                            );
+                                                            let call_label = call_p
+                                                                .label
+                                                                .as_ref()
+                                                                .map(|l| l.value.clone());
+                                                            if decl_label != call_label {
+                                                                labels_match = false;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                    if labels_match {
+                                                        matched_ret_type =
+                                                            Some(ret_type.clone());
+                                                        matched_count += 1;
+                                                    }
+                                                } else if matched_count == 0 {
+                                                    matched_ret_type =
+                                                        Some(ret_type.clone());
+                                                    matched_count += 1;
+                                                }
                                             }
                                         }
                                     }
-                                    None
+                                    matched_ret_type
                                 })
                             }
                             _ => None,

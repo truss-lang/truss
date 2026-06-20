@@ -1688,6 +1688,13 @@ impl<'ctx> IRGenerator<'ctx> {
                             &format!("{}.subscript.getter", name.value),
                             &getter_mangled,
                         );
+                        let label_key = self.subscript_param_key(parameters);
+                        if !label_key.is_empty() {
+                            self.register_mangled_name(
+                                &format!("{}.subscript.getter.{}", name.value, label_key),
+                                &getter_mangled,
+                            );
+                        }
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
@@ -1704,6 +1711,13 @@ impl<'ctx> IRGenerator<'ctx> {
                                 &format!("{}.subscript.setter", name.value),
                                 &setter_mangled,
                             );
+                            let label_key = self.subscript_param_key(parameters);
+                            if !label_key.is_empty() {
+                                self.register_mangled_name(
+                                    &format!("{}.subscript.setter.{}", name.value, label_key),
+                                    &setter_mangled,
+                                );
+                            }
                         }
                     }
                 }
@@ -1880,6 +1894,13 @@ impl<'ctx> IRGenerator<'ctx> {
                             &format!("{}.subscript.getter", name.value),
                             &getter_mangled,
                         );
+                        let label_key = self.subscript_param_key(parameters);
+                        if !label_key.is_empty() {
+                            self.register_mangled_name(
+                                &format!("{}.subscript.getter.{}", name.value, label_key),
+                                &getter_mangled,
+                            );
+                        }
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
@@ -1896,6 +1917,13 @@ impl<'ctx> IRGenerator<'ctx> {
                                 &format!("{}.subscript.setter", name.value),
                                 &setter_mangled,
                             );
+                            let label_key = self.subscript_param_key(parameters);
+                            if !label_key.is_empty() {
+                                self.register_mangled_name(
+                                    &format!("{}.subscript.setter.{}", name.value, label_key),
+                                    &setter_mangled,
+                                );
+                            }
                         }
                     }
                 }
@@ -1975,6 +2003,13 @@ impl<'ctx> IRGenerator<'ctx> {
                             &format!("{}.subscript.getter", name.value),
                             &getter_mangled,
                         );
+                        let label_key = self.subscript_param_key(parameters);
+                        if !label_key.is_empty() {
+                            self.register_mangled_name(
+                                &format!("{}.subscript.getter.{}", name.value, label_key),
+                                &getter_mangled,
+                            );
+                        }
                     }
                     if has_set {
                         let void_ty = Rc::new(RefCell::new(Type::Void));
@@ -1991,6 +2026,13 @@ impl<'ctx> IRGenerator<'ctx> {
                                 &format!("{}.subscript.setter", name.value),
                                 &setter_mangled,
                             );
+                            let label_key = self.subscript_param_key(parameters);
+                            if !label_key.is_empty() {
+                                self.register_mangled_name(
+                                    &format!("{}.subscript.setter.{}", name.value, label_key),
+                                    &setter_mangled,
+                                );
+                            }
                         }
                     }
                 }
@@ -2262,6 +2304,33 @@ impl<'ctx> IRGenerator<'ctx> {
         self.mangled_fn_names
             .borrow_mut()
             .insert(src_name.to_string(), mangled.to_string());
+    }
+
+    fn subscript_param_key(&self, params: &[Rc<RefCell<Parameter>>]) -> String {
+        params
+            .iter()
+            .map(|p| {
+                let pb = p.borrow();
+                pb.label
+                    .as_ref()
+                    .map(|l| l.value.clone())
+                    .unwrap_or_else(|| pb.name.value.clone())
+            })
+            .collect::<Vec<_>>()
+            .join("_")
+    }
+
+    fn subscript_call_param_key(&self, params: &[CallParameter]) -> String {
+        params
+            .iter()
+            .map(|p| {
+                p.label
+                    .as_ref()
+                    .map(|l| l.value.clone())
+                    .unwrap_or_else(|| "_".to_string())
+            })
+            .collect::<Vec<_>>()
+            .join("_")
     }
 
     fn compute_vtable_method_list(&self, class_name: &str) -> Vec<(String, String)> {
@@ -7124,17 +7193,22 @@ impl<'ctx> IRGenerator<'ctx> {
                                 ptr
                             }
                         };
-                        let setter_name = self
-                            .mangled_fn_names
-                            .borrow()
-                            .get(&format!("{}.subscript.setter", struct_name))
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                self.mangle_fn_name(
-                                    &format!("{}.subscript.setter", struct_name),
-                                    &[],
-                                )
-                            });
+                        let setter_name = {
+                            let key = format!("{}.subscript.setter", struct_name);
+                            let label_key = self.subscript_call_param_key(sub_params);
+                            let names = self.mangled_fn_names.borrow();
+                            let result = if !label_key.is_empty() {
+                                names.get(&format!("{}.{}", key, label_key))
+                                    .or_else(|| names.get(&key))
+                                    .cloned()
+                            } else {
+                                names.get(&key).cloned()
+                            };
+                            drop(names);
+                            result.unwrap_or_else(|| {
+                                self.mangle_fn_name(&key, &[])
+                            })
+                        };
                         if let Some(setter_fn) = self.module.get_function(&setter_name) {
                             let mut args = vec![struct_ptr.into()];
                             for p in sub_params {
@@ -8810,14 +8884,22 @@ impl<'ctx> IRGenerator<'ctx> {
                         self.builder.build_store(ptr, object_val)?;
                         ptr
                     };
-                    let getter_name = self
-                        .mangled_fn_names
-                        .borrow()
-                        .get(&format!("{}.subscript.getter", struct_name))
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            self.mangle_fn_name(&format!("{}.subscript.getter", struct_name), &[])
-                        });
+                    let getter_name = {
+                        let key = format!("{}.subscript.getter", struct_name);
+                        let label_key = self.subscript_call_param_key(parameters);
+                        let names = self.mangled_fn_names.borrow();
+                        let result = if !label_key.is_empty() {
+                            names.get(&format!("{}.{}", key, label_key))
+                                .or_else(|| names.get(&key))
+                                .cloned()
+                        } else {
+                            names.get(&key).cloned()
+                        };
+                        drop(names);
+                        result.unwrap_or_else(|| {
+                            self.mangle_fn_name(&key, &[])
+                        })
+                    };
                     if let Some(getter_fn) = self.module.get_function(&getter_name) {
                         let mut args = vec![struct_ptr.into()];
                         for p in parameters {
