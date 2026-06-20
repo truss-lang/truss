@@ -8259,6 +8259,130 @@ impl<'ctx> IRGenerator<'ctx> {
                                 inkwell::values::ValueKind::Basic(val) => val,
                                 _ => anyhow::bail!("Subscript getter call did not return a value"),
                             };
+                            let member_type = expr.borrow().get_ty_ref()?.clone();
+                            if let Some(mty) = &member_type
+                                && let Type::Enum(enum_name, _, _params) = &*mty.borrow()
+                                && enum_name == "Optional"
+                            {
+                                let enum_type = self
+                                    .enum_types
+                                    .borrow()
+                                    .get("Optional")
+                                    .copied()
+                                    .ok_or_else(|| anyhow::anyhow!("Optional enum type not found"))?;
+                                let payloads_type = self
+                                    .enum_payload_types
+                                    .borrow()
+                                    .get("Optional")
+                                    .copied()
+                                    .ok_or_else(|| anyhow::anyhow!("Optional payload type not found"))?;
+                                let alloca = self
+                                    .builder
+                                    .build_alloca(enum_type.as_basic_type_enum(), "")?;
+                                self.builder.build_store(alloca, result_val)?;
+                                let tag_ptr = self
+                                    .builder
+                                    .build_struct_gep(enum_type, alloca, 0, "")?;
+                                let tag = self
+                                    .builder
+                                    .build_load(self.context.i8_type(), tag_ptr, "")?;
+                                let none_tag = self.context.i8_type().const_zero();
+                                let is_none = self.builder.build_int_compare(
+                                    inkwell::IntPredicate::EQ,
+                                    tag.into_int_value(),
+                                    none_tag,
+                                    "",
+                                )?;
+                                let fn_val = self
+                                    .builder
+                                    .get_insert_block()
+                                    .unwrap()
+                                    .get_parent()
+                                    .unwrap();
+                                let none_bb = self
+                                    .context
+                                    .append_basic_block(fn_val, "dml_none");
+                                let some_bb = self
+                                    .context
+                                    .append_basic_block(fn_val, "dml_some");
+                                let cont_bb = self
+                                    .context
+                                    .append_basic_block(fn_val, "dml_cont");
+                                self.builder.build_conditional_branch(
+                                    is_none,
+                                    none_bb,
+                                    some_bb,
+                                )?;
+                                self.builder.position_at_end(none_bb);
+                                let fb_getter_name = self.mangle_fn_name(
+                                    &format!("{}.{}.getter", struct_name, field_name),
+                                    &[],
+                                );
+                                let fb_property_val =
+                                    if let Some(fb_getter_fn) =
+                                        self.module.get_function(&fb_getter_name)
+                                    {
+                                        let fb_result = self.builder.build_call(
+                                            fb_getter_fn,
+                                            &[struct_ptr.into()],
+                                            "",
+                                        )?;
+                                        match fb_result.try_as_basic_value() {
+                                            inkwell::values::ValueKind::Basic(val) => val,
+                                            _ => anyhow::bail!(
+                                                "Getter call did not return a value"
+                                            ),
+                                        }
+                                    } else {
+                                        let fb_field_index =
+                                            self.get_stored_struct_field_index(
+                                                &struct_name,
+                                                &field_name,
+                                            )?;
+                                        let fb_field_ptr = self.builder.build_struct_gep(
+                                            *self
+                                                .struct_types
+                                                .borrow()
+                                                .get(&struct_name)
+                                                .unwrap(),
+                                            struct_ptr,
+                                            fb_field_index as u32,
+                                            "",
+                                        )?;
+                                        let fb_field_ty = self.get_struct_field_type(
+                                            &struct_name,
+                                            &field_name,
+                                        )?;
+                                        self.builder
+                                            .build_load(fb_field_ty, fb_field_ptr, "")?
+                                    };
+                                let some_payload_ty = payloads_type
+                                    .get_field_type_at_index(1)
+                                    .ok_or_else(|| {
+                                        anyhow::anyhow!("Some payload type not found")
+                                    })?
+                                    .into_struct_type();
+                                let some_payload = some_payload_ty
+                                    .const_named_struct(&[fb_property_val.into()]);
+                                let some_tag = self.context.i8_type().const_int(1, false);
+                                let none_optional_val = enum_type.const_named_struct(&[
+                                    some_tag.into(),
+                                    some_payload.into(),
+                                ]);
+                                self.builder.build_unconditional_branch(cont_bb)?;
+                                self.builder.position_at_end(some_bb);
+                                self.builder.build_unconditional_branch(cont_bb)?;
+                                self.builder.position_at_end(cont_bb);
+                                let phi = self
+                                    .builder
+                                    .build_phi(enum_type.as_basic_type_enum(), "")?;
+                                phi.add_incoming(&[
+                                    (&none_optional_val, none_bb),
+                                    (&result_val, some_bb),
+                                ]);
+                                let phi_result = phi.as_basic_value();
+                                return Ok(Some(phi_result));
+                            }
                             return Ok(Some(result_val));
                         }
                     }
@@ -8392,6 +8516,204 @@ impl<'ctx> IRGenerator<'ctx> {
                                 inkwell::values::ValueKind::Basic(val) => val,
                                 _ => anyhow::bail!("Subscript getter call did not return a value"),
                             };
+                            let member_type = expr.borrow().get_ty_ref()?.clone();
+                            if let Some(mty) = &member_type
+                                && let Type::Enum(enum_name, _, _params) = &*mty.borrow()
+                                && enum_name == "Optional"
+                            {
+                                let enum_type = self
+                                    .enum_types
+                                    .borrow()
+                                    .get("Optional")
+                                    .copied()
+                                    .ok_or_else(|| anyhow::anyhow!("Optional enum type not found"))?;
+                                let payloads_type = self
+                                    .enum_payload_types
+                                    .borrow()
+                                    .get("Optional")
+                                    .copied()
+                                    .ok_or_else(|| anyhow::anyhow!("Optional payload type not found"))?;
+                                let alloca = self
+                                    .builder
+                                    .build_alloca(enum_type.as_basic_type_enum(), "")?;
+                                self.builder.build_store(alloca, result_val)?;
+                                let tag_ptr = self
+                                    .builder
+                                    .build_struct_gep(enum_type, alloca, 0, "")?;
+                                let tag = self
+                                    .builder
+                                    .build_load(self.context.i8_type(), tag_ptr, "")?;
+                                let none_tag = self.context.i8_type().const_zero();
+                                let is_none = self.builder.build_int_compare(
+                                    inkwell::IntPredicate::EQ,
+                                    tag.into_int_value(),
+                                    none_tag,
+                                    "",
+                                )?;
+                                let fn_val = self
+                                    .builder
+                                    .get_insert_block()
+                                    .unwrap()
+                                    .get_parent()
+                                    .unwrap();
+                                let none_bb = self
+                                    .context
+                                    .append_basic_block(fn_val, "dml_none");
+                                let some_bb = self
+                                    .context
+                                    .append_basic_block(fn_val, "dml_some");
+                                let cont_bb = self
+                                    .context
+                                    .append_basic_block(fn_val, "dml_cont");
+                                self.builder.build_conditional_branch(
+                                    is_none,
+                                    none_bb,
+                                    some_bb,
+                                )?;
+                                self.builder.position_at_end(none_bb);
+                                let fb_getter_entry = format!("{}.getter", field_name);
+                                let fb_class_ptr = if let Expression::Variable { name, .. } =
+                                    &*object.borrow()
+                                {
+                                    if let Some(var_ptr) = self.lookup_variable(&name.value) {
+                                        let is_in_self = name.value == "self";
+                                        if is_in_self {
+                                            var_ptr
+                                        } else {
+                                            let loaded = self.builder.build_load(
+                                                self.context
+                                                    .ptr_type(inkwell::AddressSpace::from(0)),
+                                                var_ptr,
+                                                "",
+                                            )?;
+                                            loaded.into_pointer_value()
+                                        }
+                                    } else {
+                                        class_ptr
+                                    }
+                                } else {
+                                    class_ptr
+                                };
+                                let fb_property_val =
+                                    if let Some(fb_slot_idx) = self.get_vtable_slot_index(
+                                        &class_name,
+                                        &fb_getter_entry,
+                                    ) {
+                                        let fb_class_type =
+                                            *self.class_types.borrow().get(&class_name).unwrap();
+                                        let fb_vtable_ptr_ptr = self.builder.build_struct_gep(
+                                            fb_class_type,
+                                            fb_class_ptr,
+                                            0,
+                                            "",
+                                        )?;
+                                        let fb_vtable_ptr = self
+                                            .builder
+                                            .build_load(
+                                                self.context
+                                                    .ptr_type(inkwell::AddressSpace::from(0)),
+                                                fb_vtable_ptr_ptr,
+                                                "",
+                                            )?
+                                            .into_pointer_value();
+                                        let fb_vtable_type =
+                                            *self.vtable_types.borrow().get(&class_name).unwrap();
+                                        let fb_fn_ptr_ptr = self.builder.build_struct_gep(
+                                            fb_vtable_type,
+                                            fb_vtable_ptr,
+                                            fb_slot_idx,
+                                            "",
+                                        )?;
+                                        let fb_fn_ptr_val = self
+                                            .builder
+                                            .build_load(
+                                                self.context
+                                                    .ptr_type(inkwell::AddressSpace::from(0)),
+                                                fb_fn_ptr_ptr,
+                                                "",
+                                            )?
+                                            .into_pointer_value();
+                                        let fb_method_list =
+                                            self.compute_vtable_method_list(&class_name);
+                                        let (_, fb_owner) = fb_method_list
+                                            .iter()
+                                            .find(|(n, _)| n == &fb_getter_entry)
+                                            .unwrap();
+                                        let fb_declared_fn_name = self.mangle_fn_name(
+                                            &format!(
+                                                "{}.{}.getter",
+                                                fb_owner, field_name
+                                            ),
+                                            &[],
+                                        );
+                                        let fb_declared_fn = self
+                                            .module
+                                            .get_function(&fb_declared_fn_name)
+                                            .ok_or_else(|| {
+                                                anyhow::anyhow!(
+                                                    "Getter function {} not found",
+                                                    fb_declared_fn_name
+                                                )
+                                            })?;
+                                        let fb_fn_type = fb_declared_fn.get_type();
+                                        let fb_result = self.builder.build_indirect_call(
+                                            fb_fn_type,
+                                            fb_fn_ptr_val,
+                                            &[fb_class_ptr.into()],
+                                            "",
+                                        )?;
+                                        match fb_result.try_as_basic_value() {
+                                            inkwell::values::ValueKind::Basic(val) => val,
+                                            _ => anyhow::bail!(
+                                                "Getter call did not return a value"
+                                            ),
+                                        }
+                                    } else {
+                                        let fb_field_index =
+                                            self.get_stored_class_field_index(
+                                                &class_name,
+                                                &field_name,
+                                            )?;
+                                        let fb_field_ptr = self.builder.build_struct_gep(
+                                            *self.class_types.borrow().get(&class_name).unwrap(),
+                                            fb_class_ptr,
+                                            fb_field_index as u32,
+                                            "",
+                                        )?;
+                                        let fb_field_ty = self.get_struct_field_type(
+                                            &class_name,
+                                            &field_name,
+                                        )?;
+                                        self.builder
+                                            .build_load(fb_field_ty, fb_field_ptr, "")?
+                                    };
+                                let some_payload_ty = payloads_type
+                                    .get_field_type_at_index(1)
+                                    .ok_or_else(|| {
+                                        anyhow::anyhow!("Some payload type not found")
+                                    })?
+                                    .into_struct_type();
+                                let some_payload = some_payload_ty
+                                    .const_named_struct(&[fb_property_val.into()]);
+                                let some_tag = self.context.i8_type().const_int(1, false);
+                                let none_optional_val = enum_type.const_named_struct(&[
+                                    some_tag.into(),
+                                    some_payload.into(),
+                                ]);
+                                self.builder.build_unconditional_branch(cont_bb)?;
+                                self.builder.position_at_end(some_bb);
+                                self.builder.build_unconditional_branch(cont_bb)?;
+                                self.builder.position_at_end(cont_bb);
+                                let phi = self
+                                    .builder
+                                    .build_phi(enum_type.as_basic_type_enum(), "")?;
+                                phi.add_incoming(&[
+                                    (&none_optional_val, none_bb),
+                                    (&result_val, some_bb),
+                                ]);
+                                let phi_result = phi.as_basic_value();
+                                return Ok(Some(phi_result));
+                            }
                             return Ok(Some(result_val));
                         }
                     }

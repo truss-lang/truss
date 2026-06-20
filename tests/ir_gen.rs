@@ -7351,3 +7351,38 @@ fn test_irgen_catch_block_reachable() {
     );
     assert!(llvm_ir.contains("do_catch"));
 }
+
+#[test]
+fn test_irgen_struct_dynamic_member_optional_fallback() {
+    let (llvm_ir, engine) = run_ir_gen_with_stdlib(
+        r#"
+        #[dynamicMemberLookup]
+        struct Container {
+            var x: Int32
+            subscript(dynamicMember: String) -> Int32? {
+                get { return x }
+            }
+        }
+        func test(c: Container) -> Int32? {
+            return c.x
+        }
+        "#,
+        &[
+            "#[builtintype] public struct Int32 {}",
+            "#[builtintype] public struct Bool {}",
+            "#[builtintype] public struct String {}",
+            "public enum Optional<T> { case None, Some(T) }",
+        ],
+    );
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "dynamic member lookup with optional fallback should compile: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("_T$Container$subscript$getter$dynamicMember$String"),
+        "Expected subscript.getter in IR:\n{}",
+        llvm_ir
+    );
+}

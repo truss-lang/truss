@@ -3791,7 +3791,11 @@ impl TypeResolver {
                                     parameters: vec![param],
                                     ty: None,
                                 }));
-                            return self.infer_type(subscript_expr);
+                            let inferred = self.infer_type(subscript_expr);
+                            if let Some(ref t) = inferred {
+                                *ty = Some(t.clone());
+                            }
+                            return inferred;
                         }
                         let token = &*member;
                         self.emit_error(
@@ -4027,7 +4031,11 @@ impl TypeResolver {
                                     parameters: vec![param],
                                     ty: None,
                                 }));
-                            return self.infer_type(subscript_expr);
+                            let inferred = self.infer_type(subscript_expr);
+                            if let Some(ref t) = inferred {
+                                *ty = Some(t.clone());
+                            }
+                            return inferred;
                         }
                         let token = &*member;
                         self.emit_error(
