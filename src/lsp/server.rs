@@ -193,6 +193,9 @@ impl LanguageServer {
             "textDocument/documentHighlight" => {
                 vec![self.handle_document_highlight(id, params)]
             }
+            "textDocument/foldingRange" => {
+                vec![self.handle_folding_range(id, params)]
+            }
             "textDocument/semanticTokens/full" => {
                 vec![self.handle_semantic_tokens(id, params)]
             }
@@ -224,6 +227,7 @@ impl LanguageServer {
                         "triggerCharacters": ["."]
                     },
                     "documentSymbolProvider": true,
+                    "foldingRangeProvider": true,
                     "hoverProvider": true,
                     "definitionProvider": true,
                     "inlayHintProvider": {
@@ -1371,6 +1375,122 @@ impl LanguageServer {
         .to_string()
     }
 
+    fn handle_folding_range(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+            }
+        };
+        let file_path = uri.strip_prefix("file://").unwrap_or(uri);
+        let file_rc = Rc::new(file_path.to_string());
+        let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let char_stream = CharStream::new(content.clone(), file_rc.clone());
+        let mut lexer = Lexer::new(char_stream, engine.clone());
+        let tokens = lexer.parse();
+        if engine.borrow().has_errors() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+        }
+        let parser_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let mut parser = Parser::new(file_rc, tokens, parser_engine.clone());
+        let program = parser.parse();
+        let ranges = self.collect_folding_ranges(&program.statements, &content);
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": ranges
+        })
+        .to_string()
+    }
+
+    fn collect_folding_ranges(&self, stmts: &[Rc<RefCell<Statement>>], content: &str) -> Vec<Value> {
+        let mut ranges = Vec::new();
+        for stmt_rc in stmts {
+            let child_stmts: Vec<Rc<RefCell<Statement>>> = {
+                let stmt = stmt_rc.borrow();
+                let decl_token = stmt.token();
+                let start_line = decl_token.position.line;
+                let start_col = decl_token.position.col;
+
+                if matches!(&*stmt,
+                    Statement::FunctionDecl { .. }
+                    | Statement::StructDecl { .. }
+                    | Statement::ClassDecl { .. }
+                    | Statement::EnumDecl { .. }
+                    | Statement::ProtocolDecl { .. }
+                    | Statement::ExtensionDecl { .. }
+                    | Statement::InitDecl { .. }
+                    | Statement::DeinitDecl { .. }
+                    | Statement::SubscriptDecl { .. }
+                    | Statement::ModuleDecl { .. }
+                    | Statement::Loop { .. }
+                    | Statement::While { .. }
+                    | Statement::RepeatWhile { .. }
+                    | Statement::For { .. }
+                    | Statement::Guard { .. }
+                    | Statement::Defer { .. }
+                    | Statement::ConditionalBlock { .. }
+                    | Statement::AsmBlock { .. }
+                ) {
+                    if let Some((open_line, close_line)) = Self::find_brace_range(content, start_line, start_col) {
+                        ranges.push(json!({
+                            "startLine": (open_line - 1) as u64,
+                            "endLine": (close_line - 1) as u64
+                        }));
+                    }
+                }
+
+                match &*stmt {
+                    Statement::FunctionDecl { body, .. } => {
+                        match &*body.borrow() {
+                            FunctionBody::Statements(s) => s.clone(),
+                            _ => vec![],
+                        }
+                    }
+                    Statement::StructDecl { body, .. } => body.clone(),
+                    Statement::ClassDecl { body, .. } => body.clone(),
+                    Statement::EnumDecl { body, .. } => body.clone(),
+                    Statement::ExtensionDecl { body, .. } => body.clone(),
+                    Statement::ModuleDecl { body, .. } => body.clone(),
+                    Statement::Loop { body, .. } => body.clone(),
+                    Statement::While { body, .. } => body.clone(),
+                    Statement::RepeatWhile { body, .. } => body.clone(),
+                    Statement::For { body, .. } => body.clone(),
+                    Statement::Guard { else_body, .. } => else_body.clone(),
+                    Statement::Defer { body, .. } => body.clone(),
+                    Statement::ConditionalBlock { clauses } => {
+                        clauses.iter().flat_map(|c| c.body.clone()).collect()
+                    }
+                    Statement::InitDecl { body, .. } => {
+                        match &*body.borrow() {
+                            FunctionBody::Statements(s) => s.clone(),
+                            _ => vec![],
+                        }
+                    }
+                    Statement::DeinitDecl { body, .. } => {
+                        match &*body.borrow() {
+                            FunctionBody::Statements(s) => s.clone(),
+                            _ => vec![],
+                        }
+                    }
+                    Statement::SubscriptDecl { accessors, .. } => {
+                        accessors.iter().flat_map(|a| a.body.clone()).collect()
+                    }
+                    _ => vec![],
+                }
+            };
+            if !child_stmts.is_empty() {
+                ranges.extend(self.collect_folding_ranges(&child_stmts, content));
+            }
+        }
+        ranges
+    }
+
     fn handle_document_highlight(&self, id: Option<u64>, params: Option<&Value>) -> String {
         let uri = params
             .and_then(|p| p.get("textDocument"))
@@ -1672,6 +1792,35 @@ impl LanguageServer {
                 "children": []
             })
         }).collect()
+    }
+
+    fn find_brace_range(content: &str, start_line: usize, start_col: usize) -> Option<(usize, usize)> {
+        let mut open_line: Option<usize> = None;
+        let mut depth: i32 = 0;
+        for (i, line) in content.lines().enumerate() {
+            let line_num = i + 1;
+            if line_num < start_line {
+                continue;
+            }
+            let col_start = if line_num == start_line { start_col.saturating_sub(1) as usize } else { 0 };
+            for (j, ch) in line.char_indices() {
+                if line_num == start_line && j < col_start {
+                    continue;
+                }
+                if ch == '{' {
+                    if open_line.is_none() {
+                        open_line = Some(line_num);
+                    }
+                    depth += 1;
+                } else if ch == '}' && depth > 0 {
+                    depth -= 1;
+                    if depth == 0 && open_line.is_some() {
+                        return Some((open_line.unwrap(), line_num));
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn find_brace_end(content: &str, start_line: usize, start_col: usize) -> Option<(usize, usize)> {
