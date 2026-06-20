@@ -69,14 +69,15 @@ fn collect_diagnostics_filtered(
             duck_diagnostic::Severity::Note => 3,
             duck_diagnostic::Severity::Help => 4,
         };
-        let (start_line, start_col, diag_file) = if let Some(label) = diag.primary_label() {
+        let (start_line, start_col, span_length, diag_file) = if let Some(label) = diag.primary_label() {
             (
                 label.span.line,
                 label.span.column,
+                label.span.length,
                 Some(label.span.file.clone()),
             )
         } else {
-            (1, 1, None)
+            (1, 1, 1, None)
         };
         if let Some(ref filter) = filter_file {
             if let Some(ref file_arc) = diag_file {
@@ -93,7 +94,7 @@ fn collect_diagnostics_filtered(
                 },
                 "end": {
                     "line": (start_line - 1) as u64,
-                    "character": start_col as u64
+                    "character": (start_col - 1 + span_length) as u64
                 }
             },
             "severity": severity,
