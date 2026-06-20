@@ -19,6 +19,7 @@ enum Commands {
     Remove { version: String },
     RemoveStd,
     Use { version: String },
+    Update,
 }
 
 fn main() {
@@ -31,6 +32,7 @@ fn main() {
         Commands::Remove { version } => cmd_remove(&version),
         Commands::RemoveStd => cmd_remove_std(),
         Commands::Use { version } => cmd_use(&version),
+        Commands::Update => cmd_update(),
     }
 }
 
@@ -50,7 +52,9 @@ fn get_trussup_dir() -> PathBuf {
 
 fn get_current_version() -> Option<String> {
     let current_file = get_trussup_dir().join("current.txt");
-    std::fs::read_to_string(current_file).ok().map(|s| s.trim().to_string())
+    std::fs::read_to_string(current_file)
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 fn set_current_version(version: &str) {
@@ -104,10 +108,7 @@ fn cmd_install(version: &str) {
                     println!("Downloaded std library");
                 }
                 _ => {
-                    eprintln!(
-                        "Warning: failed to download std library from {}",
-                        std_url
-                    );
+                    eprintln!("Warning: failed to download std library from {}", std_url);
                 }
             }
 
@@ -128,7 +129,10 @@ fn cmd_install(version: &str) {
 fn cmd_install_std() {
     let std_dir = home_dir().join(".trussup").join("stdlib");
     if std_dir.exists() {
-        eprintln!("Error: std library is already installed at {}", std_dir.display());
+        eprintln!(
+            "Error: std library is already installed at {}",
+            std_dir.display()
+        );
         std::process::exit(1);
     }
     std::fs::create_dir_all(std_dir.parent().unwrap()).ok();
@@ -227,4 +231,100 @@ fn cmd_use(version: &str) {
 
     set_current_version(version);
     println!("Using toolchain '{}'", version);
+}
+
+fn cmd_update() {
+    let repo_url = "https://github.com/truss-lang/truss.git";
+    let temp_dir = std::env::temp_dir().join("truss-update");
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    println!("Cloning truss repository from {}...", repo_url);
+    let clone_status = Command::new("git")
+        .args(["clone", "--depth", "1", repo_url, &temp_dir.to_string_lossy()])
+        .status();
+    match clone_status {
+        Ok(s) if s.success() => {
+            println!("Repository cloned successfully");
+        }
+        Ok(s) => {
+            eprintln!("Error: git clone failed with status: {}", s);
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: failed to run git: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    println!("Building truss toolchain (release mode)...");
+    let build_status = Command::new("cargo")
+        .args([
+            "build",
+            "--release",
+            "--bin",
+            "truss",
+            "--bin",
+            "trussc",
+            "--bin",
+            "truss-lsp",
+            "--bin",
+            "trussup",
+        ])
+        .current_dir(&temp_dir)
+        .status();
+    match build_status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            eprintln!("Error: cargo build failed with status: {}", s);
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: failed to run cargo: {}", e);
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            std::process::exit(1);
+        }
+    }
+
+    let version = "latest";
+    let toolchains_dir = get_trussup_dir().join("toolchains").join(version);
+    std::fs::create_dir_all(&toolchains_dir).unwrap_or_else(|e| {
+        eprintln!("Error: failed to create toolchain directory: {}", e);
+        std::process::exit(1);
+    });
+
+    let target_dir = temp_dir.join("target").join("release");
+    for bin in &["truss", "trussc", "truss-lsp", "trussup"] {
+        let src = target_dir.join(bin);
+        let dst = toolchains_dir.join(bin);
+        std::fs::copy(&src, &dst).unwrap_or_else(|e| {
+            eprintln!("Error: failed to copy {}: {}", bin, e);
+            std::process::exit(1);
+        });
+    }
+    println!("Copied binaries to {}", toolchains_dir.display());
+
+    let std_url = "https://github.com/truss-lang/truss-std.git";
+    let std_dir = toolchains_dir.join("stdlib");
+    if std_dir.exists() {
+        let _ = std::fs::remove_dir_all(&std_dir);
+    }
+    let std_status = Command::new("git")
+        .args(["clone", "--depth", "1", std_url, &std_dir.to_string_lossy()])
+        .status();
+    match std_status {
+        Ok(s) if s.success() => {
+            println!("Downloaded std library");
+        }
+        _ => {
+            eprintln!("Warning: failed to download std library from {}", std_url);
+        }
+    }
+
+    set_current_version(version);
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    println!("Update complete! Active toolchain: {} (latest)", version);
 }
