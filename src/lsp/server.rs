@@ -1308,7 +1308,27 @@ impl LanguageServer {
 
         let mut signatures = Vec::new();
         for sym in &symbols {
-            if let Ok(Some(decl)) = sym.borrow().get_decl() {
+            let sym_borrow = sym.borrow();
+            let constructor_sigs: Vec<(String, Vec<Value>)> = match &*sym_borrow {
+                Symbol::Struct { constructors, .. }
+                | Symbol::Class { constructors, .. } => {
+                    let mut sigs = Vec::new();
+                    for ctor in constructors {
+                        if let Ok(Some(decl)) = ctor.borrow().get_decl() {
+                            let stmt = decl.borrow();
+                            if let Some(sig) = self.signature_from_statement(&stmt) {
+                                sigs.push(sig);
+                            }
+                        }
+                    }
+                    sigs
+                }
+                _ => vec![],
+            };
+            for (label, param_info) in constructor_sigs {
+                signatures.push(json!({"label": label, "parameters": param_info}));
+            }
+            if let Ok(Some(decl)) = sym_borrow.get_decl() {
                 let stmt = decl.borrow();
                 if let Some((label, param_info)) = self.signature_from_statement(&stmt) {
                     signatures.push(json!({
