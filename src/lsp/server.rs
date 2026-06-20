@@ -190,6 +190,9 @@ impl LanguageServer {
             "textDocument/documentSymbol" => {
                 vec![self.handle_document_symbol(id, params)]
             }
+            "textDocument/documentHighlight" => {
+                vec![self.handle_document_highlight(id, params)]
+            }
             "textDocument/semanticTokens/full" => {
                 vec![self.handle_semantic_tokens(id, params)]
             }
@@ -1366,6 +1369,83 @@ impl LanguageServer {
             "result": symbols
         })
         .to_string()
+    }
+
+    fn handle_document_highlight(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.as_str(),
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+            }
+        };
+
+        let line = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("line"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let character = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("character"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
+        let word = match self.word_at_position(content, line, character) {
+            Some(w) => w,
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+            }
+        };
+
+        let mut highlights: Vec<Value> = Vec::new();
+
+        for (line_idx, line_str) in content.lines().enumerate() {
+            let mut search_start = 0usize;
+            let line_bytes = line_str.as_bytes();
+            while search_start + word.len() <= line_str.len() {
+                match line_str[search_start..].find(&word) {
+                    Some(pos) => {
+                        let abs_pos = search_start + pos;
+                        let has_boundary_before = if abs_pos == 0 {
+                            true
+                        } else {
+                            let b = line_bytes[abs_pos - 1];
+                            !b.is_ascii_alphanumeric() && b != b'_'
+                        };
+                        let has_boundary_after = if abs_pos + word.len() >= line_bytes.len() {
+                            true
+                        } else {
+                            let b = line_bytes[abs_pos + word.len()];
+                            !b.is_ascii_alphanumeric() && b != b'_'
+                        };
+                        if has_boundary_before && has_boundary_after {
+                            highlights.push(json!({
+                                "range": {
+                                    "start": {
+                                        "line": line_idx as u64,
+                                        "character": abs_pos as u64
+                                    },
+                                    "end": {
+                                        "line": line_idx as u64,
+                                        "character": (abs_pos + word.len()) as u64
+                                    }
+                                },
+                                "kind": 1
+                            }));
+                        }
+                        search_start = abs_pos + word.len();
+                    }
+                    None => break,
+                }
+            }
+        }
+
+        json!({"jsonrpc": "2.0", "id": id, "result": highlights}).to_string()
     }
 
     fn collect_document_symbols(&self, stmts: &[Rc<RefCell<Statement>>], content: &str) -> Vec<Value> {
