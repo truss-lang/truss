@@ -1566,21 +1566,10 @@ impl<'ctx> IRGenerator<'ctx> {
         if let Statement::ExternDecl { statement, .. } = &*statement.borrow() {
             let _ = self.create_extern_declaration(statement.clone());
         }
-        if let Statement::StructDecl { name, body, .. } = &*statement.borrow() {
-            let is_builtintype = self
-                .program_scope
-                .borrow()
-                .as_ref()
-                .and_then(|scope| scope.borrow().get_symbol(&name.value))
-                .map_or(false, |sym| {
-                    matches!(
-                        &*sym.borrow(),
-                        Symbol::Struct {
-                            is_builtin_type: true,
-                            ..
-                        }
-                    )
-                });
+        if let Statement::StructDecl {
+            name, body, attributes, ..
+        } = &*statement.borrow() {
+            let is_builtintype = attributes.iter().any(|a| a.name == "builtintype");
             for stmt in body {
                 if let Statement::FunctionDecl {
                     name: method_name,
@@ -4300,8 +4289,13 @@ impl<'ctx> IRGenerator<'ctx> {
                                     continue;
                                 }
                                 let param_name = &param.borrow().name.value;
-                                let llvm_type =
-                                    self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                                let param_ty = param.borrow().ty.clone().ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Parameter '{}' has no resolved type",
+                                        param_name
+                                    )
+                                })?;
+                                let llvm_type = self.resolve_type(param_ty)?;
                                 let alloca_name = self.unique_alloca_name(param_name);
                                 let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
                                 if let Some(param_value) =
@@ -4326,8 +4320,13 @@ impl<'ctx> IRGenerator<'ctx> {
                                     continue;
                                 }
                                 let param_name = &param.borrow().name.value;
-                                let llvm_type =
-                                    self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                                let param_ty = param.borrow().ty.clone().ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Parameter '{}' has no resolved type",
+                                        param_name
+                                    )
+                                })?;
+                                let llvm_type = self.resolve_type(param_ty)?;
                                 let alloca_name = self.unique_alloca_name(param_name);
                                 let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
                                 if let Some(param_value) =
@@ -4501,7 +4500,13 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                     for (i, param) in parameters.iter().enumerate() {
                         let param_name = &param.borrow().name.value;
-                        let llvm_type = self.resolve_type(param.borrow().ty.clone().unwrap())?;
+                        let param_ty = param.borrow().ty.clone().ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "Parameter '{}' has no resolved type",
+                                param_name
+                            )
+                        })?;
+                        let llvm_type = self.resolve_type(param_ty)?;
                         let alloca_name = self.unique_alloca_name(param_name);
                         let ptr = self.builder.build_alloca(llvm_type, &alloca_name)?;
                         let param_value = function.get_nth_param(i as u32 + param_offset).unwrap();
