@@ -2296,8 +2296,8 @@ impl LanguageServer {
 
 fn lsp_pos(line: usize, col: usize) -> Value {
     json!({
-        "line": (line.saturating_sub(1)) as u64,
-        "character": (col.saturating_sub(1)) as u64
+        "line": line as u64,
+        "character": col as u64
     })
 }
 
