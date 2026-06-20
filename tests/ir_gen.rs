@@ -7386,3 +7386,46 @@ fn test_irgen_struct_dynamic_member_optional_fallback() {
         llvm_ir
     );
 }
+
+#[test]
+fn test_irgen_panic_backtrace() {
+    let engine = create_engine();
+    let mut lexer = Lexer::new(
+        CharStream::new(
+            "func panic() {} func test() { panic() }".to_string(),
+            Rc::new("".to_string()),
+        ),
+        engine.clone(),
+    );
+    let tokens = lexer.parse();
+    let mut parser = Parser::new(lexer.get_file(), tokens, engine.clone());
+    let program = parser.parse();
+    let (packages, _krate) = truss::krate::single_package_map("test");
+    let mut symbol_resolver =
+        SymbolResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    let module_id = symbol_resolver.resolve(&program, "test".to_string());
+    let mut type_resolver = TypeResolver::new(packages.clone(), "test".to_string(), engine.clone());
+    type_resolver.resolve(&program, module_id.clone());
+
+    let context = Context::create();
+    let ir_gen = IRGenerator::new(&context, engine.clone());
+    let module = ir_gen.generate(&program, module_id.borrow().scope.clone().unwrap());
+    let llvm_ir = module.print_to_string().to_string();
+
+    assert_eq!(
+        engine.borrow().get_errors().len(),
+        0,
+        "panic should compile without errors: {:?}",
+        engine.borrow().get_errors()
+    );
+    assert!(
+        llvm_ir.contains("@backtrace"),
+        "Expected backtrace declaration in IR:\n{}",
+        llvm_ir
+    );
+    assert!(
+        llvm_ir.contains("@backtrace_symbols_fd"),
+        "Expected backtrace_symbols_fd declaration in IR:\n{}",
+        llvm_ir
+    );
+}

@@ -10429,6 +10429,16 @@ impl<'ctx> IRGenerator<'ctx> {
                     }
                 };
 
+                if !is_init_call {
+                    let is_panic = match &*callee.borrow() {
+                        Expression::Variable { name, .. } => name.value == "panic",
+                        _ => false,
+                    };
+                    if is_panic && parameters.is_empty() {
+                        self.generate_panic_backtrace()?;
+                    }
+                }
+
                 let callee_ty = match &*callee.borrow() {
                     Expression::Variable { ty, .. } => ty.clone(),
                     Expression::MemberAccess { ty, .. } => ty.clone(),
@@ -12534,6 +12544,50 @@ impl<'ctx> IRGenerator<'ctx> {
             Expression::MemberAccess { object, .. } => self.is_module_expression(object),
             _ => false,
         }
+    }
+
+    fn generate_panic_backtrace(&self) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::from(0));
+        let void_ty = self.context.void_type();
+
+        let backtrace_fn = self.module.get_function("backtrace").unwrap_or_else(|| {
+            let fn_ty = i32_ty.fn_type(&[ptr_ty.into(), i32_ty.into()], false);
+            self.module.add_function("backtrace", fn_ty, None)
+        });
+
+        let btsfd_fn =
+            self.module
+                .get_function("backtrace_symbols_fd")
+                .unwrap_or_else(|| {
+                    let fn_ty =
+                        void_ty.fn_type(&[ptr_ty.into(), i32_ty.into(), i32_ty.into()], false);
+                    self.module.add_function("backtrace_symbols_fd", fn_ty, None)
+                });
+
+        let buf_array_ty = ptr_ty.array_type(64);
+        let buf = self.builder.build_alloca(buf_array_ty, "bt_buf")?;
+        let zero = i32_ty.const_zero();
+        let buf_ptr = unsafe {
+            self.builder
+                .build_gep(buf_array_ty, buf, &[zero, zero], "bt_buf_ptr")?
+        };
+
+        let bt_n = self
+            .builder
+            .build_call(backtrace_fn, &[buf_ptr.into(), i32_ty.const_int(64, false).into()], "bt_n")?;
+        let n_val = match bt_n.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(val) => val.into_int_value(),
+            _ => anyhow::bail!("backtrace expected to return i32"),
+        };
+
+        self.builder.build_call(
+            btsfd_fn,
+            &[buf_ptr.into(), n_val.into(), i32_ty.const_int(2, false).into()],
+            "",
+        )?;
+
+        Ok(())
     }
 
     fn emit_error(
