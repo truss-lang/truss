@@ -184,6 +184,9 @@ impl LanguageServer {
             "textDocument/definition" => {
                 vec![self.handle_definition(id, params)]
             }
+            "textDocument/signatureHelp" => {
+                vec![self.handle_signature_help(id, params)]
+            }
             "textDocument/documentSymbol" => {
                 vec![self.handle_document_symbol(id, params)]
             }
@@ -208,6 +211,9 @@ impl LanguageServer {
             "result": {
                 "capabilities": {
                     "textDocumentSync": 1,
+                    "signatureHelpProvider": {
+                        "triggerCharacters": ["("]
+                    },
                     "completionProvider": {
                         "triggerCharacters": ["."]
                     },
@@ -559,6 +565,144 @@ impl LanguageServer {
             }
         }
         None
+    }
+
+    fn lookup_all_symbols_in_scopes(&self, name: &str) -> Vec<Rc<RefCell<Symbol>>> {
+        let mut result = Vec::new();
+        if let Some(ref scope) = self.stdlib_scope {
+            result.extend(scope.borrow().get_all_symbols(name));
+        }
+        for (_, analysis) in &self.project_analyses {
+            let sb = analysis.scope.borrow();
+            let mut symbols = sb.get_all_symbols(name);
+            if !symbols.is_empty() {
+                result.append(&mut symbols);
+            }
+        }
+        result
+    }
+
+    fn signature_from_statement(&self, stmt: &Statement) -> Option<(String, Vec<Value>)> {
+        match stmt {
+            Statement::FunctionDecl { name, parameters, ty, .. } => {
+                let mut label = format!("func {}", name.value);
+                label.push('(');
+                for (i, param) in parameters.iter().enumerate() {
+                    if i > 0 { label.push_str(", "); }
+                    let p = param.borrow();
+                    if let Some(l) = &p.label {
+                        label.push_str(&l.value);
+                        label.push(' ');
+                    }
+                    label.push_str(&p.name.value);
+                    label.push_str(": ");
+                    if let Some(ref pty) = p.ty {
+                        label.push_str(&pty.borrow().to_string());
+                    }
+                }
+                label.push(')');
+                if let Some(func_ty) = ty {
+                    if let Type::Function(_, ret, _, _) = &*func_ty.borrow() {
+                        label.push_str(" -> ");
+                        label.push_str(&ret.borrow().to_string());
+                    }
+                }
+                let param_info: Vec<Value> = parameters.iter().map(|p| {
+                    let p = p.borrow();
+                    let mut pl = String::new();
+                    if let Some(l) = &p.label {
+                        pl.push_str(&l.value);
+                        pl.push(' ');
+                    }
+                    pl.push_str(&p.name.value);
+                    pl.push_str(": ");
+                    if let Some(ref pty) = p.ty {
+                        pl.push_str(&pty.borrow().to_string());
+                    }
+                    json!({"label": pl, "documentation": ""})
+                }).collect();
+                Some((label, param_info))
+            }
+            Statement::InitDecl { parameters, is_failable, ty, .. } => {
+                let mut label = if *is_failable { "init?".to_string() } else { "init".to_string() };
+                label.push('(');
+                for (i, param) in parameters.iter().enumerate() {
+                    if i > 0 { label.push_str(", "); }
+                    let p = param.borrow();
+                    if let Some(l) = &p.label {
+                        label.push_str(&l.value);
+                        label.push(' ');
+                    }
+                    label.push_str(&p.name.value);
+                    label.push_str(": ");
+                    if let Some(ref pty) = p.ty {
+                        label.push_str(&pty.borrow().to_string());
+                    }
+                }
+                label.push(')');
+                if let Some(func_ty) = ty {
+                    if let Type::Function(_, ret, _, _) = &*func_ty.borrow() {
+                        label.push_str(" -> ");
+                        label.push_str(&ret.borrow().to_string());
+                    }
+                }
+                let param_info: Vec<Value> = parameters.iter().map(|p| {
+                    let p = p.borrow();
+                    let mut pl = String::new();
+                    if let Some(l) = &p.label {
+                        pl.push_str(&l.value);
+                        pl.push(' ');
+                    }
+                    pl.push_str(&p.name.value);
+                    pl.push_str(": ");
+                    if let Some(ref pty) = p.ty {
+                        pl.push_str(&pty.borrow().to_string());
+                    }
+                    json!({"label": pl, "documentation": ""})
+                }).collect();
+                Some((label, param_info))
+            }
+            Statement::SubscriptDecl { parameters, ty, .. } => {
+                let mut label = "subscript".to_string();
+                label.push('(');
+                for (i, param) in parameters.iter().enumerate() {
+                    if i > 0 { label.push_str(", "); }
+                    let p = param.borrow();
+                    if let Some(l) = &p.label {
+                        label.push_str(&l.value);
+                        label.push(' ');
+                    }
+                    label.push_str(&p.name.value);
+                    label.push_str(": ");
+                    if let Some(ref pty) = p.ty {
+                        label.push_str(&pty.borrow().to_string());
+                    }
+                }
+                label.push(')');
+                if let Some(func_ty) = ty {
+                    if let Type::Function(_, ret, _, _) = &*func_ty.borrow() {
+                        label.push_str(" -> ");
+                        label.push_str(&ret.borrow().to_string());
+                    }
+                }
+                let param_info: Vec<Value> = parameters.iter().map(|p| {
+                    let p = p.borrow();
+                    let mut pl = String::new();
+                    if let Some(l) = &p.label {
+                        pl.push_str(&l.value);
+                        pl.push(' ');
+                    }
+                    pl.push_str(&p.name.value);
+                    pl.push_str(": ");
+                    if let Some(ref pty) = p.ty {
+                        pl.push_str(&pty.borrow().to_string());
+                    }
+                    json!({"label": pl, "documentation": ""})
+                }).collect();
+                Some((label, param_info))
+            }
+            _ => None,
+        }
     }
 
     fn lookup_type_in_scopes(&self, name: &str) -> Option<(String, String)> {
@@ -1008,6 +1152,115 @@ impl LanguageServer {
             Some(r) => json!({"jsonrpc": "2.0", "id": id, "result": r}).to_string(),
             None => json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string(),
         }
+    }
+
+    fn handle_signature_help(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+            }
+        };
+
+        let line = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("line"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let character = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("character"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
+        let lines: Vec<&str> = content.lines().collect();
+        if line >= lines.len() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+        }
+        let current_line = lines[line];
+        let chars: Vec<char> = current_line.chars().collect();
+        if chars.is_empty() || character > chars.len() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+        }
+
+        let mut paren_pos = None;
+        if character < chars.len() && chars[character] == '(' {
+            paren_pos = Some(character);
+        } else {
+            let mut pos = character.min(chars.len());
+            while pos > 0 {
+                pos -= 1;
+                if chars[pos] == '(' {
+                    paren_pos = Some(pos);
+                    break;
+                }
+            }
+        }
+        let paren_pos = match paren_pos {
+            Some(p) => p,
+            None => return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string(),
+        };
+
+        let mut name_end = paren_pos;
+        while name_end > 0 && chars[name_end - 1].is_whitespace() {
+            name_end -= 1;
+        }
+        let name_end = name_end;
+        let mut name_start = name_end;
+        while name_start > 0 && (chars[name_start - 1].is_alphanumeric() || chars[name_start - 1] == '_') {
+            name_start -= 1;
+        }
+        if name_start >= name_end {
+            return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+        }
+        let func_name: String = chars[name_start..name_end].iter().collect();
+
+        let symbols = self.lookup_all_symbols_in_scopes(&func_name);
+        if symbols.is_empty() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+        }
+
+        let mut signatures = Vec::new();
+        for sym in &symbols {
+            if let Ok(Some(decl)) = sym.borrow().get_decl() {
+                let stmt = decl.borrow();
+                if let Some((label, param_info)) = self.signature_from_statement(&stmt) {
+                    signatures.push(json!({
+                        "label": label,
+                        "parameters": param_info
+                    }));
+                }
+            }
+        }
+        if signatures.is_empty() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+        }
+
+        let mut active_param = 0u64;
+        let end = character.min(chars.len());
+        if end > paren_pos + 1 {
+            for c in &chars[paren_pos + 1..end] {
+                if *c == ',' {
+                    active_param += 1;
+                }
+            }
+        }
+
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "signatures": signatures,
+                "activeSignature": 0,
+                "activeParameter": active_param
+            }
+        })
+        .to_string()
     }
 
     fn handle_definition(&self, id: Option<u64>, params: Option<&Value>) -> String {
