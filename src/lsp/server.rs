@@ -197,6 +197,9 @@ impl LanguageServer {
             "textDocument/foldingRange" => {
                 vec![self.handle_folding_range(id, params)]
             }
+            "textDocument/references" => {
+                vec![self.handle_references(id, params)]
+            }
             "textDocument/semanticTokens/full" => {
                 vec![self.handle_semantic_tokens(id, params)]
             }
@@ -231,6 +234,7 @@ impl LanguageServer {
                     "foldingRangeProvider": true,
                     "hoverProvider": true,
                     "definitionProvider": true,
+                    "referencesProvider": true,
                     "inlayHintProvider": {
                         "resolveProvider": false
                     },
@@ -1569,6 +1573,68 @@ impl LanguageServer {
         json!({"jsonrpc": "2.0", "id": id, "result": highlights}).to_string()
     }
 
+    fn handle_references(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+            }
+        };
+
+        let line = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("line"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let character = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("character"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
+        let word = match self.word_at_position(&content, line, character) {
+            Some(w) => w,
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+            }
+        };
+
+        let search_word = if let Some((sym, _)) = self.lookup_symbol_in_scopes(&word) {
+            sym.borrow().name().unwrap_or(word)
+        } else {
+            word
+        };
+
+        let mut locations: Vec<Value> = Vec::new();
+
+        for (doc_uri, doc_content) in &self.documents {
+            let matches = find_word_occurrences(doc_content, &search_word, doc_uri);
+            locations.extend(matches);
+        }
+
+        for (file_path, _) in &self.project_analyses {
+            let file_uri = format!("file://{}", file_path);
+            if !self.documents.contains_key(&file_uri) {
+                if let Ok(file_content) = std::fs::read_to_string(file_path) {
+                    let matches = find_word_occurrences(&file_content, &search_word, &file_uri);
+                    locations.extend(matches);
+                }
+            }
+        }
+
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": locations
+        })
+        .to_string()
+    }
+
     fn collect_document_symbols(&self, stmts: &[Rc<RefCell<Statement>>], content: &str) -> Vec<Value> {
         stmts.iter().filter_map(|stmt_rc| {
             self.statement_to_document_symbol(&stmt_rc.borrow(), content)
@@ -2072,6 +2138,39 @@ fn lsp_pos(line: usize, col: usize) -> Value {
         "line": (line.saturating_sub(1)) as u64,
         "character": (col.saturating_sub(1)) as u64
     })
+}
+
+fn find_word_occurrences(content: &str, word: &str, uri: &str) -> Vec<Value> {
+    let mut locations = Vec::new();
+    for (line_idx, line) in content.lines().enumerate() {
+        let mut search_start = 0;
+        let line_bytes = line.as_bytes();
+        while let Some(pos) = line[search_start..].find(word) {
+            let abs_pos = search_start + pos;
+            let before_ok = if abs_pos > 0 {
+                !line_bytes[abs_pos - 1].is_ascii_alphanumeric() && line_bytes[abs_pos - 1] != b'_'
+            } else {
+                true
+            };
+            let after_end = abs_pos + word.len();
+            let after_ok = if after_end < line_bytes.len() {
+                !line_bytes[after_end].is_ascii_alphanumeric() && line_bytes[after_end] != b'_'
+            } else {
+                true
+            };
+            if before_ok && after_ok {
+                locations.push(json!({
+                    "uri": uri,
+                    "range": {
+                        "start": { "line": line_idx as u64, "character": abs_pos as u64 },
+                        "end": { "line": line_idx as u64, "character": after_end as u64 }
+                    }
+                }));
+            }
+            search_start = abs_pos + word.len();
+        }
+    }
+    locations
 }
 
 fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
