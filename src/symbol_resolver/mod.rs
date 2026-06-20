@@ -5,9 +5,9 @@ use crate::{
         expression::{ClosureCapture, ElseBranch, Expression},
         node::Program,
         statement::{
-            AccessorKind, FunctionBody, GenericParameterKind, ImportKind, Modifier, ModifierType,
-            OwnershipModifier, Pattern, ProtocolAccessorSet, ProtocolMember, SelectiveAlias,
-            Statement, WhereRequirement, WhereRequirementKind,
+            AccessorKind, Attribute, FunctionBody, GenericParameterKind, ImportKind, Modifier,
+            ModifierType, OwnershipModifier, Pattern, ProtocolAccessorSet, ProtocolMember,
+            SelectiveAlias, Statement, WhereRequirement, WhereRequirementKind,
         },
     },
     diag::{TrussDiagnosticCode, TrussDiagnosticEngine, new_diagnostic, primary_label_from_token},
@@ -1715,6 +1715,154 @@ impl SymbolResolver {
                                 methods.push(method_sym.clone());
                                 if let Some(s) = scope.as_ref() {
                                     s.borrow_mut().set_symbol(method_sym);
+                                }
+                            }
+                        }
+                    }
+                }
+                let is_builtintype = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().get_symbol(&name.value))
+                    .map_or(false, |sym| {
+                        matches!(
+                            &*sym.borrow(),
+                            Symbol::Struct {
+                                is_builtin_type: true,
+                                ..
+                            }
+                        )
+                    });
+                if is_builtintype {
+                    for conformance in conformances.iter() {
+                        let protocol_name = {
+                            let e = conformance.borrow();
+                            match &*e {
+                                Expression::Type { name: n, .. } => n.value.clone(),
+                                _ => continue,
+                            }
+                        };
+                        let protocol_sym =
+                            match self.current_scope.as_ref().and_then(|scope| {
+                                scope.borrow().get_symbol(&protocol_name)
+                            }) {
+                                Some(s) => s,
+                                None => continue,
+                            };
+                        let autowired_methods: Vec<(
+                            String,
+                            Rc<RefCell<Statement>>,
+                        )> = {
+                            let sym = protocol_sym.borrow();
+                            match &*sym {
+                                Symbol::Protocol { methods, .. } => methods
+                                    .iter()
+                                    .filter(|m| {
+                                        let mb = m.borrow();
+                                        matches!(
+                                            &*mb,
+                                            Symbol::ProtocolMethod {
+                                                is_autowired: true,
+                                                ..
+                                            }
+                                        )
+                                    })
+                                    .filter_map(|m| {
+                                        let mb = m.borrow();
+                                        if let Symbol::ProtocolMethod {
+                                            name, decl, ..
+                                        } = &*mb
+                                        {
+                                            Some((name.clone(), decl.clone()?))
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect(),
+                                _ => vec![],
+                            }
+                        };
+                        for (method_name, method_decl) in autowired_methods {
+                            let already_has = body.iter().any(|s| {
+                                matches!(
+                                    &*s.borrow(),
+                                    Statement::FunctionDecl { name: n, .. }
+                                        if n.value == method_name
+                                )
+                            });
+                            if already_has {
+                                continue;
+                            }
+                            let (params, ret_type, sm, mutating, op_fixity, throws) = {
+                                let d = method_decl.borrow();
+                                match &*d {
+                                    Statement::FunctionDecl {
+                                        parameters,
+                                        return_type,
+                                        static_method,
+                                        mutating,
+                                        operator_fixity,
+                                        throws_types,
+                                        ..
+                                    } => (
+                                        parameters.clone(),
+                                        return_type.clone(),
+                                        *static_method,
+                                        *mutating,
+                                        *operator_fixity,
+                                        throws_types.clone(),
+                                    ),
+                                    _ => continue,
+                                }
+                            };
+                            let pos = name.position.clone();
+                            let file = name.file.clone();
+                            let func_name_tok = Token::new(
+                                method_name.clone(),
+                                TokenType::Identifier,
+                                pos.clone(),
+                                file.clone(),
+                            );
+                            let generated_func = Statement::FunctionDecl {
+                                attributes: vec![Attribute {
+                                    name: "autowired".to_string(),
+                                    value: None,
+                                }],
+                                modifiers: vec![],
+                                token: Box::new(func_name_tok.clone()),
+                                name: Box::new(func_name_tok),
+                                generic_parameters: vec![],
+                                parameters: params,
+                                return_type: ret_type,
+                                throws_types: throws,
+                                body: Rc::new(RefCell::new(FunctionBody::None)),
+                                where_clause: None,
+                                scope: None,
+                                ty: None,
+                                static_method: sm,
+                                mutating,
+                                operator_fixity: op_fixity,
+                            };
+                            let func_stmt = Rc::new(RefCell::new(generated_func));
+                            body.push(func_stmt.clone());
+                            if let Some(st) = self
+                                .current_scope
+                                .as_ref()
+                                .and_then(|scope| scope.borrow().get_symbol(&name.value))
+                            {
+                                let mut st_binding = st.borrow_mut();
+                                if let Symbol::Struct { methods, .. } = &mut *st_binding {
+                                    let method_sym = Rc::new(RefCell::new(
+                                        Symbol::StructMethod {
+                                            name: method_name.clone(),
+                                            parent: WeakSymbol(Rc::downgrade(&st)),
+                                            decl: Some(func_stmt.clone()),
+                                        },
+                                    ));
+                                    methods.push(method_sym.clone());
+                                    if let Some(s) = scope.as_ref() {
+                                        s.borrow_mut().set_symbol(method_sym);
+                                    }
                                 }
                             }
                         }

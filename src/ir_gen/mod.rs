@@ -1567,17 +1567,40 @@ impl<'ctx> IRGenerator<'ctx> {
             let _ = self.create_extern_declaration(statement.clone());
         }
         if let Statement::StructDecl { name, body, .. } = &*statement.borrow() {
+            let is_builtintype = self
+                .program_scope
+                .borrow()
+                .as_ref()
+                .and_then(|scope| scope.borrow().get_symbol(&name.value))
+                .map_or(false, |sym| {
+                    matches!(
+                        &*sym.borrow(),
+                        Symbol::Struct {
+                            is_builtin_type: true,
+                            ..
+                        }
+                    )
+                });
             for stmt in body {
                 if let Statement::FunctionDecl {
                     name: method_name,
                     ty,
                     parameters,
+                    attributes,
+                    body,
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
                     && let Type::Function(param_types, return_type, is_vararg, throws_types) =
                         &*ty.borrow()
                 {
+                    let is_autowired =
+                        attributes.iter().any(|a| a.name == "autowired");
+                    if is_builtintype && is_autowired
+                        && matches!(&*body.borrow(), FunctionBody::None)
+                    {
+                        continue;
+                    }
                     let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                         Type::Void,
                     )))));
@@ -4187,6 +4210,20 @@ impl<'ctx> IRGenerator<'ctx> {
                 ..
             } => {
                 let saved_struct = self.current_struct.borrow_mut().take();
+                if let Some(ref struct_name) = saved_struct {
+                    let is_builtintype =
+                        !self.struct_types.borrow().contains_key(struct_name);
+                    let is_autowired =
+                        attributes.iter().any(|a| a.name == "autowired");
+                    if is_builtintype
+                        && is_autowired
+                        && matches!(&*body.borrow(), FunctionBody::None)
+                    {
+                        *self.current_struct.borrow_mut() =
+                            Some(struct_name.clone());
+                        return Ok(false);
+                    }
+                }
                 let fn_name = if let Some(cname) = attributes
                     .iter()
                     .find(|a| a.name == "cname")

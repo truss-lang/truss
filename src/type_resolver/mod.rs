@@ -8288,15 +8288,24 @@ impl TypeResolver {
                                 ),
                                 type_token,
                             );
-                        } else if protocol_name != "Copyable" || req_method != "copy" {
-                            self.emit_error(
-                                TrussDiagnosticCode::TypeError,
-                                format!(
-                                    "Compiler does not support autowired requirement 'func {}()' in protocol '{}'",
-                                    req_method, protocol_name
-                                ),
-                                type_token,
+                        } else {
+                            let is_builtintype = matches!(
+                                &*type_symbol.borrow(),
+                                Symbol::Struct {
+                                    is_builtin_type: true,
+                                    ..
+                                }
                             );
+                            if !is_builtintype && (protocol_name != "Copyable" || req_method != "copy") {
+                                self.emit_error(
+                                    TrussDiagnosticCode::TypeError,
+                                    format!(
+                                        "Compiler does not support autowired requirement 'func {}()' in protocol '{}'",
+                                        req_method, protocol_name
+                                    ),
+                                    type_token,
+                                );
+                            }
                         }
                     } else {
                         self.emit_error(
