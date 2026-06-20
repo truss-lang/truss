@@ -894,6 +894,20 @@ impl LanguageServer {
         items.push(json!({"label": "override", "kind": 14, "detail": "override modifier", "insertText": "override ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
         items.push(json!({"label": "static", "kind": 14, "detail": "static modifier", "insertText": "static ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
         items.push(json!({"label": "mutating", "kind": 14, "detail": "mutating modifier", "insertText": "mutating func ${1:name}($2) {\n\t$3\n}", "insertTextFormat": 2, "sortText": "2"}));
+        items.push(json!({"label": "associatedtype", "kind": 14, "detail": "associated type declaration", "insertText": "associatedtype ${1:Name}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "prefix func", "kind": 14, "detail": "prefix operator function", "insertText": "prefix func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "postfix func", "kind": 14, "detail": "postfix operator function", "insertText": "postfix func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "infix func", "kind": 14, "detail": "infix operator function", "insertText": "infix func ${1:name}(${2:lhs: Type}, ${3:rhs: Type}) -> ${4:ReturnType} {\n\t${5:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "operator", "kind": 14, "detail": "operator declaration", "insertText": "operator ${1:...}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "precedencegroup", "kind": 14, "detail": "precedence group declaration", "insertText": "precedencegroup ${1:Name} {\n\tassociativity: ${2:left}\n\tprecedence: ${3:100}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "throws", "kind": 14, "detail": "throws keyword", "insertText": "throws", "insertTextFormat": 1, "sortText": "2"}));
+        items.push(json!({"label": "catch", "kind": 14, "detail": "catch clause", "insertText": "catch ${1:error} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "fallthrough", "kind": 14, "detail": "fallthrough keyword", "insertText": "fallthrough", "insertTextFormat": 1, "sortText": "2"}));
+        items.push(json!({"label": "where", "kind": 14, "detail": "where clause keyword", "insertText": "where ${1:condition}", "insertTextFormat": 2, "sortText": "2"}));
+        items.push(json!({"label": "weak", "kind": 14, "detail": "weak modifier", "insertText": "weak", "insertTextFormat": 1, "sortText": "2"}));
+        items.push(json!({"label": "unowned", "kind": 14, "detail": "unowned modifier", "insertText": "unowned", "insertTextFormat": 1, "sortText": "2"}));
+        items.push(json!({"label": "indirect", "kind": 14, "detail": "indirect modifier", "insertText": "indirect", "insertTextFormat": 1, "sortText": "2"}));
+        items.push(json!({"label": "rethrows", "kind": 14, "detail": "rethrows keyword", "insertText": "rethrows", "insertTextFormat": 1, "sortText": "2"}));
     }
 
     fn add_stdlib_completions(&self, items: &mut Vec<Value>) {
@@ -903,12 +917,21 @@ impl LanguageServer {
                 items.push(json!({"label": name, "kind": 5, "detail": "builtin type", "sortText": "3"}));
             }
             for (name, symbol) in &sb.name_table {
-                let kind = match &*symbol.borrow() {
-                    Symbol::Function { .. } => 3,
-                    Symbol::Variable { .. } => 6,
+                let (kind, detail) = match &*symbol.borrow() {
+                    Symbol::Function { .. } => (3, "function"),
+                    Symbol::Variable { .. } => (6, "variable"),
+                    Symbol::Struct { .. } => (5, "struct"),
+                    Symbol::Class { .. } => (5, "class"),
+                    Symbol::Enum { .. } => (10, "enum"),
+                    Symbol::Protocol { .. } => (8, "protocol"),
+                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => (6, "property"),
+                    Symbol::StructMethod { .. } | Symbol::ClassMethod { .. } => (3, "method"),
+                    Symbol::EnumCase { .. } => (21, "enum case"),
+                    Symbol::Module { .. } => (9, "module"),
+                    Symbol::Macro { .. } => (14, "macro"),
                     _ => continue,
                 };
-                items.push(json!({"label": name, "kind": kind, "detail": "stdlib symbol", "sortText": "3"}));
+                items.push(json!({"label": name, "kind": kind, "detail": format!("stdlib {}", detail), "sortText": "3"}));
             }
             for (name, _) in &sb.overloads {
                 items.push(json!({"label": name, "kind": 3, "detail": "stdlib symbol (overloaded)", "sortText": "3"}));
@@ -995,6 +1018,22 @@ impl LanguageServer {
                     }).collect();
                     (cases_items, meths)
                 }
+                Symbol::Protocol { methods, properties, subscripts, .. } => {
+                    let props: Vec<_> = properties.iter().map(|s| {
+                        let name = s.borrow().name().unwrap_or_default();
+                        (name, 6, "property")
+                    }).collect();
+                    let mut meths: Vec<_> = methods.iter().map(|s| {
+                        let name = s.borrow().name().unwrap_or_default();
+                        (name, 3, "method")
+                    }).collect();
+                    let subs: Vec<_> = subscripts.iter().map(|s| {
+                        let name = s.borrow().name().unwrap_or_default();
+                        (name, 3, "subscript")
+                    }).collect();
+                    meths.extend(subs);
+                    (props, meths)
+                }
                 _ => (vec![], vec![]),
             };
             for (name, kind, detail) in properties.iter().chain(methods.iter()) {
@@ -1057,6 +1096,30 @@ impl LanguageServer {
             self.add_snippet_completions(&mut items);
             self.add_stdlib_completions(&mut items);
             self.add_scope_completions(&mut items, &content, uri);
+        }
+
+        // Prefix filtering: keep only items whose label starts with prefix
+        let prefix = {
+            let line_str = lines.get(line).unwrap_or(&"");
+            let end = character.min(line_str.len());
+            let bytes = line_str[..end].as_bytes();
+            let mut start = end;
+            while start > 0 {
+                let b = bytes[start - 1];
+                if !b.is_ascii_alphanumeric() && b != b'_' {
+                    break;
+                }
+                start -= 1;
+            }
+            line_str[start..end].to_string()
+        };
+        if !prefix.is_empty() {
+            items.retain(|item| {
+                item.get("label")
+                    .and_then(|v| v.as_str())
+                    .map(|label| label.to_lowercase().starts_with(&prefix.to_lowercase()))
+                    .unwrap_or(false)
+            });
         }
 
         json!({
@@ -1312,22 +1375,119 @@ impl LanguageServer {
             }
         };
 
+        // Check for member access (e.g., obj.method)
+        let lines: Vec<&str> = content.lines().collect();
+        if line < lines.len() {
+            let current_line = lines[line];
+            let chars: Vec<char> = current_line.chars().collect();
+            let end = character.min(chars.len());
+            let mut word_start = end;
+            while word_start > 0 && (chars[word_start - 1].is_alphanumeric() || chars[word_start - 1] == '_') {
+                word_start -= 1;
+            }
+            if word_start > 0 && chars[word_start - 1] == '.' {
+                let dot_pos = word_start - 1;
+                let mut obj_start = dot_pos;
+                while obj_start > 0 && (chars[obj_start - 1].is_alphanumeric() || chars[obj_start - 1] == '_' || chars[obj_start - 1] == '.') {
+                    obj_start -= 1;
+                }
+                let obj_expr: String = chars[obj_start..dot_pos].iter().collect();
+                let obj_name = obj_expr.split('.').last().unwrap_or("").to_string();
+                if !obj_name.is_empty() {
+                    if let Some((sym, _)) = self.lookup_symbol_in_scopes(&obj_name) {
+                        let sym_borrow = sym.borrow();
+                        let members: Vec<Rc<RefCell<Symbol>>> = match &*sym_borrow {
+                            Symbol::Struct { methods, properties, constructors, subscripts, .. } => {
+                                let mut all = Vec::new();
+                                all.extend(methods.iter().cloned());
+                                all.extend(properties.iter().cloned());
+                                all.extend(constructors.iter().cloned());
+                                all.extend(subscripts.iter().cloned());
+                                all
+                            }
+                            Symbol::Class { methods, properties, constructors, subscripts, .. } => {
+                                let mut all = Vec::new();
+                                all.extend(methods.iter().cloned());
+                                all.extend(properties.iter().cloned());
+                                all.extend(constructors.iter().cloned());
+                                all.extend(subscripts.iter().cloned());
+                                all
+                            }
+                            Symbol::Enum { methods, cases, .. } => {
+                                let mut all = Vec::new();
+                                all.extend(methods.iter().cloned());
+                                all.extend(cases.iter().cloned());
+                                all
+                            }
+                            Symbol::Protocol { methods, properties, subscripts, .. } => {
+                                let mut all = Vec::new();
+                                all.extend(methods.iter().cloned());
+                                all.extend(properties.iter().cloned());
+                                all.extend(subscripts.iter().cloned());
+                                all
+                            }
+                            _ => vec![],
+                        };
+                        for member_sym in &members {
+                            if let Ok(name) = member_sym.borrow().name() {
+                                if name == word {
+                                    if let Ok(Some(decl)) = member_sym.borrow().get_decl() {
+                                        let decl_stmt = decl.borrow();
+                                        let token = decl_stmt.token();
+                                        let pos = token.position;
+                                        let mut decl_file = token.file.as_str().to_string();
+                                        if decl_file == "stdlib" || decl_file.is_empty() {
+                                            if let Some(ref stdlib_path) = self.stdlib_path {
+                                                decl_file = format!("file://{}/Sources/Truss/Truss.truss", stdlib_path);
+                                            }
+                                        } else if decl_file.starts_with('/') {
+                                            decl_file = format!("file://{}", decl_file);
+                                        }
+                                        return json!({
+                                            "jsonrpc": "2.0",
+                                            "id": id,
+                                            "result": {
+                                                "uri": decl_file,
+                                                "range": {
+                                                    "start": {
+                                                        "line": (pos.line.saturating_sub(1)) as u64,
+                                                        "character": (pos.col.saturating_sub(1)) as u64
+                                                    },
+                                                    "end": {
+                                                        "line": (pos.line.saturating_sub(1)) as u64,
+                                                        "character": (pos.col.saturating_sub(1) + pos.len) as u64
+                                                    }
+                                                }
+                                            }
+                                        })
+                                        .to_string();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if let Some((sym, _)) = self.lookup_symbol_in_scopes(&word) {
             if let Ok(Some(decl)) = sym.borrow().get_decl() {
                 let stmt = decl.borrow();
                 let token = stmt.token();
                 let pos = token.position;
-                let decl_file = token.file.as_str().to_string();
-                let decl_uri = if decl_file.starts_with('/') {
-                    format!("file://{}", decl_file)
-                } else {
-                    decl_file
-                };
+                let mut decl_file = token.file.as_str().to_string();
+                if decl_file == "stdlib" || decl_file.is_empty() {
+                    if let Some(ref stdlib_path) = self.stdlib_path {
+                        decl_file = format!("file://{}/Sources/Truss/Truss.truss", stdlib_path);
+                    }
+                } else if decl_file.starts_with('/') {
+                    decl_file = format!("file://{}", decl_file);
+                }
                 return json!({
                     "jsonrpc": "2.0",
                     "id": id,
                     "result": {
-                        "uri": decl_uri,
+                        "uri": decl_file,
                         "range": {
                             "start": {
                                 "line": (pos.line.saturating_sub(1)) as u64,
