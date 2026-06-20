@@ -11,10 +11,12 @@ use duck_diagnostic::DiagnosticCode;
 use crate::ast::node::Program;
 use crate::ast::statement::Statement;
 use crate::diag::TrussDiagnosticEngine;
-use crate::krate::Package;
+use crate::krate::{Module, Package};
 use crate::lexer::token::{KeywordType, Token, TokenType};
 use crate::lexer::{CharStream, Lexer};
 use crate::parser::Parser;
+use crate::scope::Scope;
+use crate::symbol::Symbol;
 use crate::symbol_resolver::SymbolResolver;
 use crate::trusspm::manifest::Manifest;
 use crate::trusspm::resolver::DependencyResolver;
@@ -67,7 +69,11 @@ fn collect_diagnostics_filtered(
             duck_diagnostic::Severity::Help => 4,
         };
         let (start_line, start_col, diag_file) = if let Some(label) = diag.primary_label() {
-            (label.span.line, label.span.column, Some(label.span.file.clone()))
+            (
+                label.span.line,
+                label.span.column,
+                Some(label.span.file.clone()),
+            )
         } else {
             (1, 1, None)
         };
@@ -105,7 +111,10 @@ pub fn start_server() {
         documents: HashMap::new(),
         exit: false,
         stdlib_path,
+        stdlib_scope: None,
+        project_analyses: HashMap::new(),
     };
+    server.load_stdlib();
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin.lock());
     while !server.exit {
@@ -121,10 +130,18 @@ pub fn start_server() {
     }
 }
 
+struct ProjectAnalysis {
+    scope: Rc<RefCell<Scope>>,
+    #[allow(dead_code)]
+    module: Rc<RefCell<Module>>,
+}
+
 struct LanguageServer {
     documents: HashMap<String, String>,
     exit: bool,
     stdlib_path: Option<String>,
+    stdlib_scope: Option<Rc<RefCell<Scope>>>,
+    project_analyses: HashMap<String, ProjectAnalysis>,
 }
 
 impl LanguageServer {
@@ -158,13 +175,13 @@ impl LanguageServer {
             }
             "textDocument/didSave" => self.publish_diagnostics(params),
             "textDocument/completion" => {
-                vec![self.handle_completion(id)]
+                vec![self.handle_completion(id, params)]
             }
             "textDocument/hover" => {
                 vec![self.handle_hover(id, params)]
             }
             "textDocument/definition" => {
-                vec![self.handle_definition(id)]
+                vec![self.handle_definition(id, params)]
             }
             "textDocument/semanticTokens/full" => {
                 vec![self.handle_semantic_tokens(id, params)]
@@ -262,7 +279,7 @@ impl LanguageServer {
         }
     }
 
-    fn publish_diagnostics(&self, params: Option<&Value>) -> Vec<String> {
+    fn publish_diagnostics(&mut self, params: Option<&Value>) -> Vec<String> {
         let uri = match params
             .and_then(|p| p.get("textDocument"))
             .and_then(|td| td.get("uri"))
@@ -287,7 +304,7 @@ impl LanguageServer {
         vec![notification.to_string()]
     }
 
-    fn run_diagnostics(&self, uri: &str, content: &str) -> Vec<Value> {
+    fn run_diagnostics(&mut self, uri: &str, content: &str) -> Vec<Value> {
         let file_path = uri.strip_prefix("file://").unwrap_or(uri);
         let file_rc = Rc::new(file_path.to_string());
         let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
@@ -312,12 +329,7 @@ impl LanguageServer {
         diagnostics
     }
 
-    fn run_full_analysis(
-        &self,
-        file_path: &str,
-        content: &str,
-        program: &Program,
-    ) -> Vec<Value> {
+    fn run_full_analysis(&mut self, file_path: &str, content: &str, program: &Program) -> Vec<Value> {
         let analysis_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
 
         let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
@@ -330,8 +342,7 @@ impl LanguageServer {
             packages.insert("Truss".to_string(), truss_pkg.clone());
 
             let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-            let (file_programs, _) =
-                crate::trusspm::parse_std_lib(stdlib_path, std_engine.clone());
+            let (file_programs, _) = crate::trusspm::parse_std_lib(stdlib_path, std_engine.clone());
 
             if !std_engine.borrow().has_errors() {
                 for file_stmts in &file_programs {
@@ -344,11 +355,8 @@ impl LanguageServer {
                     file: Rc::new("stdlib".to_string()),
                     statements: stdlib_stmts.clone(),
                 };
-                let mut std_resolver = SymbolResolver::new(
-                    packages.clone(),
-                    "Truss".to_string(),
-                    std_engine.clone(),
-                );
+                let mut std_resolver =
+                    SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
                 let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
 
                 if !std_engine.borrow().has_errors() {
@@ -368,9 +376,10 @@ impl LanguageServer {
         }
 
         if let Some(proj_dir) = self.find_project_dir(file_path) {
-            if let Ok(manifest) =
-                Manifest::from_project_dir(&proj_dir, Rc::new(RefCell::new(TrussDiagnosticEngine::new())))
-            {
+            if let Ok(manifest) = Manifest::from_project_dir(
+                &proj_dir,
+                Rc::new(RefCell::new(TrussDiagnosticEngine::new())),
+            ) {
                 let pkg_name = &manifest.name;
                 if !packages.contains_key(pkg_name) {
                     let pkg = Rc::new(RefCell::new(Package::new(pkg_name.clone())));
@@ -427,10 +436,24 @@ impl LanguageServer {
             "main".to_string(),
             analysis_engine.clone(),
         );
-        type_resolver.resolve(&combined_prog, module);
+        type_resolver.resolve(&combined_prog, module.clone());
         let type_diags =
             collect_diagnostics_filtered(&analysis_engine.borrow(), content, Some(file_path));
         analysis_diags.extend(type_diags);
+
+        if !analysis_engine.borrow().has_errors() {
+            self.project_analyses.insert(
+                file_path.to_string(),
+                ProjectAnalysis {
+                    scope: module.borrow().scope.clone().unwrap_or_else(|| {
+                        let s = Rc::new(RefCell::new(Scope::new(None)));
+                        module.borrow_mut().scope = Some(s.clone());
+                        s
+                    }),
+                    module: module.clone(),
+                },
+            );
+        }
 
         analysis_diags
     }
@@ -450,35 +473,301 @@ impl LanguageServer {
         }
     }
 
-    fn handle_completion(&self, id: Option<u64>) -> String {
-        let items = vec![
-            json!({"label": "func", "kind": 14, "detail": "keyword"}),
-            json!({"label": "let", "kind": 14, "detail": "keyword"}),
-            json!({"label": "var", "kind": 14, "detail": "keyword"}),
-            json!({"label": "return", "kind": 14, "detail": "keyword"}),
-            json!({"label": "if", "kind": 14, "detail": "keyword"}),
-            json!({"label": "else", "kind": 14, "detail": "keyword"}),
-            json!({"label": "for", "kind": 14, "detail": "keyword"}),
-            json!({"label": "while", "kind": 14, "detail": "keyword"}),
-            json!({"label": "struct", "kind": 14, "detail": "keyword"}),
-            json!({"label": "class", "kind": 14, "detail": "keyword"}),
-            json!({"label": "enum", "kind": 14, "detail": "keyword"}),
-            json!({"label": "protocol", "kind": 14, "detail": "keyword"}),
-            json!({"label": "extension", "kind": 14, "detail": "keyword"}),
-            json!({"label": "public", "kind": 14, "detail": "keyword"}),
-            json!({"label": "private", "kind": 14, "detail": "keyword"}),
-            json!({"label": "internal", "kind": 14, "detail": "keyword"}),
-            json!({"label": "import", "kind": 14, "detail": "keyword"}),
-            json!({"label": "match", "kind": 14, "detail": "keyword"}),
-            json!({"label": "true", "kind": 21, "detail": "literal"}),
-            json!({"label": "false", "kind": 21, "detail": "literal"}),
-            json!({"label": "null", "kind": 21, "detail": "literal"}),
-            json!({"label": "Self", "kind": 15, "detail": "type"}),
-            json!({"label": "self", "kind": 21, "detail": "keyword"}),
-            json!({"label": "super", "kind": 21, "detail": "keyword"}),
-            json!({"label": "init", "kind": 15, "detail": "keyword"}),
-            json!({"label": "deinit", "kind": 15, "detail": "keyword"}),
-        ];
+    fn load_stdlib(&mut self) {
+        if let Some(ref stdlib_path) = self.stdlib_path.clone() {
+            let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+            let (file_programs, _) = crate::trusspm::parse_std_lib(&stdlib_path, engine.clone());
+            if engine.borrow().has_errors() {
+                return;
+            }
+            let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
+            let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+            packages.insert("Truss".to_string(), truss_pkg.clone());
+
+            let mut all_stmts = Vec::new();
+            for stmts in &file_programs {
+                for s in stmts {
+                    all_stmts.push(s.clone());
+                }
+            }
+            let std_prog = Program {
+                file: Rc::new("stdlib".to_string()),
+                statements: all_stmts,
+            };
+
+            let mut resolver =
+                SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+            let module = resolver.resolve(&std_prog, "Truss".to_string());
+
+            if engine.borrow().has_errors() {
+                return;
+            }
+
+            let mut type_resolver =
+                TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+            type_resolver.resolve(&std_prog, module.clone());
+
+            if !engine.borrow().has_errors() {
+                self.stdlib_scope = module.borrow().scope.clone();
+            }
+        }
+    }
+
+    fn word_at_position(&self, content: &str, line: usize, character: usize) -> Option<String> {
+        let lines: Vec<&str> = content.lines().collect();
+        if line >= lines.len() {
+            return None;
+        }
+        let current_line = lines[line];
+        if character > current_line.len() {
+            return None;
+        }
+        let chars: Vec<char> = current_line.chars().collect();
+        if chars.is_empty() {
+            return None;
+        }
+        let mut start = character;
+        let mut end = character;
+        while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
+            start -= 1;
+        }
+        while end < chars.len() && (chars[end].is_alphanumeric() || chars[end] == '_') {
+            end += 1;
+        }
+        if start < end {
+            Some(chars[start..end].iter().collect())
+        } else {
+            None
+        }
+    }
+
+    fn lookup_symbol_in_scopes(&self, name: &str) -> Option<(Rc<RefCell<Symbol>>, String)> {
+        if let Some(ref scope) = self.stdlib_scope {
+            if let Some(sym) = scope.borrow().get_symbol(name) {
+                return Some((sym, "stdlib".to_string()));
+            }
+        }
+        for (file_path, analysis) in &self.project_analyses {
+            if let Some(sym) = analysis.scope.borrow().get_symbol(name) {
+                return Some((sym, file_path.clone()));
+            }
+        }
+        None
+    }
+
+    fn symbol_type_string(&self, sym: &Symbol) -> Option<String> {
+        if let Ok(Some(decl)) = sym.get_decl() {
+            let stmt = decl.borrow();
+            let ty = match &*stmt {
+                Statement::FunctionDecl { ty, .. } => ty.clone(),
+                Statement::VariableDecl { ty, .. } => ty.clone(),
+                Statement::StructDecl { ty, .. } => ty.clone(),
+                Statement::ClassDecl { ty, .. } => ty.clone(),
+                Statement::EnumDecl { ty, .. } => ty.clone(),
+                Statement::ProtocolDecl { ty, .. } => ty.clone(),
+                Statement::InitDecl { ty, .. } => ty.clone(),
+                Statement::DeinitDecl { ty, .. } => ty.clone(),
+                Statement::SubscriptDecl { ty, .. } => ty.clone(),
+                _ => None,
+            };
+            ty.map(|t| t.borrow().to_string())
+        } else {
+            None
+        }
+    }
+
+    fn add_snippet_completions(&self, items: &mut Vec<Value>) {
+        items.push(json!({"label": "fn", "kind": 14, "detail": "→ func", "insertText": "func", "insertTextFormat": 1, "sortText": "0"}));
+        items.push(json!({"label": "func", "kind": 14, "detail": "function declaration", "insertText": "func ${1:name}(${2:params}) -> ${3:ReturnType} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "struct", "kind": 14, "detail": "struct declaration", "insertText": "struct ${1:Name}${2:: ${3:Protocol}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "class", "kind": 14, "detail": "class declaration", "insertText": "class ${1:Name}${2:: ${3:SuperClass}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "enum", "kind": 14, "detail": "enum declaration", "insertText": "enum ${1:Name}${2:: ${3:RawType}} {\n\tcase ${4:value}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "protocol", "kind": 14, "detail": "protocol declaration", "insertText": "protocol ${1:Name}${2:: ${3:ParentProtocol}} {\n\t${4:members}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "extension", "kind": 14, "detail": "type extension", "insertText": "extension ${1:Type}${2:: ${3:Protocol}} {\n\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "init", "kind": 14, "detail": "initializer declaration", "insertText": "init${1:?}(${2:params}) {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "deinit", "kind": 14, "detail": "deinitializer", "insertText": "deinit {\n\t${1:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "subscript", "kind": 14, "detail": "subscript declaration", "insertText": "subscript(${1:params}) -> ${2:Type} {\n\tget {\n\t\treturn ${3:val}\n\t}\n\t${4:set {\n\t\t${5:newValue}\n\t}}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "typealias", "kind": 14, "detail": "type alias", "insertText": "typealias ${1:Name} = ${2:Type}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "if", "kind": 14, "detail": "if statement", "insertText": "if ${1:condition} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "ifelse", "kind": 14, "detail": "if-else statement", "insertText": "if ${1:condition} {\n\t${2:body}\n} else {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "for", "kind": 14, "detail": "for-in loop", "insertText": "for ${1:item} in ${2:collection} {\n\t${3:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "while", "kind": 14, "detail": "while loop", "insertText": "while ${1:condition} {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "repeat", "kind": 14, "detail": "repeat-while loop", "insertText": "repeat {\n\t${1:body}\n} while ${2:condition}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "match", "kind": 14, "detail": "match expression", "insertText": "match ${1:value} {\n\tcase ${2:pattern} =>\n\t\t${3:body}\n\tdefault =>\n\t\t${4:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "guard", "kind": 14, "detail": "guard statement", "insertText": "guard ${1:condition} else {\n\t${2:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "do", "kind": 14, "detail": "do-catch block", "insertText": "do {\n\t${1:body}\n} catch {\n\t${2:handler}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "defer", "kind": 14, "detail": "defer block", "insertText": "defer {\n\t${1:body}\n}", "insertTextFormat": 2, "sortText": "1"}));
+        items.push(json!({"label": "public", "kind": 14, "detail": "public access modifier", "insertText": "public ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
+        items.push(json!({"label": "private", "kind": 14, "detail": "private access modifier", "insertText": "private ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
+        items.push(json!({"label": "open", "kind": 14, "detail": "open access modifier", "insertText": "open ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
+        items.push(json!({"label": "override", "kind": 14, "detail": "override modifier", "insertText": "override ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
+        items.push(json!({"label": "static", "kind": 14, "detail": "static modifier", "insertText": "static ${1:...}", "insertTextFormat": 2, "sortText": "2"}));
+        items.push(json!({"label": "mutating", "kind": 14, "detail": "mutating modifier", "insertText": "mutating func ${1:name}($2) {\n\t$3\n}", "insertTextFormat": 2, "sortText": "2"}));
+    }
+
+    fn add_stdlib_completions(&self, items: &mut Vec<Value>) {
+        if let Some(ref scope) = self.stdlib_scope {
+            let sb = scope.borrow();
+            for (name, _) in &sb.type_env {
+                items.push(json!({"label": name, "kind": 5, "detail": "builtin type", "sortText": "3"}));
+            }
+            for (name, symbol) in &sb.name_table {
+                let kind = match &*symbol.borrow() {
+                    Symbol::Function { .. } => 3,
+                    Symbol::Variable { .. } => 6,
+                    _ => continue,
+                };
+                items.push(json!({"label": name, "kind": kind, "detail": "stdlib symbol", "sortText": "3"}));
+            }
+            for (name, _) in &sb.overloads {
+                items.push(json!({"label": name, "kind": 3, "detail": "stdlib symbol (overloaded)", "sortText": "3"}));
+            }
+        }
+    }
+
+    fn add_scope_completions(&self, items: &mut Vec<Value>, _content: &str, uri: &str) {
+        let file_path = uri.strip_prefix("file://").unwrap_or(uri);
+        if let Some(analysis) = self.project_analyses.get(file_path) {
+            let sb = analysis.scope.borrow();
+            for (name, _) in &sb.type_env {
+                items.push(json!({"label": name, "kind": 5, "detail": "type", "sortText": "4"}));
+            }
+            for (name, symbol) in &sb.name_table {
+                let (kind, detail) = match &*symbol.borrow() {
+                    Symbol::Function { .. } => (3, "function"),
+                    Symbol::Variable { .. } => (6, "variable"),
+                    Symbol::Struct { .. } => (5, "struct"),
+                    Symbol::Class { .. } => (5, "class"),
+                    Symbol::Enum { .. } => (10, "enum"),
+                    Symbol::Protocol { .. } => (8, "protocol"),
+                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => (6, "property"),
+                    Symbol::StructMethod { .. } | Symbol::ClassMethod { .. } => (3, "method"),
+                    Symbol::EnumCase { .. } => (21, "enum case"),
+                    Symbol::Module { .. } => (9, "module"),
+                    Symbol::Macro { .. } => (14, "macro"),
+                    _ => continue,
+                };
+                items.push(json!({"label": name, "kind": kind, "detail": detail, "sortText": "4"}));
+            }
+        }
+    }
+
+    fn add_member_completions(&self, items: &mut Vec<Value>, content: &str, _uri: &str, line: usize, character: usize) {
+        let lines: Vec<&str> = content.lines().collect();
+        if line >= lines.len() {
+            return;
+        }
+        let current_line = lines[line];
+        let before_dot = &current_line[..character.saturating_sub(1).min(current_line.len())];
+        let obj_name = before_dot
+            .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+            .filter(|s| !s.is_empty())
+            .last()
+            .and_then(|s| {
+                if s.ends_with('.') {
+                    s.trim_end_matches('.')
+                        .split(|c: char| !c.is_alphanumeric() && c != '_')
+                        .last()
+                } else {
+                    Some(s)
+                }
+            })
+            .unwrap_or("");
+
+        if obj_name.is_empty() {
+            return;
+        }
+
+        if let Some((sym, _)) = self.lookup_symbol_in_scopes(obj_name) {
+            let sym_borrow = sym.borrow();
+            let (properties, methods) = match &*sym_borrow {
+                Symbol::Struct { properties, methods, .. }
+                | Symbol::Class { properties, methods, .. } => {
+                    let props: Vec<_> = properties.iter().map(|s| {
+                        let name = s.borrow().name().unwrap_or_default();
+                        (name, 6, "property")
+                    }).collect();
+                    let meths: Vec<_> = methods.iter().map(|s| {
+                        let name = s.borrow().name().unwrap_or_default();
+                        (name, 3, "method")
+                    }).collect();
+                    (props, meths)
+                }
+                Symbol::Enum { cases, methods, .. } => {
+                    let cases_items: Vec<_> = cases.iter().map(|s| {
+                        let name = s.borrow().name().unwrap_or_default();
+                        (name, 21, "enum case")
+                    }).collect();
+                    let meths: Vec<_> = methods.iter().map(|s| {
+                        let name = s.borrow().name().unwrap_or_default();
+                        (name, 3, "method")
+                    }).collect();
+                    (cases_items, meths)
+                }
+                _ => (vec![], vec![]),
+            };
+            for (name, kind, detail) in properties.iter().chain(methods.iter()) {
+                if !name.is_empty() {
+                    items.push(json!({"label": name, "kind": kind, "detail": detail, "sortText": "0"}));
+                }
+            }
+        }
+    }
+
+    fn empty_completion(&self, id: Option<u64>) -> String {
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "isIncomplete": false,
+                "items": []
+            }
+        })
+        .to_string()
+    }
+
+    fn handle_completion(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => return self.empty_completion(id),
+        };
+
+        let line = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("line"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let character = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("character"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
+        let lines: Vec<&str> = content.lines().collect();
+        let current_line = if line < lines.len() {
+            lines[line]
+        } else {
+            ""
+        };
+        let before_cursor = &current_line[..character.min(current_line.len())];
+
+        let is_member = before_cursor.trim_end().ends_with('.');
+
+        let mut items: Vec<Value> = Vec::new();
+
+        if is_member {
+            self.add_member_completions(&mut items, &content, uri, line, character);
+        } else {
+            self.add_snippet_completions(&mut items);
+            self.add_stdlib_completions(&mut items);
+            self.add_scope_completions(&mut items, &content, uri);
+        }
+
         json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -490,22 +779,140 @@ impl LanguageServer {
         .to_string()
     }
 
-    fn handle_hover(&self, id: Option<u64>, _params: Option<&Value>) -> String {
-        json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": null
-        })
-        .to_string()
+    fn handle_hover(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+            }
+        };
+
+        let line = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("line"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let character = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("character"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
+        let word = match self.word_at_position(&content, line, character) {
+            Some(w) => w,
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+            }
+        };
+
+        let result = if let Some((sym, _)) = self.lookup_symbol_in_scopes(&word) {
+            let sym_borrow = sym.borrow();
+            let sym_name = sym_borrow.name().unwrap_or_default();
+            let type_str = self.symbol_type_string(&sym_borrow);
+            let mut markdown = format!("```truss\n{}", sym_name);
+            if let Some(ref ty) = type_str {
+                markdown.push_str(&format!(": {}", ty));
+            }
+            let decl_info = match &*sym_borrow {
+                Symbol::Function { .. } => "func",
+                Symbol::Variable { is_var, .. } => {
+                    if *is_var { "var" } else { "let" }
+                }
+                Symbol::Struct { .. } => "struct",
+                Symbol::Class { .. } => "class",
+                Symbol::Enum { .. } => "enum",
+                Symbol::Protocol { .. } => "protocol",
+                Symbol::StructProperty { .. } => "property",
+                Symbol::StructMethod { .. } => "method",
+                Symbol::ClassProperty { .. } => "property",
+                Symbol::ClassMethod { .. } => "method",
+                Symbol::EnumCase { .. } => "enum case",
+                Symbol::Module { .. } => "module",
+                Symbol::Macro { .. } => "macro",
+                _ => "symbol",
+            };
+            markdown.push_str(&format!("\n{}", decl_info));
+            markdown.push_str("\n```");
+            Some(json!({"contents": {"kind": "markdown", "value": markdown}}))
+        } else {
+            None
+        };
+
+        match result {
+            Some(r) => json!({"jsonrpc": "2.0", "id": id, "result": r}).to_string(),
+            None => json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string(),
+        }
     }
 
-    fn handle_definition(&self, id: Option<u64>) -> String {
-        json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": null
-        })
-        .to_string()
+    fn handle_definition(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+            }
+        };
+
+        let line = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("line"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let character = params
+            .and_then(|p| p.get("position"))
+            .and_then(|pos| pos.get("character"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+
+        let word = match self.word_at_position(&content, line, character) {
+            Some(w) => w,
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
+            }
+        };
+
+        if let Some((sym, _)) = self.lookup_symbol_in_scopes(&word) {
+            if let Ok(Some(decl)) = sym.borrow().get_decl() {
+                let stmt = decl.borrow();
+                let token = stmt.token();
+                let pos = token.position;
+                let decl_file = token.file.as_str().to_string();
+                let decl_uri = if decl_file.starts_with('/') {
+                    format!("file://{}", decl_file)
+                } else {
+                    decl_file
+                };
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "uri": decl_uri,
+                        "range": {
+                            "start": {
+                                "line": (pos.line.saturating_sub(1)) as u64,
+                                "character": (pos.col.saturating_sub(1)) as u64
+                            },
+                            "end": {
+                                "line": (pos.line.saturating_sub(1)) as u64,
+                                "character": (pos.col.saturating_sub(1) + pos.len) as u64
+                            }
+                        }
+                    }
+                })
+                .to_string();
+            }
+        }
+
+        json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string()
     }
 
     fn handle_semantic_tokens(&self, id: Option<u64>, params: Option<&Value>) -> String {
