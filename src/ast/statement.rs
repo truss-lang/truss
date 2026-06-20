@@ -542,6 +542,19 @@ pub enum ProtocolMember {
         accessors: ProtocolAccessorSet,
         default_accessors: Vec<Accessor>,
     },
+    StaticVar {
+        modifiers: Vec<Modifier>,
+        token: Box<Token>,
+        name: Box<Token>,
+        type_expression: Rc<RefCell<Expression>>,
+        accessors: ProtocolAccessorSet,
+    },
+    Init {
+        modifiers: Vec<Modifier>,
+        token: Box<Token>,
+        parameters: Vec<Rc<RefCell<Parameter>>>,
+        throws_types: Option<Vec<Rc<RefCell<Expression>>>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -945,6 +945,30 @@ impl SymbolResolver {
                             }));
                             subscripts.push(sub);
                         }
+                        ProtocolMember::StaticVar {
+                            name: prop_name,
+                            accessors,
+                            ..
+                        } => {
+                            let prop_symbol = Rc::new(RefCell::new(Symbol::ProtocolProperty {
+                                name: prop_name.value.clone(),
+                                parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
+                                decl: None,
+                                accessors: *accessors,
+                            }));
+                            properties.push(prop_symbol.clone());
+                            self.enter(prop_symbol, prop_name);
+                        }
+                        ProtocolMember::Init { token, .. } => {
+                            let method_symbol = Rc::new(RefCell::new(Symbol::ProtocolMethod {
+                                name: "init".to_string(),
+                                parent: WeakSymbol(Rc::downgrade(&protocol_symbol)),
+                                decl: None,
+                                is_autowired: false,
+                            }));
+                            methods.push(method_symbol.clone());
+                            self.enter(method_symbol, token);
+                        }
                     }
                 }
                 self.leave_scope();
@@ -1905,6 +1929,16 @@ impl SymbolResolver {
                             self.resolve_expression(type_expression.clone());
                         }
                         ProtocolMember::Subscript { .. } => {}
+                        ProtocolMember::StaticVar {
+                            type_expression, ..
+                        } => {
+                            self.resolve_expression(type_expression.clone());
+                        }
+                        ProtocolMember::Init { parameters, .. } => {
+                            for parameter in parameters {
+                                self.resolve_expression(parameter.borrow().type_expression.clone());
+                            }
+                        }
                     }
                 }
                 self.leave_scope();

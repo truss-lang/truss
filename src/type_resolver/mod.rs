@@ -1066,6 +1066,31 @@ impl TypeResolver {
                             }
                             self.infer_type(return_type_expression.clone());
                         }
+                        ProtocolMember::StaticVar {
+                            name: prop_name,
+                            type_expression,
+                            ..
+                        } => {
+                            let prop_ty = self.infer_type(type_expression.clone());
+                            if let Some(prop_ty) = prop_ty {
+                                self.current_scope
+                                    .as_ref()
+                                    .unwrap()
+                                    .borrow_mut()
+                                    .set_type(prop_name.value.clone(), prop_ty);
+                            }
+                        }
+                        ProtocolMember::Init { parameters, .. } => {
+                            let cloned_params: Vec<_> = parameters
+                                .iter()
+                                .map(|p| (p.borrow().type_expression.clone(), p.clone()))
+                                .collect();
+                            for (type_expr, param) in cloned_params {
+                                if let Some(param_type) = self.infer_type(type_expr) {
+                                    param.borrow_mut().ty = Some(param_type);
+                                }
+                            }
+                        }
                     }
                 }
                 self.leave_scope();
@@ -1815,6 +1840,22 @@ impl TypeResolver {
                                 }
                             }
                             self.infer_type(return_type_expression.clone());
+                        }
+                        ProtocolMember::StaticVar {
+                            type_expression, ..
+                        } => {
+                            self.infer_type(type_expression.clone());
+                        }
+                        ProtocolMember::Init { parameters, .. } => {
+                            let cloned_params: Vec<_> = parameters
+                                .iter()
+                                .map(|p| (p.borrow().type_expression.clone(), p.clone()))
+                                .collect();
+                            for (type_expr, param) in cloned_params {
+                                if let Some(param_type) = self.infer_type(type_expr) {
+                                    param.borrow_mut().ty = Some(param_type);
+                                }
+                            }
                         }
                     }
                 }
@@ -8127,6 +8168,7 @@ impl TypeResolver {
                     }
                 })
             };
+
             let has_default_subscript = || -> bool {
                 proto_decl_members.iter().any(|m| {
                     matches!(m, ProtocolMember::Subscript { default_accessors, .. } if !default_accessors.is_empty())
