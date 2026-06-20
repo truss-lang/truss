@@ -549,8 +549,55 @@ impl LanguageServer {
             }
         }
         for (file_path, analysis) in &self.project_analyses {
-            if let Some(sym) = analysis.scope.borrow().get_symbol(name) {
+            let sb = analysis.scope.borrow();
+            if let Some(sym) = sb.get_symbol(name) {
                 return Some((sym, file_path.clone()));
+            }
+        }
+        None
+    }
+
+    fn lookup_type_in_scopes(&self, name: &str) -> Option<(String, String)> {
+        if let Some(ref scope) = self.stdlib_scope {
+            let sb = scope.borrow();
+            if let Some(ty) = sb.get_type(name) {
+                return Some((ty.borrow().to_string(), "stdlib".to_string()));
+            }
+            if sb.overloads.contains_key(name) {
+                let overload_key = format!("{} (overloaded)", name);
+                return Some((overload_key, "stdlib".to_string()));
+            }
+            let check_name_table = |n: &str| -> Option<(String, String)> {
+                if let Some(sym) = sb.name_table.get(n) {
+                    if let Some(desc) = self.symbol_type_string(&sym.borrow()) {
+                        return Some((desc, "stdlib".to_string()));
+                    }
+                }
+                None
+            };
+            if let Some(result) = check_name_table(name) {
+                return Some(result);
+            }
+        }
+        for (file_path, analysis) in &self.project_analyses {
+            let sb = analysis.scope.borrow();
+            if let Some(ty) = sb.get_type(name) {
+                return Some((ty.borrow().to_string(), file_path.clone()));
+            }
+            if sb.overloads.contains_key(name) {
+                let overload_key = format!("{} (overloaded)", name);
+                return Some((overload_key, file_path.clone()));
+            }
+            let check_name_table = |n: &str| -> Option<(String, String)> {
+                if let Some(sym) = sb.name_table.get(n) {
+                    if let Some(desc) = self.symbol_type_string(&sym.borrow()) {
+                        return Some((desc, file_path.clone()));
+                    }
+                }
+                None
+            };
+            if let Some(result) = check_name_table(name) {
+                return Some(result);
             }
         }
         None
@@ -888,7 +935,15 @@ impl LanguageServer {
             }
         };
 
-        let result = if let Some((sym, _)) = self.lookup_symbol_in_scopes(&word) {
+        let result = if word == "self" || word == "Self" || word == "super" {
+            let desc = match word.as_str() {
+                "self" => "self (current instance)",
+                "Self" => "Self (current type)",
+                "super" => "super (parent instance)",
+                _ => "",
+            };
+            Some(json!({"contents": {"kind": "markdown", "value": format!("```truss\n{}\nkeyword\n```", desc)}}))
+        } else if let Some((sym, _)) = self.lookup_symbol_in_scopes(&word) {
             let sym_borrow = sym.borrow();
             let sym_name = sym_borrow.name().unwrap_or_default();
             let type_str = self.symbol_type_string(&sym_borrow);
@@ -927,6 +982,9 @@ impl LanguageServer {
                 Symbol::StructMethod { .. } => "method",
                 Symbol::ClassProperty { .. } => "property",
                 Symbol::ClassMethod { .. } => "method",
+                Symbol::StructSubscript { .. } => "subscript",
+                Symbol::ClassSubscript { .. } => "subscript",
+                Symbol::ProtocolSubscript { .. } => "subscript",
                 Symbol::EnumCase { .. } => "enum case",
                 Symbol::Module { .. } => "module",
                 Symbol::Macro { .. } => "macro",
@@ -934,6 +992,9 @@ impl LanguageServer {
             };
             markdown.push_str(&format!("\n{}", decl_info));
             markdown.push_str("\n```");
+            Some(json!({"contents": {"kind": "markdown", "value": markdown}}))
+        } else if let Some((type_desc, _)) = self.lookup_type_in_scopes(&word) {
+            let markdown = format!("```truss\n{}\ntype\n```", type_desc);
             Some(json!({"contents": {"kind": "markdown", "value": markdown}}))
         } else {
             None
