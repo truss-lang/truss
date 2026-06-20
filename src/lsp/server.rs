@@ -21,6 +21,7 @@ use crate::symbol_resolver::SymbolResolver;
 use crate::trusspm::manifest::Manifest;
 use crate::trusspm::resolver::DependencyResolver;
 use crate::type_resolver::TypeResolver;
+use crate::types::Type;
 
 fn read_message(reader: &mut BufReader<io::StdinLock<'_>>) -> Option<String> {
     let mut content_length: Option<usize> = None;
@@ -558,19 +559,96 @@ impl LanguageServer {
     fn symbol_type_string(&self, sym: &Symbol) -> Option<String> {
         if let Ok(Some(decl)) = sym.get_decl() {
             let stmt = decl.borrow();
-            let ty = match &*stmt {
-                Statement::FunctionDecl { ty, .. } => ty.clone(),
-                Statement::VariableDecl { ty, .. } => ty.clone(),
-                Statement::StructDecl { ty, .. } => ty.clone(),
-                Statement::ClassDecl { ty, .. } => ty.clone(),
-                Statement::EnumDecl { ty, .. } => ty.clone(),
-                Statement::ProtocolDecl { ty, .. } => ty.clone(),
-                Statement::InitDecl { ty, .. } => ty.clone(),
-                Statement::DeinitDecl { ty, .. } => ty.clone(),
-                Statement::SubscriptDecl { ty, .. } => ty.clone(),
+            match &*stmt {
+                Statement::FunctionDecl { name, parameters, ty, .. } => {
+                    let mut s = format!("func {}", name.value);
+                    s.push('(');
+                    for (i, param) in parameters.iter().enumerate() {
+                        if i > 0 { s.push_str(", "); }
+                        let p = param.borrow();
+                        if let Some(label) = &p.label {
+                            s.push_str(&label.value);
+                            s.push(' ');
+                        }
+                        s.push_str(&p.name.value);
+                        s.push_str(": ");
+                        if let Some(ref pty) = p.ty {
+                            s.push_str(&pty.borrow().to_string());
+                        }
+                    }
+                    s.push(')');
+                    if let Some(func_ty) = ty {
+                        if let Type::Function(_, ret, _, _) = &*func_ty.borrow() {
+                            s.push_str(" -> ");
+                            s.push_str(&ret.borrow().to_string());
+                        }
+                    }
+                    Some(s)
+                }
+                Statement::InitDecl { parameters, is_failable, .. } => {
+                    let mut s = if *is_failable { String::from("init?") } else { String::from("init") };
+                    s.push('(');
+                    for (i, param) in parameters.iter().enumerate() {
+                        if i > 0 { s.push_str(", "); }
+                        let p = param.borrow();
+                        if let Some(label) = &p.label {
+                            s.push_str(&label.value);
+                            s.push(' ');
+                        }
+                        s.push_str(&p.name.value);
+                        s.push_str(": ");
+                        if let Some(ref pty) = p.ty {
+                            s.push_str(&pty.borrow().to_string());
+                        }
+                    }
+                    s.push(')');
+                    Some(s)
+                }
+                Statement::SubscriptDecl { parameters, ty, .. } => {
+                    let mut s = String::from("subscript");
+                    s.push('(');
+                    for (i, param) in parameters.iter().enumerate() {
+                        if i > 0 { s.push_str(", "); }
+                        let p = param.borrow();
+                        if let Some(label) = &p.label {
+                            s.push_str(&label.value);
+                            s.push(' ');
+                        }
+                        s.push_str(&p.name.value);
+                        s.push_str(": ");
+                        if let Some(ref pty) = p.ty {
+                            s.push_str(&pty.borrow().to_string());
+                        }
+                    }
+                    s.push(')');
+                    if let Some(func_ty) = ty {
+                        if let Type::Function(_, ret, _, _) = &*func_ty.borrow() {
+                            s.push_str(" -> ");
+                            s.push_str(&ret.borrow().to_string());
+                        }
+                    }
+                    Some(s)
+                }
+                Statement::VariableDecl { ty, .. } => {
+                    ty.as_ref().map(|t| t.borrow().to_string())
+                }
+                Statement::StructDecl { ty, .. } => {
+                    ty.as_ref().map(|t| t.borrow().to_string())
+                }
+                Statement::ClassDecl { ty, .. } => {
+                    ty.as_ref().map(|t| t.borrow().to_string())
+                }
+                Statement::EnumDecl { ty, .. } => {
+                    ty.as_ref().map(|t| t.borrow().to_string())
+                }
+                Statement::ProtocolDecl { ty, .. } => {
+                    ty.as_ref().map(|t| t.borrow().to_string())
+                }
+                Statement::DeinitDecl { .. } => {
+                    Some(String::from("deinit"))
+                }
                 _ => None,
-            };
-            ty.map(|t| t.borrow().to_string())
+            }
         } else {
             None
         }
@@ -814,9 +892,27 @@ impl LanguageServer {
             let sym_borrow = sym.borrow();
             let sym_name = sym_borrow.name().unwrap_or_default();
             let type_str = self.symbol_type_string(&sym_borrow);
-            let mut markdown = format!("```truss\n{}", sym_name);
-            if let Some(ref ty) = type_str {
-                markdown.push_str(&format!(": {}", ty));
+            let is_func_like = matches!(&*sym_borrow,
+                Symbol::Function { .. }
+                | Symbol::StructMethod { .. }
+                | Symbol::ClassMethod { .. }
+                | Symbol::ProtocolMethod { .. }
+                | Symbol::StructSubscript { .. }
+                | Symbol::ClassSubscript { .. }
+                | Symbol::ProtocolSubscript { .. }
+            );
+            let mut markdown = format!("```truss\n");
+            if is_func_like {
+                if let Some(ref sig) = type_str {
+                    markdown.push_str(sig);
+                } else {
+                    markdown.push_str(&sym_name);
+                }
+            } else {
+                markdown.push_str(&sym_name);
+                if let Some(ref ty) = type_str {
+                    markdown.push_str(&format!(": {}", ty));
+                }
             }
             let decl_info = match &*sym_borrow {
                 Symbol::Function { .. } => "func",
