@@ -2594,9 +2594,9 @@ impl TypeResolver {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidOperand,
                         format!(
-                            "Invalid operands for binary operator: {} and {}",
+                            "Type '{}' does not implement operator '{}'",
                             left_ty.borrow().clone(),
-                            right_ty.borrow().clone()
+                            operator.operator_name()
                         ),
                         &token,
                     );
@@ -2633,8 +2633,9 @@ impl TypeResolver {
                     self.emit_error(
                         TrussDiagnosticCode::InvalidOperand,
                         format!(
-                            "Invalid operand for unary operator: {}",
-                            operand_ty.borrow().clone()
+                            "Type '{}' does not implement operator '{}'",
+                            operand_ty.borrow().clone(),
+                            operator.operator_name()
                         ),
                         &token,
                     );
