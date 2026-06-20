@@ -1,16 +1,24 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::path::Path;
 use std::rc::Rc;
 
 use serde_json::{Value, json};
 
 use duck_diagnostic::DiagnosticCode;
 
+use crate::ast::node::Program;
+use crate::ast::statement::Statement;
 use crate::diag::TrussDiagnosticEngine;
+use crate::krate::Package;
 use crate::lexer::token::{KeywordType, Token, TokenType};
 use crate::lexer::{CharStream, Lexer};
 use crate::parser::Parser;
+use crate::symbol_resolver::SymbolResolver;
+use crate::trusspm::manifest::Manifest;
+use crate::trusspm::resolver::DependencyResolver;
+use crate::type_resolver::TypeResolver;
 
 fn read_message(reader: &mut BufReader<io::StdinLock<'_>>) -> Option<String> {
     let mut content_length: Option<usize> = None;
@@ -41,7 +49,15 @@ fn write_message(writer: &mut dyn Write, content: &str) {
     let _ = writer.flush();
 }
 
-fn collect_diagnostics_from_engine(engine: &TrussDiagnosticEngine, _content: &str) -> Vec<Value> {
+fn collect_diagnostics_from_engine(engine: &TrussDiagnosticEngine, content: &str) -> Vec<Value> {
+    collect_diagnostics_filtered(engine, content, None)
+}
+
+fn collect_diagnostics_filtered(
+    engine: &TrussDiagnosticEngine,
+    _content: &str,
+    filter_file: Option<&str>,
+) -> Vec<Value> {
     let mut diagnostics = Vec::new();
     for diag in engine.get_diagnostics() {
         let severity = match diag.severity {
@@ -50,11 +66,18 @@ fn collect_diagnostics_from_engine(engine: &TrussDiagnosticEngine, _content: &st
             duck_diagnostic::Severity::Note => 3,
             duck_diagnostic::Severity::Help => 4,
         };
-        let (start_line, start_col) = if let Some(label) = diag.primary_label() {
-            (label.span.line, label.span.column)
+        let (start_line, start_col, diag_file) = if let Some(label) = diag.primary_label() {
+            (label.span.line, label.span.column, Some(label.span.file.clone()))
         } else {
-            (1, 1)
+            (1, 1, None)
         };
+        if let Some(ref filter) = filter_file {
+            if let Some(ref file_arc) = diag_file {
+                if file_arc.as_ref() != *filter {
+                    continue;
+                }
+            }
+        }
         diagnostics.push(json!({
             "range": {
                 "start": {
@@ -277,10 +300,154 @@ impl LanguageServer {
         }
         let parser_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
         let mut parser = Parser::new(file_rc, tokens, parser_engine.clone());
-        let _program = parser.parse();
+        let program = parser.parse();
         let parser_diags = collect_diagnostics_from_engine(&parser_engine.borrow(), content);
         diagnostics.extend(parser_diags);
+        if parser_engine.borrow().has_errors() {
+            return diagnostics;
+        }
+
+        let analysis_diags = self.run_full_analysis(file_path, content, &program);
+        diagnostics.extend(analysis_diags);
         diagnostics
+    }
+
+    fn run_full_analysis(
+        &self,
+        file_path: &str,
+        content: &str,
+        program: &Program,
+    ) -> Vec<Value> {
+        let analysis_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+
+        let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
+        let main_pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
+        packages.insert("main".to_string(), main_pkg.clone());
+
+        let mut stdlib_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+        if let Some(ref stdlib_path) = self.stdlib_path {
+            let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+            packages.insert("Truss".to_string(), truss_pkg.clone());
+
+            let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+            let (file_programs, _) =
+                crate::trusspm::parse_std_lib(stdlib_path, std_engine.clone());
+
+            if !std_engine.borrow().has_errors() {
+                for file_stmts in &file_programs {
+                    for stmt in file_stmts {
+                        stdlib_stmts.push(stmt.clone());
+                    }
+                }
+
+                let std_prog = Program {
+                    file: Rc::new("stdlib".to_string()),
+                    statements: stdlib_stmts.clone(),
+                };
+                let mut std_resolver = SymbolResolver::new(
+                    packages.clone(),
+                    "Truss".to_string(),
+                    std_engine.clone(),
+                );
+                let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
+
+                if !std_engine.borrow().has_errors() {
+                    let mut std_type_resolver = TypeResolver::new(
+                        packages.clone(),
+                        "Truss".to_string(),
+                        std_engine.clone(),
+                    );
+                    std_type_resolver.resolve(&std_prog, std_module);
+                }
+            }
+        }
+
+        let mut all_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+        for stmt in &program.statements {
+            all_stmts.push(stmt.clone());
+        }
+
+        if let Some(proj_dir) = self.find_project_dir(file_path) {
+            if let Ok(manifest) =
+                Manifest::from_project_dir(&proj_dir, Rc::new(RefCell::new(TrussDiagnosticEngine::new())))
+            {
+                let pkg_name = &manifest.name;
+                if !packages.contains_key(pkg_name) {
+                    let pkg = Rc::new(RefCell::new(Package::new(pkg_name.clone())));
+                    packages.insert(pkg_name.clone(), pkg);
+                }
+
+                let source_files =
+                    DependencyResolver::discover_source_files(pkg_name, Path::new(&proj_dir));
+                for path in &source_files {
+                    let path_str = path.to_string_lossy().to_string();
+                    if path_str == file_path {
+                        continue;
+                    }
+                    if let Ok(file_content) = std::fs::read_to_string(path) {
+                        let f_rc = Rc::new(path_str);
+                        let f_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                        let cs = CharStream::new(file_content, f_rc.clone());
+                        let mut lx = Lexer::new(cs, f_engine.clone());
+                        let toks = lx.parse();
+                        if f_engine.borrow().has_errors() {
+                            continue;
+                        }
+                        let mut pp = Parser::new(f_rc, toks, f_engine.clone());
+                        let prog = pp.parse();
+                        if f_engine.borrow().has_errors() {
+                            continue;
+                        }
+                        for stmt in prog.statements {
+                            all_stmts.push(stmt);
+                        }
+                    }
+                }
+            }
+        }
+
+        let combined_prog = Program {
+            file: Rc::new(file_path.to_string()),
+            statements: all_stmts,
+        };
+        let mut symbol_resolver = SymbolResolver::new(
+            packages.clone(),
+            "main".to_string(),
+            analysis_engine.clone(),
+        );
+        let module = symbol_resolver.resolve(&combined_prog, "main".to_string());
+        let mut analysis_diags =
+            collect_diagnostics_filtered(&analysis_engine.borrow(), content, Some(file_path));
+        if analysis_engine.borrow().has_errors() {
+            return analysis_diags;
+        }
+
+        let mut type_resolver = TypeResolver::new(
+            packages.clone(),
+            "main".to_string(),
+            analysis_engine.clone(),
+        );
+        type_resolver.resolve(&combined_prog, module);
+        let type_diags =
+            collect_diagnostics_filtered(&analysis_engine.borrow(), content, Some(file_path));
+        analysis_diags.extend(type_diags);
+
+        analysis_diags
+    }
+
+    fn find_project_dir(&self, file_path: &str) -> Option<String> {
+        let path = Path::new(file_path);
+        let mut current = path.parent()?;
+        loop {
+            let project_file = current.join("Project.truss");
+            if project_file.exists() {
+                return Some(current.to_string_lossy().to_string());
+            }
+            match current.parent() {
+                Some(parent) => current = parent,
+                None => return None,
+            }
+        }
     }
 
     fn handle_completion(&self, id: Option<u64>) -> String {
