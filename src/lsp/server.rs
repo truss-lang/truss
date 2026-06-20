@@ -1877,11 +1877,12 @@ impl LanguageServer {
             | Statement::SubscriptDecl { .. }
             | Statement::MacroDecl { .. }
         );
+        let name_end = name_pos.col + name_pos.len;
         let (end_line, end_col) = if has_brace_body {
             LanguageServer::find_brace_end(content, start_pos.line, start_pos.col)
-                .unwrap_or((start_pos.line, start_pos.col + start_pos.len))
+                .unwrap_or((name_pos.line, name_end))
         } else {
-            (start_pos.line, start_pos.col + start_pos.len)
+            (name_pos.line, name_end)
         };
         Some(json!({
             "name": name,
@@ -2237,8 +2238,8 @@ impl LanguageServer {
                             let col = name.position.col + name.value.len();
                             hints.push(json!({
                                 "position": {
-                                    "line": (line - 1) as u64,
-                                    "character": (col - 1) as u64
+                                    "line": line as u64,
+                                    "character": col as u64
                                 },
                                 "label": format!(": {}", type_name),
                                 "kind": 2,
