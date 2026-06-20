@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use duck_diagnostic::DiagnosticCode;
 
 use crate::ast::node::Program;
-use crate::ast::statement::Statement;
+use crate::ast::statement::{FunctionBody, ProtocolMember, Statement};
 use crate::diag::TrussDiagnosticEngine;
 use crate::krate::{Module, Package};
 use crate::lexer::token::{KeywordType, SeparatorType, Token, TokenType};
@@ -184,6 +184,9 @@ impl LanguageServer {
             "textDocument/definition" => {
                 vec![self.handle_definition(id, params)]
             }
+            "textDocument/documentSymbol" => {
+                vec![self.handle_document_symbol(id, params)]
+            }
             "textDocument/semanticTokens/full" => {
                 vec![self.handle_semantic_tokens(id, params)]
             }
@@ -208,6 +211,7 @@ impl LanguageServer {
                     "completionProvider": {
                         "triggerCharacters": ["."]
                     },
+                    "documentSymbolProvider": true,
                     "hoverProvider": true,
                     "definitionProvider": true,
                     "semanticTokensProvider": {
@@ -1072,6 +1076,292 @@ impl LanguageServer {
         json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string()
     }
 
+    fn handle_document_symbol(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => {
+                return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+            }
+        };
+        let file_path = uri.strip_prefix("file://").unwrap_or(uri);
+        let file_rc = Rc::new(file_path.to_string());
+        let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let char_stream = CharStream::new(content.clone(), file_rc.clone());
+        let mut lexer = Lexer::new(char_stream, engine.clone());
+        let tokens = lexer.parse();
+        if engine.borrow().has_errors() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+        }
+        let parser_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let mut parser = Parser::new(file_rc, tokens, parser_engine.clone());
+        let program = parser.parse();
+        let symbols = self.collect_document_symbols(&program.statements, &content);
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": symbols
+        })
+        .to_string()
+    }
+
+    fn collect_document_symbols(&self, stmts: &[Rc<RefCell<Statement>>], content: &str) -> Vec<Value> {
+        stmts.iter().filter_map(|stmt_rc| {
+            self.statement_to_document_symbol(&stmt_rc.borrow(), content)
+        }).collect()
+    }
+
+    fn statement_to_document_symbol(&self, stmt: &Statement, content: &str) -> Option<Value> {
+        let (name, kind, children, name_token): (String, u64, Vec<Value>, Token) = match stmt {
+            Statement::FunctionDecl { name, body, .. } => {
+                let children = match &*body.borrow() {
+                    FunctionBody::Statements(stmts) => self.collect_document_symbols(stmts, content),
+                    _ => vec![],
+                };
+                (name.value.clone(), 12, children, (**name).clone())
+            }
+            Statement::StructDecl { name, body, .. } => {
+                let children = self.collect_document_symbols(body, content);
+                (name.value.clone(), 23, children, (**name).clone())
+            }
+            Statement::ClassDecl { name, body, .. } => {
+                let children = self.collect_document_symbols(body, content);
+                (name.value.clone(), 5, children, (**name).clone())
+            }
+            Statement::EnumDecl { name, body, cases, .. } => {
+                let mut children = self.collect_document_symbols(body, content);
+                children.extend(self.collect_enum_cases(cases));
+                (name.value.clone(), 10, children, (**name).clone())
+            }
+            Statement::ProtocolDecl { name, members, .. } => {
+                let children = self.collect_protocol_members(members, content);
+                (name.value.clone(), 14, children, (**name).clone())
+            }
+            Statement::ExtensionDecl { type_name, body, .. } => {
+                let children = self.collect_document_symbols(body, content);
+                (type_name.value.clone(), 5, children, (**type_name).clone())
+            }
+            Statement::InitDecl { token, .. } => {
+                ("init".to_string(), 12, vec![], (**token).clone())
+            }
+            Statement::DeinitDecl { token, .. } => {
+                ("deinit".to_string(), 12, vec![], (**token).clone())
+            }
+            Statement::SubscriptDecl { token, .. } => {
+                ("subscript".to_string(), 12, vec![], (**token).clone())
+            }
+            Statement::VariableDecl { name, .. } => {
+                (name.value.clone(), 13, vec![], (**name).clone())
+            }
+            Statement::TypeAlias { name, .. } => {
+                (name.value.clone(), 17, vec![], (**name).clone())
+            }
+            Statement::OperatorDecl { token, symbol, .. } => {
+                (symbol.clone(), 12, vec![], (**token).clone())
+            }
+            Statement::PrecedenceGroupDecl { name, .. } => {
+                (name.value.clone(), 24, vec![], (**name).clone())
+            }
+            Statement::ModuleDecl { name, body, .. } => {
+                let children = self.collect_document_symbols(body, content);
+                (name.value.clone(), 2, children, (**name).clone())
+            }
+            Statement::MacroDecl { name, .. } => {
+                (name.value.clone(), 14, vec![], (**name).clone())
+            }
+            _ => return None,
+        };
+        let decl_token = stmt.token();
+        let start_pos = decl_token.position;
+        let name_pos = name_token.position;
+        let has_brace_body = matches!(stmt,
+            Statement::FunctionDecl { .. }
+            | Statement::StructDecl { .. }
+            | Statement::ClassDecl { .. }
+            | Statement::EnumDecl { .. }
+            | Statement::ProtocolDecl { .. }
+            | Statement::ExtensionDecl { .. }
+            | Statement::ModuleDecl { .. }
+            | Statement::InitDecl { .. }
+            | Statement::DeinitDecl { .. }
+            | Statement::SubscriptDecl { .. }
+            | Statement::MacroDecl { .. }
+        );
+        let (end_line, end_col) = if has_brace_body {
+            LanguageServer::find_brace_end(content, start_pos.line, start_pos.col)
+                .unwrap_or((start_pos.line, start_pos.col + start_pos.len))
+        } else {
+            (start_pos.line, start_pos.col + start_pos.len)
+        };
+        Some(json!({
+            "name": name,
+            "kind": kind,
+            "range": {
+                "start": lsp_pos(start_pos.line, start_pos.col),
+                "end": lsp_pos(end_line, end_col)
+            },
+            "selectionRange": {
+                "start": lsp_pos(name_pos.line, name_pos.col),
+                "end": lsp_pos(name_pos.line, name_pos.col + name_pos.len)
+            },
+            "children": children
+        }))
+    }
+
+    fn collect_protocol_members(&self, members: &[ProtocolMember], content: &str) -> Vec<Value> {
+        members.iter().filter_map(|member| match member {
+            ProtocolMember::Method { decl, .. } => {
+                self.statement_to_document_symbol(&decl.borrow(), content)
+            }
+            ProtocolMember::Property { name, .. } => {
+                let pos = name.position;
+                Some(json!({
+                    "name": name.value.clone(),
+                    "kind": 7,
+                    "range": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "selectionRange": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "children": []
+                }))
+            }
+            ProtocolMember::AssociatedType { name, .. } => {
+                let pos = name.position;
+                Some(json!({
+                    "name": name.value.clone(),
+                    "kind": 26,
+                    "range": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "selectionRange": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "children": []
+                }))
+            }
+            ProtocolMember::StaticVar { name, .. } => {
+                let pos = name.position;
+                Some(json!({
+                    "name": name.value.clone(),
+                    "kind": 13,
+                    "range": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "selectionRange": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "children": []
+                }))
+            }
+            ProtocolMember::TypeAlias { name, .. } => {
+                let pos = name.position;
+                Some(json!({
+                    "name": name.value.clone(),
+                    "kind": 17,
+                    "range": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "selectionRange": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "children": []
+                }))
+            }
+            ProtocolMember::Subscript { token, .. } => {
+                let pos = token.position;
+                Some(json!({
+                    "name": "subscript",
+                    "kind": 12,
+                    "range": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "selectionRange": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "children": []
+                }))
+            }
+            ProtocolMember::Init { token, .. } => {
+                let pos = token.position;
+                Some(json!({
+                    "name": "init",
+                    "kind": 12,
+                    "range": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "selectionRange": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "children": []
+                }))
+            }
+        }).collect()
+    }
+
+    fn collect_enum_cases(&self, cases: &[crate::ast::statement::EnumCase]) -> Vec<Value> {
+        cases.iter().map(|ec| {
+            let pos = ec.name.position;
+            json!({
+                "name": ec.name.value.clone(),
+                "kind": 22,
+                "range": {
+                    "start": lsp_pos(pos.line, pos.col),
+                    "end": lsp_pos(pos.line, pos.col + pos.len)
+                },
+                "selectionRange": {
+                    "start": lsp_pos(pos.line, pos.col),
+                    "end": lsp_pos(pos.line, pos.col + pos.len)
+                },
+                "children": []
+            })
+        }).collect()
+    }
+
+    fn find_brace_end(content: &str, start_line: usize, start_col: usize) -> Option<(usize, usize)> {
+        let mut depth = 0i32;
+        for (i, line) in content.lines().enumerate() {
+            let line_num = i + 1;
+            if line_num < start_line {
+                continue;
+            }
+            let col_start = if line_num == start_line { start_col.saturating_sub(1) as usize } else { 0 };
+            for (j, ch) in line.char_indices() {
+                if line_num == start_line && j < col_start {
+                    continue;
+                }
+                if ch == '{' {
+                    depth += 1;
+                } else if ch == '}' {
+                    if depth == 1 {
+                        return Some((line_num, j + 1));
+                    }
+                    if depth > 0 {
+                        depth -= 1;
+                    }
+                }
+            }
+        }
+        None
+    }
+
     fn handle_semantic_tokens(&self, id: Option<u64>, params: Option<&Value>) -> String {
         let uri = params
             .and_then(|p| p.get("textDocument"))
@@ -1102,6 +1392,13 @@ impl LanguageServer {
         })
         .to_string()
     }
+}
+
+fn lsp_pos(line: usize, col: usize) -> Value {
+    json!({
+        "line": (line.saturating_sub(1)) as u64,
+        "character": (col.saturating_sub(1)) as u64
+    })
 }
 
 fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
