@@ -193,6 +193,9 @@ impl LanguageServer {
             "textDocument/semanticTokens/full" => {
                 vec![self.handle_semantic_tokens(id, params)]
             }
+            "textDocument/inlayHint" => {
+                vec![self.handle_inlay_hint(id, params)]
+            }
             "shutdown" => {
                 vec![json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string()]
             }
@@ -220,6 +223,9 @@ impl LanguageServer {
                     "documentSymbolProvider": true,
                     "hoverProvider": true,
                     "definitionProvider": true,
+                    "inlayHintProvider": {
+                        "resolveProvider": false
+                    },
                     "semanticTokensProvider": {
                         "full": true,
                         "legend": {
@@ -1644,6 +1650,190 @@ impl LanguageServer {
             "result": { "data": data }
         })
         .to_string()
+    }
+
+    fn handle_inlay_hint(&self, id: Option<u64>, params: Option<&Value>) -> String {
+        let uri = params
+            .and_then(|p| p.get("textDocument"))
+            .and_then(|td| td.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let content = match self.documents.get(uri) {
+            Some(c) => c.clone(),
+            None => {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": []
+                })
+                .to_string();
+            }
+        };
+
+        let file_path = uri.strip_prefix("file://").unwrap_or(uri);
+        let file_rc = Rc::new(file_path.to_string());
+
+        let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let char_stream = CharStream::new(content.clone(), file_rc.clone());
+        let mut lexer = Lexer::new(char_stream, engine.clone());
+        let tokens = lexer.parse();
+        if engine.borrow().has_errors() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+        }
+
+        let parser_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let mut parser = Parser::new(file_rc.clone(), tokens, parser_engine.clone());
+        let program = parser.parse();
+        if parser_engine.borrow().has_errors() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+        }
+
+        let analysis_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+        let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
+        let main_pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
+        packages.insert("main".to_string(), main_pkg.clone());
+
+        let mut stdlib_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+        if let Some(ref stdlib_path) = self.stdlib_path {
+            let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+            packages.insert("Truss".to_string(), truss_pkg.clone());
+
+            let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+            let (file_programs, _) = crate::trusspm::parse_std_lib(stdlib_path, std_engine.clone());
+
+            if !std_engine.borrow().has_errors() {
+                for file_stmts in &file_programs {
+                    for stmt in file_stmts {
+                        stdlib_stmts.push(stmt.clone());
+                    }
+                }
+
+                let std_prog = Program {
+                    file: Rc::new("stdlib".to_string()),
+                    statements: stdlib_stmts.clone(),
+                };
+                let mut std_resolver =
+                    SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
+                let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
+
+                if !std_engine.borrow().has_errors() {
+                    let mut std_type_resolver = TypeResolver::new(
+                        packages.clone(),
+                        "Truss".to_string(),
+                        std_engine.clone(),
+                    );
+                    std_type_resolver.resolve(&std_prog, std_module);
+                }
+            }
+        }
+
+        let all_stmts: Vec<Rc<RefCell<Statement>>> = program.statements.iter().cloned().collect();
+
+        let combined_prog = Program {
+            file: file_rc.clone(),
+            statements: all_stmts,
+        };
+        let mut symbol_resolver = SymbolResolver::new(
+            packages.clone(),
+            "main".to_string(),
+            analysis_engine.clone(),
+        );
+        let module = symbol_resolver.resolve(&combined_prog, "main".to_string());
+        if analysis_engine.borrow().has_errors() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+        }
+
+        let mut type_resolver = TypeResolver::new(
+            packages.clone(),
+            "main".to_string(),
+            analysis_engine.clone(),
+        );
+        type_resolver.resolve(&combined_prog, module.clone());
+        if analysis_engine.borrow().has_errors() {
+            return json!({"jsonrpc": "2.0", "id": id, "result": []}).to_string();
+        }
+
+        let mut hints: Vec<Value> = Vec::new();
+        Self::collect_inlay_hints(&program.statements, &mut hints);
+
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": hints
+        })
+        .to_string()
+    }
+
+    fn collect_inlay_hints(statements: &[Rc<RefCell<Statement>>], hints: &mut Vec<Value>) {
+        for stmt_ref in statements {
+            let stmt = stmt_ref.borrow();
+            match &*stmt {
+                Statement::VariableDecl {
+                    name,
+                    type_expression,
+                    ty,
+                    ..
+                } => {
+                    if type_expression.is_none() {
+                        if let Some(type_ref) = ty {
+                            let type_name = type_ref.borrow().to_string();
+                            let line = name.position.line;
+                            let col = name.position.col + name.value.len();
+                            hints.push(json!({
+                                "position": {
+                                    "line": (line - 1) as u64,
+                                    "character": (col - 1) as u64
+                                },
+                                "label": format!(": {}", type_name),
+                                "kind": 2,
+                                "paddingLeft": true,
+                                "paddingRight": false
+                            }));
+                        }
+                    }
+                }
+                Statement::StructDecl { body, .. }
+                | Statement::ClassDecl { body, .. }
+                | Statement::EnumDecl { body, .. }
+                | Statement::ExtensionDecl { body, .. } => {
+                    Self::collect_inlay_hints(body, hints);
+                }
+                Statement::ModuleDecl { body, .. } => {
+                    Self::collect_inlay_hints(body, hints);
+                }
+                Statement::FunctionDecl { body, .. } => {
+                    if let FunctionBody::Statements(body_stmts) = &*body.borrow() {
+                        Self::collect_inlay_hints(body_stmts, hints);
+                    }
+                }
+                Statement::InitDecl { body, .. } => {
+                    if let FunctionBody::Statements(body_stmts) = &*body.borrow() {
+                        Self::collect_inlay_hints(body_stmts, hints);
+                    }
+                }
+                Statement::DeinitDecl { body, .. } => {
+                    if let FunctionBody::Statements(body_stmts) = &*body.borrow() {
+                        Self::collect_inlay_hints(body_stmts, hints);
+                    }
+                }
+                Statement::For { body, .. }
+                | Statement::While { body, .. }
+                | Statement::RepeatWhile { body, .. }
+                | Statement::Loop { body, .. }
+                | Statement::Defer { body, .. } => {
+                    Self::collect_inlay_hints(body, hints);
+                }
+                Statement::Guard { else_body, .. } => {
+                    Self::collect_inlay_hints(else_body, hints);
+                }
+                Statement::ConditionalBlock { clauses } => {
+                    for clause in clauses {
+                        Self::collect_inlay_hints(&clause.body, hints);
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 }
 
