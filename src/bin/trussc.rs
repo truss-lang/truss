@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
 use clap::Parser;
 use truss::{
     ast::{node::Program, statement::Statement},
-    condition_eval::{TargetTriple, flatten_program},
+    condition_eval::{TargetTriple, flatten_program, predefined_symbols},
     diag::TrussDiagnosticEngine,
     ir_gen::{IRGenerator, emit},
     krate::Package,
@@ -164,7 +164,8 @@ fn main() {
             Some(t) => TargetTriple::parse(t),
             None => TargetTriple::host(),
         };
-        flatten_program(&mut program.statements, &cond_triple);
+        let mut symbols = predefined_symbols(file_path);
+        flatten_program(&mut program.statements, &cond_triple, &mut symbols);
 
         if cli.inspect || cli.ast {
             println!("=== AST (after condition evaluation) ({}) ===", file_path);

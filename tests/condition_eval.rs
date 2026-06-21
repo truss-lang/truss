@@ -2,10 +2,14 @@ use std::{cell::RefCell, rc::Rc};
 
 use truss::{
     ast::statement::Statement,
-    condition_eval::{TargetTriple, flatten_program},
+    condition_eval::{DefinedSymbols, TargetTriple, flatten_program, predefined_symbols},
     lexer::{CharStream, Lexer},
     parser::Parser,
 };
+
+fn make_symbols() -> DefinedSymbols {
+    predefined_symbols("test.truss")
+}
 
 fn create_engine() -> Rc<RefCell<truss::diag::TrussDiagnosticEngine>> {
     Rc::new(RefCell::new(truss::diag::TrussDiagnosticEngine::new()))
@@ -55,7 +59,7 @@ func c() {}
     assert_eq!(stmts.len(), 1);
 
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -79,7 +83,7 @@ func c() {}
     assert_eq!(stmts.len(), 1);
 
     let triple = TargetTriple::parse("aarch64-apple-darwin");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -103,7 +107,7 @@ func c() {}
     assert_eq!(stmts.len(), 1);
 
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -123,7 +127,7 @@ func a() {}
     assert_eq!(stmts.len(), 1);
 
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 0);
 }
@@ -140,7 +144,7 @@ func b() {}
     assert_eq!(stmts.len(), 1);
 
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -162,7 +166,7 @@ func b() {}
     assert_eq!(stmts.len(), 1);
 
     let triple = TargetTriple::parse("aarch64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -184,7 +188,7 @@ func b() {}
     assert_eq!(stmts.len(), 1);
 
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -204,7 +208,7 @@ func b() {}
 #endif",
     );
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -222,7 +226,7 @@ func a() {}
 #endif",
     );
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -240,7 +244,7 @@ func a() {}
 #endif",
     );
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
 }
@@ -255,7 +259,7 @@ func a() {}
 #endif",
     );
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -275,7 +279,7 @@ func a() {}
 #endif",
     );
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 0);
 }
@@ -291,7 +295,7 @@ func c() {}
 #endif",
     );
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 2);
     if let Statement::FunctionDecl { name, .. } = &*stmts[0].borrow() {
@@ -314,7 +318,7 @@ fn test_conditional_inside_function_body() {
 }",
     );
     let triple = TargetTriple::parse("x86_64-unknown-linux-gnu");
-    flatten_program(&mut stmts, &triple);
+    flatten_program(&mut stmts, &triple, &mut make_symbols());
 
     assert_eq!(stmts.len(), 1);
 }
