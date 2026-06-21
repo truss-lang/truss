@@ -373,25 +373,41 @@ impl LanguageServer {
             let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
             let (file_programs, _) = crate::trusspm::parse_std_lib(stdlib_path, std_engine.clone());
 
-            for file_stmts in &file_programs {
-                for stmt in file_stmts {
-                    stdlib_stmts.push(stmt.clone());
+            {
+                let mut ordered: Vec<_> = file_programs.into_iter().map(|stmts| {
+                    let name = stmts.first().and_then(|s| {
+                        let file = &*s.borrow().token().file;
+                        std::path::Path::new(file).file_stem().and_then(|n| n.to_str()).map(|n| n.to_string())
+                    }).unwrap_or_default();
+                    let priority = match name.as_str() {
+                        "Truss" => 0,
+                        "Iterator" => 1,
+                        _ => 2,
+                    };
+                    (priority, stmts)
+                }).collect();
+                ordered.sort_by_key(|(p, _)| *p);
+                for (_, stmts) in ordered {
+                    for stmt in stmts {
+                        stdlib_stmts.push(stmt.clone());
+                    }
                 }
             }
 
-            if !std_engine.borrow().has_errors() {
-                let std_prog = Program {
-                    file: Rc::new("stdlib".to_string()),
-                    statements: stdlib_stmts.clone(),
-                };
-                let mut std_resolver =
-                    SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
-                let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
+            let std_prog = Program {
+                file: Rc::new("stdlib".to_string()),
+                statements: stdlib_stmts.clone(),
+            };
+            let mut std_resolver =
+                SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
+            let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
 
+            {
+                let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
                 let mut std_type_resolver = TypeResolver::new(
                     packages.clone(),
                     "Truss".to_string(),
-                    std_engine.clone(),
+                    stdlib_ty_engine.clone(),
                 );
                 std_type_resolver.resolve(&std_prog, std_module);
             }
@@ -399,6 +415,9 @@ impl LanguageServer {
 
         let mut all_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
         for stmt in &program.statements {
+            all_stmts.push(stmt.clone());
+        }
+        for stmt in &stdlib_stmts {
             all_stmts.push(stmt.clone());
         }
 
@@ -457,6 +476,7 @@ impl LanguageServer {
         if analysis_engine.borrow().has_errors() {
             return analysis_diags;
         }
+        eprintln!("TRUSS_LSP_ANALYSIS: symbol resolve passed");
 
         let mut type_resolver = TypeResolver::new(
             packages.clone(),
@@ -466,7 +486,9 @@ impl LanguageServer {
         type_resolver.resolve(&combined_prog, module.clone());
         let type_diags =
             collect_diagnostics_filtered(&analysis_engine.borrow(), content, Some(file_path));
+        let type_diag_count = type_diags.len();
         analysis_diags.extend(type_diags);
+        eprintln!("TRUSS_LSP_ANALYSIS: type resolve done, diags={}", type_diag_count);
 
         if !analysis_engine.borrow().has_errors() {
             self.project_analyses.insert(
@@ -523,8 +545,9 @@ impl LanguageServer {
                 SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
             let module = resolver.resolve(&std_prog, "Truss".to_string());
 
+            let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
             let mut type_resolver =
-                TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+                TypeResolver::new(packages.clone(), "Truss".to_string(), stdlib_ty_engine.clone());
             type_resolver.resolve(&std_prog, module.clone());
 
             self.stdlib_scope = module.borrow().scope.clone();
