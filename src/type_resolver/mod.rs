@@ -1711,14 +1711,23 @@ impl TypeResolver {
                 self.resolve_statement(statement.clone());
             }
             Statement::StructDecl {
+                name,
                 body,
                 conformances,
                 scope,
                 ..
             } => {
+                let Some(symbol) = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().name_table.get(&name.value).cloned())
+                else {
+                    return;
+                };
                 for conformance in conformances {
                     self.infer_type(conformance.clone());
                 }
+                let prev_owner = self.current_owner.replace(symbol.clone());
                 if let Some(s) = scope.as_ref() {
                     self.enter_scope(s.clone());
                     for stmt in body {
@@ -1730,16 +1739,26 @@ impl TypeResolver {
                         self.resolve_statement(stmt.clone());
                     }
                 }
+                self.current_owner = prev_owner;
             }
             Statement::ClassDecl {
+                name,
                 body,
                 conformances,
                 scope,
                 ..
             } => {
+                let Some(symbol) = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().name_table.get(&name.value).cloned())
+                else {
+                    return;
+                };
                 for conformance in conformances {
                     self.infer_type(conformance.clone());
                 }
+                let prev_owner = self.current_owner.replace(symbol.clone());
                 if let Some(s) = scope.as_ref() {
                     self.enter_scope(s.clone());
                     for stmt in body {
@@ -1751,6 +1770,7 @@ impl TypeResolver {
                         self.resolve_statement(stmt.clone());
                     }
                 }
+                self.current_owner = prev_owner;
             }
             Statement::ProtocolDecl {
                 scope,
@@ -2206,7 +2226,7 @@ impl TypeResolver {
         type_params: Vec<Rc<RefCell<Type>>>,
     ) -> Option<Rc<RefCell<Type>>> {
         let truss_type = self.lookup_type_from_truss_package(type_name);
-        let (name, symbol) = if let Some(ty) = truss_type {
+        let (name, symbol) = if let Some(ty) = truss_type.as_ref() {
             match &*ty.borrow() {
                 Type::Enum(n, s, ..) | Type::Struct(n, s, ..) | Type::Class(n, s, ..) => {
                     (n.clone(), s.clone())
@@ -2218,6 +2238,12 @@ impl TypeResolver {
         };
         let variant = if type_name == "Optional" {
             Type::Enum(name, symbol, type_params)
+        } else if let Some(ty) = truss_type {
+            match &*ty.borrow() {
+                Type::Enum(..) => Type::Enum(name, symbol, type_params),
+                Type::Class(..) => Type::Class(name, symbol, type_params),
+                _ => Type::Struct(name, symbol, type_params),
+            }
         } else {
             Type::Struct(name, symbol, type_params)
         };
@@ -2303,7 +2329,7 @@ impl TypeResolver {
         }
 
         self.yield_context_depth += 1;
-        let then_ty = self.get_block_type(&then)?;
+        let mut then_ty = self.get_block_type(&then)?;
         self.yield_context_depth -= 1;
         if let Some(else_branch) = else_ {
             let else_ty = match else_branch {
@@ -2316,15 +2342,27 @@ impl TypeResolver {
                 ElseBranch::If(if_expr) => self.infer_if_type(if_expr)?,
             };
             if then_ty.borrow().clone() != else_ty.borrow().clone() {
-                self.emit_error(
-                    TrussDiagnosticCode::BranchTypeMismatch,
-                    format!(
-                        "If branches have different types: {} vs {}",
-                        then_ty.borrow(),
-                        else_ty.borrow()
-                    ),
-                    &condition.borrow().token(),
-                );
+                let is_then_void = matches!(&*then_ty.borrow(), Type::Void);
+                let is_else_void = matches!(&*else_ty.borrow(), Type::Void);
+                if is_then_void && !is_else_void {
+                    then_ty = self
+                        .create_parameterized_type_from_truss("Optional", vec![else_ty.clone()])
+                        .unwrap_or(then_ty);
+                } else if !is_then_void && is_else_void {
+                    then_ty = self
+                        .create_parameterized_type_from_truss("Optional", vec![then_ty.clone()])
+                        .unwrap_or(then_ty);
+                } else {
+                    self.emit_error(
+                        TrussDiagnosticCode::BranchTypeMismatch,
+                        format!(
+                            "If branches have different types: {} vs {}",
+                            then_ty.borrow(),
+                            else_ty.borrow()
+                        ),
+                        &condition.borrow().token(),
+                    );
+                }
             }
         }
         if let Expression::If { ty, .. } = &mut *expression.borrow_mut() {
@@ -5067,7 +5105,8 @@ impl TypeResolver {
                     if let Some(ref object_t) = object_ty {
                         let object_t_clone = object_t.borrow().clone();
                         let lookup_result = match &object_t_clone {
-                            Type::Struct(struct_name, ..) | Type::Class(struct_name, ..) => {
+                            Type::Struct(struct_name, _, type_params)
+                            | Type::Class(struct_name, _, type_params) => {
                                 let struct_name = struct_name.clone();
                                 let token = object.borrow().token();
                                 let scope = self.current_scope.as_ref().unwrap().borrow();
@@ -5189,6 +5228,25 @@ impl TypeResolver {
                                                     matched_ret_type =
                                                         Some(ret_type.clone());
                                                     matched_count += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if let Some(ref ret_type) = matched_ret_type {
+                                        if !type_params.is_empty() {
+                                            if let Ok(Some(decl)) = symbol.borrow().get_decl() {
+                                                let generic_params = match &*decl.borrow() {
+                                                    Statement::ClassDecl { generic_parameters, .. }
+                                                    | Statement::StructDecl { generic_parameters, .. } => generic_parameters.clone(),
+                                                    _ => vec![],
+                                                };
+                                                if !generic_params.is_empty() && generic_params.len() == type_params.len() {
+                                                    let mapping: HashMap<String, Rc<RefCell<Type>>> = generic_params
+                                                        .iter()
+                                                        .zip(type_params.iter())
+                                                        .map(|(gp, tp)| (gp.name.value.clone(), tp.clone()))
+                                                        .collect();
+                                                    matched_ret_type = Some(Self::substitute_generic_params(ret_type.clone(), &mapping));
                                                 }
                                             }
                                         }
