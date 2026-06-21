@@ -2837,6 +2837,15 @@ impl SymbolResolver {
     }
 
     fn resolve_conformance(&mut self, conformance: Rc<RefCell<Expression>>) {
+        let conformance_kind = match &*conformance.borrow() {
+            Expression::Type { .. } => 0u8,
+            Expression::CompoundType { .. } => 1u8,
+            _ => 2u8,
+        };
+        if conformance_kind == 2u8 {
+            self.resolve_expression(conformance.clone());
+            return;
+        }
         match &*conformance.borrow() {
             Expression::Type {
                 name,
@@ -2859,9 +2868,7 @@ impl SymbolResolver {
                     self.resolve_conformance(t.clone());
                 }
             }
-            _ => {
-                self.resolve_expression(conformance.clone());
-            }
+            _ => {}
         }
     }
 
