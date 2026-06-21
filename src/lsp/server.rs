@@ -388,14 +388,12 @@ impl LanguageServer {
                     SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
                 let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
 
-                if !std_engine.borrow().has_errors() {
-                    let mut std_type_resolver = TypeResolver::new(
-                        packages.clone(),
-                        "Truss".to_string(),
-                        std_engine.clone(),
-                    );
-                    std_type_resolver.resolve(&std_prog, std_module);
-                }
+                let mut std_type_resolver = TypeResolver::new(
+                    packages.clone(),
+                    "Truss".to_string(),
+                    std_engine.clone(),
+                );
+                std_type_resolver.resolve(&std_prog, std_module);
             }
         }
 
@@ -525,17 +523,11 @@ impl LanguageServer {
                 SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
             let module = resolver.resolve(&std_prog, "Truss".to_string());
 
-            if engine.borrow().has_errors() {
-                return;
-            }
-
             let mut type_resolver =
                 TypeResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
             type_resolver.resolve(&std_prog, module.clone());
 
-            if !engine.borrow().has_errors() {
-                self.stdlib_scope = module.borrow().scope.clone();
-            }
+            self.stdlib_scope = module.borrow().scope.clone();
         }
     }
 
