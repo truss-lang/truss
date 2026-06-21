@@ -1002,6 +1002,21 @@ impl TypeResolver {
                                 *ty = Some(fn_type.clone());
 
                                 self.enter_scope(fn_scope.as_ref().unwrap().clone());
+                                let self_ty = Rc::new(RefCell::new(Type::Protocol(
+                                    name.value.clone(),
+                                    WeakSymbol(Rc::downgrade(&symbol)),
+                                    vec![],
+                                )));
+                                self.current_scope
+                                    .as_ref()
+                                    .unwrap()
+                                    .borrow_mut()
+                                    .set_type("self".to_string(), self_ty.clone());
+                                self.current_scope
+                                    .as_ref()
+                                    .unwrap()
+                                    .borrow_mut()
+                                    .set_type("Self".to_string(), self_ty);
                                 match &*body.borrow() {
                                     FunctionBody::Statements(stmts) => {
                                         for s in stmts {
