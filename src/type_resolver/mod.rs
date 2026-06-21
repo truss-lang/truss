@@ -2935,7 +2935,11 @@ impl TypeResolver {
                                         break;
                                     }
                                     let param_ty = &param_tys[i];
-                                    let arg_ty = self.infer_type(param.expression.clone())?;
+                                    let prev_closure_expected = self.closure_expected_type.clone();
+                                    self.closure_expected_type = Some(param_ty.clone());
+                                    let arg_ty = self.infer_type(param.expression.clone());
+                                    self.closure_expected_type = prev_closure_expected;
+                                    let arg_ty = arg_ty?;
                                     Self::collect_generic_mappings(
                                         param_ty.clone(),
                                         arg_ty,
@@ -2965,7 +2969,10 @@ impl TypeResolver {
                                 } else {
                                     param_tys[i].clone()
                                 };
+                                let prev_closure_expected = self.closure_expected_type.clone();
+                                self.closure_expected_type = Some(expected_ty.clone());
                                 self.infer_expression_type(param.expression.clone(), expected_ty);
+                                self.closure_expected_type = prev_closure_expected;
 
                                 if let Some(ref decl) = {
                                     self.get_function_decl_from_callee(callee.clone()).or_else(
