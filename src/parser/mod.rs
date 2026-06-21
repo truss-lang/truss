@@ -7894,6 +7894,50 @@ impl Parser {
             }
             "error" => self.parse_pragma_directive(true, directive_token),
             "warning" => self.parse_pragma_directive(false, directive_token),
+            "define" => {
+                let Some(name_token) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected macro name after '#define'",
+                        &directive_token,
+                    );
+                    return Err(());
+                };
+                let current_line = name_token.position.line;
+                let value = if let Some(next) = self.peek()
+                    && current_line == next.position.line
+                {
+                    let mut parts = Vec::new();
+                    while let Some(tok) = self.peek()
+                        && current_line == tok.position.line
+                    {
+                        parts.push(tok.value.clone());
+                        self.index += 1;
+                    }
+                    Some(parts.join(" "))
+                } else {
+                    None
+                };
+                Ok(Statement::DefineDirective {
+                    token: Box::new(directive_token),
+                    name: Box::new(name_token),
+                    value,
+                })
+            }
+            "undef" => {
+                let Some(name_token) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Expected macro name after '#undef'",
+                        &directive_token,
+                    );
+                    return Err(());
+                };
+                Ok(Statement::UndefDirective {
+                    token: Box::new(directive_token),
+                    name: Box::new(name_token),
+                })
+            }
             _ => {
                 self.emit_error(
                     TrussDiagnosticCode::ParserError,

@@ -247,6 +247,15 @@ pub enum Statement {
         inputs: Vec<AsmOperand>,
         clobbers: Vec<Token>,
     },
+    DefineDirective {
+        token: Box<Token>,
+        name: Box<Token>,
+        value: Option<String>,
+    },
+    UndefDirective {
+        token: Box<Token>,
+        name: Box<Token>,
+    },
 }
 
 impl Statement {
@@ -290,6 +299,8 @@ impl Statement {
             Self::PragmaError { token, .. } => (**token).clone(),
             Self::PragmaWarning { token, .. } => (**token).clone(),
             Self::AsmBlock { token, .. } => (**token).clone(),
+            Self::DefineDirective { name, .. } => (**name).clone(),
+            Self::UndefDirective { name, .. } => (**name).clone(),
         }
     }
     pub fn modifiers(&self) -> Result<Vec<Modifier>> {
@@ -317,6 +328,8 @@ impl Statement {
             Self::PragmaError { .. } => Ok(vec![]),
             Self::PragmaWarning { .. } => Ok(vec![]),
             Self::AsmBlock { .. } => Ok(vec![]),
+            Self::DefineDirective { .. } => Ok(vec![]),
+            Self::UndefDirective { .. } => Ok(vec![]),
             _ => anyhow::bail!(""),
         }
     }
