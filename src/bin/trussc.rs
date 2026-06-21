@@ -284,9 +284,6 @@ fn main() {
         println!("{}", ir);
     }
 
-    // Link stdlib module when available. Generic function bodies are skipped
-    // during compilation, but vtables use null entries for them, so linking
-    // non-generic stdlib functions is safe.
     let link_stdlib = modules.stdlib.as_deref();
 
     match emit::emit_output(

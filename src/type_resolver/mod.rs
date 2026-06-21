@@ -3666,7 +3666,7 @@ impl TypeResolver {
                     }
                 };
                 match &*object_ty.borrow() {
-                    Type::Struct(struct_name, ..) => {
+                    Type::Struct(struct_name, _, type_params) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let symbol_opt = scope.get_symbol(struct_name);
                         drop(scope);
@@ -3823,7 +3823,7 @@ impl TypeResolver {
                             }
                         }
                         drop(binding);
-                        if let Some(proto_ty) = self.lookup_protocol_method(symbol.clone(), &member.value) {
+                        if let Some(proto_ty) = self.lookup_protocol_method(symbol.clone(), &member.value, type_params) {
                             *ty = Some(proto_ty.clone());
                             return Some(proto_ty);
                         }
@@ -3883,7 +3883,7 @@ impl TypeResolver {
                         );
                         return None;
                     }
-                    Type::Class(class_name, ..) => {
+                    Type::Class(class_name, _, type_params) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let symbol_opt = scope.get_symbol(class_name);
                         drop(scope);
@@ -4025,7 +4025,7 @@ impl TypeResolver {
                             }
                         }
 
-                        if let Some(proto_ty) = self.lookup_protocol_method(symbol.clone(), &member.value) {
+                        if let Some(proto_ty) = self.lookup_protocol_method(symbol.clone(), &member.value, type_params) {
                             *ty = Some(proto_ty.clone());
                             return Some(proto_ty);
                         }
@@ -4128,7 +4128,7 @@ impl TypeResolver {
                         );
                         return None;
                     }
-                    Type::Enum(enum_name, ..) => {
+                    Type::Enum(enum_name, _, type_params) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let symbol = scope.get_symbol(enum_name);
                         let enum_data = symbol.as_ref().and_then(|sym| {
@@ -4177,7 +4177,7 @@ impl TypeResolver {
                             }
                         }
                         if let Some(ref sym) = symbol {
-                            if let Some(proto_ty) = self.lookup_protocol_method(sym.clone(), &member.value) {
+                            if let Some(proto_ty) = self.lookup_protocol_method(sym.clone(), &member.value, type_params) {
                                 *ty = Some(proto_ty.clone());
                                 return Some(proto_ty);
                             }
@@ -6007,6 +6007,15 @@ impl TypeResolver {
                     new_params, new_ret, is_vararg, None,
                 )))
             }
+            Type::Closure(param_tys, ret_ty, captures) => {
+                drop(borrowed);
+                let new_params: Vec<Rc<RefCell<Type>>> = param_tys
+                    .iter()
+                    .map(|p| Self::substitute_generic_params(p.clone(), mapping))
+                    .collect();
+                let new_ret = Self::substitute_generic_params(ret_ty.clone(), mapping);
+                Rc::new(RefCell::new(Type::Closure(new_params, new_ret, captures)))
+            }
             Type::Pointer(base) => {
                 drop(borrowed);
                 let new_base = Self::substitute_generic_params(base.clone(), mapping);
@@ -7443,9 +7452,10 @@ impl TypeResolver {
     }
 
     fn lookup_protocol_method(
-        &self,
+        &mut self,
         type_symbol: Rc<RefCell<Symbol>>,
         member_name: &str,
+        concrete_type_params: &[Rc<RefCell<Type>>],
     ) -> Option<Rc<RefCell<Type>>> {
         let mut protocols: Vec<Rc<RefCell<Symbol>>> = Vec::new();
         if let Some(scope) = self.current_scope.as_ref() {
@@ -7490,13 +7500,117 @@ impl TypeResolver {
                 if m.name().ok().as_deref() != Some(member_name) {
                     continue;
                 }
-                if let Some(decl) = m.get_decl().ok().flatten() {
-                    if let Ok(decl_ref) = decl.try_borrow() {
-                        if let Statement::FunctionDecl { ty: Some(method_ty), .. } = &*decl_ref {
-                            return Some(method_ty.clone());
+                        if let Some(decl) = m.get_decl().ok().flatten() {
+                            if let Ok(decl_ref) = decl.try_borrow() {
+                                if let Statement::FunctionDecl { ty: Some(method_ty), .. } = &*decl_ref {
+                                    let method_ty = method_ty.clone();
+                                    drop(decl_ref);
+                                    drop(m);
+                                    drop(method);
+
+                                    // Extract protocol generic param names from the protocol declaration
+                                    let proto_generic_params: Vec<String> = {
+                                        let proto_ref = proto_sym.borrow();
+                                        if let Ok(Some(pd)) = proto_ref.get_decl() {
+                                            if let Statement::ProtocolDecl {
+                                                generic_parameters, ..
+                                            } = &*pd.borrow()
+                                            {
+                                                generic_parameters
+                                                    .iter()
+                                                    .map(|gp| gp.name.value.clone())
+                                                    .collect()
+                                            } else {
+                                                Vec::new()
+                                            }
+                                        } else {
+                                            Vec::new()
+                                        }
+                                    };
+
+                                    if !proto_generic_params.is_empty() {
+                                        // Get the type declaration to find the protocol conformance
+                                        let proto_gp_map: Option<HashMap<String, Rc<RefCell<Type>>>> = {
+                                            let type_sym_binding = type_symbol.borrow();
+                                            if let Ok(Some(type_decl)) = type_sym_binding.get_decl() {
+                                                let type_decl_ref = type_decl.borrow();
+                                                let conformances: Vec<Rc<RefCell<Expression>>> = match &*type_decl_ref {
+                                                    Statement::StructDecl { conformances, .. }
+                                                    | Statement::ClassDecl { conformances, .. } => conformances.clone(),
+                                                    _ => Vec::new(),
+                                                };
+                                                drop(type_decl_ref);
+                                                drop(type_sym_binding);
+
+                                                // Find conformance matching this protocol
+                                                let protocol_name = proto_sym.borrow().name().ok();
+                                                let mut result_map: Option<HashMap<String, Rc<RefCell<Type>>>> = None;
+                                                for conformance in &conformances {
+                                                    let ce = conformance.borrow();
+                                                    if let Expression::Type {
+                                                        name: conformance_name,
+                                                        type_parameters,
+                                                        ..
+                                                    } = &*ce
+                                                    {
+                                                        // Check if this conformance is for our protocol
+                                                        if Some(&conformance_name.value) == protocol_name.as_ref() {
+                                                            if let Some(params) = type_parameters {
+                                                                let resolved_params: Vec<Rc<RefCell<Type>>> = params
+                                                                    .iter()
+                                                                    .filter_map(|p| self.infer_type(p.clone()))
+                                                                    .collect();
+                                                                if resolved_params.len() == proto_generic_params.len() {
+                                                                    let map: HashMap<String, Rc<RefCell<Type>>> =
+                                                                        proto_generic_params.iter()
+                                                                            .zip(resolved_params.into_iter())
+                                                                            .map(|(name, ty)| (name.clone(), ty))
+                                                                            .collect();
+                                                                    if !map.is_empty() {
+                                                                        result_map = Some(map);
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                result_map
+                                            } else {
+                                                None
+                                            }
+                                        };
+
+                                        if let Some(mapping) = proto_gp_map {
+                                            return Some(Self::substitute_generic_params(
+                                                method_ty,
+                                                &mapping,
+                                            ));
+                                        }
+
+                                        // Fallback: try positional mapping from concrete type params
+                                        if !concrete_type_params.is_empty()
+                                            && proto_generic_params.len() == concrete_type_params.len()
+                                        {
+                                            let mapping: HashMap<String, Rc<RefCell<Type>>> =
+                                                proto_generic_params
+                                                    .iter()
+                                                    .zip(concrete_type_params.iter())
+                                                    .map(|(name, ty)| (name.clone(), ty.clone()))
+                                                    .collect();
+                                            if !mapping.is_empty() {
+                                                return Some(Self::substitute_generic_params(
+                                                    method_ty,
+                                                    &mapping,
+                                                ));
+                                            }
+                                        }
+                                    }
+
+                                    return Some(method_ty);
+                                }
+                            }
                         }
-                    }
-                }
             }
         }
         None
