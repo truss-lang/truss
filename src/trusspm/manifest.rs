@@ -62,6 +62,7 @@ pub struct ManifestProduct {
 pub struct Manifest {
     pub name: String,
     pub version: String,
+    pub defines: Vec<String>,
     pub products: Vec<ManifestProduct>,
     pub targets: Vec<ManifestTarget>,
     pub dependencies: Vec<ManifestDependency>,

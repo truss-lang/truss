@@ -45,6 +45,7 @@ pub fn extract_manifest(program: &Program) -> Option<Manifest> {
 fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) -> Option<Manifest> {
     let mut name = None;
     let mut version = None;
+    let mut defines = Vec::new();
     let mut products = Vec::new();
     let mut targets = Vec::new();
     let mut dependencies = Vec::new();
@@ -85,6 +86,11 @@ fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) ->
                     }
                 }
             }
+            Some("defines") => {
+                if let Some(items) = extract_array(param) {
+                    defines = extract_string_array(&items);
+                }
+            }
             _ => {}
         }
     }
@@ -95,6 +101,7 @@ fn extract_project_call(parameters: &[crate::ast::expression::CallParameter]) ->
     Some(Manifest {
         name,
         version,
+        defines,
         products,
         targets,
         dependencies,
@@ -108,6 +115,20 @@ fn extract_string(param: &crate::ast::expression::CallParameter) -> Option<Strin
     } else {
         None
     }
+}
+
+fn extract_string_array(items: &[Rc<RefCell<Expression>>]) -> Vec<String> {
+    items
+        .iter()
+        .filter_map(|item| {
+            let item_borrow = item.borrow();
+            if let Expression::StringLiteral { value, .. } = &*item_borrow {
+                Some(value.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn extract_array(
