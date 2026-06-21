@@ -373,6 +373,7 @@ impl Parser {
                 Expression::Variable { .. }
                     | Expression::MemberAccess { .. }
                     | Expression::Call { .. }
+                    | Expression::ImplicitMemberAccess { .. }
             )
         {
             let closure = self.parse_closure_expression()?;
