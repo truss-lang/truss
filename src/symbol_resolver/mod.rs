@@ -2267,6 +2267,14 @@ impl SymbolResolver {
                 if is_type_name {
                     return;
                 }
+                let is_generic_param = self
+                    .current_scope
+                    .as_ref()
+                    .and_then(|scope| scope.borrow().get_type(&name.value))
+                    .is_some();
+                if is_generic_param {
+                    return;
+                }
 
                 // Detect implicit closure captures
                 if !self.closure_capture_stack.is_empty() {
@@ -2326,6 +2334,14 @@ impl SymbolResolver {
                             .and_then(|scope| scope.borrow().get_type("self"))
                             .is_some();
                         if has_self {
+                            return;
+                        }
+                        let is_known_type = self
+                            .current_scope
+                            .as_ref()
+                            .and_then(|scope| scope.borrow().get_type(&name.value))
+                            .is_some();
+                        if is_known_type {
                             return;
                         }
                         self.emit_error(
