@@ -7287,7 +7287,9 @@ impl TypeResolver {
             AccessModifier::Private => self
                 .current_owner
                 .as_ref()
-                .map_or(false, |owner| Rc::ptr_eq(owner, &container)),
+                .map_or(false, |owner| {
+                    owner.borrow().name().ok() == container.borrow().name().ok()
+                }),
             AccessModifier::Package => {
                 // TODO: implement package access check
                 true
@@ -7334,7 +7336,9 @@ impl TypeResolver {
                     && self
                         .current_owner
                         .as_ref()
-                        .map_or(false, |owner| Rc::ptr_eq(owner, &parent.unwrap()))
+                        .map_or(false, |owner| {
+                            owner.borrow().name().ok() == parent.as_ref().unwrap().borrow().name().ok()
+                        })
             }
             AccessModifier::Package => {
                 // TODO: implement package access check
