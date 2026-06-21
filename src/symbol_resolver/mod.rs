@@ -2509,13 +2509,21 @@ impl SymbolResolver {
             } => {
                 self.resolve_expression(condition.clone());
 
+                fn collect_case_bindings(expr: &Expression) -> Vec<Pattern> {
+                    match expr {
+                        Expression::Case { bindings, .. } => bindings.clone(),
+                        Expression::Binary { left, right, .. } => {
+                            let mut result = collect_case_bindings(&*left.borrow());
+                            result.extend(collect_case_bindings(&*right.borrow()));
+                            result
+                        }
+                        _ => Vec::new(),
+                    }
+                }
+
                 let case_bindings = {
                     let cond = condition.borrow();
-                    if let Expression::Case { bindings, .. } = &*cond {
-                        bindings.clone()
-                    } else {
-                        Vec::new()
-                    }
+                    collect_case_bindings(&*cond)
                 };
 
                 if !case_bindings.is_empty() {
