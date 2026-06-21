@@ -836,6 +836,14 @@ impl SymbolResolver {
                     is_any_object_protocol: is_any_object,
                 }));
                 self.enter(protocol_symbol.clone(), name);
+                if let Some(scope) = self.current_scope.as_ref() {
+                    let protocol_ty = Rc::new(RefCell::new(Type::Protocol(
+                        name.value.clone(),
+                        WeakSymbol(Rc::downgrade(&protocol_symbol)),
+                        vec![],
+                    )));
+                    scope.borrow_mut().set_type(name.value.clone(), protocol_ty);
+                }
                 let Symbol::Protocol {
                     methods,
                     properties,
