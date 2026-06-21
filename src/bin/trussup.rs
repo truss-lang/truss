@@ -14,6 +14,7 @@ struct Cli {
 enum Commands {
     Install { version: String },
     InstallStd,
+    UpdateStd,
     List,
     Current,
     Remove { version: String },
@@ -27,6 +28,7 @@ fn main() {
     match cli.command {
         Commands::Install { version } => cmd_install(&version),
         Commands::InstallStd => cmd_install_std(),
+        Commands::UpdateStd => cmd_update_std(),
         Commands::List => cmd_list(),
         Commands::Current => cmd_current(),
         Commands::Remove { version } => cmd_remove(&version),
@@ -146,6 +148,30 @@ fn cmd_install_std() {
         }
         Ok(s) => {
             eprintln!("Error: git clone failed with status: {}", s);
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error: failed to run git: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_update_std() {
+    let std_dir = home_dir().join(".trussup").join("stdlib");
+    if !std_dir.exists() {
+        eprintln!("Error: std library is not installed. Use 'install-std' first.");
+        std::process::exit(1);
+    }
+    let status = Command::new("git")
+        .args(["-C", &std_dir.to_string_lossy(), "pull"])
+        .status();
+    match status {
+        Ok(s) if s.success() => {
+            println!("Updated std library at {}", std_dir.display());
+        }
+        Ok(s) => {
+            eprintln!("Error: git pull failed with status: {}", s);
             std::process::exit(1);
         }
         Err(e) => {
