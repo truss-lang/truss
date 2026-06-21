@@ -592,6 +592,11 @@ impl TypeResolver {
 
                 let mut protocol_conformances: Vec<Rc<RefCell<Expression>>> = Vec::new();
                 for conformance in conformances {
+                    if matches!(&*conformance.borrow(), Expression::Unary { operator: UnaryOperator::BitNot, expression, .. }
+                        if matches!(&*expression.borrow(), Expression::Type { name, .. } if name.value == "Copyable"))
+                    {
+                        continue;
+                    }
                     let ty = self.infer_type(conformance.clone());
                     if let Some(ref ty) = ty {
                         if Self::is_integer_type(&*ty.borrow()) {
@@ -2610,6 +2615,11 @@ impl TypeResolver {
                 selected_index,
                 ..
             } => {
+                if *operator == UnaryOperator::BitNot
+                    && matches!(&*expression.borrow(), Expression::Type { name, .. } if name.value == "Copyable")
+                {
+                    return self.infer_type(expression.clone());
+                }
                 if *operator == UnaryOperator::AddressOf {
                     let operand_ty = self.infer_type(expression.clone());
                     return self.check_address_of(expression.clone(), operand_ty);

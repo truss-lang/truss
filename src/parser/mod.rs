@@ -4149,7 +4149,28 @@ impl Parser {
         {
             self.index += 1;
             loop {
-                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                if let Some(t) = self.peek()
+                    && OperatorType::is_operator(&t, OperatorType::BitNot)
+                {
+                    self.index += 1;
+                    let type_expr = self.parse_type_expression()?;
+                    if !matches!(&type_expr, Expression::Type { name, .. } if name.value == "Copyable") {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserError,
+                            "Only Copyable can be suppressed with ~",
+                            &t,
+                        );
+                    }
+                    conformances.push(Rc::new(RefCell::new(Expression::Unary {
+                        operator: UnaryOperator::BitNot,
+                        expression: Rc::new(RefCell::new(type_expr)),
+                        is_prefix: true,
+                        overloads: vec![],
+                        selected_index: None,
+                    })));
+                } else {
+                    conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                }
                 if let Some(t) = self.peek()
                     && SeparatorType::is_separator(&t, SeparatorType::Comma)
                 {
@@ -4214,7 +4235,26 @@ impl Parser {
                 && SeparatorType::is_separator(&t, SeparatorType::Comma)
             {
                 self.index += 1;
-                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                if let Some(t) = self.peek()
+                    && OperatorType::is_operator(&t, OperatorType::BitNot)
+                {
+                    self.index += 1;
+                    let type_expr = self.parse_type_expression()?;
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "~Copyable is not supported on classes",
+                        &t,
+                    );
+                    conformances.push(Rc::new(RefCell::new(Expression::Unary {
+                        operator: UnaryOperator::BitNot,
+                        expression: Rc::new(RefCell::new(type_expr)),
+                        is_prefix: true,
+                        overloads: vec![],
+                        selected_index: None,
+                    })));
+                } else {
+                    conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                }
             }
         }
         let where_clause = self.parse_where_clause()?;
@@ -4323,7 +4363,28 @@ impl Parser {
         {
             self.index += 1;
             loop {
-                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                if let Some(t) = self.peek()
+                    && OperatorType::is_operator(&t, OperatorType::BitNot)
+                {
+                    self.index += 1;
+                    let type_expr = self.parse_type_expression()?;
+                    if !matches!(&type_expr, Expression::Type { name, .. } if name.value == "Copyable") {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserError,
+                            "Only Copyable can be suppressed with ~",
+                            &t,
+                        );
+                    }
+                    conformances.push(Rc::new(RefCell::new(Expression::Unary {
+                        operator: UnaryOperator::BitNot,
+                        expression: Rc::new(RefCell::new(type_expr)),
+                        is_prefix: true,
+                        overloads: vec![],
+                        selected_index: None,
+                    })));
+                } else {
+                    conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                }
                 if let Some(t) = self.peek()
                     && SeparatorType::is_separator(&t, SeparatorType::Comma)
                 {
@@ -4825,7 +4886,28 @@ impl Parser {
         {
             self.index += 1;
             loop {
-                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                if let Some(t) = self.peek()
+                    && OperatorType::is_operator(&t, OperatorType::BitNot)
+                {
+                    self.index += 1;
+                    let type_expr = self.parse_type_expression()?;
+                    if !matches!(&type_expr, Expression::Type { name, .. } if name.value == "Copyable") {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserError,
+                            "Only Copyable can be suppressed with ~",
+                            &t,
+                        );
+                    }
+                    conformances.push(Rc::new(RefCell::new(Expression::Unary {
+                        operator: UnaryOperator::BitNot,
+                        expression: Rc::new(RefCell::new(type_expr)),
+                        is_prefix: true,
+                        overloads: vec![],
+                        selected_index: None,
+                    })));
+                } else {
+                    conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                }
                 if let Some(t) = self.peek()
                     && SeparatorType::is_separator(&t, SeparatorType::Comma)
                 {
@@ -5013,12 +5095,54 @@ impl Parser {
             && SeparatorType::is_separator(&next, SeparatorType::Colon)
         {
             self.index += 1;
-            conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+            if let Some(t) = self.peek()
+                && OperatorType::is_operator(&t, OperatorType::BitNot)
+            {
+                self.index += 1;
+                let type_expr = self.parse_type_expression()?;
+                if !matches!(&type_expr, Expression::Type { name, .. } if name.value == "Copyable") {
+                    self.emit_error(
+                        TrussDiagnosticCode::ParserError,
+                        "Only Copyable can be suppressed with ~",
+                        &t,
+                    );
+                }
+                conformances.push(Rc::new(RefCell::new(Expression::Unary {
+                    operator: UnaryOperator::BitNot,
+                    expression: Rc::new(RefCell::new(type_expr)),
+                    is_prefix: true,
+                    overloads: vec![],
+                    selected_index: None,
+                })));
+            } else {
+                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+            }
             while let Some(t) = self.peek()
                 && SeparatorType::is_separator(&t, SeparatorType::Comma)
             {
                 self.index += 1;
-                conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                if let Some(t) = self.peek()
+                    && OperatorType::is_operator(&t, OperatorType::BitNot)
+                {
+                    self.index += 1;
+                    let type_expr = self.parse_type_expression()?;
+                    if !matches!(&type_expr, Expression::Type { name, .. } if name.value == "Copyable") {
+                        self.emit_error(
+                            TrussDiagnosticCode::ParserError,
+                            "Only Copyable can be suppressed with ~",
+                            &t,
+                        );
+                    }
+                    conformances.push(Rc::new(RefCell::new(Expression::Unary {
+                        operator: UnaryOperator::BitNot,
+                        expression: Rc::new(RefCell::new(type_expr)),
+                        is_prefix: true,
+                        overloads: vec![],
+                        selected_index: None,
+                    })));
+                } else {
+                    conformances.push(Rc::new(RefCell::new(self.parse_type_expression()?)));
+                }
             }
         }
         let where_clause = self.parse_where_clause()?;

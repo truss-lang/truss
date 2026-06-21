@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
-        expression::{ClosureCapture, ElseBranch, Expression},
+        expression::{ClosureCapture, ElseBranch, Expression, UnaryOperator},
         node::Program,
         statement::{
             AccessorKind, Attribute, FunctionBody, GenericParameterKind, ImportKind, Modifier,
@@ -1629,7 +1629,11 @@ impl SymbolResolver {
                         self.resolve_where_requirement(req);
                     }
                 }
-                let needs_copy = conformances.iter().any(|expr| {
+                let has_copyable_suppression = conformances.iter().any(|c| {
+                    matches!(&*c.borrow(), Expression::Unary { operator: UnaryOperator::BitNot, expression, .. }
+                        if matches!(&*expression.borrow(), Expression::Type { name, .. } if name.value == "Copyable"))
+                });
+                let needs_copy = !has_copyable_suppression && conformances.iter().any(|expr| {
                     let e = expr.borrow();
                     matches!(&*e, Expression::Type { name, .. } if name.value == "Copyable")
                 });
