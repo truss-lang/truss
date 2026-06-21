@@ -373,13 +373,13 @@ impl LanguageServer {
             let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
             let (file_programs, _) = crate::trusspm::parse_std_lib(stdlib_path, std_engine.clone());
 
-            if !std_engine.borrow().has_errors() {
-                for file_stmts in &file_programs {
-                    for stmt in file_stmts {
-                        stdlib_stmts.push(stmt.clone());
-                    }
+            for file_stmts in &file_programs {
+                for stmt in file_stmts {
+                    stdlib_stmts.push(stmt.clone());
                 }
+            }
 
+            if !std_engine.borrow().has_errors() {
                 let std_prog = Program {
                     file: Rc::new("stdlib".to_string()),
                     statements: stdlib_stmts.clone(),
@@ -506,9 +506,6 @@ impl LanguageServer {
         if let Some(ref stdlib_path) = self.stdlib_path.clone() {
             let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
             let (file_programs, _) = crate::trusspm::parse_std_lib(&stdlib_path, engine.clone());
-            if engine.borrow().has_errors() {
-                return;
-            }
             let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
             packages.insert("Truss".to_string(), truss_pkg.clone());
