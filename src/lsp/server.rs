@@ -2361,6 +2361,9 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
     let mut prev_keyword: Option<KeywordType> = None;
     let mut prev_was_hash = false;
     let mut inside_attribute = false;
+    let mut pending_macro_identifier = false;
+    let mut pending_function_params = false;
+    let mut inside_function_params = false;
     for token in tokens {
         let is_hash = matches!(&token.ty, TokenType::Separator { separator: SeparatorType::Hash });
         if prev_was_hash
@@ -2368,9 +2371,32 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
         {
             inside_attribute = true;
         }
-        if let Some((type_idx, modifier_bits)) =
-            semantic_token_info(token, prev_keyword, prev_was_hash, inside_attribute)
+        if matches!(&token.ty, TokenType::Separator { separator: SeparatorType::OpenParen }) {
+            if pending_function_params || prev_keyword == Some(KeywordType::Init) {
+                inside_function_params = true;
+                pending_function_params = false;
+            }
+        }
+        if matches!(&token.ty, TokenType::Identifier)
+            && (prev_keyword == Some(KeywordType::Func) || prev_keyword == Some(KeywordType::Init))
         {
+            pending_function_params = true;
+        }
+        let is_directive = prev_was_hash
+            && matches!(
+                token.value.as_str(),
+                "define" | "undef" | "if" | "ifdef" | "ifndef" | "else" | "elseif" | "endif"
+                    | "error" | "warning"
+            );
+        if let Some((type_idx, modifier_bits)) = semantic_token_info(
+            token,
+            prev_keyword,
+            prev_was_hash,
+            inside_attribute,
+            is_directive,
+            pending_macro_identifier,
+            inside_function_params,
+        ) {
             let line = token.position.line as u64;
             let col = token.position.col as u64;
             let length = token.value.len() as u64;
@@ -2389,10 +2415,18 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
         } else if prev_was_hash {
             prev_was_hash = false;
         }
+        if is_directive {
+            pending_macro_identifier = matches!(token.value.as_str(), "define" | "ifdef" | "ifndef");
+        } else {
+            pending_macro_identifier = false;
+        }
         if let TokenType::Separator { separator: SeparatorType::CloseBracket } = &token.ty {
             if inside_attribute {
                 inside_attribute = false;
             }
+        }
+        if matches!(&token.ty, TokenType::Separator { separator: SeparatorType::CloseParen }) {
+            inside_function_params = false;
         }
         if let TokenType::Keyword { keyword } = &token.ty {
             prev_keyword = Some(*keyword);
@@ -2408,6 +2442,9 @@ fn semantic_token_info(
     prev_keyword: Option<KeywordType>,
     prev_was_hash: bool,
     inside_attribute: bool,
+    is_directive: bool,
+    pending_macro_identifier: bool,
+    inside_function_params: bool,
 ) -> Option<(u64, u64)> {
     match &token.ty {
         TokenType::Keyword { keyword } => {
@@ -2418,16 +2455,22 @@ fn semantic_token_info(
             Some((type_idx, 0))
         }
         TokenType::Identifier => {
-            if prev_was_hash {
+            if is_directive {
+                Some((0, 0))
+            } else if prev_was_hash {
+                Some((10, 0))
+            } else if pending_macro_identifier {
                 Some((10, 0))
             } else if inside_attribute {
-                Some((1, 0))
+                Some((9, 0))
             } else {
                 let first_char = token.value.chars().next().unwrap_or(' ');
                 if first_char.is_uppercase() {
                     Some((1, 0))
                 } else if prev_keyword == Some(KeywordType::Func) {
                     Some((2, 0))
+                } else if inside_function_params {
+                    Some((4, 0))
                 } else {
                     Some((3, 0))
                 }
