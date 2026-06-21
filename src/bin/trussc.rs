@@ -40,6 +40,8 @@ struct Cli {
     r#static: bool,
     #[arg(long, short = 'o')]
     output: Option<String>,
+    #[arg(long, short = 'D', value_name = "DEFINE")]
+    define: Vec<String>,
 }
 
 fn emit_diagnostics(engine: &TrussDiagnosticEngine, content: &str) -> bool {
@@ -165,6 +167,13 @@ fn main() {
             None => TargetTriple::host(),
         };
         let mut symbols = predefined_symbols(file_path);
+        for d in &cli.define {
+            if let Some((name, value)) = d.split_once('=') {
+                symbols.insert(name.to_string(), Some(value.to_string()));
+            } else {
+                symbols.insert(d.clone(), None);
+            }
+        }
         flatten_program(&mut program.statements, &cond_triple, &mut symbols);
 
         if cli.inspect || cli.ast {
