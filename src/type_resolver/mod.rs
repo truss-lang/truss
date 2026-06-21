@@ -3801,6 +3801,10 @@ impl TypeResolver {
                             }
                         }
                         drop(binding);
+                        if let Some(proto_ty) = self.lookup_protocol_method(symbol.clone(), &member.value) {
+                            *ty = Some(proto_ty.clone());
+                            return Some(proto_ty);
+                        }
                         if matches!(
                             &*symbol.borrow(),
                             Symbol::Struct {
@@ -3999,6 +4003,11 @@ impl TypeResolver {
                             }
                         }
 
+                        if let Some(proto_ty) = self.lookup_protocol_method(symbol.clone(), &member.value) {
+                            *ty = Some(proto_ty.clone());
+                            return Some(proto_ty);
+                        }
+
                         let decl = symbol.borrow().get_decl().ok().flatten();
                         let super_info = decl.as_ref().and_then(|decl| {
                             if let Ok(decl_ref) = decl.try_borrow() {
@@ -4143,6 +4152,12 @@ impl TypeResolver {
                                         return Some(case_fn_type);
                                     }
                                 }
+                            }
+                        }
+                        if let Some(ref sym) = symbol {
+                            if let Some(proto_ty) = self.lookup_protocol_method(sym.clone(), &member.value) {
+                                *ty = Some(proto_ty.clone());
+                                return Some(proto_ty);
                             }
                         }
                         if has_dml {
@@ -7403,6 +7418,66 @@ impl TypeResolver {
                 true
             }
         }
+    }
+
+    fn lookup_protocol_method(
+        &self,
+        type_symbol: Rc<RefCell<Symbol>>,
+        member_name: &str,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let mut protocols: Vec<Rc<RefCell<Symbol>>> = Vec::new();
+        if let Some(scope) = self.current_scope.as_ref() {
+            let scope_ref = scope.borrow();
+            for (_, sym) in &scope_ref.name_table {
+                if matches!(&*sym.borrow(), Symbol::Protocol { .. }) {
+                    protocols.push(sym.clone());
+                }
+            }
+            if let Some(parent) = &scope_ref.parent {
+                let parent_ref = parent.borrow();
+                for (_, sym) in &parent_ref.name_table {
+                    if matches!(&*sym.borrow(), Symbol::Protocol { .. }) {
+                        protocols.push(sym.clone());
+                    }
+                }
+            }
+        }
+        if let Some(truss_pkg) = self.packages.get("Truss") {
+            if let Some(truss_module) = truss_pkg.borrow().modules.get("Truss") {
+                if let Some(scope) = &truss_module.borrow().scope {
+                    let scope_ref = scope.borrow();
+                    for (_, sym) in &scope_ref.name_table {
+                        if matches!(&*sym.borrow(), Symbol::Protocol { .. })
+                            && !protocols.iter().any(|p| Rc::ptr_eq(p, sym))
+                        {
+                            protocols.push(sym.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        for proto_sym in protocols {
+            let Ok(proto_ref) = proto_sym.try_borrow() else { continue };
+            let Symbol::Protocol { methods, .. } = &*proto_ref else { continue };
+            let methods = methods.clone();
+            drop(proto_ref);
+
+            for method in methods {
+                let Ok(m) = method.try_borrow() else { continue };
+                if m.name().ok().as_deref() != Some(member_name) {
+                    continue;
+                }
+                if let Some(decl) = m.get_decl().ok().flatten() {
+                    if let Ok(decl_ref) = decl.try_borrow() {
+                        if let Statement::FunctionDecl { ty: Some(method_ty), .. } = &*decl_ref {
+                            return Some(method_ty.clone());
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn get_enum_case_parameter_types(
