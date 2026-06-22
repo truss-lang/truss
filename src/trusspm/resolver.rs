@@ -97,4 +97,16 @@ impl DependencyResolver {
         files.sort();
         files
     }
+
+    pub fn dependency_source_dir(dep: &ManifestDependency, project_dir: &Path) -> std::path::PathBuf {
+        if dep.url.is_some() {
+            // Remote dependency: cloned to .truss-cache/<name>/Sources/<name>/
+            project_dir.join(".truss-cache").join(&dep.name).join("Sources").join(&dep.name)
+        } else {
+            // Local dependency: relative to project dir at <path>/Sources/<name>/
+            let default_path = format!("../{}", dep.name);
+            let rel_path = dep.path.as_deref().unwrap_or(&default_path);
+            project_dir.join(rel_path).join("Sources").join(&dep.name)
+        }
+    }
 }

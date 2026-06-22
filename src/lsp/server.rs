@@ -458,6 +458,66 @@ impl LanguageServer {
                         }
                     }
                 }
+
+                // Resolve dependency packages using DependencyResolver
+                let dep_packages = DependencyResolver::resolve(&manifest, Path::new(&proj_dir), Rc::new(RefCell::new(TrussDiagnosticEngine::new())));
+                for (dep_name, dep_pkg) in dep_packages {
+                    if dep_name == "Truss" || dep_name == *pkg_name { continue; }
+                    if packages.contains_key(&dep_name) { continue; }
+                    packages.insert(dep_name.clone(), dep_pkg.clone());
+                }
+
+                // Parse and resolve dependency source files so their symbols are available
+                for dep in &manifest.dependencies {
+                    if dep.name == "Truss" || dep.name == *pkg_name { continue; }
+                    let dep_src_dir = DependencyResolver::dependency_source_dir(dep, Path::new(&proj_dir));
+                    if !dep_src_dir.exists() { continue; }
+
+                    let mut dep_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+                    if let Ok(entries) = std::fs::read_dir(&dep_src_dir) {
+                        let mut truss_files: Vec<_> = entries
+                            .filter_map(|e| e.ok())
+                            .filter(|e| e.path().extension().is_some_and(|ext| ext == "truss"))
+                            .collect();
+                        truss_files.sort_by_key(|e| e.file_name());
+                        for entry in truss_files {
+                            let path = entry.path();
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                let path_str = path.to_string_lossy().to_string();
+                                let f_rc = Rc::new(path_str);
+                                let f_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                                let cs = CharStream::new(content, f_rc.clone());
+                                let mut lx = Lexer::new(cs, f_engine.clone());
+                                let toks = lx.parse();
+                                if f_engine.borrow().has_errors() { continue; }
+                                let mut pp = Parser::new(f_rc, toks, f_engine.clone());
+                                let prog = pp.parse();
+                                if f_engine.borrow().has_errors() { continue; }
+                                for stmt in prog.statements {
+                                    dep_stmts.push(stmt);
+                                }
+                            }
+                        }
+                    }
+
+                    if !dep_stmts.is_empty() {
+                        let dep_prog = Program {
+                            file: Rc::new(format!("dep:{}", dep.name)),
+                            statements: dep_stmts,
+                        };
+                        let dep_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                        let mut dep_resolver = SymbolResolver::new(packages.clone(), dep.name.clone(), dep_engine.clone());
+                        dep_resolver.resolve(&dep_prog, dep.name.clone());
+                        // Also type resolve the dependency for full type info
+                        let dep_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                        let mut dep_type_resolver = TypeResolver::new(packages.clone(), dep.name.clone(), dep_ty_engine.clone());
+                        if let Some(pkg) = packages.get(&dep.name) {
+                            if let Some(mod_ref) = pkg.borrow().modules.get(&dep.name) {
+                                dep_type_resolver.resolve(&dep_prog, mod_ref.clone());
+                            }
+                        }
+                    }
+                }
             }
         }
 
