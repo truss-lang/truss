@@ -115,6 +115,10 @@ impl Parser {
                 return self.parse_preprocessor_directive();
             }
         }
+        if let Some(fixity) = self.try_parse_operator_fixity() {
+            let token = self.next().unwrap();
+            return self.parse_operator_decl_body(token, fixity);
+        }
         let modifiers = self.parse_modifiers()?;
         let Some(token) = self.peek() else {
             return Err(());
@@ -266,14 +270,12 @@ impl Parser {
                     self.parse_precedencegroup_decl()
                 }
                 KeywordType::Operator => {
-                    if !modifiers.is_empty() {
-                        self.emit_error(
-                            TrussDiagnosticCode::ModifierNotAllowedHere,
-                            format!("Modifiers are not allowed on '{}' declaration", token.value),
-                            &modifiers[0].token,
-                        );
-                    }
-                    self.parse_operator_decl()
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        "Expected 'prefix', 'postfix', or 'infix' before 'operator'".to_string(),
+                        &token,
+                    );
+                    return Err(());
                 }
                 KeywordType::Macro => {
                     if !modifiers.is_empty() {
@@ -2745,41 +2747,24 @@ impl Parser {
         })
     }
 
-    fn parse_operator_decl(&mut self) -> Result<Statement, ()> {
-        let token = self.next().unwrap();
-        let fixity = match self.peek() {
-            Some(t) if KeywordType::is_keyword(&t, KeywordType::Prefix) => {
-                self.index += 1;
-                OperatorDeclFixity::Prefix
-            }
-            Some(t) if KeywordType::is_keyword(&t, KeywordType::Postfix) => {
-                self.index += 1;
-                OperatorDeclFixity::Postfix
-            }
-            Some(t) if KeywordType::is_keyword(&t, KeywordType::Infix) => {
-                self.index += 1;
-                OperatorDeclFixity::Infix
-            }
-            Some(t) => {
-                self.emit_error(
-                    TrussDiagnosticCode::ExpectedIdentifier,
-                    format!(
-                        "Expected 'prefix', 'postfix', or 'infix' after 'operator', found '{}'",
-                        t.value
-                    ),
-                    &t,
-                );
-                return Err(());
-            }
-            None => {
-                self.emit_error(
-                    TrussDiagnosticCode::MissingSeparator,
-                    "Expected 'prefix', 'postfix', or 'infix' after 'operator'".to_string(),
-                    &token,
-                );
-                return Err(());
-            }
+    fn try_parse_operator_fixity(&mut self) -> Option<OperatorDeclFixity> {
+        let token = self.peek()?;
+        let TokenType::Keyword { keyword } = &token.ty else { return None; };
+        let fixity = match keyword {
+            KeywordType::Prefix => OperatorDeclFixity::Prefix,
+            KeywordType::Postfix => OperatorDeclFixity::Postfix,
+            KeywordType::Infix => OperatorDeclFixity::Infix,
+            _ => return None,
         };
+        let next = self.tokens.get(self.index + 1)?;
+        if !KeywordType::is_keyword(next, KeywordType::Operator) {
+            return None;
+        }
+        self.index += 1;
+        Some(fixity)
+    }
+
+    fn parse_operator_decl_body(&mut self, token: Token, fixity: OperatorDeclFixity) -> Result<Statement, ()> {
         let symbol = if let Some(t) = self.peek()
             && matches!(t.ty, TokenType::Identifier)
         {

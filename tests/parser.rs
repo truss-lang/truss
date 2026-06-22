@@ -10057,7 +10057,7 @@ fn test_parse_compound_assignment_operator_function_decl() {
 #[test]
 fn test_parse_operator_prefix_decl() {
     let engine = create_engine();
-    let code = "operator prefix myNegate";
+    let code = "prefix operator myNegate";
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
@@ -10081,7 +10081,7 @@ fn test_parse_operator_prefix_decl() {
 #[test]
 fn test_parse_operator_postfix_decl() {
     let engine = create_engine();
-    let code = "operator postfix myIncrement";
+    let code = "postfix operator myIncrement";
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
@@ -10105,7 +10105,7 @@ fn test_parse_operator_postfix_decl() {
 #[test]
 fn test_parse_operator_infix_decl() {
     let engine = create_engine();
-    let code = "operator infix myAdd";
+    let code = "infix operator myAdd";
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
@@ -10129,7 +10129,7 @@ fn test_parse_operator_infix_decl() {
 #[test]
 fn test_parse_operator_infix_decl_with_precedence() {
     let engine = create_engine();
-    let code = "operator infix myAdd: MyPrecedence";
+    let code = "infix operator myAdd: MyPrecedence";
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
@@ -10187,7 +10187,7 @@ fn test_parse_precedencegroup_decl() {
 #[test]
 fn test_parse_operator_infix_with_precedencegroup() {
     let engine = create_engine();
-    let code = "precedencegroup G { precedence: 200 associativity: left } operator infix ^: G";
+    let code = "precedencegroup G { precedence: 200 associativity: left } infix operator ^: G";
     let mut lexer = Lexer::new(
         CharStream::new(code.to_string(), Rc::new("".to_string())),
         engine.clone(),
