@@ -305,6 +305,7 @@ impl Parser {
                     }
                     let expr = self.parse_expression()?;
                     let expr = self.apply_trailing_closure(expr)?;
+                    let expr = self.parse_trailing_chain(expr)?;
                     Ok(Statement::ExpressionStatement {
                         expression: Rc::new(RefCell::new(expr)),
                     })
@@ -334,6 +335,7 @@ impl Parser {
                     }
                     let expr = self.parse_expression()?;
                     let expr = self.apply_trailing_closure(expr)?;
+                    let expr = self.parse_trailing_chain(expr)?;
                     Ok(Statement::ExpressionStatement {
                         expression: Rc::new(RefCell::new(expr)),
                     })
@@ -357,6 +359,7 @@ impl Parser {
                 }
                 let expr = self.parse_expression()?;
                 let expr = self.apply_trailing_closure(expr)?;
+                let expr = self.parse_trailing_chain(expr)?;
                 Ok(Statement::ExpressionStatement {
                     expression: Rc::new(RefCell::new(expr)),
                 })
@@ -391,6 +394,47 @@ impl Parser {
         } else {
             Ok(expr)
         }
+    }
+
+    /// After parsing a trailing closure, check if the chain continues with .member calls
+    fn parse_trailing_chain(&mut self, expr: Expression) -> Result<Expression, ()> {
+        let mut current = expr;
+        loop {
+            if let Some(token) = self.peek()
+                && OperatorType::is_operator(&token, OperatorType::Dot)
+            {
+                self.index += 1;
+                let Some(member_token) = self.next() else {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedExpression,
+                        "Expected member name after '.'",
+                        &self.tokens[self.index.saturating_sub(1)],
+                    );
+                    return Err(());
+                };
+                if TokenType::Identifier != member_token.ty {
+                    self.emit_error(
+                        TrussDiagnosticCode::ExpectedIdentifier,
+                        format!(
+                            "Expected identifier after '.' but found '{}'",
+                            member_token.value
+                        ),
+                        &member_token,
+                    );
+                    return Err(());
+                }
+                current = Expression::MemberAccess {
+                    object: Rc::new(RefCell::new(current)),
+                    member: Box::new(member_token),
+                    ty: None,
+                };
+                // The new member access might also have a trailing closure
+                current = self.apply_trailing_closure(current)?;
+            } else {
+                break;
+            }
+        }
+        Ok(current)
     }
 
     fn parse_expression(&mut self) -> Result<Expression, ()> {
