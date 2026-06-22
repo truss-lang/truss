@@ -9,7 +9,7 @@ use crate::{
         },
         node::Program,
         statement::{
-            AccessModifier, AccessorKind, FunctionBody, GenericParameterKind, ModifierType,
+            AccessModifier, AccessorKind, FunctionBody, GenericParameter, GenericParameterKind, ModifierType,
             OperatorFixity, OwnershipModifier, Parameter, Pattern, ProtocolAccessorSet,
             ProtocolMember, Statement, VariadicKind, WhereRequirement, WhereRequirementKind,
         },
@@ -2600,7 +2600,79 @@ impl TypeResolver {
                         _ => t.clone(),
                     }
                 } else {
-                    t
+                    // When no explicit type parameters are given but the type is
+                    // generic (e.g. `ArrayIterator` resolves to `ArrayIterator<>`
+                    // with empty type params), fill in default generic params so
+                    // that member access on concrete instances propagates the
+                    // concrete type (e.g., `ArrayIterator<Int32>`).
+                    let tb = t.borrow();
+                    let fill_info: Option<(String, WeakSymbol, u8)> = match &*tb {
+                        Type::Struct(n, sym, params) if params.is_empty() => {
+                            Some((n.clone(), sym.clone(), 0))
+                        }
+                        Type::Class(n, sym, params) if params.is_empty() => {
+                            Some((n.clone(), sym.clone(), 1))
+                        }
+                        Type::Enum(n, sym, params) if params.is_empty() => {
+                            Some((n.clone(), sym.clone(), 2))
+                        }
+                        _ => None,
+                    };
+                    drop(tb);
+                    if let Some((name, sym, variant_kind)) = fill_info {
+                        if let Some(sym_strong) = sym.0.upgrade() {
+                            if let Ok(Some(decl)) = sym_strong.borrow().get_decl() {
+                                // Use try_borrow to avoid panic when the declaration
+                                // is already mutably borrowed (e.g. during struct body processing)
+                                let generic_params: Vec<GenericParameter> =
+                                    match decl.try_borrow() {
+                                        Ok(stmt) => match &*stmt {
+                                            Statement::StructDecl {
+                                                generic_parameters, ..
+                                            }
+                                            | Statement::ClassDecl {
+                                                generic_parameters, ..
+                                            }
+                                            | Statement::EnumDecl {
+                                                generic_parameters, ..
+                                            } => generic_parameters.clone(),
+                                            _ => vec![],
+                                        },
+                                        Err(_) => vec![],
+                                    };
+                                if !generic_params.is_empty() {
+                                    let default_params: Vec<Rc<RefCell<Type>>> = generic_params
+                                        .iter()
+                                        .map(|gp| {
+                                            Rc::new(RefCell::new(Type::GenericParam(
+                                                gp.name.value.clone(),
+                                            )))
+                                        })
+                                        .collect();
+                                    match variant_kind {
+                                        0 => Rc::new(RefCell::new(Type::Struct(
+                                            name, sym, default_params,
+                                        ))),
+                                        1 => Rc::new(RefCell::new(Type::Class(
+                                            name, sym, default_params,
+                                        ))),
+                                        2 => Rc::new(RefCell::new(Type::Enum(
+                                            name, sym, default_params,
+                                        ))),
+                                        _ => unreachable!(),
+                                    }
+                                } else {
+                                    t
+                                }
+                            } else {
+                                t
+                            }
+                        } else {
+                            t
+                        }
+                    } else {
+                        t
+                    }
                 };
                 *ty = Some(t.clone());
                 t
