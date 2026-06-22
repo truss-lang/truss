@@ -3868,6 +3868,28 @@ impl TypeResolver {
                                 };
                                 if let Some(t) = method_ty {
                                     *ty = Some(t.clone());
+                                    let m_params = type_params.clone();
+                                    if !m_params.is_empty() {
+                                        if let Ok(Some(decl)) = binding.get_decl() {
+                                            let decl_ref = decl.borrow();
+                                            let gp_names: Vec<String> = match &*decl_ref {
+                                                Statement::StructDecl { generic_parameters, .. } => {
+                                                    generic_parameters.iter().map(|gp| gp.name.value.clone()).collect()
+                                                }
+                                                _ => vec![],
+                                            };
+                                            drop(decl_ref);
+                                            if gp_names.len() == m_params.len() {
+                                                let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names.iter()
+                                                    .zip(m_params.into_iter())
+                                                    .map(|(n, ty)| (n.clone(), ty))
+                                                    .collect();
+                                                let substituted = Self::substitute_generic_params(t.clone(), &mapping);
+                                                *ty = Some(substituted.clone());
+                                                return Some(substituted);
+                                            }
+                                        }
+                                    }
                                     return Some(t.clone());
                                 }
                             }
@@ -3888,6 +3910,28 @@ impl TypeResolver {
                                         };
                                         if let Some(t) = method_ty {
                                             *ty = Some(t.clone());
+                                            let i_params = type_params.clone();
+                                            if !i_params.is_empty() {
+                                                if let Ok(Some(decl)) = binding.get_decl() {
+                                                    let decl_ref = decl.borrow();
+                                                    let gp_names: Vec<String> = match &*decl_ref {
+                                                        Statement::StructDecl { generic_parameters, .. } => {
+                                                            generic_parameters.iter().map(|gp| gp.name.value.clone()).collect()
+                                                        }
+                                                        _ => vec![],
+                                                    };
+                                                    drop(decl_ref);
+                                                    if gp_names.len() == i_params.len() {
+                                                        let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names.iter()
+                                                            .zip(i_params.into_iter())
+                                                            .map(|(n, ty)| (n.clone(), ty))
+                                                            .collect();
+                                                        let substituted = Self::substitute_generic_params(t.clone(), &mapping);
+                                                        *ty = Some(substituted.clone());
+                                                        return Some(substituted);
+                                                    }
+                                                }
+                                            }
                                             return Some(t.clone());
                                         }
                                     }
@@ -4045,6 +4089,28 @@ impl TypeResolver {
                                     return None;
                                 }
                                 *ty = Some(t.clone());
+                                let c_params = type_params.clone();
+                                if !c_params.is_empty() {
+                                    if let Ok(Some(decl)) = binding.get_decl() {
+                                        let decl_ref = decl.borrow();
+                                        let gp_names: Vec<String> = match &*decl_ref {
+                                            Statement::ClassDecl { generic_parameters, .. } => {
+                                                generic_parameters.iter().map(|gp| gp.name.value.clone()).collect()
+                                            }
+                                            _ => vec![],
+                                        };
+                                        drop(decl_ref);
+                                        if gp_names.len() == c_params.len() {
+                                            let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names.iter()
+                                                .zip(c_params.into_iter())
+                                                .map(|(n, ty)| (n.clone(), ty))
+                                                .collect();
+                                            let substituted = Self::substitute_generic_params(t.clone(), &mapping);
+                                            *ty = Some(substituted.clone());
+                                            return Some(substituted);
+                                        }
+                                    }
+                                }
                                 return Some(t.clone());
                             }
                         }
@@ -4092,6 +4158,28 @@ impl TypeResolver {
                                 };
                                 if let Some(t) = method_ty {
                                     *ty = Some(t.clone());
+                                    let m_params = type_params.clone();
+                                    if !m_params.is_empty() {
+                                        if let Ok(Some(decl)) = binding.get_decl() {
+                                            let decl_ref = decl.borrow();
+                                            let gp_names: Vec<String> = match &*decl_ref {
+                                                Statement::ClassDecl { generic_parameters, .. } => {
+                                                    generic_parameters.iter().map(|gp| gp.name.value.clone()).collect()
+                                                }
+                                                _ => vec![],
+                                            };
+                                            drop(decl_ref);
+                                            if gp_names.len() == m_params.len() {
+                                                let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names.iter()
+                                                    .zip(m_params.into_iter())
+                                                    .map(|(n, ty)| (n.clone(), ty))
+                                                    .collect();
+                                                let substituted = Self::substitute_generic_params(t.clone(), &mapping);
+                                                *ty = Some(substituted.clone());
+                                                return Some(substituted);
+                                            }
+                                        }
+                                    }
                                     return Some(t.clone());
                                 }
                             }
@@ -4243,6 +4331,32 @@ impl TypeResolver {
                                             None,
                                         )));
                                         *ty = Some(case_fn_type.clone());
+                                        let e_params = type_params.clone();
+                                        if !e_params.is_empty() {
+                                            if let Some(ref sym) = symbol {
+                                                let sym_ref = sym.borrow();
+                                                if let Ok(Some(decl)) = sym_ref.get_decl() {
+                                                    let decl_ref = decl.borrow();
+                                                    let gp_names: Vec<String> = match &*decl_ref {
+                                                        Statement::EnumDecl { generic_parameters, .. } => {
+                                                            generic_parameters.iter().map(|gp| gp.name.value.clone()).collect()
+                                                        }
+                                                        _ => vec![],
+                                                    };
+                                                    drop(decl_ref);
+                                                    drop(sym_ref);
+                                                    if gp_names.len() == e_params.len() {
+                                                        let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names.iter()
+                                                            .zip(e_params.into_iter())
+                                                            .map(|(n, ty)| (n.clone(), ty))
+                                                            .collect();
+                                                        let substituted = Self::substitute_generic_params(case_fn_type.clone(), &mapping);
+                                                        *ty = Some(substituted.clone());
+                                                        return Some(substituted);
+                                                    }
+                                                }
+                                            }
+                                        }
                                         return Some(case_fn_type);
                                     }
                                 }
@@ -4480,11 +4594,11 @@ impl TypeResolver {
                                                 &*decl.borrow()
                                             && let Some(t) = field_ty
                                         {
-                                            *ty = Some(t.clone());
-                                            return Some(t.clone());
-                                        }
-                                    }
-                                    for method in methods {
+                                *ty = Some(t.clone());
+                                return Some(t.clone());
+                            }
+                        }
+                        for method in methods {
                                         if method.borrow().name().as_ref().ok()
                                             == Some(&member.value)
                                             && let Some(decl) =
@@ -5433,21 +5547,64 @@ impl TypeResolver {
                 }
             }
             Expression::ArrayLiteral { elements, ty, .. } => {
-                for element in elements {
+                for element in elements.iter() {
                     self.infer_type(element.clone());
                 }
                 if let Some(t) = ty.as_ref() {
                     t.clone()
                 } else if let Some(current_scope) = &self.current_scope {
+                    // Infer element type from the first element
+                    let element_type = elements.first().and_then(|e| {
+                        let e_borrow = e.borrow();
+                        match &*e_borrow {
+                            Expression::IntegerLiteral { ty, .. } => ty.clone(),
+                            Expression::StringLiteral { ty, .. } => ty.clone(),
+                            Expression::BooleanLiteral { .. } => {
+                                Some(Rc::new(RefCell::new(crate::types::builtin_type("Bool"))))
+                            }
+                            Expression::NullLiteral { ty, .. } => ty.clone(),
+                            Expression::NullptrLiteral { .. } => {
+                                Some(Rc::new(RefCell::new(crate::types::builtin_type("Void"))))
+                            }
+                            _ => None,
+                        }
+                    });
                     if let Some(t) = current_scope.borrow().get_type("Array") {
-                        *ty = Some(t.clone());
-                        t
+                        let tb = t.borrow();
+                        let array_ty = match (&*tb, element_type) {
+                            (Type::Class(name, sym, _), Some(et)) => {
+                                Rc::new(RefCell::new(Type::Class(
+                                    name.clone(),
+                                    sym.clone(),
+                                    vec![et],
+                                )))
+                            }
+                            (Type::Struct(name, sym, _), Some(et)) => {
+                                Rc::new(RefCell::new(Type::Struct(
+                                    name.clone(),
+                                    sym.clone(),
+                                    vec![et],
+                                )))
+                            }
+                            _ => t.clone(),
+                        };
+                        drop(tb);
+                        *ty = Some(array_ty.clone());
+                        array_ty
                     } else {
-                        let array_ty = Rc::new(RefCell::new(Type::Struct(
-                            "Array".to_string(),
-                            WeakSymbol(std::rc::Weak::new()),
-                            vec![],
-                        )));
+                        let array_ty = if let Some(et) = element_type {
+                            Rc::new(RefCell::new(Type::Struct(
+                                "Array".to_string(),
+                                WeakSymbol(std::rc::Weak::new()),
+                                vec![et],
+                            )))
+                        } else {
+                            Rc::new(RefCell::new(Type::Struct(
+                                "Array".to_string(),
+                                WeakSymbol(std::rc::Weak::new()),
+                                vec![],
+                            )))
+                        };
                         *ty = Some(array_ty.clone());
                         array_ty
                     }
