@@ -6611,7 +6611,7 @@ fn test_non_null_pointer_deref() {
 fn test_nullptr_rejected_for_non_null_pointer() {
     let errors = run_type_check("func test() { let p: Int32*! = nullptr }");
     assert_eq!(
-        errors, 2,
+        errors, 1,
         "assigning nullptr to non-null pointer should error"
     );
 }

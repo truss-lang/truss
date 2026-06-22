@@ -103,6 +103,7 @@ pub enum Symbol {
         parent: WeakSymbol,
         decl: Option<Rc<RefCell<Statement>>>,
         parameter_types: Vec<Rc<RefCell<Type>>>,
+        has_parameters: bool,
     },
     Protocol {
         name: String,

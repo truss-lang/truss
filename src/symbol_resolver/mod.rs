@@ -761,6 +761,7 @@ impl SymbolResolver {
                         parent: WeakSymbol(Rc::downgrade(&enum_symbol)),
                         decl: Some(stmt.clone()),
                         parameter_types: vec![],
+                        has_parameters: !case.parameters.is_empty(),
                     }));
                     cases.push(case_symbol.clone());
                     self.enter(case_symbol, &case.name);

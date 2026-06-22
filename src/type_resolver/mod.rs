@@ -796,7 +796,7 @@ impl TypeResolver {
 
                 self.leave_scope();
             }
-            Statement::VariableDecl {
+             Statement::VariableDecl {
                 name,
                 pattern: decl_pattern,
                 type_expression,
@@ -808,45 +808,6 @@ impl TypeResolver {
                 if let Some(type_expr) = type_expression {
                     let annotated = self.infer_type(type_expr.clone());
                     if let Some(annotated) = annotated {
-                        if let Some(init) = initializer {
-                            let closure_info: Option<(usize, Rc<RefCell<Scope>>)> = {
-                                let init_ref = init.borrow();
-                                if let Expression::Closure {
-                                    parameters,
-                                    body,
-                                    scope,
-                                    ..
-                                } = &*init_ref
-                                    && parameters.is_empty()
-                                    && self.find_max_shorthand(body).is_some()
-                                {
-                                    scope.as_ref().map(|sc| {
-                                        let max_idx = self.find_max_shorthand(body).unwrap();
-                                        (max_idx as usize, sc.clone())
-                                    })
-                                } else {
-                                    None
-                                }
-                            };
-                            if let Some((param_count, sc)) = closure_info {
-                                if let Type::Closure(expected_param_tys, _, _) =
-                                    &*annotated.borrow()
-                                    && !expected_param_tys.is_empty()
-                                {
-                                    for (i, pt) in
-                                        expected_param_tys.iter().enumerate().take(param_count + 1)
-                                    {
-                                        let name = format!("${}", i);
-                                        sc.borrow_mut().set_type(name, pt.clone());
-                                    }
-                                }
-                            }
-                            self.check_type_with_expected(
-                                init.clone(),
-                                annotated.clone(),
-                                name.as_ref(),
-                            );
-                        }
                         *ty = Some(annotated.clone());
                         if let Some(pattern) = decl_pattern {
                             self.set_pattern_types(pattern, &annotated);
@@ -1416,6 +1377,38 @@ impl TypeResolver {
                     let annotated = self.infer_type(type_expr.clone());
                     if let Some(annotated) = annotated {
                         if let Some(init) = initializer {
+                            let closure_info: Option<(usize, Rc<RefCell<Scope>>)> = {
+                                let init_ref = init.borrow();
+                                if let Expression::Closure {
+                                    parameters,
+                                    body,
+                                    scope,
+                                    ..
+                                } = &*init_ref
+                                    && parameters.is_empty()
+                                    && self.find_max_shorthand(body).is_some()
+                                {
+                                    scope.as_ref().map(|sc| {
+                                        let max_idx = self.find_max_shorthand(body).unwrap();
+                                        (max_idx as usize, sc.clone())
+                                    })
+                                } else {
+                                    None
+                                }
+                            };
+                            if let Some((param_count, sc)) = closure_info {
+                                if let Type::Closure(expected_param_tys, _, _) =
+                                    &*annotated.borrow()
+                                    && !expected_param_tys.is_empty()
+                                {
+                                    for (i, pt) in
+                                        expected_param_tys.iter().enumerate().take(param_count + 1)
+                                    {
+                                        let name = format!("${}", i);
+                                        sc.borrow_mut().set_type(name, pt.clone());
+                                    }
+                                }
+                            }
                             self.check_type_with_expected(
                                 init.clone(),
                                 annotated.clone(),
@@ -4505,10 +4498,15 @@ impl TypeResolver {
                         for case in &cases {
                             if case.borrow().name().as_ref().ok() == Some(&member.value) {
                                 if let Symbol::EnumCase {
-                                    parameter_types, ..
+                                    parameter_types,
+                                    has_parameters,
+                                    ..
                                 } = &*case.borrow()
                                 {
                                     if parameter_types.is_empty() {
+                                        if *has_parameters {
+                                            return None;
+                                        }
                                         *ty = Some(object_ty.clone());
                                         return Some(object_ty.clone());
                                     } else {
