@@ -3941,6 +3941,27 @@ impl TypeResolver {
                         drop(binding);
                         if let Some(proto_ty) = self.lookup_protocol_method(symbol.clone(), &member.value, type_params) {
                             *ty = Some(proto_ty.clone());
+                            if !type_params.is_empty() {
+                                if let Ok(Some(decl)) = symbol.borrow().get_decl() {
+                                    let decl_ref = decl.borrow();
+                                    let gp_names: Vec<String> = match &*decl_ref {
+                                        Statement::StructDecl { generic_parameters, .. } => {
+                                            generic_parameters.iter().map(|gp| gp.name.value.clone()).collect()
+                                        }
+                                        _ => vec![],
+                                    };
+                                    drop(decl_ref);
+                                    if gp_names.len() == type_params.len() {
+                                        let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names.iter()
+                                            .zip(type_params.iter())
+                                            .map(|(n, ty)| (n.clone(), ty.clone()))
+                                            .collect();
+                                        let substituted = Self::substitute_generic_params(proto_ty, &mapping);
+                                        *ty = Some(substituted.clone());
+                                        return Some(substituted);
+                                    }
+                                }
+                            }
                             return Some(proto_ty);
                         }
                         if matches!(
@@ -4187,6 +4208,27 @@ impl TypeResolver {
 
                         if let Some(proto_ty) = self.lookup_protocol_method(symbol.clone(), &member.value, type_params) {
                             *ty = Some(proto_ty.clone());
+                            if !type_params.is_empty() {
+                                if let Ok(Some(decl)) = binding.get_decl() {
+                                    let decl_ref = decl.borrow();
+                                    let gp_names: Vec<String> = match &*decl_ref {
+                                        Statement::ClassDecl { generic_parameters, .. } => {
+                                            generic_parameters.iter().map(|gp| gp.name.value.clone()).collect()
+                                        }
+                                        _ => vec![],
+                                    };
+                                    drop(decl_ref);
+                                    if gp_names.len() == type_params.len() {
+                                        let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names.iter()
+                                            .zip(type_params.iter())
+                                            .map(|(n, ty)| (n.clone(), ty.clone()))
+                                            .collect();
+                                        let substituted = Self::substitute_generic_params(proto_ty, &mapping);
+                                        *ty = Some(substituted.clone());
+                                        return Some(substituted);
+                                    }
+                                }
+                            }
                             return Some(proto_ty);
                         }
 
@@ -4365,6 +4407,29 @@ impl TypeResolver {
                         if let Some(ref sym) = symbol {
                             if let Some(proto_ty) = self.lookup_protocol_method(sym.clone(), &member.value, type_params) {
                                 *ty = Some(proto_ty.clone());
+                                if !type_params.is_empty() {
+                                    let sym_ref = sym.borrow();
+                                    if let Ok(Some(decl)) = sym_ref.get_decl() {
+                                        let decl_ref = decl.borrow();
+                                        let gp_names: Vec<String> = match &*decl_ref {
+                                            Statement::EnumDecl { generic_parameters, .. } => {
+                                                generic_parameters.iter().map(|gp| gp.name.value.clone()).collect()
+                                            }
+                                            _ => vec![],
+                                        };
+                                        drop(decl_ref);
+                                        drop(sym_ref);
+                                        if gp_names.len() == type_params.len() {
+                                            let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names.iter()
+                                                .zip(type_params.iter())
+                                                .map(|(n, ty)| (n.clone(), ty.clone()))
+                                                .collect();
+                                            let substituted = Self::substitute_generic_params(proto_ty, &mapping);
+                                            *ty = Some(substituted.clone());
+                                            return Some(substituted);
+                                        }
+                                    }
+                                }
                                 return Some(proto_ty);
                             }
                         }
