@@ -782,6 +782,24 @@ impl LanguageServer {
     }
 
     fn symbol_type_string(&self, sym: &Symbol) -> Option<String> {
+        // Handle enum case constructors directly from Symbol data
+        if let Symbol::EnumCase { name, parent, parameter_types, .. } = sym {
+            if !parameter_types.is_empty() {
+                let enum_name = parent.0.upgrade().and_then(|p| p.borrow().name().ok());
+                let mut sig = name.to_string();
+                sig.push('(');
+                for (i, pt) in parameter_types.iter().enumerate() {
+                    if i > 0 { sig.push_str(", "); }
+                    sig.push_str(&pt.borrow().to_string());
+                }
+                sig.push(')');
+                if let Some(ref en) = enum_name {
+                    sig.push_str(&format!(" -> {}", en));
+                }
+                return Some(sig);
+            }
+        }
+
         if let Ok(Some(decl)) = sym.get_decl() {
             let stmt = decl.borrow();
             match &*stmt {
@@ -926,7 +944,7 @@ impl LanguageServer {
         if let Some(ref scope) = self.stdlib_scope {
             let sb = scope.borrow();
             for (name, _) in &sb.type_env {
-                items.push(json!({"label": name, "kind": 22, "detail": "builtin type", "sortText": "3"}));
+                items.push(json!({"label": name, "kind": 22, "detail": "type", "sortText": "3"}));
             }
             for (name, symbol) in &sb.name_table {
                 let (kind, detail) = match &*symbol.borrow() {
@@ -1196,7 +1214,7 @@ impl LanguageServer {
                 | Symbol::StructSubscript { .. }
                 | Symbol::ClassSubscript { .. }
                 | Symbol::ProtocolSubscript { .. }
-            );
+            ) || matches!(&*sym_borrow, Symbol::EnumCase { parameter_types, .. } if !parameter_types.is_empty());
             let mut markdown = format!("```truss\n");
             if is_func_like {
                 if let Some(ref sig) = type_str {
@@ -1334,6 +1352,23 @@ impl LanguageServer {
                         }
                     }
                     sigs
+                }
+                Symbol::EnumCase { name, parameter_types, parent, .. } if !parameter_types.is_empty() => {
+                    let enum_name = parent.0.upgrade().and_then(|p| p.borrow().name().ok()).unwrap_or_default();
+                    let mut label = name.to_string();
+                    label.push('(');
+                    let mut param_info = Vec::new();
+                    for (i, pt) in parameter_types.iter().enumerate() {
+                        if i > 0 { label.push_str(", "); }
+                        let type_str = pt.borrow().to_string();
+                        label.push_str(&format!("_: {}", type_str));
+                        param_info.push(json!({"label": format!("_: {}", type_str), "documentation": ""}));
+                    }
+                    label.push(')');
+                    if !enum_name.is_empty() {
+                        label.push_str(&format!(" -> {}", enum_name));
+                    }
+                    vec![(label, param_info)]
                 }
                 _ => vec![],
             };
