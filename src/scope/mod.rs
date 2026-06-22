@@ -1,12 +1,13 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    fmt,
     rc::Rc,
 };
 
 use crate::{symbol::Symbol, types::Type};
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub struct Scope {
     pub name_table: HashMap<String, Rc<RefCell<Symbol>>>,
     pub overloads: HashMap<String, Vec<Rc<RefCell<Symbol>>>>,
@@ -14,6 +15,19 @@ pub struct Scope {
     pub parent: Option<Rc<RefCell<Scope>>>,
     pub captured_by_closures: HashSet<String>,
 }
+
+impl fmt::Debug for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Scope")
+            .field("name_table", &self.name_table)
+            .field("overloads", &self.overloads)
+            .field("type_env", &self.type_env)
+            .field("parent", &self.parent.as_ref().map(|_| ".."))
+            .field("captured_by_closures", &self.captured_by_closures)
+            .finish()
+    }
+}
+
 impl Scope {
     pub fn new(parent: Option<Rc<RefCell<Scope>>>) -> Self {
         Self {
