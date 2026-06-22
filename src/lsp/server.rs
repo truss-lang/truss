@@ -1331,6 +1331,72 @@ impl LanguageServer {
         }
         let func_name: String = chars[name_start..name_end].iter().collect();
 
+        let mut member_sigs: Vec<(String, Vec<Value>)> = Vec::new();
+        if name_start > 1 && chars[name_start - 1] == '.' {
+            let mut obj_end = name_start - 1;
+            let mut obj_start = obj_end;
+            while obj_start > 0 && (chars[obj_start - 1].is_alphanumeric() || chars[obj_start - 1] == '_') {
+                obj_start -= 1;
+            }
+            if obj_start < obj_end {
+                let obj_name: String = chars[obj_start..obj_end].iter().collect();
+                if let Some((sym, _)) = self.lookup_symbol_in_scopes(&obj_name) {
+                    let binding = sym.borrow();
+                    member_sigs = match &*binding {
+                        Symbol::Enum { cases, .. } => {
+                            let mut sigs = Vec::new();
+                            for case in cases {
+                                if case.borrow().name().ok().as_deref() == Some(&func_name) {
+                                    if let Symbol::EnumCase { name, parameter_types, parent, .. } = &*case.borrow() {
+                                        if !parameter_types.is_empty() {
+                                            let enum_name = parent.0.upgrade().and_then(|p| p.borrow().name().ok()).unwrap_or_default();
+                                            let mut label = name.to_string();
+                                            label.push('(');
+                                            let mut param_info = Vec::new();
+                                            for (i, pt) in parameter_types.iter().enumerate() {
+                                                if i > 0 { label.push_str(", "); }
+                                                let type_str = pt.borrow().to_string();
+                                                label.push_str(&format!("_: {}", type_str));
+                                                param_info.push(json!({"label": format!("_: {}", type_str), "documentation": ""}));
+                                            }
+                                            label.push(')');
+                                            if !enum_name.is_empty() {
+                                                label.push_str(&format!(" -> {}", enum_name));
+                                            }
+                                            sigs.push((label, param_info));
+                                        }
+                                    }
+                                }
+                            }
+                            sigs
+                        }
+                        _ => vec![],
+                    };
+                }
+            }
+        }
+        if !member_sigs.is_empty() {
+            let mut signatures = Vec::new();
+            for (label, param_info) in member_sigs {
+                signatures.push(json!({"label": label, "parameters": param_info}));
+            }
+            let active_param = {
+                let end = character.min(chars.len());
+                if end > paren_pos + 1 {
+                    chars[paren_pos + 1..end].iter().filter(|&&c| c == ',').count() as u64
+                } else { 0 }
+            };
+            return json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "signatures": signatures,
+                    "activeSignature": 0,
+                    "activeParameter": active_param
+                }
+            }).to_string();
+        }
+
         let symbols = self.lookup_all_symbols_in_scopes(&func_name);
         if symbols.is_empty() {
             return json!({"jsonrpc": "2.0", "id": id, "result": null}).to_string();
