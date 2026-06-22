@@ -2977,7 +2977,7 @@ impl TypeResolver {
                                 std::collections::HashMap::new();
                             let has_generic_param = param_tys
                                 .iter()
-                                .any(|pt| matches!(&*pt.borrow(), Type::GenericParam(_)));
+                                .any(|pt| Self::type_has_any_generic_param(&pt.borrow()));
                             if has_generic_param
                                 && type_parameters.is_some()
                                 && !type_parameters.as_ref().unwrap().is_empty()
@@ -3032,6 +3032,152 @@ impl TypeResolver {
                             Self::substitute_generic_params(ret_ty.clone(), mapping)
                         } else {
                             ret_ty.clone()
+                        };
+
+
+                        let resolved_ret_ty = {
+                            let (ret_name, ret_sym, ret_has_unresolved_params) = {
+                                let ret_borrow = resolved_ret_ty.borrow();
+                                match &*ret_borrow {
+                                    Type::Struct(n, s, p) | Type::Class(n, s, p) => {
+                                        let needs_substitution = p.is_empty()
+                                            || p.iter().any(|pp| {
+                                                matches!(&*pp.borrow(), Type::GenericParam(_))
+                                            });
+                                        (n.clone(), WeakSymbol(s.0.clone()), needs_substitution)
+                                    }
+                                    _ => (String::new(), WeakSymbol(std::rc::Weak::new()), false),
+                                }
+                            };
+
+                            if !ret_name.is_empty() {
+                                let ret_gp_names: Vec<String> = ret_sym
+                                    .0
+                                    .upgrade()
+                                    .and_then(|sym| {
+                                        let sym_borrow = sym.borrow();
+                                        sym_borrow.get_decl().ok().flatten()
+                                    })
+                                    .map(|decl| {
+                                        let decl_borrow = decl.borrow();
+                                        match &*decl_borrow {
+                                            Statement::StructDecl { generic_parameters, .. }
+                                            | Statement::ClassDecl { generic_parameters, .. } => {
+                                                generic_parameters
+                                                    .iter()
+                                                    .map(|gp| gp.name.value.clone())
+                                                    .collect()
+                                            }
+                                            _ => vec![],
+                                        }
+                                    })
+                                    .unwrap_or_default();
+
+                                if !ret_gp_names.is_empty() && ret_has_unresolved_params {
+                                    let mut ext_mapping: HashMap<String, Rc<RefCell<Type>>> =
+                                        generic_mapping
+                                            .as_ref()
+                                            .map(|m| m.clone())
+                                            .unwrap_or_default();
+
+                                    let original_len = ext_mapping.len();
+
+                                    // Get the actual type params from the return type
+                                    let (actual_params, actual_params_empty) = {
+                                        let rb = resolved_ret_ty.borrow();
+                                        match &*rb {
+                                            Type::Struct(_, _, p) | Type::Class(_, _, p) => {
+                                                (p.clone(), p.is_empty())
+                                            }
+                                            _ => (vec![], true),
+                                        }
+                                    };
+
+                                    // Determine which names need resolution:
+                                    // - If actual params are empty, use the declaration
+                                    //   generic param names (e.g., I, F, T)
+                                    // - Otherwise, scan actual params for GenericParam
+                                    //   entries (e.g., "Self")
+                                    let unresolved_names: Vec<String> =
+                                        if actual_params_empty {
+                                            ret_gp_names.clone()
+                                        } else {
+                                            actual_params
+                                                .iter()
+                                                .filter_map(|p| match &*p.borrow() {
+                                                    Type::GenericParam(name) => {
+                                                        Some(name.clone())
+                                                    }
+                                                    _ => None,
+                                                })
+                                                .collect()
+                                        };
+
+                                    for name in &unresolved_names {
+                                        if !ext_mapping.contains_key(name) {
+                                            if let Expression::MemberAccess { object, .. } =
+                                                &*callee.borrow()
+                                            {
+                                                if let Some(object_ty) =
+                                                    self.infer_type(object.clone())
+                                                {
+                                                    ext_mapping.insert(name.clone(), object_ty);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if ext_mapping.len() > original_len {
+                                        if actual_params_empty {
+                                            // Reconstruct with default params for
+                                            // substitution to work
+                                            let default_params: Vec<Rc<RefCell<Type>>> =
+                                                ret_gp_names
+                                                    .iter()
+                                                    .map(|n| {
+                                                        Rc::new(RefCell::new(
+                                                            Type::GenericParam(n.clone()),
+                                                        ))
+                                                    })
+                                                    .collect();
+                                            let ty_with_params = {
+                                                let rb = resolved_ret_ty.borrow();
+                                                match &*rb {
+                                                    Type::Struct(n, s, _) => {
+                                                        Rc::new(RefCell::new(Type::Struct(
+                                                            n.clone(),
+                                                            s.clone(),
+                                                            default_params,
+                                                        )))
+                                                    }
+                                                    Type::Class(n, s, _) => {
+                                                        Rc::new(RefCell::new(Type::Class(
+                                                            n.clone(),
+                                                            s.clone(),
+                                                            default_params,
+                                                        )))
+                                                    }
+                                                    _ => resolved_ret_ty.clone(),
+                                                }
+                                            };
+                                            Self::substitute_generic_params(
+                                                ty_with_params,
+                                                &ext_mapping,
+                                            )
+                                        } else {
+                                            Self::substitute_generic_params(
+                                                resolved_ret_ty,
+                                                &ext_mapping,
+                                            )
+                                        }
+                                    } else {
+                                        resolved_ret_ty.clone()
+                                    }
+                                } else {
+                                    resolved_ret_ty
+                                }
+                            } else {
+                                resolved_ret_ty
+                            }
                         };
 
                         for (i, param) in parameters.iter().enumerate() {
@@ -6276,6 +6422,42 @@ impl TypeResolver {
         )
     }
 
+    /// Recursively check if a type contains any `GenericParam` (at any depth).
+    fn type_has_any_generic_param(ty: &Type) -> bool {
+        match ty {
+            Type::GenericParam(_) => true,
+            Type::Function(params, ret, _, _) => {
+                params
+                    .iter()
+                    .any(|p| Self::type_has_any_generic_param(&p.borrow()))
+                    || Self::type_has_any_generic_param(&ret.borrow())
+            }
+            Type::Closure(params, ret, _) => {
+                params
+                    .iter()
+                    .any(|p| Self::type_has_any_generic_param(&p.borrow()))
+                    || Self::type_has_any_generic_param(&ret.borrow())
+            }
+            Type::Struct(_, _, params)
+            | Type::Class(_, _, params)
+            | Type::Enum(_, _, params)
+            | Type::Protocol(_, _, params) => params
+                .iter()
+                .any(|p| Self::type_has_any_generic_param(&p.borrow())),
+            Type::Tuple(elems) => elems
+                .iter()
+                .any(|(_, t)| Self::type_has_any_generic_param(&t.borrow())),
+            Type::Pointer(t)
+            | Type::NonNullPointer(t)
+            | Type::Inline(t, _) => Self::type_has_any_generic_param(&t.borrow()),
+            Type::Compound(types) => types
+                .iter()
+                .any(|t| Self::type_has_any_generic_param(&t.borrow())),
+            Type::AssociatedType(base, _) => Self::type_has_any_generic_param(&base.borrow()),
+            _ => false,
+        }
+    }
+
     fn substitute_generic_params(
         ty: Rc<RefCell<Type>>,
         mapping: &std::collections::HashMap<String, Rc<RefCell<Type>>>,
@@ -6442,7 +6624,10 @@ impl TypeResolver {
                     mapping.insert(name.clone(), arg_ty.clone());
                 }
             }
-            (Type::Function(p1, r1, _, None), Type::Function(p2, r2, _, None)) => {
+            (Type::Function(p1, r1, _, None), Type::Function(p2, r2, _, None))
+            | (Type::Closure(p1, r1, _), Type::Closure(p2, r2, _))
+            | (Type::Function(p1, r1, _, None), Type::Closure(p2, r2, _))
+            | (Type::Closure(p1, r1, _), Type::Function(p2, r2, _, None)) => {
                 for (pt, at) in p1.iter().zip(p2.iter()) {
                     Self::collect_generic_mappings(pt.clone(), at.clone(), mapping);
                 }
@@ -7852,7 +8037,18 @@ impl TypeResolver {
                                                             if let Some(params) = type_parameters {
                                                                 let resolved_params: Vec<Rc<RefCell<Type>>> = params
                                                                     .iter()
-                                                                    .filter_map(|p| self.infer_type(p.clone()))
+                                                                    .map(|p| {
+                                                                        self.infer_type(p.clone()).unwrap_or_else(|| {
+                                                                            match &*p.borrow() {
+                                                                                Expression::Variable { name, .. } => {
+                                                                                    Rc::new(RefCell::new(Type::GenericParam(name.value.clone())))
+                                                                                }
+                                                                                _ => {
+                                                                                    Rc::new(RefCell::new(Type::GenericParam(String::new())))
+                                                                                }
+                                                                            }
+                                                                        })
+                                                                    })
                                                                     .collect();
                                                                 if resolved_params.len() == proto_generic_params.len() {
                                                                     let map: HashMap<String, Rc<RefCell<Type>>> =
@@ -7897,6 +8093,38 @@ impl TypeResolver {
                                                     method_ty,
                                                     &mapping,
                                                 ));
+                                            }
+                                        }
+
+                                        if let Ok(type_name) = type_symbol.borrow().name() {
+                                            if let Some(inferred_params) = self.infer_protocol_generic_params(
+                                                "",
+                                                &proto_sym,
+                                                &proto_generic_params,
+                                                &type_name,
+                                            ) {
+                                                let resolved: Vec<Rc<RefCell<Type>>> = inferred_params
+                                                    .iter()
+                                                    .filter_map(|p| {
+                                                        let pe = p.borrow();
+                                                        match &*pe {
+                                                            Expression::Type { ty, .. }
+                                                            | Expression::Variable { ty, .. } => ty.clone(),
+                                                            _ => None,
+                                                        }
+                                                    })
+                                                    .collect();
+                                                if resolved.len() == proto_generic_params.len() {
+                                                    let mapping: HashMap<String, Rc<RefCell<Type>>> =
+                                                        proto_generic_params.iter()
+                                                            .zip(resolved.into_iter())
+                                                            .map(|(n, t)| (n.clone(), t))
+                                                            .collect();
+                                                    return Some(Self::substitute_generic_params(
+                                                        method_ty,
+                                                        &mapping,
+                                                    ));
+                                                }
                                             }
                                         }
                                     }
