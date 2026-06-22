@@ -9126,6 +9126,14 @@ impl TypeResolver {
             };
             drop(decl_ref);
 
+            // Skip protocol methods that have default implementations (body is not None),
+            // since the concrete type may not explicitly implement them.
+            if let Statement::FunctionDecl { body, .. } = &*decl.borrow() {
+                if !matches!(&*body.borrow(), FunctionBody::None) {
+                    continue;
+                }
+            }
+
             let Some(type_sym) = self
                 .current_scope
                 .as_ref()
