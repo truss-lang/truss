@@ -83,6 +83,7 @@ pub struct IRGenerator<'ctx> {
     container_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
     overloaded_fn_names: Rc<RefCell<HashSet<String>>>,
     closure_counter: Rc<RefCell<u32>>,
+    in_function_body: Rc<RefCell<bool>>,
     yield_targets: Rc<RefCell<Vec<(PointerValue<'ctx>, BasicBlock<'ctx>)>>>,
     error_ptr: Rc<RefCell<Option<PointerValue<'ctx>>>>,
     loop_break_targets: Rc<RefCell<Vec<BasicBlock<'ctx>>>>,
@@ -123,6 +124,7 @@ impl<'ctx> IRGenerator<'ctx> {
             container_refs: Rc::new(RefCell::new(Vec::new())),
             overloaded_fn_names: Rc::new(RefCell::new(HashSet::new())),
             closure_counter: Rc::new(RefCell::new(0)),
+            in_function_body: Rc::new(RefCell::new(false)),
             yield_targets: Rc::new(RefCell::new(Vec::new())),
             error_ptr: Rc::new(RefCell::new(None)),
             loop_break_targets: Rc::new(RefCell::new(Vec::new())),
@@ -1410,7 +1412,18 @@ impl<'ctx> IRGenerator<'ctx> {
             })
             .collect();
         let base = base_name.replace('.', "$");
-        format!("_T${}${}${}", base, labels.join("_"), types.join("_"))
+        if self.package_name.is_empty() && self.module_name.is_empty() {
+            format!("_T${}${}${}", base, labels.join("_"), types.join("_"))
+        } else {
+            format!(
+                "_T${}${}${}${}${}",
+                self.package_name,
+                self.module_name,
+                base,
+                labels.join("_"),
+                types.join("_")
+            )
+        }
     }
 
     fn types_compatible(a: &Type, b: &Type) -> bool {
@@ -1535,10 +1548,46 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.module.add_function(cname, function_type, None);
                         }
                     }
+                } else if *self.in_function_body.borrow() {
+                    // Nested FunctionDecl inside another function body — use closure counter
+                    let counter = {
+                        let mut c = self.closure_counter.borrow_mut();
+                        let val = *c;
+                        *c += 1;
+                        val
+                    };
+                    let mangled = if self.package_name.is_empty() && self.module_name.is_empty() {
+                        format!("_T$CC${}", counter)
+                    } else {
+                        format!("_T${}${}$CC${}", self.package_name, self.module_name, counter)
+                    };
+                    if let Type::Function(param_types, return_type, is_vararg, throws_types) =
+                        &*ty.borrow()
+                    {
+                        let mut all_params = param_types.clone();
+                        if throws_types.is_some() {
+                            let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(
+                                RefCell::new(Type::Struct(
+                                    "Int8".to_string(),
+                                    WeakSymbol(std::rc::Weak::new()),
+                                    vec![],
+                                )),
+                            ))));
+                            all_params.insert(0, err_ty);
+                        }
+                        if let Ok(function_type) =
+                            self.get_function_type(return_type.clone(), all_params, *is_vararg)
+                        {
+                            self.module.add_function(&mangled, function_type, None);
+                        }
+                    }
                 } else {
                     self.create_mangled_function_declaration(name, parameters, ty);
                 }
             }
+            // Set in_function_body before recursing into the body
+            let saved = *self.in_function_body.borrow();
+            *self.in_function_body.borrow_mut() = true;
             match &*body.borrow() {
                 FunctionBody::Statements(stmts) => {
                     for s in stmts {
@@ -1550,13 +1599,17 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 FunctionBody::None => {}
             }
+            *self.in_function_body.borrow_mut() = saved;
         }
         if let Statement::VariableDecl { accessors, .. } = &*statement.borrow() {
+            let saved = *self.in_function_body.borrow();
+            *self.in_function_body.borrow_mut() = true;
             for accessor in accessors {
                 for stmt in &accessor.body {
                     self.create_function_declarations(stmt.clone());
                 }
             }
+            *self.in_function_body.borrow_mut() = saved;
         }
         if let Statement::ExternBlock { items, .. } = &*statement.borrow() {
             for item in items {
@@ -3843,7 +3896,10 @@ impl<'ctx> IRGenerator<'ctx> {
                                 Some(sname),
                             )?;
                         }
-                    } else if is_class {
+                    } else if is_class && initializer.is_none() {
+                        // Class stored properties are initialized in init, not at declaration,
+                        // so they have no initializer. This guard prevents auto-accessor
+                        // generation for local variables inside computed property bodies.
                         let is_var = matches!(
                             &token.ty,
                             TokenType::Keyword {
@@ -11421,7 +11477,11 @@ impl<'ctx> IRGenerator<'ctx> {
                     *c += 1;
                     val
                 };
-                let fn_name = format!("_T$CC${}", counter);
+                let fn_name = if self.package_name.is_empty() && self.module_name.is_empty() {
+                    format!("_T$CC${}", counter)
+                } else {
+                    format!("_T${}${}$CC${}", self.package_name, self.module_name, counter)
+                };
 
                 let ret_type = return_type
                     .as_ref()
