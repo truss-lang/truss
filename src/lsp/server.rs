@@ -1,5 +1,7 @@
 use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::rc::Rc;
@@ -104,6 +106,12 @@ fn collect_diagnostics_filtered(
     diagnostics
 }
 
+fn compute_hash(content: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    hasher.finish()
+}
+
 pub fn start_server() {
     let stdlib_path = crate::trusspm::find_stdlib_path();
     if let Some(ref path) = stdlib_path {
@@ -116,6 +124,7 @@ pub fn start_server() {
         stdlib_scope: None,
         stdlib_cache: None,
         project_analyses: HashMap::new(),
+        file_cache: HashMap::new(),
     };
     server.load_stdlib();
     let stdin = io::stdin();
@@ -139,6 +148,11 @@ struct ProjectAnalysis {
     module: Rc<RefCell<Module>>,
 }
 
+struct CachedFile {
+    hash: u64,
+    statements: Vec<Rc<RefCell<Statement>>>,
+}
+
 struct StdlibCache {
     statements: Vec<Rc<RefCell<Statement>>>,
     sources: Vec<(String, String)>,
@@ -151,6 +165,7 @@ struct LanguageServer {
     stdlib_scope: Option<Rc<RefCell<Scope>>>,
     stdlib_cache: Option<StdlibCache>,
     project_analyses: HashMap<String, ProjectAnalysis>,
+    file_cache: HashMap<String, CachedFile>,
 }
 
 impl LanguageServer {
@@ -474,7 +489,16 @@ impl LanguageServer {
                         continue;
                     }
                     if let Ok(file_content) = std::fs::read_to_string(path) {
-                        let f_rc = Rc::new(path_str);
+                        let hash = compute_hash(&file_content);
+                        if let Some(cached) = self.file_cache.get(&path_str) {
+                            if cached.hash == hash {
+                                for stmt in &cached.statements {
+                                    all_stmts.push(stmt.clone());
+                                }
+                                continue;
+                            }
+                        }
+                        let f_rc = Rc::new(path_str.clone());
                         let f_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
                         let cs = CharStream::new(file_content, f_rc.clone());
                         let mut lx = Lexer::new(cs, f_engine.clone());
@@ -487,9 +511,11 @@ impl LanguageServer {
                         if f_engine.borrow().has_errors() {
                             continue;
                         }
-                        for stmt in prog.statements {
-                            all_stmts.push(stmt);
+                        let stmts: Vec<Rc<RefCell<Statement>>> = prog.statements;
+                        for stmt in &stmts {
+                            all_stmts.push(stmt.clone());
                         }
+                        self.file_cache.insert(path_str, CachedFile { hash, statements: stmts });
                     }
                 }
 
@@ -518,7 +544,16 @@ impl LanguageServer {
                             let path = entry.path();
                             if let Ok(content) = std::fs::read_to_string(&path) {
                                 let path_str = path.to_string_lossy().to_string();
-                                let f_rc = Rc::new(path_str);
+                                let hash = compute_hash(&content);
+                                if let Some(cached) = self.file_cache.get(&path_str) {
+                                    if cached.hash == hash {
+                                        for stmt in &cached.statements {
+                                            dep_stmts.push(stmt.clone());
+                                        }
+                                        continue;
+                                    }
+                                }
+                                let f_rc = Rc::new(path_str.clone());
                                 let f_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
                                 let cs = CharStream::new(content, f_rc.clone());
                                 let mut lx = Lexer::new(cs, f_engine.clone());
@@ -527,9 +562,11 @@ impl LanguageServer {
                                 let mut pp = Parser::new(f_rc, toks, f_engine.clone());
                                 let prog = pp.parse();
                                 if f_engine.borrow().has_errors() { continue; }
-                                for stmt in prog.statements {
-                                    dep_stmts.push(stmt);
+                                let stmts: Vec<Rc<RefCell<Statement>>> = prog.statements;
+                                for stmt in &stmts {
+                                    dep_stmts.push(stmt.clone());
                                 }
+                                self.file_cache.insert(path_str, CachedFile { hash, statements: stmts });
                             }
                         }
                     }
