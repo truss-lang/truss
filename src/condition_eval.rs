@@ -27,9 +27,59 @@ impl TargetTriple {
     }
 
     pub fn host() -> Self {
-        match option_env!("HOST") {
-            Some(triple) => TargetTriple::parse(triple),
-            None => TargetTriple::parse("unknown-unknown-unknown"),
+        let arch = std::process::Command::new("uname")
+            .arg("-m")
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout).ok()
+                } else {
+                    None
+                }
+            })
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+
+        let os = std::process::Command::new("uname")
+            .arg("-s")
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout).ok()
+                } else {
+                    None
+                }
+            })
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+
+        if arch.is_empty() || os.is_empty() {
+            return TargetTriple::parse("unknown-unknown-unknown");
+        }
+
+        let mapped_arch = match arch.as_str() {
+            "x86_64" | "amd64" => "x86_64",
+            "aarch64" | "arm64" => "arm64",
+            "i386" | "i686" => "i386",
+            "armv7l" | "arm" => "arm",
+            other => other,
+        };
+
+        let mapped_os = if os.contains("Linux") {
+            "linux"
+        } else if os.contains("Darwin") {
+            "darwin"
+        } else if os.contains("MINGW") || os.contains("MSYS") || os.contains("CYGWIN") {
+            "windows"
+        } else {
+            &os
+        };
+
+        TargetTriple {
+            arch: mapped_arch.to_string(),
+            os: mapped_os.to_string(),
         }
     }
 
@@ -37,7 +87,12 @@ impl TargetTriple {
         if self.arch == "unknown" || self.os.is_empty() {
             "x86_64-unknown-linux-gnu".to_string()
         } else {
-            format!("{}-unknown-{}-gnu", self.arch, self.os)
+            match self.os.as_str() {
+                "linux" => format!("{}-unknown-linux-gnu", self.arch),
+                "darwin" | "macosx" | "apple" => format!("{}-apple-macosx", self.arch),
+                "windows" | "win32" => format!("{}-pc-windows-msvc", self.arch),
+                other => format!("{}-unknown-{}-gnu", self.arch, other),
+            }
         }
     }
 }
