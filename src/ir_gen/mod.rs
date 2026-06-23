@@ -10918,7 +10918,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     anyhow::bail!("TupleIndexAccess on non-tuple type");
                 }
             }
-            Expression::Match { value, cases, .. } => {
+            Expression::Match {
+                value,
+                cases,
+                ty,
+                ..
+            } => {
                 let fn_val = self
                     .builder
                     .get_insert_block()
@@ -10926,6 +10931,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     .get_parent()
                     .unwrap();
                 let exit_bb = self.context.append_basic_block(fn_val, "match_exit");
+
+                let result_alloca = ty.as_ref().and_then(|t| {
+                    self.resolve_type(t.clone())
+                        .ok()
+                        .map(|llvm_ty| (self.builder.build_alloca(llvm_ty, "match_result"), llvm_ty))
+                });
 
                 let subject_val = self.resolve_expression(value.clone())?.unwrap();
                 let subject_alloca = self.builder.build_alloca(subject_val.get_type(), "")?;
@@ -11201,16 +11212,16 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
 
-                    let mut case_terminated = false;
-                    for stmt in &case.body {
-                        if let Ok(terminates) = self.resolve_statement(stmt.clone()) {
-                            if terminates {
-                                case_terminated = true;
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
+                    if let Some((Ok(alloca), _)) = result_alloca.as_ref() {
+                        self.yield_targets.borrow_mut().push((*alloca, exit_bb));
+                    }
+                    let (case_terminated, case_val) =
+                        self.resolve_block_and_get_value(&case.body)?;
+                    if let Some((Ok(_alloca), _)) = result_alloca.as_ref() {
+                        self.yield_targets.borrow_mut().pop();
+                    }
+                    if let (Some((Ok(alloca), _)), Some(val)) = (&result_alloca, case_val) {
+                        self.builder.build_store(*alloca, val)?;
                     }
                     if case.guard.is_some() {
                         let _ = self.resolve_expression(case.guard.clone().unwrap());
@@ -11227,8 +11238,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
 
                 self.builder.position_at_end(exit_bb);
-                let _ = self.builder.build_unreachable();
-                Ok(None)
+                match result_alloca {
+                    Some((Ok(alloca), llvm_ty)) => {
+                        let result =
+                            self.builder.build_load(llvm_ty, alloca, "match_result")?;
+                        Ok(Some(result))
+                    }
+                    _ => Ok(None),
+                }
             }
             Expression::Closure {
                 captures,
@@ -11723,6 +11740,7 @@ impl<'ctx> IRGenerator<'ctx> {
                         }
                     }
                     TryKind::Optional => {
+                        let entry_bb = self.builder.get_insert_block().unwrap();
                         let none_bb = self.context.append_basic_block(fn_val, "try_none");
                         self.builder
                             .build_conditional_branch(err_is_null, continue_bb, none_bb)?;
@@ -11776,9 +11794,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                 let some_tag = self.context.i8_type().const_int(1, false);
                                 let some_val = enum_type
                                     .const_named_struct(&[some_tag.into(), some_payload.into()]);
-                                phi.add_incoming(&[(&some_val as &dyn BasicValue, continue_bb)]);
+                                phi.add_incoming(&[(&some_val as &dyn BasicValue, entry_bb)]);
                             } else {
-                                self.builder.build_unconditional_branch(continue_bb)?;
                                 self.builder.position_at_end(continue_bb);
                             }
                             let phi_val = phi.as_basic_value();
