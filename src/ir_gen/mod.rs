@@ -1630,6 +1630,7 @@ impl<'ctx> IRGenerator<'ctx> {
                     parameters,
                     attributes,
                     body,
+                    static_method,
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
@@ -1643,10 +1644,12 @@ impl<'ctx> IRGenerator<'ctx> {
                     {
                         continue;
                     }
-                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                        Type::Void,
-                    )))));
-                    let mut all_param_types = vec![self_param];
+                    let mut all_param_types: Vec<Rc<RefCell<Type>>> = Vec::new();
+                    if !static_method {
+                        all_param_types.push(Rc::new(RefCell::new(Type::Pointer(Rc::new(
+                            RefCell::new(Type::Void),
+                        )))));
+                    }
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                             Type::Struct(
@@ -1802,16 +1805,19 @@ impl<'ctx> IRGenerator<'ctx> {
                     name: method_name,
                     ty,
                     parameters,
+                    static_method,
                     ..
                 } = &*stmt.borrow()
                     && let Some(ty) = ty
                     && let Type::Function(param_types, return_type, is_vararg, throws_types) =
                         &*ty.borrow()
                 {
-                    let self_param = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
-                        Type::Void,
-                    )))));
-                    let mut all_param_types = vec![self_param];
+                    let mut all_param_types: Vec<Rc<RefCell<Type>>> = Vec::new();
+                    if !static_method {
+                        all_param_types.push(Rc::new(RefCell::new(Type::Pointer(Rc::new(
+                            RefCell::new(Type::Void),
+                        )))));
+                    }
                     if throws_types.is_some() {
                         let err_ty = Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(
                             Type::Struct(
@@ -9866,50 +9872,58 @@ impl<'ctx> IRGenerator<'ctx> {
                             } else if let Some(ty) = &object_ty
                                 && let Type::Struct(struct_name, ..) = &*ty.borrow()
                             {
-                                let object_val = self.resolve_expression(object.clone())?.unwrap();
-                                let ptr = if let Expression::Variable { name, .. } =
-                                    &*object.borrow()
-                                {
-                                    if let Some(var_ptr) = self.lookup_variable(&name.value) {
-                                        var_ptr
-                                    } else {
-                                        if let BasicValueEnum::PointerValue(p) = object_val {
-                                            p
+                                let is_type_access = {
+                                    let obj_ref = object.borrow();
+                                    matches!(&*obj_ref, Expression::Type { .. })
+                                        || matches!(&*obj_ref, Expression::Variable { symbol: None, ty: Some(ty), .. }
+                                            if matches!(&*ty.borrow(), Type::Struct(..) | Type::Class(..) | Type::Enum(..)))
+                                };
+                                if !is_type_access {
+                                    let object_val = self.resolve_expression(object.clone())?.unwrap();
+                                    let ptr = if let Expression::Variable { name, .. } =
+                                        &*object.borrow()
+                                    {
+                                        if let Some(var_ptr) = self.lookup_variable(&name.value) {
+                                            var_ptr
                                         } else {
-                                            let p = self
-                                                .builder
-                                                .build_alloca(object_val.get_type(), "")?;
-                                            self.builder.build_store(p, object_val)?;
-                                            p
-                                        }
-                                    }
-                                } else if let BasicValueEnum::PointerValue(p) = object_val {
-                                    p
-                                } else {
-                                    let p = self.builder.build_alloca(object_val.get_type(), "")?;
-                                    self.builder.build_store(p, object_val)?;
-                                    p
-                                };
-                                let is_static = if let Some(idx) = *selected_index
-                                    && idx < overloads.len()
-                                {
-                                    overloads[idx].borrow().get_decl().ok().flatten().is_some_and(
-                                        |d| {
-                                            if let Statement::FunctionDecl {
-                                                static_method, ..
-                                            } = &*d.borrow()
-                                            {
-                                                *static_method
+                                            if let BasicValueEnum::PointerValue(p) = object_val {
+                                                p
                                             } else {
-                                                false
+                                                let p = self
+                                                    .builder
+                                                    .build_alloca(object_val.get_type(), "")?;
+                                                self.builder.build_store(p, object_val)?;
+                                                p
                                             }
-                                        },
-                                    )
-                                } else {
-                                    false
-                                };
-                                if !is_static {
-                                    method_self_ptr = Some(ptr);
+                                        }
+                                    } else if let BasicValueEnum::PointerValue(p) = object_val {
+                                        p
+                                    } else {
+                                        let p = self.builder.build_alloca(object_val.get_type(), "")?;
+                                        self.builder.build_store(p, object_val)?;
+                                        p
+                                    };
+                                    let is_static = if let Some(idx) = *selected_index
+                                        && idx < overloads.len()
+                                    {
+                                        overloads[idx].borrow().get_decl().ok().flatten().is_some_and(
+                                            |d| {
+                                                if let Statement::FunctionDecl {
+                                                    static_method, ..
+                                                } = &*d.borrow()
+                                                {
+                                                    *static_method
+                                                } else {
+                                                    false
+                                                }
+                                            },
+                                        )
+                                    } else {
+                                        false
+                                    };
+                                    if !is_static {
+                                        method_self_ptr = Some(ptr);
+                                    }
                                 }
                                 let base_name = format!("{}.{}", struct_name, member.value);
                                 let fn_name = if let Some(idx) = *selected_index
