@@ -1393,7 +1393,7 @@ impl LanguageServer {
 
         let mut member_sigs: Vec<(String, Vec<Value>)> = Vec::new();
         if name_start > 1 && chars[name_start - 1] == '.' {
-            let mut obj_end = name_start - 1;
+            let obj_end = name_start - 1;
             let mut obj_start = obj_end;
             while obj_start > 0 && (chars[obj_start - 1].is_alphanumeric() || chars[obj_start - 1] == '_') {
                 obj_start -= 1;

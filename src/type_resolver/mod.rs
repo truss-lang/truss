@@ -4895,7 +4895,7 @@ impl TypeResolver {
                             }
                         }
                     }
-                    Type::GenericParam(param_name) => {
+                    Type::GenericParam(_param_name) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let matching_protocols: Vec<String> = scope
                             .name_table
@@ -5651,7 +5651,7 @@ impl TypeResolver {
                                                 return None;
                                             }
                                             if let Type::Function(
-                                                param_types,
+                                                _param_types,
                                                 ret_type,
                                                 _is_vararg,
                                                 None,
@@ -9858,7 +9858,7 @@ impl TypeResolver {
                                 return Some(ty.clone());
                             }
                             let ty_borrow = ty.borrow();
-                            if let Type::Function(param_tys, ret_ty, is_vararg, throws) =
+                            if let Type::Function(param_tys, ret_ty, _is_vararg, _throws) =
                                 &*ty_borrow
                             {
                                 let self_ty = if is_class {

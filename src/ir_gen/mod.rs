@@ -6488,8 +6488,7 @@ impl<'ctx> IRGenerator<'ctx> {
                                     "",
                                 )?;
                                 let right_ty = right_val.get_type();
-                                use inkwell::types::BasicType;
-                                let right_ptr_ty = right_ty.ptr_type(inkwell::AddressSpace::default());
+                                let right_ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
                                 let cast_ptr = self.builder.build_pointer_cast(
                                     inner_ptr,
                                     right_ptr_ty,

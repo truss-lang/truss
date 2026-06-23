@@ -2,5 +2,5 @@
 /.vscode
 /.idea
 PROGRESS.md
-.omo/*.out
+.omo/
 *.out
