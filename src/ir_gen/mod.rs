@@ -5009,6 +5009,8 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::Break { .. } => {
                 let targets = self.loop_break_targets.borrow();
                 if let Some(exit_bb) = targets.last() {
+                    self.emit_all_deinit_calls();
+                    self.emit_class_releases();
                     self.builder.build_unconditional_branch(*exit_bb)?;
                     Ok(true)
                 } else {
@@ -5018,6 +5020,8 @@ impl<'ctx> IRGenerator<'ctx> {
             Statement::Continue { .. } => {
                 let targets = self.loop_continue_targets.borrow();
                 if let Some(cont_bb) = targets.last() {
+                    self.emit_all_deinit_calls();
+                    self.emit_class_releases();
                     self.builder.build_unconditional_branch(*cont_bb)?;
                     Ok(true)
                 } else {
@@ -11692,13 +11696,6 @@ impl<'ctx> IRGenerator<'ctx> {
                         )?;
 
                         self.builder.position_at_end(panic_bb);
-                        let panic_fn = self.module.get_function("panic").unwrap_or_else(|| {
-                            let void_ty = self.context.void_type();
-                            let fn_ty = void_ty.fn_type(&[ptr_ty.into()], false);
-                            self.module.add_function("panic", fn_ty, None)
-                        });
-                        let err_str = self.builder.build_pointer_cast(local_error, ptr_ty, "")?;
-                        let _ = self.builder.build_call(panic_fn, &[err_str.into()], "");
                         self.builder.build_unreachable()?;
 
                         self.builder.position_at_end(continue_bb);
