@@ -6310,16 +6310,33 @@ impl<'ctx> IRGenerator<'ctx> {
                                 left_some_bb,
                             )?;
                             self.builder.position_at_end(left_some_bb);
+                            // Determine which field index holds the Some payload in the payload
+                            // union. Normal case (2+ fields): index 0 = None payload,
+                            // index 1 = Some payload. Single field (1 field): only Some has a
+                            // payload at index 0. Zero fields: no variant has an associated value.
+                            let some_field_idx =
+                                if payloads_type.get_field_type_at_index(1).is_some() {
+                                    1u32
+                                } else if payloads_type.get_field_type_at_index(0).is_some() {
+                                    0u32
+                                } else {
+                                    // No variant has a payload — just use the fallback value
+                                    self.builder.build_unconditional_branch(cont_bb)?;
+                                    self.builder.position_at_end(left_none_bb);
+                                    self.builder.build_unconditional_branch(cont_bb)?;
+                                    self.builder.position_at_end(cont_bb);
+                                    return Ok(Some(right_val));
+                                };
                             let payload_union_ptr =
                                 self.builder.build_struct_gep(enum_type, alloca, 1, "")?;
                             let some_payload_ptr = self.builder.build_struct_gep(
                                 payloads_type,
                                 payload_union_ptr,
-                                1,
+                                some_field_idx,
                                 "",
                             )?;
                             let some_payload_ty = payloads_type
-                                .get_field_type_at_index(1)
+                                .get_field_type_at_index(some_field_idx)
                                 .ok_or_else(|| anyhow::anyhow!("Some payload field not found"))?
                                 .into_struct_type();
                             let payload_val =
@@ -6331,9 +6348,9 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.builder.build_unconditional_branch(cont_bb)?;
                             self.builder.position_at_end(cont_bb);
                             let result_ty =
-                                payloads_type.get_field_type_at_index(1).ok_or_else(|| {
-                                    anyhow::anyhow!("Some payload field type not found")
-                                })?;
+                                payloads_type.get_field_type_at_index(some_field_idx).ok_or_else(
+                                    || anyhow::anyhow!("Some payload field type not found"),
+                                )?;
                             let phi = self.builder.build_phi(result_ty, "")?;
                             phi.add_incoming(&[
                                 (&payload_val, left_some_bb),
