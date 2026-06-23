@@ -10983,22 +10983,96 @@ impl<'ctx> IRGenerator<'ctx> {
                             let value_ptr_ptr =
                                 self.builder.build_struct_gep(struct_ty, container, 0, "")?;
                             self.builder.build_store(value_ptr_ptr, val_alloca)?;
-                            let wt_ptr_ptr =
-                                self.builder.build_struct_gep(struct_ty, container, 1, "")?;
-                            let wt_global = self.protocol_witness_tables.borrow().iter().find_map(
-                                |((pn, _ts), gv)| {
-                                    if pn == protocol_name { Some(*gv) } else { None }
-                                },
-                            );
-                            if let Some(wt_gv) = wt_global {
-                                self.builder
-                                    .build_store(wt_ptr_ptr, wt_gv.as_pointer_value())?;
+
+                            // Compound protocols have N+1 fields (value + N witness table ptrs)
+                            let is_compound = struct_ty.get_field_type_at_index(2).is_some();
+
+                            if is_compound {
+                                let protocol_names: Vec<&str> =
+                                    protocol_name.split(" & ").collect();
+                                let concrete_type_name = param
+                                    .expression
+                                    .borrow()
+                                    .get_ty()
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|ty| {
+                                        match &*ty.borrow() {
+                                            Type::Struct(name, _, _)
+                                            | Type::Class(name, _, _)
+                                            | Type::Enum(name, _, _) => Some(name.clone()),
+                                            Type::Pointer(inner) => {
+                                                match &*inner.borrow() {
+                                                    Type::Struct(name, _, _)
+                                                    | Type::Class(name, _, _) => {
+                                                        Some(name.clone())
+                                                    }
+                                                    _ => None,
+                                                }
+                                            }
+                                            _ => None,
+                                        }
+                                    });
+
+                                for (i, pn) in protocol_names.iter().enumerate() {
+                                    let field_idx = (i + 1) as u32;
+                                    let wt_ptr_ptr = self.builder.build_struct_gep(
+                                        struct_ty,
+                                        container,
+                                        field_idx,
+                                        "",
+                                    )?;
+                                    let wt_global =
+                                        concrete_type_name.as_ref().and_then(|cn| {
+                                            self.protocol_witness_tables
+                                                .borrow()
+                                                .get(&(pn.to_string(), cn.clone()))
+                                                .copied()
+                                        });
+                                    if let Some(wt_gv) = wt_global {
+                                        self.builder.build_store(
+                                            wt_ptr_ptr,
+                                            wt_gv.as_pointer_value(),
+                                        )?;
+                                    } else {
+                                        let wt_null = self
+                                            .context
+                                            .ptr_type(inkwell::AddressSpace::from(0))
+                                            .const_null();
+                                        self.builder
+                                            .build_store(wt_ptr_ptr, wt_null)?;
+                                    }
+                                }
                             } else {
-                                let wt_null = self
-                                    .context
-                                    .ptr_type(inkwell::AddressSpace::from(0))
-                                    .const_null();
-                                self.builder.build_store(wt_ptr_ptr, wt_null)?;
+                                let wt_ptr_ptr = self.builder.build_struct_gep(
+                                    struct_ty,
+                                    container,
+                                    1,
+                                    "",
+                                )?;
+                                let wt_global =
+                                    self.protocol_witness_tables.borrow().iter().find_map(
+                                        |((pn, _ts), gv)| {
+                                            if pn == protocol_name {
+                                                Some(*gv)
+                                            } else {
+                                                None
+                                            }
+                                        },
+                                    );
+                                if let Some(wt_gv) = wt_global {
+                                    self.builder.build_store(
+                                        wt_ptr_ptr,
+                                        wt_gv.as_pointer_value(),
+                                    )?;
+                                } else {
+                                    let wt_null = self
+                                        .context
+                                        .ptr_type(inkwell::AddressSpace::from(0))
+                                        .const_null();
+                                    self.builder
+                                        .build_store(wt_ptr_ptr, wt_null)?;
+                                }
                             }
                             let container_val =
                                 self.builder.build_load(struct_ty, container, "")?;
