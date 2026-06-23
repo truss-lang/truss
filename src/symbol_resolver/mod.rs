@@ -2169,7 +2169,11 @@ impl SymbolResolver {
                         self.resolve_where_requirement(req);
                     }
                 }
-                for conformance in conformances.iter() {
+                let mut all_protocol_exprs: Vec<Rc<RefCell<Expression>>> = conformances.clone();
+                if let Some(super_expr) = superclass.as_ref() {
+                    all_protocol_exprs.push(super_expr.clone());
+                }
+                for conformance in all_protocol_exprs.iter() {
                     let protocol_name = {
                         let e = conformance.borrow();
                         match &*e {

@@ -4381,7 +4381,8 @@ impl<'ctx> IRGenerator<'ctx> {
                 let saved_struct = self.current_struct.borrow_mut().take();
                 if let Some(ref struct_name) = saved_struct {
                     let is_builtintype =
-                        !self.struct_types.borrow().contains_key(struct_name);
+                        !self.struct_types.borrow().contains_key(struct_name)
+                        && !self.class_types.borrow().contains_key(struct_name);
                     let is_autowired =
                         attributes.iter().any(|a| a.name == "autowired");
                     if is_builtintype
