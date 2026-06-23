@@ -5048,7 +5048,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
                 Ok(false)
             }
-            Statement::PragmaError { .. } | Statement::PragmaWarning { .. } => Ok(false),
+            Statement::PragmaError { message, token, .. } => {
+                self.emit_error(TrussDiagnosticCode::CompileTimeError, message.clone(), Some(token.as_ref()));
+                Ok(true)
+            }
+            Statement::PragmaWarning { message, token, .. } => {
+                self.emit_error(TrussDiagnosticCode::CompileTimeWarning, message.clone(), Some(token.as_ref()));
+                Ok(true)
+            }
             Statement::AsmBlock {
                 instructions,
                 outputs,

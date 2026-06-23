@@ -84,9 +84,11 @@ pub enum TrussDiagnosticCode {
     NestedFunctionType,
     TypeInferenceFailed,
     IRVariableNotFound,
-    StructTypeNotSupported,
-    EnumTypeNotSupported,
-}
+            StructTypeNotSupported,
+            EnumTypeNotSupported,
+            CompileTimeError,
+            CompileTimeWarning,
+        }
 
 impl DiagnosticCode for TrussDiagnosticCode {
     fn code(&self) -> &str {
@@ -170,12 +172,14 @@ impl DiagnosticCode for TrussDiagnosticCode {
             Self::IRVariableNotFound => "E0407",
             Self::StructTypeNotSupported => "E0408",
             Self::EnumTypeNotSupported => "E0409",
+            Self::CompileTimeError => "E0410",
+            Self::CompileTimeWarning => "W0411",
         }
     }
 
     fn severity(&self) -> Severity {
         match self {
-            Self::ShadowedVariable | Self::UnusedVariable | Self::InternalUsedReferenced => {
+            Self::ShadowedVariable | Self::UnusedVariable | Self::InternalUsedReferenced | Self::CompileTimeWarning => {
                 Severity::Warning
             }
             _ => Severity::Error,

@@ -5813,7 +5813,9 @@ func foo() -> Int32 { 1 }",
     );
     let engine_ref = engine.borrow();
     let errors = engine_ref.get_errors();
-    assert_eq!(errors.len(), 0, "Expected no errors, got: {:?}", errors);
+    let warnings = engine_ref.get_warnings();
+    assert_eq!(errors.len(), 1, "Expected 1 error, got: {:?}", errors);
+    assert_eq!(warnings.len(), 1, "Expected 1 warning, got: {:?}", warnings);
     assert!(llvm_ir.contains("foo"));
 }
 
