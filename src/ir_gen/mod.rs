@@ -4923,7 +4923,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 if let Expression::Case {
                     enum_type,
                     case_name,
-                    bindings: _,
+                    bindings,
                     expression,
                     ..
                 } = &*condition.borrow()
@@ -5000,6 +5000,83 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.builder.build_unconditional_branch(exit_bb)?;
 
                     self.builder.position_at_end(exit_bb);
+
+                    if !bindings.is_empty() {
+                        let enum_payloads = self.enum_payload_types.borrow();
+                        if let Some(payload_type) = enum_payloads.get(&enum_name) {
+                            let payload_union_ptr = self.builder.build_struct_gep(
+                                enum_llvm_type,
+                                subject_alloca,
+                                1,
+                                "",
+                            )?;
+                            let case_payload_ptr = self.builder.build_struct_gep(
+                                *payload_type,
+                                payload_union_ptr,
+                                case_idx as u32,
+                                "",
+                            )?;
+                            let case_payload_ty = payload_type
+                                .get_field_type_at_index(case_idx as u32)
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "Case payload field not found at index {}",
+                                        case_idx
+                                    )
+                                })?;
+                            let case_payload_struct_ty = case_payload_ty.into_struct_type();
+
+                            for (i, binding) in bindings.iter().enumerate() {
+                                match binding {
+                                    Pattern::Identifier(token) => {
+                                        let field_ptr = self.builder.build_struct_gep(
+                                            case_payload_struct_ty,
+                                            case_payload_ptr,
+                                            i as u32,
+                                            "",
+                                        )?;
+                                        let field_ty = case_payload_struct_ty
+                                            .get_field_type_at_index(i as u32)
+                                            .ok_or_else(|| {
+                                                anyhow::anyhow!(
+                                                    "Binding field not found at index {}",
+                                                    i
+                                                )
+                                            })?;
+                                        let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                                        let var_ptr = self.builder.build_alloca(field_ty, &token.value)?;
+                                        self.builder.build_store(var_ptr, field_val)?;
+                                        self.declare_variable(token.value.clone(), var_ptr);
+                                    }
+                                    Pattern::ValueBinding(inner) => {
+                                        if let Pattern::Identifier(token) = inner.as_ref() {
+                                            let field_ptr = self.builder.build_struct_gep(
+                                                case_payload_struct_ty,
+                                                case_payload_ptr,
+                                                i as u32,
+                                                "",
+                                            )?;
+                                            let field_ty = case_payload_struct_ty
+                                                .get_field_type_at_index(i as u32)
+                                                .ok_or_else(|| {
+                                                    anyhow::anyhow!(
+                                                        "Binding field not found at index {}",
+                                                        i
+                                                    )
+                                                })?;
+                                            let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                                            let var_ptr = self.builder.build_alloca(field_ty, &token.value)?;
+                                            self.builder.build_store(var_ptr, field_val)?;
+                                            self.declare_variable(token.value.clone(), var_ptr);
+                                        }
+                                    }
+                                    Pattern::Ignore => {}
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+
                 }
                 Ok(false)
             }
@@ -7673,6 +7750,47 @@ impl<'ctx> IRGenerator<'ctx> {
                                         }
                                     }
                                     Pattern::Ignore => {}
+                                    Pattern::ValueBinding(inner) => {
+                                        if let Pattern::Identifier(token) = inner.as_ref() {
+                                            let field_ptr = self.builder.build_struct_gep(
+                                                case_payload_struct_ty,
+                                                case_payload_ptr,
+                                                i as u32,
+                                                "",
+                                            )?;
+                                            let field_ty = case_payload_struct_ty
+                                                .get_field_type_at_index(i as u32)
+                                                .ok_or_else(|| {
+                                                    anyhow::anyhow!(
+                                                        "Binding field not found at index {}",
+                                                        i
+                                                    )
+                                                })?;
+                                            if field_ty.is_pointer_type() {
+                                                let val_ptr = self.builder.build_load(
+                                                    self.context.ptr_type(inkwell::AddressSpace::from(0)),
+                                                    field_ptr,
+                                                    "",
+                                                )?;
+                                                let loaded_enum_val = self.builder.build_load(
+                                                    enum_llvm_type.as_basic_type_enum(),
+                                                    val_ptr.into_pointer_value(),
+                                                    "",
+                                                )?;
+                                                let var_ptr = self.builder.build_alloca(
+                                                    enum_llvm_type.as_basic_type_enum(),
+                                                    &token.value,
+                                                )?;
+                                                self.builder.build_store(var_ptr, loaded_enum_val)?;
+                                                self.declare_variable(token.value.clone(), var_ptr);
+                                            } else {
+                                                let field_val = self.builder.build_load(field_ty, field_ptr, "")?;
+                                                let var_ptr = self.builder.build_alloca(field_ty, &token.value)?;
+                                                self.builder.build_store(var_ptr, field_val)?;
+                                                self.declare_variable(token.value.clone(), var_ptr);
+                                            }
+                                        }
+                                    }
                                     _ => {}
                                 }
                             }
