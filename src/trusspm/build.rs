@@ -285,6 +285,7 @@ impl BuildOrchestrator {
 
             let files = DependencyResolver::discover_source_files(&pkg_name, project_path);
             let mut file_modules: Vec<(String, inkwell::module::Module<'_>)> = Vec::new();
+            let mut stdlib_to_emit: Option<Rc<inkwell::module::Module<'_>>> = None;
 
             for file in &files {
                 let path_str = file.to_string_lossy().to_string();
@@ -328,6 +329,9 @@ impl BuildOrchestrator {
                     .with_namespace(&pkg_name, &pkg_name);
                 let file_modules_result =
                     file_ir_gen.generate_with_stdlib(&program, &stdlib_stmts, main_scope.clone());
+                if stdlib_to_emit.is_none() {
+                    stdlib_to_emit = file_modules_result.stdlib.clone();
+                }
                 file_modules.push((
                     file.to_string_lossy().to_string(),
                     (*file_modules_result.main).clone(),
@@ -357,7 +361,7 @@ impl BuildOrchestrator {
             } else if file_modules.len() == 1 {
                 IRModules {
                     main: Rc::new(file_modules[0].1.clone()),
-                    stdlib: None,
+                    stdlib: stdlib_to_emit,
                 }
             } else {
                 let target_module = file_modules.remove(0);
@@ -372,7 +376,7 @@ impl BuildOrchestrator {
                 }
                 IRModules {
                     main: Rc::new(target_module.1),
-                    stdlib: None,
+                    stdlib: stdlib_to_emit,
                 }
             };
 
