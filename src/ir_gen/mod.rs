@@ -263,6 +263,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             for (var_ptr, type_name) in deferred_vars {
+                if self.class_types.borrow().contains_key(type_name) {
+                    continue;
+                }
                 let deinit_name = self
                     .mangled_fn_names
                     .borrow()
@@ -295,6 +298,9 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
             for (var_ptr, type_name) in &deferred_vars {
+                if self.class_types.borrow().contains_key(type_name) {
+                    continue;
+                }
                 let deinit_name = self
                     .mangled_fn_names
                     .borrow()
@@ -4583,7 +4589,21 @@ impl<'ctx> IRGenerator<'ctx> {
                             self.builder.build_return(Some(&value))?;
                         }
                         FunctionBody::None => {
-                            self.emit_class_releases();
+                            if is_class_method && name.value == "deallocate" && attributes.iter().any(|a| a.name == "autowired") {
+                                let self_ptr = function.get_nth_param(0).unwrap().into_pointer_value();
+                                self.builder.build_call(
+                                    self.module.get_function("free").unwrap_or_else(|| {
+                                        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+                                        let free_ty = self.context.void_type().fn_type(&[ptr_ty.into()], false);
+                                        self.module.add_function("free", free_ty, None)
+                                    }),
+                                    &[self_ptr.into()],
+                                    "",
+                                ).unwrap();
+                                self.builder.build_return(None)?;
+                            } else {
+                                self.emit_class_releases();
+                            }
                         }
                     }
                     // Ensure entry block has a terminator even if body compilation failed
