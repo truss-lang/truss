@@ -1113,6 +1113,11 @@ impl Lexer {
                 self.input.inc_pos();
                 literal.push(c);
                 c = self.input.peek();
+                if c == '+' || c == '-' {
+                    self.input.inc_pos();
+                    literal.push(c);
+                    c = self.input.peek();
+                }
                 while c.is_ascii_digit() {
                     self.input.inc_pos();
                     literal.push(c);
@@ -1133,6 +1138,11 @@ impl Lexer {
             self.input.inc_pos();
             literal.push(c);
             c = self.input.peek();
+            if c == '+' || c == '-' {
+                self.input.inc_pos();
+                literal.push(c);
+                c = self.input.peek();
+            }
             while c.is_ascii_digit() {
                 self.input.inc_pos();
                 literal.push(c);
