@@ -4599,7 +4599,8 @@ impl Parser {
                 break;
             }
             first = false;
-            if !matches!(name_token.ty, TokenType::Identifier) {
+            let is_self = matches!(name_token.ty, TokenType::Keyword { keyword: KeywordType::SelfKw });
+            if !is_self && !matches!(name_token.ty, TokenType::Identifier) {
                 self.emit_error(
                     TrussDiagnosticCode::ExpectedIdentifier,
                     format!("Expected identifier but found '{}'", name_token.value),
@@ -4607,7 +4608,63 @@ impl Parser {
                 );
                 return Err(());
             }
-            let name = name_token.value.clone();
+            let mut name = name_token.value.clone();
+            let members_opt = if is_self {
+                None
+            } else if let Some(ref dot) = self.peek() {
+                if OperatorType::is_operator(dot, OperatorType::Dot) {
+                    self.index += 1;
+                    let Some(next) = self.next() else {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            "Expected identifier after '.'",
+                            &name_token,
+                        );
+                        return Err(());
+                    };
+                    if !matches!(next.ty, TokenType::Identifier) {
+                        self.emit_error(
+                            TrussDiagnosticCode::ExpectedIdentifier,
+                            format!("Expected identifier after '.' but found '{}'", next.value),
+                            &next,
+                        );
+                        return Err(());
+                    }
+                    name = format!("{}.{}", name, next.value);
+                    while let Some(ref more_dot) = self.peek() {
+                        if OperatorType::is_operator(more_dot, OperatorType::Dot) {
+                            self.index += 1;
+                            let Some(next) = self.next() else {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ExpectedIdentifier,
+                                    "Expected identifier after '.'",
+                                    &name_token,
+                                );
+                                return Err(());
+                            };
+                            if !matches!(next.ty, TokenType::Identifier) {
+                                self.emit_error(
+                                    TrussDiagnosticCode::ExpectedIdentifier,
+                                    format!("Expected identifier after '.' but found '{}'", next.value),
+                                    &next,
+                                );
+                                return Err(());
+                            }
+                            name = format!("{}.{}", name, next.value);
+                        } else {
+                            break;
+                        }
+                    }
+                    None
+                } else if SeparatorType::is_separator(dot, SeparatorType::OpenBrace) {
+                    self.index += 1;
+                    Some(self.parse_selective_members()?)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let alias = if let Some(ref as_kw) = self.peek() {
                 if KeywordType::is_keyword(as_kw, KeywordType::As) {
                     self.index += 1;
@@ -4638,7 +4695,7 @@ impl Parser {
             } else {
                 SelectiveAlias::Direct
             };
-            members.push(SelectiveMember { name, alias });
+            members.push(SelectiveMember { name, alias, members: members_opt });
             match self.peek() {
                 Some(ref comma) if SeparatorType::is_separator(comma, SeparatorType::Comma) => {
                     self.index += 1;
@@ -4854,6 +4911,7 @@ impl Parser {
                 let member = SelectiveMember {
                     name: member_name,
                     alias,
+                    members: None,
                 };
                 (Some(vec![member]), ImportKind::Module)
             } else {

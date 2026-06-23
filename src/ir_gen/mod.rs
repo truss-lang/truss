@@ -9882,7 +9882,21 @@ impl<'ctx> IRGenerator<'ctx> {
                     Expression::MemberAccess { object, member, .. } => {
                         if self.is_module_expression(object) {
                             let fn_name = member.value.clone();
-                            (fn_name, false)
+                            if self.module.get_function(&fn_name).is_some()
+                                || self.mangled_fn_names.borrow().contains_key(&fn_name)
+                            {
+                                let mangled = self
+                                    .mangled_fn_names
+                                    .borrow()
+                                    .get(&fn_name)
+                                    .cloned()
+                                    .unwrap_or(fn_name);
+                                (mangled, false)
+                            } else if let Some(mangled) = self.try_declare_function_from_scope(&fn_name) {
+                                (mangled, false)
+                            } else {
+                                (fn_name, false)
+                            }
                         } else {
                             let object_expr = object.borrow();
                             let object_ty = object_expr.get_ty_ref()?.clone();

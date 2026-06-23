@@ -4090,11 +4090,7 @@ fn test_irgen_import_module_call() {
         "Expected 'bar' function in IR, got:\n{}",
         llvm_ir
     );
-    assert_eq!(
-        engine.borrow().get_errors().len(),
-        1,
-        "expected 1 error (module member access limitation)"
-    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
 #[test]
@@ -4154,11 +4150,7 @@ fn test_irgen_import_package_module_call() {
         "Expected 'bar' function in IR, got:\n{}",
         llvm_ir
     );
-    assert_eq!(
-        engine.borrow().get_errors().len(),
-        1,
-        "expected 1 error (module member access limitation)"
-    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
 #[test]

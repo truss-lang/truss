@@ -594,6 +594,7 @@ pub enum SelectiveAlias {
 pub struct SelectiveMember {
     pub name: String,
     pub alias: SelectiveAlias,
+    pub members: Option<Vec<SelectiveMember>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
