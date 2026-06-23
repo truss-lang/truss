@@ -6704,10 +6704,17 @@ impl<'ctx> IRGenerator<'ctx> {
             } => {
                 let right_val = self.resolve_expression(right.clone())?.unwrap();
 
-                if let Expression::Variable { name, .. } = &*left.borrow() {
-                    let setter_name = self.mangle_fn_name(&format!("{}.setter", name.value), &[]);
-                    let willset_name = self.mangle_fn_name(&format!("{}.willSet", name.value), &[]);
-                    let didset_name = self.mangle_fn_name(&format!("{}.didSet", name.value), &[]);
+                let var_name = {
+                    let left_ref = left.borrow();
+                    match &*left_ref {
+                        Expression::Variable { name, .. } => Some(name.value.clone()),
+                        _ => None,
+                    }
+                };
+                if let Some(ref name) = var_name {
+                    let setter_name = self.mangle_fn_name(&format!("{}.setter", name), &[]);
+                    let willset_name = self.mangle_fn_name(&format!("{}.willSet", name), &[]);
+                    let didset_name = self.mangle_fn_name(&format!("{}.didSet", name), &[]);
                     let has_setter = self.module.get_function(&setter_name).is_some();
                     let has_willset = self.module.get_function(&willset_name).is_some();
                     let has_didset = self.module.get_function(&didset_name).is_some();
@@ -6718,11 +6725,11 @@ impl<'ctx> IRGenerator<'ctx> {
                         } else {
                             self.context.i32_type().into()
                         };
-                        let ptr = self.lookup_variable(&name.value).ok_or_else(|| {
+                        let ptr = self.lookup_variable(name).ok_or_else(|| {
                             self.emit_error(
                                 TrussDiagnosticCode::UndefinedVariable,
-                                format!("Undefined variable: '{}'", name.value),
-                                Some(name),
+                                format!("Undefined variable: '{}'", name),
+                                None,
                             );
                             anyhow::anyhow!("Undefined variable")
                         })?;
@@ -6758,11 +6765,17 @@ impl<'ctx> IRGenerator<'ctx> {
                         return Ok(Some(store_val));
                     }
                 }
-                let (var_ptr, current_val) = if let Expression::Variable { name, .. } =
-                    &*left.borrow()
-                {
-                    if let Some(ptr) = self.lookup_variable(&name.value) {
-                        let ty_opt = left.borrow().get_ty()?;
+                let var_info = {
+                    let left_ref = left.borrow();
+                    match &*left_ref {
+                        Expression::Variable { name, ty, .. } => {
+                            Some((name.value.clone(), ty.clone()))
+                        }
+                        _ => None,
+                    }
+                };
+                let (var_ptr, current_val) = if let Some((name, ty_opt)) = var_info {
+                    if let Some(ptr) = self.lookup_variable(&name) {
                         let ty = if let Some(ty_rc) = ty_opt {
                             self.resolve_type(ty_rc)?
                         } else {
@@ -6772,15 +6785,14 @@ impl<'ctx> IRGenerator<'ctx> {
                         (ptr, Some(val))
                     } else if let Some((sname, struct_ptr)) =
                         &*self.current_accessor_struct.borrow()
-                        && let Ok(idx) = self.get_stored_struct_field_index(sname, &name.value)
+                        && let Ok(idx) = self.get_stored_struct_field_index(sname, &name)
                         && let Some(stype) = self.struct_types.borrow().get(sname).copied()
                         && let Ok(field_ptr) =
                             self.builder
                                 .build_struct_gep(stype, *struct_ptr, idx as u32, "")
                     {
-                        self.declare_variable(name.value.clone(), field_ptr);
-                        let ty_opt = left.borrow().get_ty()?;
-                        let ty = if let Some(ty_rc) = ty_opt {
+                        self.declare_variable(name.clone(), field_ptr);
+                        let ty = if let Some(ty_rc) = ty_opt.clone() {
                             self.resolve_type(ty_rc)?
                         } else {
                             self.context.i32_type().into()
@@ -6790,8 +6802,8 @@ impl<'ctx> IRGenerator<'ctx> {
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::UndefinedVariable,
-                            format!("Undefined variable: '{}'", name.value),
-                            Some(name),
+                            format!("Undefined variable: '{}'", name),
+                            None,
                         );
                         anyhow::bail!("Undefined variable");
                     }
@@ -9350,21 +9362,30 @@ impl<'ctx> IRGenerator<'ctx> {
                 selected_index,
                 ..
             } => {
-                if let Expression::ImplicitMemberAccess { member, .. } = &*callee.borrow() {
-                    let callee_ty = callee.borrow().get_ty_ref()?.clone();
-                    let enum_type = if let Some(t) = &callee_ty
-                        && let Type::Function(_, ret_ty, _, _) = &*t.borrow()
+                let (member_val, callee_ty) = {
+                    let callee_ref = callee.borrow();
+                    match &*callee_ref {
+                        Expression::ImplicitMemberAccess { member, .. } => {
+                            let member_name = member.value.clone();
+                            let ty = callee_ref.get_ty_ref()?.clone();
+                            (Some(member_name), ty)
+                        }
+                        _ => (None, None),
+                    }
+                };
+                if let Some(member) = &member_val
+                    && let Some(callee_ty) = &callee_ty
+                {
+                    let enum_type = if let Type::Function(_, ret_ty, _, _) = &*callee_ty.borrow()
                     {
                         Some(ret_ty.clone())
-                    } else if let Some(t) = &callee_ty {
-                        Some(t.clone())
                     } else {
-                        None
+                        Some(callee_ty.clone())
                     };
                     if let Some(et) = &enum_type
                         && let Type::Enum(enum_name, ..) = &*et.borrow()
                     {
-                        let case_name = member.value.clone();
+                        let case_name = member.clone();
                         let enum_name = enum_name.clone();
                         let case_index = self.get_enum_case_index(&enum_name, &case_name)?;
                         let enum_types = self.enum_types.borrow();
@@ -9695,7 +9716,27 @@ impl<'ctx> IRGenerator<'ctx> {
                                     self.builder.build_store(p, object_val)?;
                                     p
                                 };
-                                method_self_ptr = Some(ptr);
+                                let is_static = if let Some(idx) = *selected_index
+                                    && idx < overloads.len()
+                                {
+                                    overloads[idx].borrow().get_decl().ok().flatten().is_some_and(
+                                        |d| {
+                                            if let Statement::FunctionDecl {
+                                                static_method, ..
+                                            } = &*d.borrow()
+                                            {
+                                                *static_method
+                                            } else {
+                                                false
+                                            }
+                                        },
+                                    )
+                                } else {
+                                    false
+                                };
+                                if !is_static {
+                                    method_self_ptr = Some(ptr);
+                                }
                                 let base_name = format!("{}.{}", struct_name, member.value);
                                 let fn_name = if let Some(idx) = *selected_index
                                     && idx < overloads.len()
