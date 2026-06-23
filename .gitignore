@@ -3,3 +3,4 @@
 /.idea
 PROGRESS.md
 .omo/*.out
+*.out
