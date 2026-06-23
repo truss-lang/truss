@@ -1,4 +1,15 @@
-use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    path::Path,
+    rc::Rc,
+    time::SystemTime,
+};
+
+struct CachedBuildFile {
+    mtime: SystemTime,
+    statements: Vec<Rc<RefCell<Statement>>>,
+}
 
 use crate::{
     ast::{node::Program, statement::Statement},
@@ -22,6 +33,7 @@ pub struct BuildOrchestrator {
     pub manifest: Manifest,
     engine: Rc<RefCell<TrussDiagnosticEngine>>,
     pub output_path: Option<String>,
+    file_cache: HashMap<String, CachedBuildFile>,
 }
 
 impl BuildOrchestrator {
@@ -42,6 +54,7 @@ impl BuildOrchestrator {
             manifest,
             engine,
             output_path: None,
+            file_cache: HashMap::new(),
         })
     }
 
@@ -81,12 +94,21 @@ impl BuildOrchestrator {
             }
 
             if !std_files.is_empty() {
-                // Parse std files
                 let mut file_programs: Vec<Vec<Rc<RefCell<Statement>>>> = Vec::new();
                 for path in &std_files {
+                    let path_str = path.to_string_lossy().to_string();
+                    if let Ok(meta) = std::fs::metadata(path) {
+                        if let Ok(mtime) = meta.modified() {
+                            if let Some(cached) = self.file_cache.get(&path_str) {
+                                if cached.mtime == mtime {
+                                    file_programs.push(cached.statements.clone());
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                     if let Ok(content) = std::fs::read_to_string(path) {
-                        let file_path = path.to_string_lossy().to_string();
-                        let file_rc = Rc::new(file_path);
+                        let file_rc = Rc::new(path_str.clone());
                         let file_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
                         let char_stream = CharStream::new(content, file_rc.clone());
                         let mut lexer = Lexer::new(char_stream, file_engine.clone());
@@ -100,7 +122,16 @@ impl BuildOrchestrator {
                             continue;
                         }
                         self.engine.borrow_mut().extend(file_engine.take());
-                        file_programs.push(program.statements);
+                        let stmts = program.statements;
+                        if let Ok(meta) = std::fs::metadata(path) {
+                            if let Ok(mtime) = meta.modified() {
+                                self.file_cache.insert(path_str, CachedBuildFile {
+                                    mtime,
+                                    statements: stmts.clone(),
+                                });
+                            }
+                        }
+                        file_programs.push(stmts);
                     }
                 }
 
@@ -144,11 +175,24 @@ impl BuildOrchestrator {
 
             let files = DependencyResolver::discover_source_files(&pkg_name, project_path);
             for file in &files {
+                let path_str = file.to_string_lossy().to_string();
+                if let Ok(meta) = std::fs::metadata(file) {
+                    if let Ok(mtime) = meta.modified() {
+                        if let Some(cached) = self.file_cache.get(&path_str) {
+                            if cached.mtime == mtime {
+                                for stmt in &cached.statements {
+                                    file_stmts.push(stmt.clone());
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                }
                 let content = match std::fs::read_to_string(file) {
                     Ok(c) => c,
                     Err(_) => continue,
                 };
-                let file_rc = Rc::new(file.to_string_lossy().to_string());
+                let file_rc = Rc::new(path_str.clone());
                 let char_stream = CharStream::new(content, file_rc.clone());
                 let mut lexer = Lexer::new(char_stream, self.engine.clone());
                 let tokens = lexer.parse();
@@ -160,7 +204,16 @@ impl BuildOrchestrator {
                 if self.engine.borrow().has_errors() {
                     return;
                 }
-                for stmt in program.statements {
+                let stmts = program.statements;
+                if let Ok(meta) = std::fs::metadata(file) {
+                    if let Ok(mtime) = meta.modified() {
+                        self.file_cache.insert(path_str, CachedBuildFile {
+                            mtime,
+                            statements: stmts.clone(),
+                        });
+                    }
+                }
+                for stmt in stmts {
                     file_stmts.push(stmt);
                 }
             }
@@ -234,22 +287,42 @@ impl BuildOrchestrator {
             let mut file_modules: Vec<(String, inkwell::module::Module<'_>)> = Vec::new();
 
             for file in &files {
-                let content = match std::fs::read_to_string(file) {
-                    Ok(c) => c,
-                    Err(_) => continue,
+                let path_str = file.to_string_lossy().to_string();
+                let program = if let Some(cached) = self.file_cache.get(&path_str) {
+                    Program {
+                        file: Rc::new(path_str),
+                        statements: cached.statements.clone(),
+                    }
+                } else {
+                    let content = match std::fs::read_to_string(file) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
+                    let file_rc = Rc::new(file.to_string_lossy().to_string());
+                    let char_stream = CharStream::new(content, file_rc.clone());
+                    let mut lexer = Lexer::new(char_stream, self.engine.clone());
+                    let tokens = lexer.parse();
+                    if self.engine.borrow().has_errors() {
+                        return;
+                    }
+                    let mut parser = Parser::new(file_rc, tokens, self.engine.clone());
+                    let parsed = parser.parse();
+                    if self.engine.borrow().has_errors() {
+                        return;
+                    }
+                    if let Ok(meta) = std::fs::metadata(file) {
+                        if let Ok(mtime) = meta.modified() {
+                            self.file_cache.insert(
+                                file.to_string_lossy().to_string(),
+                                CachedBuildFile {
+                                    mtime,
+                                    statements: parsed.statements.clone(),
+                                },
+                            );
+                        }
+                    }
+                    parsed
                 };
-                let file_rc = Rc::new(file.to_string_lossy().to_string());
-                let char_stream = CharStream::new(content, file_rc.clone());
-                let mut lexer = Lexer::new(char_stream, self.engine.clone());
-                let tokens = lexer.parse();
-                if self.engine.borrow().has_errors() {
-                    return;
-                }
-                let mut parser = Parser::new(file_rc, tokens, self.engine.clone());
-                let program = parser.parse();
-                if self.engine.borrow().has_errors() {
-                    return;
-                }
 
                 let file_ir_gen = IRGenerator::new(&context, ir_engine.clone())
                     .with_namespace(&pkg_name, &pkg_name);
