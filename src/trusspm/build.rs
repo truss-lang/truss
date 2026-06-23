@@ -173,7 +173,28 @@ impl BuildOrchestrator {
 
             let mut file_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
 
-            let files = DependencyResolver::discover_source_files(&pkg_name, project_path);
+            let files = if is_main {
+                DependencyResolver::discover_source_files(&pkg_name, project_path)
+            } else if pkg_name != "Truss" {
+                let mut dep_files = Vec::new();
+                if let Some(dep) = self.manifest.dependencies.iter().find(|d| d.name == pkg_name) {
+                    let dep_src_dir = DependencyResolver::dependency_source_dir(dep, project_path);
+                    if dep_src_dir.exists() {
+                        let mut entries: Vec<_> = match std::fs::read_dir(&dep_src_dir) {
+                            Ok(entries) => entries
+                                .filter_map(|e| e.ok())
+                                .filter(|e| e.path().extension().is_some_and(|ext| ext == "truss"))
+                                .collect(),
+                            Err(_) => Vec::new(),
+                        };
+                        entries.sort_by_key(|e| e.file_name());
+                        dep_files = entries.into_iter().map(|e| e.path()).collect();
+                    }
+                }
+                dep_files
+            } else {
+                Vec::new()
+            };
             for file in &files {
                 let path_str = file.to_string_lossy().to_string();
                 if let Ok(meta) = std::fs::metadata(file) {
