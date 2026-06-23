@@ -114,6 +114,7 @@ pub fn start_server() {
         exit: false,
         stdlib_path,
         stdlib_scope: None,
+        stdlib_cache: None,
         project_analyses: HashMap::new(),
     };
     server.load_stdlib();
@@ -138,11 +139,17 @@ struct ProjectAnalysis {
     module: Rc<RefCell<Module>>,
 }
 
+struct StdlibCache {
+    statements: Vec<Rc<RefCell<Statement>>>,
+    sources: Vec<(String, String)>,
+}
+
 struct LanguageServer {
     documents: HashMap<String, String>,
     exit: bool,
     stdlib_path: Option<String>,
     stdlib_scope: Option<Rc<RefCell<Scope>>>,
+    stdlib_cache: Option<StdlibCache>,
     project_analyses: HashMap<String, ProjectAnalysis>,
 }
 
@@ -365,14 +372,38 @@ impl LanguageServer {
         let main_pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
         packages.insert("main".to_string(), main_pkg.clone());
 
-        let mut stdlib_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
-        if let Some(ref stdlib_path) = self.stdlib_path {
+        let stdlib_stmts: Vec<Rc<RefCell<Statement>>>;
+        if let Some(ref cache) = self.stdlib_cache {
+            let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
+            packages.insert("Truss".to_string(), truss_pkg.clone());
+            stdlib_stmts = cache.statements.clone();
+
+            let std_prog = Program {
+                file: Rc::new("stdlib".to_string()),
+                statements: stdlib_stmts.clone(),
+            };
+            let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+            let mut std_resolver =
+                SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
+            let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
+
+            {
+                let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
+                let mut std_type_resolver = TypeResolver::new(
+                    packages.clone(),
+                    "Truss".to_string(),
+                    stdlib_ty_engine.clone(),
+                );
+                std_type_resolver.resolve(&std_prog, std_module);
+            }
+        } else if let Some(ref stdlib_path) = self.stdlib_path {
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
             packages.insert("Truss".to_string(), truss_pkg.clone());
 
             let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
             let (file_programs, _) = crate::trusspm::parse_std_lib(stdlib_path, std_engine.clone());
 
+            let mut stdlib_stmts_mut = Vec::new();
             {
                 let mut ordered: Vec<_> = file_programs.into_iter().map(|stmts| {
                     let name = stmts.first().and_then(|s| {
@@ -389,10 +420,11 @@ impl LanguageServer {
                 ordered.sort_by_key(|(p, _)| *p);
                 for (_, stmts) in ordered {
                     for stmt in stmts {
-                        stdlib_stmts.push(stmt.clone());
+                        stdlib_stmts_mut.push(stmt.clone());
                     }
                 }
             }
+            stdlib_stmts = stdlib_stmts_mut;
 
             let std_prog = Program {
                 file: Rc::new("stdlib".to_string()),
@@ -411,6 +443,8 @@ impl LanguageServer {
                 );
                 std_type_resolver.resolve(&std_prog, std_module);
             }
+        } else {
+            stdlib_stmts = Vec::new();
         }
 
         let mut all_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
@@ -585,7 +619,7 @@ impl LanguageServer {
     fn load_stdlib(&mut self) {
         if let Some(ref stdlib_path) = self.stdlib_path.clone() {
             let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-            let (file_programs, _) = crate::trusspm::parse_std_lib(&stdlib_path, engine.clone());
+            let (file_programs, sources) = crate::trusspm::parse_std_lib(&stdlib_path, engine.clone());
             let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
             packages.insert("Truss".to_string(), truss_pkg.clone());
@@ -611,6 +645,31 @@ impl LanguageServer {
             type_resolver.resolve(&std_prog, module.clone());
 
             self.stdlib_scope = module.borrow().scope.clone();
+
+            let mut ordered_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+            let mut ordered: Vec<_> = file_programs.iter().map(|stmts| {
+                let name = stmts.first().and_then(|s| {
+                    let file = &*s.borrow().token().file;
+                    std::path::Path::new(file).file_stem().and_then(|n| n.to_str()).map(|n| n.to_string())
+                }).unwrap_or_default();
+                let priority = match name.as_str() {
+                    "Truss" => 0,
+                    "Iterator" => 1,
+                    _ => 2,
+                };
+                (priority, stmts)
+            }).collect();
+            ordered.sort_by_key(|(p, _)| *p);
+            for (_, stmts) in ordered {
+                for stmt in stmts {
+                    ordered_stmts.push(stmt.clone());
+                }
+            }
+
+            self.stdlib_cache = Some(StdlibCache {
+                statements: ordered_stmts,
+                sources,
+            });
         }
     }
 
