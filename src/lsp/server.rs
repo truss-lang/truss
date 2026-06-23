@@ -125,6 +125,7 @@ pub fn start_server() {
         stdlib_cache: None,
         project_analyses: HashMap::new(),
         file_cache: HashMap::new(),
+        dep_cache: HashMap::new(),
     };
     server.load_stdlib();
     let stdin = io::stdin();
@@ -156,6 +157,13 @@ struct CachedFile {
 struct StdlibCache {
     statements: Vec<Rc<RefCell<Statement>>>,
     sources: Vec<(String, String)>,
+    module: Rc<RefCell<Module>>,
+}
+
+struct DepCache {
+    #[allow(dead_code)]
+    statements: Vec<Rc<RefCell<Statement>>>,
+    module: Rc<RefCell<Module>>,
 }
 
 struct LanguageServer {
@@ -166,6 +174,7 @@ struct LanguageServer {
     stdlib_cache: Option<StdlibCache>,
     project_analyses: HashMap<String, ProjectAnalysis>,
     file_cache: HashMap<String, CachedFile>,
+    dep_cache: HashMap<String, DepCache>,
 }
 
 impl LanguageServer {
@@ -393,24 +402,7 @@ impl LanguageServer {
             packages.insert("Truss".to_string(), truss_pkg.clone());
             stdlib_stmts = cache.statements.clone();
 
-            let std_prog = Program {
-                file: Rc::new("stdlib".to_string()),
-                statements: stdlib_stmts.clone(),
-            };
-            let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-            let mut std_resolver =
-                SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
-            let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
-
-            {
-                let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-                let mut std_type_resolver = TypeResolver::new(
-                    packages.clone(),
-                    "Truss".to_string(),
-                    stdlib_ty_engine.clone(),
-                );
-                std_type_resolver.resolve(&std_prog, std_module);
-            }
+            truss_pkg.borrow_mut().modules.insert("Truss".to_string(), cache.module.clone());
         } else if let Some(ref stdlib_path) = self.stdlib_path {
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
             packages.insert("Truss".to_string(), truss_pkg.clone());
@@ -533,6 +525,13 @@ impl LanguageServer {
                     let dep_src_dir = DependencyResolver::dependency_source_dir(dep, Path::new(&proj_dir));
                     if !dep_src_dir.exists() { continue; }
 
+                    if let Some(cached) = self.dep_cache.get(&dep.name) {
+                        if let Some(pkg) = packages.get(&dep.name) {
+                            pkg.borrow_mut().modules.insert(dep.name.clone(), cached.module.clone());
+                        }
+                        continue;
+                    }
+
                     let mut dep_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
                     if let Ok(entries) = std::fs::read_dir(&dep_src_dir) {
                         let mut truss_files: Vec<_> = entries
@@ -572,6 +571,7 @@ impl LanguageServer {
                     }
 
                     if !dep_stmts.is_empty() {
+                        let dep_stmts_cache = dep_stmts.clone();
                         let dep_prog = Program {
                             file: Rc::new(format!("dep:{}", dep.name)),
                             statements: dep_stmts,
@@ -585,6 +585,10 @@ impl LanguageServer {
                         if let Some(pkg) = packages.get(&dep.name) {
                             if let Some(mod_ref) = pkg.borrow().modules.get(&dep.name) {
                                 dep_type_resolver.resolve(&dep_prog, mod_ref.clone());
+                                self.dep_cache.insert(dep.name.clone(), DepCache {
+                                    statements: dep_stmts_cache,
+                                    module: mod_ref.clone(),
+                                });
                             }
                         }
                     }
@@ -706,6 +710,7 @@ impl LanguageServer {
             self.stdlib_cache = Some(StdlibCache {
                 statements: ordered_stmts,
                 sources,
+                module: module.clone(),
             });
         }
     }
