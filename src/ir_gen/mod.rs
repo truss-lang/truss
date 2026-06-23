@@ -6766,15 +6766,56 @@ impl<'ctx> IRGenerator<'ctx> {
                         anyhow::bail!("Open range not implemented");
                     }
                     UnaryOperator::Deref => {
-                        if let BasicValueEnum::PointerValue(ptr) = expr_val {
-                            let expr_borrowed = expr.borrow();
-                            let ty_opt = expr_borrowed.get_ty_ref()?;
-                            let ty = ty_opt.as_ref().ok_or_else(|| anyhow::anyhow!("No type"))?;
-                            let llvm_ty = self.resolve_type(ty.clone())?;
-                            drop(expr_borrowed);
-                            Ok(Some(self.builder.build_load(llvm_ty, ptr, "")?))
-                        } else {
-                            anyhow::bail!("Invalid type for dereference");
+                        let expr_borrowed = expr.borrow();
+                        let ty_opt = expr_borrowed.get_ty_ref()?;
+                        let ty = ty_opt.as_ref().ok_or_else(|| anyhow::anyhow!("No type"))?;
+                        let type_kind = ty.borrow().clone();
+                        let cloned_ty = ty.clone();
+                        drop(expr_borrowed);
+                        match &type_kind {
+                            Type::Pointer(_) | Type::NonNullPointer(_) => {
+                                if let BasicValueEnum::PointerValue(ptr) = expr_val {
+                                    let llvm_ty = self.resolve_type(cloned_ty)?;
+                                    Ok(Some(self.builder.build_load(llvm_ty, ptr, "")?))
+                                } else {
+                                    anyhow::bail!("Invalid type for dereference");
+                                }
+                            }
+                            Type::Struct(name, ..)
+                            | Type::Class(name, ..)
+                            | Type::Enum(name, ..) => {
+                                let deref_fn_name =
+                                    self.mangle_fn_name(&format!("{}.deref", name), &[]);
+                                if let Some(deref_fn) =
+                                    self.module.get_function(&deref_fn_name)
+                                {
+                                    let struct_ptr =
+                                        if let BasicValueEnum::PointerValue(ptr) = expr_val {
+                                            ptr
+                                        } else {
+                                            let ptr = self
+                                                .builder
+                                                .build_alloca(expr_val.get_type(), "")?;
+                                            self.builder.build_store(ptr, expr_val)?;
+                                            ptr
+                                        };
+                                    let result = self.builder.build_call(
+                                        deref_fn,
+                                        &[struct_ptr.into()],
+                                        "",
+                                    )?;
+                                    let result_val = match result.try_as_basic_value() {
+                                        inkwell::values::ValueKind::Basic(val) => val,
+                                        _ => anyhow::bail!(
+                                            "deref() call did not return a value"
+                                        ),
+                                    };
+                                    Ok(Some(result_val))
+                                } else {
+                                    anyhow::bail!("Invalid type for dereference");
+                                }
+                            }
+                            _ => anyhow::bail!("Invalid type for dereference"),
                         }
                     }
                     UnaryOperator::AddressOf => {
