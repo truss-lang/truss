@@ -2756,6 +2756,27 @@ impl TypeResolver {
                     selected_index,
                 ) {
                     result
+                } else if *operator == UnaryOperator::Deref {
+                    if let Some(result) = self.try_resolve_deref_protocol(
+                        expression.clone(),
+                        operand_ty.clone(),
+                        overloads,
+                        selected_index,
+                    ) {
+                        result
+                    } else {
+                        let token = expression.borrow().token();
+                        self.emit_error(
+                            TrussDiagnosticCode::InvalidOperand,
+                            format!(
+                                "Type '{}' does not implement operator '{}'",
+                                operand_ty.borrow().clone(),
+                                operator.operator_name()
+                            ),
+                            &token,
+                        );
+                        return None;
+                    }
                 } else {
                     let token = expression.borrow().token();
                     self.emit_error(
@@ -7432,6 +7453,31 @@ impl TypeResolver {
             }
         }
         None
+    }
+
+    fn try_resolve_deref_protocol(
+        &mut self,
+        _operand: Rc<RefCell<Expression>>,
+        operand_ty: Rc<RefCell<Type>>,
+        _deref_overloads: &mut Vec<Rc<RefCell<Symbol>>>,
+        _deref_selected: &mut Option<usize>,
+    ) -> Option<Rc<RefCell<Type>>> {
+        let type_name = match &*operand_ty.borrow() {
+            Type::Struct(n, ..) | Type::Class(n, ..) | Type::Enum(n, ..) => n.clone(),
+            _ => return None,
+        };
+        let scope = self.current_scope.as_ref()?;
+        let scope_ref = scope.borrow();
+        let sym = scope_ref.get_symbol(&type_name)?;
+        drop(scope_ref);
+
+        let method_ty = self.lookup_protocol_method(sym.clone(), "deref", &[])?;
+
+        // Extract return type from the function type: Function(params, ret, vararg, throws)
+        match &*method_ty.borrow() {
+            Type::Function(_, ret_ty, _, _) => Some(ret_ty.clone()),
+            _ => None,
+        }
     }
 
     fn resolve_operator_overload(
