@@ -2365,6 +2365,49 @@ impl<'ctx> IRGenerator<'ctx> {
             .insert(src_name.to_string(), mangled.to_string());
     }
 
+    /// Check the program scope for a function declaration matching `name`.
+    /// If found and not yet declared in the LLVM module, create a declaration
+    /// and return the mangled name. This allows calling functions from
+    /// dependency packages that were resolved in the scope but not yet
+    /// added to this IR module.
+    fn try_declare_function_from_scope(&self, name: &str) -> Option<String> {
+        let fn_name;
+        let decl_stmt;
+        {
+            let scope_borrow = self.program_scope.borrow();
+            let scope = scope_borrow.as_ref()?;
+            let sym = scope.borrow().get_symbol(name)?;
+            let sym_borrow = sym.borrow();
+            match &*sym_borrow {
+                Symbol::Function { decl, .. } => {
+                    decl_stmt = decl.clone();
+                    fn_name =
+                        if let Statement::FunctionDecl { name, .. } = &*decl_stmt.borrow() {
+                            name.value.clone()
+                        } else {
+                            return None;
+                        };
+                }
+                _ => return None,
+            }
+        }
+        if let Some(mangled) = self.mangled_fn_names.borrow().get(name) {
+            return Some(mangled.clone());
+        }
+        if let Some(mangled) = self.mangled_fn_names.borrow().get(&fn_name) {
+            return Some(mangled.clone());
+        }
+        self.create_function_declarations(decl_stmt);
+        // Check both `name` (the lookup key, e.g. "add") and `fn_name` (the
+        // actual function name from the declaration) since they may differ in
+        // edge cases.
+        let names = self.mangled_fn_names.borrow();
+        names
+            .get(name)
+            .or_else(|| names.get(&fn_name))
+            .cloned()
+    }
+
     fn subscript_param_key(&self, params: &[Rc<RefCell<Parameter>>]) -> String {
         params
             .iter()
@@ -9822,6 +9865,8 @@ impl<'ctx> IRGenerator<'ctx> {
                                 .get(&name)
                                 .cloned()
                                 .unwrap_or(name);
+                            (mangled, false)
+                        } else if let Some(mangled) = self.try_declare_function_from_scope(&name) {
                             (mangled, false)
                         } else {
                             let init_name = format!("{}.init", name);

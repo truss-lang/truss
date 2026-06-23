@@ -168,16 +168,17 @@ impl BuildOrchestrator {
             }
         }
 
-        for (pkg_name, _pkg) in self.packages.clone() {
-            let is_main = pkg_name == self.manifest.name;
+        let pkgs_snapshot: Vec<String> = self.packages.keys().cloned().collect();
 
+
+        for pkg_name in &pkgs_snapshot {
+            if *pkg_name == self.manifest.name || *pkg_name == "Truss" {
+                continue;
+            }
             let mut file_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
-
-            let files = if is_main {
-                DependencyResolver::discover_source_files(&pkg_name, project_path)
-            } else if pkg_name != "Truss" {
+            let files = {
                 let mut dep_files = Vec::new();
-                if let Some(dep) = self.manifest.dependencies.iter().find(|d| d.name == pkg_name) {
+                if let Some(dep) = self.manifest.dependencies.iter().find(|d| d.name == *pkg_name) {
                     let dep_src_dir = DependencyResolver::dependency_source_dir(dep, project_path);
                     if dep_src_dir.exists() {
                         let mut entries: Vec<_> = match std::fs::read_dir(&dep_src_dir) {
@@ -192,8 +193,6 @@ impl BuildOrchestrator {
                     }
                 }
                 dep_files
-            } else {
-                Vec::new()
             };
             for file in &files {
                 let path_str = file.to_string_lossy().to_string();
@@ -218,11 +217,15 @@ impl BuildOrchestrator {
                 let mut lexer = Lexer::new(char_stream, self.engine.clone());
                 let tokens = lexer.parse();
                 if self.engine.borrow().has_errors() {
+                    let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                    if !formatted.is_empty() { eprintln!("{}", formatted); }
                     return;
                 }
                 let mut parser = Parser::new(file_rc, tokens, self.engine.clone());
                 let program = parser.parse();
                 if self.engine.borrow().has_errors() {
+                    let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                    if !formatted.is_empty() { eprintln!("{}", formatted); }
                     return;
                 }
                 let stmts = program.statements;
@@ -238,11 +241,9 @@ impl BuildOrchestrator {
                     file_stmts.push(stmt);
                 }
             }
-
             if file_stmts.is_empty() {
                 continue;
             }
-
             let mut resolver =
                 SymbolResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
             let dummy_program = Program {
@@ -250,29 +251,101 @@ impl BuildOrchestrator {
                 statements: Vec::new(),
             };
             let module = resolver.resolve(&dummy_program, pkg_name.clone());
-
             if let Some(scope) = module.borrow().scope.clone() {
                 resolver.enter_scope(Some(scope));
             }
-
             for stmt in &file_stmts {
                 resolver.register_symbols(stmt.clone());
             }
-
+            let dep_prog = Program {
+                file: Rc::new(pkg_name.clone()),
+                statements: file_stmts.clone(),
+            };
             let mut type_resolver =
                 TypeResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
-            let empty_prog = Program {
-                file: Rc::new(String::new()),
-                statements: vec![],
-            };
-            type_resolver.resolve(&empty_prog, module);
-
+            type_resolver.resolve(&dep_prog, module);
             if self.engine.borrow().has_errors() {
+                let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                if !formatted.is_empty() { eprintln!("{}", formatted); }
                 return;
             }
+        }
 
-            if !is_main {
-                continue;
+        let main_pkg_name = self.manifest.name.clone();
+        if let Some(pkg) = self.packages.get(&main_pkg_name) {
+            let mut file_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
+            let files = DependencyResolver::discover_source_files(&main_pkg_name, project_path);
+            for file in &files {
+                let path_str = file.to_string_lossy().to_string();
+                if let Ok(meta) = std::fs::metadata(file) {
+                    if let Ok(mtime) = meta.modified() {
+                        if let Some(cached) = self.file_cache.get(&path_str) {
+                            if cached.mtime == mtime {
+                                for stmt in &cached.statements {
+                                    file_stmts.push(stmt.clone());
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                }
+                let content = match std::fs::read_to_string(file) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let file_rc = Rc::new(path_str.clone());
+                let char_stream = CharStream::new(content, file_rc.clone());
+                let mut lexer = Lexer::new(char_stream, self.engine.clone());
+                let tokens = lexer.parse();
+                if self.engine.borrow().has_errors() {
+                    let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                    if !formatted.is_empty() { eprintln!("{}", formatted); }
+                    return;
+                }
+                let mut parser = Parser::new(file_rc, tokens, self.engine.clone());
+                let program = parser.parse();
+                if self.engine.borrow().has_errors() {
+                    let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                    if !formatted.is_empty() { eprintln!("{}", formatted); }
+                    return;
+                }
+                let stmts = program.statements;
+                if let Ok(meta) = std::fs::metadata(file) {
+                    if let Ok(mtime) = meta.modified() {
+                        self.file_cache.insert(path_str, CachedBuildFile {
+                            mtime,
+                            statements: stmts.clone(),
+                        });
+                    }
+                }
+                for stmt in stmts {
+                    file_stmts.push(stmt);
+                }
+            }
+            if file_stmts.is_empty() {
+                return;
+            }
+            let pkg_name = main_pkg_name;
+            let mut resolver =
+                SymbolResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
+            let dummy_program = Program {
+                file: Rc::new(String::new()),
+                statements: Vec::new(),
+            };
+            let module = resolver.resolve(&dummy_program, pkg_name.clone());
+            if let Some(scope) = module.borrow().scope.clone() {
+                resolver.enter_scope(Some(scope));
+            }
+            for stmt in &file_stmts {
+                resolver.register_symbols(stmt.clone());
+            }
+            let mut type_resolver =
+                TypeResolver::new(self.packages.clone(), pkg_name.clone(), self.engine.clone());
+            type_resolver.resolve(&dummy_program, module);
+            if self.engine.borrow().has_errors() {
+                let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                if !formatted.is_empty() { eprintln!("{}", formatted); }
+                return;
             }
 
             let mut resolver2 =
@@ -287,6 +360,10 @@ impl BuildOrchestrator {
             type_resolver2.resolve(&prog, main_module.clone());
 
             if self.engine.borrow().has_errors() {
+                let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                if !formatted.is_empty() {
+                    eprintln!("{}", formatted);
+                }
                 return;
             }
 
@@ -310,7 +387,7 @@ impl BuildOrchestrator {
 
             for file in &files {
                 let path_str = file.to_string_lossy().to_string();
-                let program = if let Some(cached) = self.file_cache.get(&path_str) {
+                let mut program = if let Some(cached) = self.file_cache.get(&path_str) {
                     Program {
                         file: Rc::new(path_str),
                         statements: cached.statements.clone(),
@@ -345,6 +422,38 @@ impl BuildOrchestrator {
                     }
                     parsed
                 };
+
+                // First file: also include dependency file statements so their function
+                // bodies are compiled into the same LLVM module.
+                if file_modules.is_empty() {
+                    for dep in &self.manifest.dependencies {
+                        let dep_src_dir =
+                            DependencyResolver::dependency_source_dir(dep, project_path);
+                        if !dep_src_dir.exists() {
+                            continue;
+                        }
+                        let mut dep_entries: Vec<_> = match std::fs::read_dir(&dep_src_dir) {
+                            Ok(entries) => entries
+                                .filter_map(|e| e.ok())
+                                .filter(|e| {
+                                    e.path()
+                                        .extension()
+                                        .is_some_and(|ext| ext == "truss")
+                                })
+                                .collect(),
+                            Err(_) => Vec::new(),
+                        };
+                        dep_entries.sort_by_key(|e| e.file_name());
+                        for dep_file in dep_entries.into_iter().map(|e| e.path()) {
+                            let dep_path = dep_file.to_string_lossy().to_string();
+                            if let Some(cached) = self.file_cache.get(&dep_path) {
+                                program
+                                    .statements
+                                    .extend(cached.statements.iter().cloned());
+                            }
+                        }
+                    }
+                }
 
                 let file_ir_gen = IRGenerator::new(&context, ir_engine.clone())
                     .with_namespace(&pkg_name, &pkg_name);
