@@ -6478,22 +6478,35 @@ impl<'ctx> IRGenerator<'ctx> {
                                 .get_field_type_at_index(some_field_idx)
                                 .ok_or_else(|| anyhow::anyhow!("Some payload field not found"))?
                                 .into_struct_type();
-                            let payload_val =
-                                self.builder
-                                    .build_load(some_payload_ty, some_payload_ptr, "")?;
+                            let payload_val = if some_payload_ty.get_field_type_at_index(0).is_some()
+                                && some_payload_ty.get_field_type_at_index(1).is_none()
+                            {
+                                let inner_ptr = self.builder.build_struct_gep(
+                                    some_payload_ty,
+                                    some_payload_ptr,
+                                    0,
+                                    "",
+                                )?;
+                                let right_ty = right_val.get_type();
+                                use inkwell::types::BasicType;
+                                let right_ptr_ty = right_ty.ptr_type(inkwell::AddressSpace::default());
+                                let cast_ptr = self.builder.build_pointer_cast(
+                                    inner_ptr,
+                                    right_ptr_ty,
+                                    "",
+                                )?;
+                                self.builder.build_load(right_ty, cast_ptr, "")?
+                            } else {
+                                self.builder.build_load(some_payload_ty, some_payload_ptr, "")?
+                            };
                             self.builder.build_unconditional_branch(cont_bb)?;
                             self.builder.position_at_end(left_none_bb);
-                            let none_val = right_val;
                             self.builder.build_unconditional_branch(cont_bb)?;
                             self.builder.position_at_end(cont_bb);
-                            let result_ty =
-                                payloads_type.get_field_type_at_index(some_field_idx).ok_or_else(
-                                    || anyhow::anyhow!("Some payload field type not found"),
-                                )?;
-                            let phi = self.builder.build_phi(result_ty, "")?;
+                            let phi = self.builder.build_phi(right_val.get_type(), "")?;
                             phi.add_incoming(&[
                                 (&payload_val, left_some_bb),
-                                (&none_val, left_none_bb),
+                                (&right_val, left_none_bb),
                             ]);
                             let result = phi.as_basic_value();
                             Ok(Some(result))
