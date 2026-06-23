@@ -3001,7 +3001,11 @@ impl TypeResolver {
                                     }
                                     let param_ty = &param_tys[i];
                                     let prev_closure_expected = self.closure_expected_type.clone();
-                                    self.closure_expected_type = Some(param_ty.clone());
+                                    if !Self::type_contains_generic(param_ty) {
+                                        // Only set closure_expected_type when the type doesn't contain
+                                        // unsubstituted GenericParam — first pass doesn't substitute yet
+                                        self.closure_expected_type = Some(param_ty.clone());
+                                    }
                                     let arg_ty = self.infer_type(param.expression.clone());
                                     self.closure_expected_type = prev_closure_expected;
                                     let arg_ty = arg_ty?;
@@ -6607,6 +6611,25 @@ impl TypeResolver {
             return None;
         }
         Some(mapping)
+    }
+
+    fn type_contains_generic(ty: &Rc<RefCell<Type>>) -> bool {
+        match &*ty.borrow() {
+            Type::GenericParam(_) => true,
+            Type::Function(params, ret, _, _) | Type::Closure(params, ret, _) => {
+                params.iter().any(|p| Self::type_contains_generic(p)) || Self::type_contains_generic(ret)
+            }
+            Type::Struct(_, _, args) | Type::Enum(_, _, args) | Type::Class(_, _, args) => {
+                args.iter().any(|a| Self::type_contains_generic(a))
+            }
+            Type::Protocol(_, _, args) => args.iter().any(|a| Self::type_contains_generic(a)),
+            Type::Compound(types) => types.iter().any(|t| Self::type_contains_generic(t)),
+            Type::Tuple(elems) => elems.iter().any(|(_, t)| Self::type_contains_generic(t)),
+            Type::Pointer(t) | Type::NonNullPointer(t) | Type::Inline(t, _) => {
+                Self::type_contains_generic(t)
+            }
+            _ => false,
+        }
     }
 
     fn collect_generic_mappings(
