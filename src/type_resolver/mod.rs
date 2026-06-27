@@ -4728,7 +4728,11 @@ impl TypeResolver {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let protocol_name = protocol_name.clone();
                         if let Some(symbol) = scope.get_symbol(&protocol_name)
-                            && let Symbol::Protocol { methods, .. } = &*symbol.borrow()
+                            && let Symbol::Protocol {
+                                methods,
+                                properties,
+                                ..
+                            } = &*symbol.borrow()
                         {
                             for method in methods {
                                 if method.borrow().name().as_ref().ok() == Some(&member.value)
@@ -4746,6 +4750,17 @@ impl TypeResolver {
                                         *ty = Some(t.clone());
                                         return Some(t.clone());
                                     }
+                                }
+                            }
+                            for prop in properties {
+                                if prop.borrow().name().as_ref().ok() == Some(&member.value)
+                                    && let Some(decl) = prop.borrow().get_decl().ok().flatten()
+                                    && let Statement::VariableDecl { ty: prop_ty, .. } =
+                                        &*decl.borrow()
+                                    && let Some(t) = prop_ty
+                                {
+                                    *ty = Some(t.clone());
+                                    return Some(t.clone());
                                 }
                             }
                             let token = &*member;
