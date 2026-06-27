@@ -917,6 +917,7 @@ impl TypeResolver {
                                 body,
                                 scope: fn_scope,
                                 ty,
+                                generic_parameters,
                                 ..
                             } = &mut *decl.borrow_mut()
                             {
@@ -976,6 +977,34 @@ impl TypeResolver {
                                     .unwrap()
                                     .borrow_mut()
                                     .set_type("Self".to_string(), self_ty);
+                                for gp in generic_parameters {
+                                    let gp_type = match &gp.kind {
+                                        GenericParameterKind::Type { constraints } => {
+                                            if !constraints.is_empty() {
+                                                self.generic_param_constraint_exprs
+                                                    .insert(gp.name.value.clone(), constraints.clone());
+                                            }
+                                            Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())))
+                                        }
+                                        GenericParameterKind::Const { const_type } => {
+                                            let resolved = self
+                                                .infer_type(const_type.clone())
+                                                .unwrap_or_else(|| Rc::new(RefCell::new(Type::Never)));
+                                            Rc::new(RefCell::new(Type::ConstGeneric(
+                                                gp.name.value.clone(),
+                                                resolved,
+                                            )))
+                                        }
+                                    };
+                                    self.current_scope
+                                        .as_ref()
+                                        .unwrap()
+                                        .borrow_mut()
+                                        .set_type(gp.name.value.clone(), gp_type);
+                                    if let Some(default_value) = &gp.default_value {
+                                        self.infer_type(default_value.clone());
+                                    }
+                                }
                                 match &*body.borrow() {
                                     FunctionBody::Statements(stmts) => {
                                         for s in stmts {
@@ -1337,25 +1366,8 @@ impl TypeResolver {
         }
     }
 
-    /// Resolve generic parameter constraint expressions into types.
-    /// This runs after process_decl (so all symbols exist) but before resolve_statement.
     fn resolve_generic_constraints(&mut self) {
-        // Clone all constraint expressions first to avoid borrow conflicts
-        let entries: Vec<(String, Vec<Rc<RefCell<Expression>>>)> =
-            self.generic_param_constraint_exprs.drain().collect();
-        let mut resolved: HashMap<String, Vec<Rc<RefCell<Type>>>> = HashMap::new();
-        for (name, exprs) in entries {
-            let mut types = Vec::new();
-            for expr in exprs {
-                if let Some(t) = self.infer_type(expr.clone()) {
-                    types.push(t);
-                }
-            }
-            if !types.is_empty() {
-                resolved.insert(name, types);
-            }
-        }
-        self.generic_param_constraints = resolved;
+        let _ = self.generic_param_constraint_exprs.drain();
     }
 
     fn resolve_statement(&mut self, statement: Rc<RefCell<Statement>>) {
@@ -2820,6 +2832,29 @@ impl TypeResolver {
                 });
 
                 let callee_type = callee_type?;
+
+                if parameters.is_empty()
+                    && let Expression::ArrayLiteral { elements, .. } = &*callee.borrow()
+                    && elements.len() == 1
+                {
+                    let elem_ty = self.infer_type(elements[0].clone());
+                    if let Some(ref elem_ty) = elem_ty
+                        && matches!(
+                            &*elem_ty.borrow(),
+                            Type::GenericParam(_)
+                                | Type::Struct(..)
+                                | Type::Class(..)
+                                | Type::Enum(..)
+                                | Type::AssociatedType(..)
+                        )
+                    {
+                        if let Some(array_ty) =
+                            self.create_parameterized_type_from_truss("Array", vec![elem_ty.clone()])
+                        {
+                            return Some(array_ty);
+                        }
+                    }
+                }
 
                 if !overloads.is_empty() {
                     if let Some(best) = self.resolve_overloaded_call(
@@ -4906,7 +4941,7 @@ impl TypeResolver {
                     }
                     Type::GenericParam(_param_name) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
-                        let matching_protocols: Vec<String> = scope
+                        let mut matching_protocols: Vec<String> = scope
                             .name_table
                             .iter()
                             .filter_map(|(name, sym)| {
@@ -4923,6 +4958,18 @@ impl TypeResolver {
                                 }
                             })
                             .collect();
+                        if let Some(parent) = &scope.parent {
+                            let parent_ref = parent.borrow();
+                            for (name, sym) in &parent_ref.name_table {
+                                if let Symbol::Protocol { methods, .. } = &*sym.borrow() {
+                                    if methods.iter().any(|m| {
+                                        m.borrow().name().as_ref().ok() == Some(&member.value)
+                                    }) && !matching_protocols.contains(name) {
+                                        matching_protocols.push(name.clone());
+                                    }
+                                }
+                            }
+                        }
                         for protocol_name in &matching_protocols {
                             if let Some(symbol) = scope.get_symbol(protocol_name)
                                 && let Symbol::Protocol { methods, .. } = &*symbol.borrow()
@@ -4949,6 +4996,35 @@ impl TypeResolver {
                             }
                         }
                         drop(scope);
+                        if let Some(truss_pkg) = self.packages.get("Truss") {
+                            if let Some(truss_module) = truss_pkg.borrow().modules.get("Truss") {
+                                if let Some(truss_scope) = &truss_module.borrow().scope {
+                                    let truss_ref = truss_scope.borrow();
+                                    for (_, sym) in &truss_ref.name_table {
+                                        if let Symbol::Protocol { methods, .. } = &*sym.borrow() {
+                                            for method in methods {
+                                                if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                                    && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                                                {
+                                                    let method_ty = {
+                                                        let decl_ref = decl.borrow();
+                                                        if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                                            ty.clone()
+                                                        } else {
+                                                            continue;
+                                                        }
+                                                    };
+                                                    if let Some(t) = method_ty {
+                                                        *ty = Some(t.clone());
+                                                        return Some(t.clone());
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         let token = &*member;
                         self.emit_error(
                             TrussDiagnosticCode::FieldNotFound,

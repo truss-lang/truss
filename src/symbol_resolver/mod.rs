@@ -3513,6 +3513,11 @@ impl SymbolResolver {
         {
             Ok(symbol)
         } else {
+            if let Some(scope) = self.current_scope.as_ref()
+                && scope.borrow().get_type(&name).is_some()
+            {
+                return Err(());
+            }
             self.emit_error(
                 TrussDiagnosticCode::SymbolError,
                 format!("No avaliable scope for symbol '{}'", name),
