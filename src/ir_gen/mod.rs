@@ -7434,6 +7434,8 @@ impl<'ctx> IRGenerator<'ctx> {
                             let field_ty = self.get_struct_field_type(&class_name, &field_name)?;
                             let val = self.builder.build_load(field_ty, field_ptr, "")?;
                             (field_ptr, Some(val))
+                        } else if self.is_module_expression(object) {
+                            anyhow::bail!("Module member access not supported in this context");
                         } else {
                             self.emit_error(
                                 TrussDiagnosticCode::UnsupportedFeature,
@@ -9517,6 +9519,9 @@ impl<'ctx> IRGenerator<'ctx> {
                     );
                 }
 
+                if self.is_module_expression(object) {
+                    anyhow::bail!("Module member access not supported in this context");
+                }
                 self.emit_error(
                     TrussDiagnosticCode::UnsupportedFeature,
                     "Member access on non-struct type",
