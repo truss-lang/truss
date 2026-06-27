@@ -396,83 +396,19 @@ fn cmd_use(version: &str) {
 }
 
 fn cmd_update() {
-    let repo_url = "https://github.com/truss-lang/truss.git";
-    let temp_dir = std::env::temp_dir().join("truss-update");
-
-    let _ = std::fs::remove_dir_all(&temp_dir);
-
-    println!("Cloning truss repository from {}...", repo_url);
-    let clone_status = Command::new("git")
-        .args(["clone", "--depth", "1", repo_url, &temp_dir.to_string_lossy()])
-        .status();
-    match clone_status {
-        Ok(s) if s.success() => {
-            println!("Repository cloned successfully");
-        }
-        Ok(s) => {
-            eprintln!("Error: git clone failed with status: {}", s);
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: failed to run git: {}", e);
-            std::process::exit(1);
-        }
-    }
-
-    println!("Building truss toolchain (release mode)...");
-    let build_status = Command::new("cargo")
-        .args([
-            "build",
-            "--release",
-            "--bin",
-            "truss",
-            "--bin",
-            "trussc",
-            "--bin",
-            "truss-lsp",
-            "--bin",
-            "trussup",
-        ])
-        .current_dir(&temp_dir)
-        .status();
-    match build_status {
-        Ok(s) if s.success() => {}
-        Ok(s) => {
-            eprintln!("Error: cargo build failed with status: {}", s);
-            let _ = std::fs::remove_dir_all(&temp_dir);
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("Error: failed to run cargo: {}", e);
-            let _ = std::fs::remove_dir_all(&temp_dir);
-            std::process::exit(1);
-        }
-    }
-
-    let version = "latest";
-    let toolchains_dir = get_trussup_dir().join("toolchains").join(version);
-    std::fs::create_dir_all(&toolchains_dir).unwrap_or_else(|e| {
-        eprintln!("Error: failed to create toolchain directory: {}", e);
+    let current = get_current_version().unwrap_or_else(|| {
+        eprintln!("Error: no active toolchain to update. Use 'install' first.");
         std::process::exit(1);
     });
 
-    let target_dir = temp_dir.join("target").join("release");
-    for bin in &["truss", "trussc", "truss-lsp", "trussup"] {
-        let src = target_dir.join(bin);
-        let dst = toolchains_dir.join(bin);
-        std::fs::copy(&src, &dst).unwrap_or_else(|e| {
-            eprintln!("Error: failed to copy {}: {}", bin, e);
-            std::process::exit(1);
-        });
+    let toolchain_dir = get_trussup_dir().join("toolchains").join(&current);
+    if !toolchain_dir.exists() {
+        eprintln!("Error: toolchain '{}' is not installed", current);
+        std::process::exit(1);
     }
-    println!("Copied binaries to {}", toolchains_dir.display());
 
-    download_stdlib(&toolchains_dir);
-
-    set_current_version(version);
-    sync_bin_dir(version);
-
-    let _ = std::fs::remove_dir_all(&temp_dir);
-
-    println!("Update complete! Active toolchain: {} (latest)", version);
+    install_from_remote(&toolchain_dir);
+    download_stdlib(&toolchain_dir);
+    sync_bin_dir(&current);
+    println!("Update complete! Active toolchain: {} (updated)", current);
 }
