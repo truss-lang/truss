@@ -1235,7 +1235,6 @@ impl SymbolResolver {
                         .as_ref()
                         .map(|m| m.borrow().name.clone());
                     match parent {
-                        Some(ref p) if *p == self.root_module_name => name.value.clone(),
                         Some(ref p) => format!("{}.{}", p, name.value),
                         None => name.value.clone(),
                     }
@@ -1246,7 +1245,7 @@ impl SymbolResolver {
                     .unwrap()
                     .borrow_mut()
                     .modules
-                    .insert(full_path, module.clone());
+                    .insert(full_path.clone(), module.clone());
                 if let Some(current) = &self.current_module {
                     current
                         .borrow_mut()
@@ -1263,6 +1262,7 @@ impl SymbolResolver {
 
                 *scope = Some(self.enter_scope(None));
                 module.borrow_mut().scope = scope.clone();
+                scope.as_ref().unwrap().borrow_mut().module_name = Some(full_path);
 
                 let saved_module = self.current_module.replace(module);
                 for s in body {

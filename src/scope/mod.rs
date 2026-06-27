@@ -14,6 +14,7 @@ pub struct Scope {
     pub type_env: HashMap<String, Rc<RefCell<Type>>>,
     pub parent: Option<Rc<RefCell<Scope>>>,
     pub captured_by_closures: HashSet<String>,
+    pub module_name: Option<String>,
 }
 
 impl fmt::Debug for Scope {
@@ -36,6 +37,7 @@ impl Scope {
             type_env: HashMap::new(),
             parent,
             captured_by_closures: HashSet::new(),
+            module_name: None,
         }
     }
 
