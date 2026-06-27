@@ -2937,23 +2937,13 @@ impl SymbolResolver {
                 }
             }
             Expression::ArrayLiteral { elements, .. } => {
-                for element in elements {
-                    let is_var = matches!(&*element.borrow(), Expression::Variable { .. });
-                    if is_var {
-                        if let Some(scope) = self.current_scope.as_ref() {
-                            let name = match &*element.borrow() {
-                                Expression::Variable { name, .. } => name.value.clone(),
-                                _ => String::new(),
-                            };
-                            if !name.is_empty()
-                                && (scope.borrow().get_type(&name).is_some()
-                                    || scope.borrow().get_symbol(&name).is_some())
-                            {
-                                continue;
-                            }
-                        }
+                if elements.len() == 1
+                    && matches!(&*elements[0].borrow(), Expression::Variable { .. })
+                {
+                } else {
+                    for element in elements {
+                        self.resolve_expression(element.clone());
                     }
-                    self.resolve_expression(element.clone());
                 }
             }
             Expression::DictionaryLiteral { elements, .. } => {
@@ -3528,16 +3518,6 @@ impl SymbolResolver {
         {
             Ok(symbol)
         } else {
-            if let Some(scope) = self.current_scope.as_ref()
-                && scope.borrow().get_type(&name).is_some()
-            {
-                return Err(());
-            }
-            self.emit_error(
-                TrussDiagnosticCode::SymbolError,
-                format!("No avaliable scope for symbol '{}'", name),
-                token,
-            );
             Err(())
         }
     }
