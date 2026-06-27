@@ -1,6 +1,6 @@
 use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -71,16 +71,17 @@ fn collect_diagnostics_filtered(
             duck_diagnostic::Severity::Note => 3,
             duck_diagnostic::Severity::Help => 4,
         };
-        let (start_line, start_col, span_length, diag_file) = if let Some(label) = diag.primary_label() {
-            (
-                label.span.line,
-                label.span.column,
-                label.span.length,
-                Some(label.span.file.clone()),
-            )
-        } else {
-            (1, 1, 1, None)
-        };
+        let (start_line, start_col, span_length, diag_file) =
+            if let Some(label) = diag.primary_label() {
+                (
+                    label.span.line,
+                    label.span.column,
+                    label.span.length,
+                    Some(label.span.file.clone()),
+                )
+            } else {
+                (1, 1, 1, None)
+            };
         if let Some(ref filter) = filter_file {
             if let Some(ref file_arc) = diag_file {
                 if file_arc.as_ref() != *filter {
@@ -155,7 +156,6 @@ struct CachedFile {
 
 struct StdlibCache {
     statements: Vec<Rc<RefCell<Statement>>>,
-    sources: Vec<(String, String)>,
     module: Rc<RefCell<Module>>,
 }
 
@@ -387,20 +387,26 @@ impl LanguageServer {
         diagnostics
     }
 
-    fn run_full_analysis(&mut self, file_path: &str, content: &str, program: &Program) -> Vec<Value> {
+    fn run_full_analysis(
+        &mut self,
+        file_path: &str,
+        content: &str,
+        program: &Program,
+    ) -> Vec<Value> {
         let analysis_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
 
         let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
         let main_pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
         packages.insert("main".to_string(), main_pkg.clone());
 
-        let stdlib_stmts: Vec<Rc<RefCell<Statement>>>;
         if let Some(ref cache) = self.stdlib_cache {
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
             packages.insert("Truss".to_string(), truss_pkg.clone());
-            stdlib_stmts = cache.statements.clone();
 
-            truss_pkg.borrow_mut().modules.insert("Truss".to_string(), cache.module.clone());
+            truss_pkg
+                .borrow_mut()
+                .modules
+                .insert("Truss".to_string(), cache.module.clone());
         } else if let Some(ref stdlib_path) = self.stdlib_path {
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
             packages.insert("Truss".to_string(), truss_pkg.clone());
@@ -408,29 +414,36 @@ impl LanguageServer {
             let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
             let (file_programs, _) = crate::trusspm::parse_std_lib(stdlib_path, std_engine.clone());
 
-            let mut stdlib_stmts_mut = Vec::new();
+            let mut stdlib_stmts = Vec::new();
             {
-                let mut ordered: Vec<_> = file_programs.into_iter().map(|stmts| {
-                    let name = stmts.first().and_then(|s| {
-                        let file = &*s.borrow().token().file;
-                        std::path::Path::new(file).file_stem().and_then(|n| n.to_str()).map(|n| n.to_string())
-                    }).unwrap_or_default();
-                    let priority = match name.as_str() {
-                        "Truss" => 0,
-                        "Iterator" => 1,
-                        _ => 2,
-                    };
-                    (priority, stmts)
-                }).collect();
+                let mut ordered: Vec<_> = file_programs
+                    .into_iter()
+                    .map(|stmts| {
+                        let name = stmts
+                            .first()
+                            .and_then(|s| {
+                                let file = &*s.borrow().token().file;
+                                std::path::Path::new(file)
+                                    .file_stem()
+                                    .and_then(|n| n.to_str())
+                                    .map(|n| n.to_string())
+                            })
+                            .unwrap_or_default();
+                        let priority = match name.as_str() {
+                            "Truss" => 0,
+                            "Iterator" => 1,
+                            _ => 2,
+                        };
+                        (priority, stmts)
+                    })
+                    .collect();
                 ordered.sort_by_key(|(p, _)| *p);
                 for (_, stmts) in ordered {
                     for stmt in stmts {
-                        stdlib_stmts_mut.push(stmt.clone());
+                        stdlib_stmts.push(stmt.clone());
                     }
                 }
             }
-            stdlib_stmts = stdlib_stmts_mut;
-
             let std_prog = Program {
                 file: Rc::new("stdlib".to_string()),
                 statements: stdlib_stmts.clone(),
@@ -448,15 +461,10 @@ impl LanguageServer {
                 );
                 std_type_resolver.resolve(&std_prog, std_module);
             }
-        } else {
-            stdlib_stmts = Vec::new();
         }
 
         let mut all_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
         for stmt in &program.statements {
-            all_stmts.push(stmt.clone());
-        }
-        for stmt in &stdlib_stmts {
             all_stmts.push(stmt.clone());
         }
 
@@ -505,27 +513,48 @@ impl LanguageServer {
                         for stmt in &stmts {
                             all_stmts.push(stmt.clone());
                         }
-                        self.file_cache.insert(path_str, CachedFile { hash, statements: stmts });
+                        self.file_cache.insert(
+                            path_str,
+                            CachedFile {
+                                hash,
+                                statements: stmts,
+                            },
+                        );
                     }
                 }
 
                 // Resolve dependency packages using DependencyResolver
-                let dep_packages = DependencyResolver::resolve(&manifest, Path::new(&proj_dir), Rc::new(RefCell::new(TrussDiagnosticEngine::new())));
+                let dep_packages = DependencyResolver::resolve(
+                    &manifest,
+                    Path::new(&proj_dir),
+                    Rc::new(RefCell::new(TrussDiagnosticEngine::new())),
+                );
                 for (dep_name, dep_pkg) in dep_packages {
-                    if dep_name == "Truss" || dep_name == *pkg_name { continue; }
-                    if packages.contains_key(&dep_name) { continue; }
+                    if dep_name == "Truss" || dep_name == *pkg_name {
+                        continue;
+                    }
+                    if packages.contains_key(&dep_name) {
+                        continue;
+                    }
                     packages.insert(dep_name.clone(), dep_pkg.clone());
                 }
 
                 // Parse and resolve dependency source files so their symbols are available
                 for dep in &manifest.dependencies {
-                    if dep.name == "Truss" || dep.name == *pkg_name { continue; }
-                    let dep_src_dir = DependencyResolver::dependency_source_dir(dep, Path::new(&proj_dir));
-                    if !dep_src_dir.exists() { continue; }
+                    if dep.name == "Truss" || dep.name == *pkg_name {
+                        continue;
+                    }
+                    let dep_src_dir =
+                        DependencyResolver::dependency_source_dir(dep, Path::new(&proj_dir));
+                    if !dep_src_dir.exists() {
+                        continue;
+                    }
 
                     if let Some(cached) = self.dep_cache.get(&dep.name) {
                         if let Some(pkg) = packages.get(&dep.name) {
-                            pkg.borrow_mut().modules.insert(dep.name.clone(), cached.module.clone());
+                            pkg.borrow_mut()
+                                .modules
+                                .insert(dep.name.clone(), cached.module.clone());
                         }
                         continue;
                     }
@@ -555,15 +584,25 @@ impl LanguageServer {
                                 let cs = CharStream::new(content, f_rc.clone());
                                 let mut lx = Lexer::new(cs, f_engine.clone());
                                 let toks = lx.parse();
-                                if f_engine.borrow().has_errors() { continue; }
+                                if f_engine.borrow().has_errors() {
+                                    continue;
+                                }
                                 let mut pp = Parser::new(f_rc, toks, f_engine.clone());
                                 let prog = pp.parse();
-                                if f_engine.borrow().has_errors() { continue; }
+                                if f_engine.borrow().has_errors() {
+                                    continue;
+                                }
                                 let stmts: Vec<Rc<RefCell<Statement>>> = prog.statements;
                                 for stmt in &stmts {
                                     dep_stmts.push(stmt.clone());
                                 }
-                                self.file_cache.insert(path_str, CachedFile { hash, statements: stmts });
+                                self.file_cache.insert(
+                                    path_str,
+                                    CachedFile {
+                                        hash,
+                                        statements: stmts,
+                                    },
+                                );
                             }
                         }
                     }
@@ -575,18 +614,29 @@ impl LanguageServer {
                             statements: dep_stmts,
                         };
                         let dep_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-                        let mut dep_resolver = SymbolResolver::new(packages.clone(), dep.name.clone(), dep_engine.clone());
+                        let mut dep_resolver = SymbolResolver::new(
+                            packages.clone(),
+                            dep.name.clone(),
+                            dep_engine.clone(),
+                        );
                         dep_resolver.resolve(&dep_prog, dep.name.clone());
                         // Also type resolve the dependency for full type info
                         let dep_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-                        let mut dep_type_resolver = TypeResolver::new(packages.clone(), dep.name.clone(), dep_ty_engine.clone());
+                        let mut dep_type_resolver = TypeResolver::new(
+                            packages.clone(),
+                            dep.name.clone(),
+                            dep_ty_engine.clone(),
+                        );
                         if let Some(pkg) = packages.get(&dep.name) {
                             if let Some(mod_ref) = pkg.borrow().modules.get(&dep.name) {
                                 dep_type_resolver.resolve(&dep_prog, mod_ref.clone());
-                                self.dep_cache.insert(dep.name.clone(), DepCache {
-                                    statements: dep_stmts_cache,
-                                    module: mod_ref.clone(),
-                                });
+                                self.dep_cache.insert(
+                                    dep.name.clone(),
+                                    DepCache {
+                                        statements: dep_stmts_cache,
+                                        module: mod_ref.clone(),
+                                    },
+                                );
                             }
                         }
                     }
@@ -621,7 +671,10 @@ impl LanguageServer {
             collect_diagnostics_filtered(&analysis_engine.borrow(), content, Some(file_path));
         let type_diag_count = type_diags.len();
         analysis_diags.extend(type_diags);
-        eprintln!("TRUSS_LSP_ANALYSIS: type resolve done, diags={}", type_diag_count);
+        eprintln!(
+            "TRUSS_LSP_ANALYSIS: type resolve done, diags={}",
+            type_diag_count
+        );
 
         if !analysis_engine.borrow().has_errors() {
             self.project_analyses.insert(
@@ -658,7 +711,7 @@ impl LanguageServer {
     fn load_stdlib(&mut self) {
         if let Some(ref stdlib_path) = self.stdlib_path.clone() {
             let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-            let (file_programs, sources) = crate::trusspm::parse_std_lib(&stdlib_path, engine.clone());
+            let (file_programs, _) = crate::trusspm::parse_std_lib(&stdlib_path, engine.clone());
             let mut packages: HashMap<String, Rc<RefCell<Package>>> = HashMap::new();
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
             packages.insert("Truss".to_string(), truss_pkg.clone());
@@ -679,23 +732,35 @@ impl LanguageServer {
             let module = resolver.resolve(&std_prog, "Truss".to_string());
 
             let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-            let mut type_resolver =
-                TypeResolver::new(packages.clone(), "Truss".to_string(), stdlib_ty_engine.clone());
+            let mut type_resolver = TypeResolver::new(
+                packages.clone(),
+                "Truss".to_string(),
+                stdlib_ty_engine.clone(),
+            );
             type_resolver.resolve(&std_prog, module.clone());
 
             let mut ordered_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
-            let mut ordered: Vec<_> = file_programs.iter().map(|stmts| {
-                let name = stmts.first().and_then(|s| {
-                    let file = &*s.borrow().token().file;
-                    std::path::Path::new(file).file_stem().and_then(|n| n.to_str()).map(|n| n.to_string())
-                }).unwrap_or_default();
-                let priority = match name.as_str() {
-                    "Truss" => 0,
-                    "Iterator" => 1,
-                    _ => 2,
-                };
-                (priority, stmts)
-            }).collect();
+            let mut ordered: Vec<_> = file_programs
+                .iter()
+                .map(|stmts| {
+                    let name = stmts
+                        .first()
+                        .and_then(|s| {
+                            let file = &*s.borrow().token().file;
+                            std::path::Path::new(file)
+                                .file_stem()
+                                .and_then(|n| n.to_str())
+                                .map(|n| n.to_string())
+                        })
+                        .unwrap_or_default();
+                    let priority = match name.as_str() {
+                        "Truss" => 0,
+                        "Iterator" => 1,
+                        _ => 2,
+                    };
+                    (priority, stmts)
+                })
+                .collect();
             ordered.sort_by_key(|(p, _)| *p);
             for (_, stmts) in ordered {
                 for stmt in stmts {
@@ -705,7 +770,6 @@ impl LanguageServer {
 
             self.stdlib_cache = Some(StdlibCache {
                 statements: ordered_stmts,
-                sources,
                 module: module.clone(),
             });
         }
@@ -763,11 +827,18 @@ impl LanguageServer {
 
     fn signature_from_statement(&self, stmt: &Statement) -> Option<(String, Vec<Value>)> {
         match stmt {
-            Statement::FunctionDecl { name, parameters, ty, .. } => {
+            Statement::FunctionDecl {
+                name,
+                parameters,
+                ty,
+                ..
+            } => {
                 let mut label = format!("func {}", name.value);
                 label.push('(');
                 for (i, param) in parameters.iter().enumerate() {
-                    if i > 0 { label.push_str(", "); }
+                    if i > 0 {
+                        label.push_str(", ");
+                    }
                     let p = param.borrow();
                     if let Some(l) = &p.label {
                         label.push_str(&l.value);
@@ -786,27 +857,41 @@ impl LanguageServer {
                         label.push_str(&ret.borrow().to_string());
                     }
                 }
-                let param_info: Vec<Value> = parameters.iter().map(|p| {
-                    let p = p.borrow();
-                    let mut pl = String::new();
-                    if let Some(l) = &p.label {
-                        pl.push_str(&l.value);
-                        pl.push(' ');
-                    }
-                    pl.push_str(&p.name.value);
-                    pl.push_str(": ");
-                    if let Some(ref pty) = p.ty {
-                        pl.push_str(&pty.borrow().to_string());
-                    }
-                    json!({"label": pl, "documentation": ""})
-                }).collect();
+                let param_info: Vec<Value> = parameters
+                    .iter()
+                    .map(|p| {
+                        let p = p.borrow();
+                        let mut pl = String::new();
+                        if let Some(l) = &p.label {
+                            pl.push_str(&l.value);
+                            pl.push(' ');
+                        }
+                        pl.push_str(&p.name.value);
+                        pl.push_str(": ");
+                        if let Some(ref pty) = p.ty {
+                            pl.push_str(&pty.borrow().to_string());
+                        }
+                        json!({"label": pl, "documentation": ""})
+                    })
+                    .collect();
                 Some((label, param_info))
             }
-            Statement::InitDecl { parameters, is_failable, ty, .. } => {
-                let mut label = if *is_failable { "init?".to_string() } else { "init".to_string() };
+            Statement::InitDecl {
+                parameters,
+                is_failable,
+                ty,
+                ..
+            } => {
+                let mut label = if *is_failable {
+                    "init?".to_string()
+                } else {
+                    "init".to_string()
+                };
                 label.push('(');
                 for (i, param) in parameters.iter().enumerate() {
-                    if i > 0 { label.push_str(", "); }
+                    if i > 0 {
+                        label.push_str(", ");
+                    }
                     let p = param.borrow();
                     if let Some(l) = &p.label {
                         label.push_str(&l.value);
@@ -825,27 +910,32 @@ impl LanguageServer {
                         label.push_str(&ret.borrow().to_string());
                     }
                 }
-                let param_info: Vec<Value> = parameters.iter().map(|p| {
-                    let p = p.borrow();
-                    let mut pl = String::new();
-                    if let Some(l) = &p.label {
-                        pl.push_str(&l.value);
-                        pl.push(' ');
-                    }
-                    pl.push_str(&p.name.value);
-                    pl.push_str(": ");
-                    if let Some(ref pty) = p.ty {
-                        pl.push_str(&pty.borrow().to_string());
-                    }
-                    json!({"label": pl, "documentation": ""})
-                }).collect();
+                let param_info: Vec<Value> = parameters
+                    .iter()
+                    .map(|p| {
+                        let p = p.borrow();
+                        let mut pl = String::new();
+                        if let Some(l) = &p.label {
+                            pl.push_str(&l.value);
+                            pl.push(' ');
+                        }
+                        pl.push_str(&p.name.value);
+                        pl.push_str(": ");
+                        if let Some(ref pty) = p.ty {
+                            pl.push_str(&pty.borrow().to_string());
+                        }
+                        json!({"label": pl, "documentation": ""})
+                    })
+                    .collect();
                 Some((label, param_info))
             }
             Statement::SubscriptDecl { parameters, ty, .. } => {
                 let mut label = "subscript".to_string();
                 label.push('(');
                 for (i, param) in parameters.iter().enumerate() {
-                    if i > 0 { label.push_str(", "); }
+                    if i > 0 {
+                        label.push_str(", ");
+                    }
                     let p = param.borrow();
                     if let Some(l) = &p.label {
                         label.push_str(&l.value);
@@ -864,20 +954,23 @@ impl LanguageServer {
                         label.push_str(&ret.borrow().to_string());
                     }
                 }
-                let param_info: Vec<Value> = parameters.iter().map(|p| {
-                    let p = p.borrow();
-                    let mut pl = String::new();
-                    if let Some(l) = &p.label {
-                        pl.push_str(&l.value);
-                        pl.push(' ');
-                    }
-                    pl.push_str(&p.name.value);
-                    pl.push_str(": ");
-                    if let Some(ref pty) = p.ty {
-                        pl.push_str(&pty.borrow().to_string());
-                    }
-                    json!({"label": pl, "documentation": ""})
-                }).collect();
+                let param_info: Vec<Value> = parameters
+                    .iter()
+                    .map(|p| {
+                        let p = p.borrow();
+                        let mut pl = String::new();
+                        if let Some(l) = &p.label {
+                            pl.push_str(&l.value);
+                            pl.push(' ');
+                        }
+                        pl.push_str(&p.name.value);
+                        pl.push_str(": ");
+                        if let Some(ref pty) = p.ty {
+                            pl.push_str(&pty.borrow().to_string());
+                        }
+                        json!({"label": pl, "documentation": ""})
+                    })
+                    .collect();
                 Some((label, param_info))
             }
             _ => None,
@@ -911,13 +1004,21 @@ impl LanguageServer {
 
     fn symbol_type_string(&self, sym: &Symbol) -> Option<String> {
         // Handle enum case constructors directly from Symbol data
-        if let Symbol::EnumCase { name, parent, parameter_types, .. } = sym {
+        if let Symbol::EnumCase {
+            name,
+            parent,
+            parameter_types,
+            ..
+        } = sym
+        {
             if !parameter_types.is_empty() {
                 let enum_name = parent.0.upgrade().and_then(|p| p.borrow().name().ok());
                 let mut sig = name.to_string();
                 sig.push('(');
                 for (i, pt) in parameter_types.iter().enumerate() {
-                    if i > 0 { sig.push_str(", "); }
+                    if i > 0 {
+                        sig.push_str(", ");
+                    }
                     sig.push_str(&pt.borrow().to_string());
                 }
                 sig.push(')');
@@ -931,11 +1032,18 @@ impl LanguageServer {
         if let Ok(Some(decl)) = sym.get_decl() {
             let stmt = decl.borrow();
             match &*stmt {
-                Statement::FunctionDecl { name, parameters, ty, .. } => {
+                Statement::FunctionDecl {
+                    name,
+                    parameters,
+                    ty,
+                    ..
+                } => {
                     let mut s = format!("func {}", name.value);
                     s.push('(');
                     for (i, param) in parameters.iter().enumerate() {
-                        if i > 0 { s.push_str(", "); }
+                        if i > 0 {
+                            s.push_str(", ");
+                        }
                         let p = param.borrow();
                         if let Some(label) = &p.label {
                             s.push_str(&label.value);
@@ -956,11 +1064,21 @@ impl LanguageServer {
                     }
                     Some(s)
                 }
-                Statement::InitDecl { parameters, is_failable, .. } => {
-                    let mut s = if *is_failable { String::from("init?") } else { String::from("init") };
+                Statement::InitDecl {
+                    parameters,
+                    is_failable,
+                    ..
+                } => {
+                    let mut s = if *is_failable {
+                        String::from("init?")
+                    } else {
+                        String::from("init")
+                    };
                     s.push('(');
                     for (i, param) in parameters.iter().enumerate() {
-                        if i > 0 { s.push_str(", "); }
+                        if i > 0 {
+                            s.push_str(", ");
+                        }
                         let p = param.borrow();
                         if let Some(label) = &p.label {
                             s.push_str(&label.value);
@@ -979,7 +1097,9 @@ impl LanguageServer {
                     let mut s = String::from("subscript");
                     s.push('(');
                     for (i, param) in parameters.iter().enumerate() {
-                        if i > 0 { s.push_str(", "); }
+                        if i > 0 {
+                            s.push_str(", ");
+                        }
                         let p = param.borrow();
                         if let Some(label) = &p.label {
                             s.push_str(&label.value);
@@ -1000,24 +1120,12 @@ impl LanguageServer {
                     }
                     Some(s)
                 }
-                Statement::VariableDecl { ty, .. } => {
-                    ty.as_ref().map(|t| t.borrow().to_string())
-                }
-                Statement::StructDecl { ty, .. } => {
-                    ty.as_ref().map(|t| t.borrow().to_string())
-                }
-                Statement::ClassDecl { ty, .. } => {
-                    ty.as_ref().map(|t| t.borrow().to_string())
-                }
-                Statement::EnumDecl { ty, .. } => {
-                    ty.as_ref().map(|t| t.borrow().to_string())
-                }
-                Statement::ProtocolDecl { ty, .. } => {
-                    ty.as_ref().map(|t| t.borrow().to_string())
-                }
-                Statement::DeinitDecl { .. } => {
-                    Some(String::from("deinit"))
-                }
+                Statement::VariableDecl { ty, .. } => ty.as_ref().map(|t| t.borrow().to_string()),
+                Statement::StructDecl { ty, .. } => ty.as_ref().map(|t| t.borrow().to_string()),
+                Statement::ClassDecl { ty, .. } => ty.as_ref().map(|t| t.borrow().to_string()),
+                Statement::EnumDecl { ty, .. } => ty.as_ref().map(|t| t.borrow().to_string()),
+                Statement::ProtocolDecl { ty, .. } => ty.as_ref().map(|t| t.borrow().to_string()),
+                Statement::DeinitDecl { .. } => Some(String::from("deinit")),
                 _ => None,
             }
         } else {
@@ -1083,7 +1191,9 @@ impl LanguageServer {
                     Symbol::Class { .. } => (7, "class"),
                     Symbol::Enum { .. } => (13, "enum"),
                     Symbol::Protocol { .. } => (8, "protocol"),
-                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => (10, "property"),
+                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => {
+                        (10, "property")
+                    }
                     Symbol::StructMethod { .. } | Symbol::ClassMethod { .. } => (2, "method"),
                     Symbol::EnumCase { .. } => (20, "enum case"),
                     Symbol::Module { .. } => (9, "module"),
@@ -1095,7 +1205,14 @@ impl LanguageServer {
         }
     }
 
-    fn add_member_completions(&self, items: &mut Vec<Value>, content: &str, _uri: &str, line: usize, character: usize) {
+    fn add_member_completions(
+        &self,
+        items: &mut Vec<Value>,
+        content: &str,
+        _uri: &str,
+        line: usize,
+        character: usize,
+    ) {
         let lines: Vec<&str> = content.lines().collect();
         if line >= lines.len() {
             return;
@@ -1124,50 +1241,127 @@ impl LanguageServer {
         if let Some((sym, _)) = self.lookup_symbol_in_scopes(obj_name) {
             let sym_borrow = sym.borrow();
             let (properties, methods) = match &*sym_borrow {
-                Symbol::Struct { properties, methods, .. }
-                | Symbol::Class { properties, methods, .. } => {
-                    let props: Vec<_> = properties.iter().map(|s| {
-                        let name = s.borrow().name().unwrap_or_default();
-                        (name, 6, "property")
-                    }).collect();
-                    let meths: Vec<_> = methods.iter().map(|s| {
-                        let name = s.borrow().name().unwrap_or_default();
-                        (name, 3, "method")
-                    }).collect();
+                Symbol::Struct {
+                    properties,
+                    methods,
+                    ..
+                }
+                | Symbol::Class {
+                    properties,
+                    methods,
+                    ..
+                } => {
+                    let props: Vec<_> = properties
+                        .iter()
+                        .map(|s| {
+                            let name = s.borrow().name().unwrap_or_default();
+                            (name, 6, "property")
+                        })
+                        .collect();
+                    let meths: Vec<_> = methods
+                        .iter()
+                        .map(|s| {
+                            let name = s.borrow().name().unwrap_or_default();
+                            (name, 3, "method")
+                        })
+                        .collect();
                     (props, meths)
                 }
                 Symbol::Enum { cases, methods, .. } => {
-                    let cases_items: Vec<_> = cases.iter().map(|s| {
-                        let name = s.borrow().name().unwrap_or_default();
-                        (name, 21, "enum case")
-                    }).collect();
-                    let meths: Vec<_> = methods.iter().map(|s| {
-                        let name = s.borrow().name().unwrap_or_default();
-                        (name, 3, "method")
-                    }).collect();
+                    let cases_items: Vec<_> = cases
+                        .iter()
+                        .map(|s| {
+                            let name = s.borrow().name().unwrap_or_default();
+                            (name, 21, "enum case")
+                        })
+                        .collect();
+                    let meths: Vec<_> = methods
+                        .iter()
+                        .map(|s| {
+                            let name = s.borrow().name().unwrap_or_default();
+                            (name, 3, "method")
+                        })
+                        .collect();
                     (cases_items, meths)
                 }
-                Symbol::Protocol { methods, properties, subscripts, .. } => {
-                    let props: Vec<_> = properties.iter().map(|s| {
-                        let name = s.borrow().name().unwrap_or_default();
-                        (name, 6, "property")
-                    }).collect();
-                    let mut meths: Vec<_> = methods.iter().map(|s| {
-                        let name = s.borrow().name().unwrap_or_default();
-                        (name, 3, "method")
-                    }).collect();
-                    let subs: Vec<_> = subscripts.iter().map(|s| {
-                        let name = s.borrow().name().unwrap_or_default();
-                        (name, 3, "subscript")
-                    }).collect();
+                Symbol::Protocol {
+                    methods,
+                    properties,
+                    subscripts,
+                    ..
+                } => {
+                    let props: Vec<_> = properties
+                        .iter()
+                        .map(|s| {
+                            let name = s.borrow().name().unwrap_or_default();
+                            (name, 6, "property")
+                        })
+                        .collect();
+                    let mut meths: Vec<_> = methods
+                        .iter()
+                        .map(|s| {
+                            let name = s.borrow().name().unwrap_or_default();
+                            (name, 3, "method")
+                        })
+                        .collect();
+                    let subs: Vec<_> = subscripts
+                        .iter()
+                        .map(|s| {
+                            let name = s.borrow().name().unwrap_or_default();
+                            (name, 3, "subscript")
+                        })
+                        .collect();
                     meths.extend(subs);
                     (props, meths)
+                }
+                Symbol::Module {
+                    module: Some(mod_ref),
+                    ..
+                } => {
+                    let scope = mod_ref.borrow().scope.clone();
+                    match scope {
+                        Some(s) => {
+                            let sb = s.borrow();
+                            let props: Vec<_> = sb
+                                .type_env
+                                .iter()
+                                .map(|(name, _)| (name.clone(), 22, "type"))
+                                .collect();
+                            let meths: Vec<_> = sb
+                                .name_table
+                                .iter()
+                                .map(|(name, symbol)| {
+                                    let (kind, detail) = match &*symbol.borrow() {
+                                        Symbol::Function { .. } => (3, "function"),
+                                        Symbol::Variable { .. } => (6, "variable"),
+                                        Symbol::Struct { .. } => (22, "struct"),
+                                        Symbol::Class { .. } => (7, "class"),
+                                        Symbol::Enum { .. } => (13, "enum"),
+                                        Symbol::Protocol { .. } => (8, "protocol"),
+                                        Symbol::StructProperty { .. }
+                                        | Symbol::ClassProperty { .. } => (10, "property"),
+                                        Symbol::StructMethod { .. }
+                                        | Symbol::ClassMethod { .. } => (2, "method"),
+                                        Symbol::EnumCase { .. } => (20, "enum case"),
+                                        Symbol::Module { .. } => (9, "module"),
+                                        Symbol::Macro { .. } => (14, "macro"),
+                                        _ => (0, "symbol"),
+                                    };
+                                    (name.clone(), kind, detail)
+                                })
+                                .collect();
+                            (props, meths)
+                        }
+                        None => (vec![], vec![]),
+                    }
                 }
                 _ => (vec![], vec![]),
             };
             for (name, kind, detail) in properties.iter().chain(methods.iter()) {
                 if !name.is_empty() {
-                    items.push(json!({"label": name, "kind": kind, "detail": detail, "sortText": "0"}));
+                    items.push(
+                        json!({"label": name, "kind": kind, "detail": detail, "sortText": "0"}),
+                    );
                 }
             }
         }
@@ -1208,11 +1402,7 @@ impl LanguageServer {
             .unwrap_or(0) as usize;
 
         let lines: Vec<&str> = content.lines().collect();
-        let current_line = if line < lines.len() {
-            lines[line]
-        } else {
-            ""
-        };
+        let current_line = if line < lines.len() { lines[line] } else { "" };
         let before_cursor = &current_line[..character.min(current_line.len())];
 
         let is_member = before_cursor.trim_end().ends_with('.');
@@ -1299,19 +1489,22 @@ impl LanguageServer {
                 "super" => "super (parent instance)",
                 _ => "",
             };
-            Some(json!({"contents": {"kind": "markdown", "value": format!("```truss\n{}\nkeyword\n```", desc)}}))
+            Some(
+                json!({"contents": {"kind": "markdown", "value": format!("```truss\n{}\nkeyword\n```", desc)}}),
+            )
         } else if let Some((sym, _)) = self.lookup_symbol_in_scopes(&word) {
             let sym_borrow = sym.borrow();
             let sym_name = sym_borrow.name().unwrap_or_default();
             let type_str = self.symbol_type_string(&sym_borrow);
-            let is_func_like = matches!(&*sym_borrow,
+            let is_func_like = matches!(
+                &*sym_borrow,
                 Symbol::Function { .. }
-                | Symbol::StructMethod { .. }
-                | Symbol::ClassMethod { .. }
-                | Symbol::ProtocolMethod { .. }
-                | Symbol::StructSubscript { .. }
-                | Symbol::ClassSubscript { .. }
-                | Symbol::ProtocolSubscript { .. }
+                    | Symbol::StructMethod { .. }
+                    | Symbol::ClassMethod { .. }
+                    | Symbol::ProtocolMethod { .. }
+                    | Symbol::StructSubscript { .. }
+                    | Symbol::ClassSubscript { .. }
+                    | Symbol::ProtocolSubscript { .. }
             ) || matches!(&*sym_borrow, Symbol::EnumCase { parameter_types, .. } if !parameter_types.is_empty());
             let mut markdown = format!("```truss\n");
             if is_func_like {
@@ -1329,7 +1522,11 @@ impl LanguageServer {
             let decl_info = match &*sym_borrow {
                 Symbol::Function { .. } => "func",
                 Symbol::Variable { is_var, .. } => {
-                    if *is_var { "var" } else { "let" }
+                    if *is_var {
+                        "var"
+                    } else {
+                        "let"
+                    }
                 }
                 Symbol::Struct { .. } => "struct",
                 Symbol::Class { .. } => "class",
@@ -1421,7 +1618,9 @@ impl LanguageServer {
         }
         let name_end = name_end;
         let mut name_start = name_end;
-        while name_start > 0 && (chars[name_start - 1].is_alphanumeric() || chars[name_start - 1] == '_') {
+        while name_start > 0
+            && (chars[name_start - 1].is_alphanumeric() || chars[name_start - 1] == '_')
+        {
             name_start -= 1;
         }
         if name_start >= name_end {
@@ -1433,7 +1632,9 @@ impl LanguageServer {
         if name_start > 1 && chars[name_start - 1] == '.' {
             let obj_end = name_start - 1;
             let mut obj_start = obj_end;
-            while obj_start > 0 && (chars[obj_start - 1].is_alphanumeric() || chars[obj_start - 1] == '_') {
+            while obj_start > 0
+                && (chars[obj_start - 1].is_alphanumeric() || chars[obj_start - 1] == '_')
+            {
                 obj_start -= 1;
             }
             if obj_start < obj_end {
@@ -1445,14 +1646,26 @@ impl LanguageServer {
                             let mut sigs = Vec::new();
                             for case in cases {
                                 if case.borrow().name().ok().as_deref() == Some(&func_name) {
-                                    if let Symbol::EnumCase { name, parameter_types, parent, .. } = &*case.borrow() {
+                                    if let Symbol::EnumCase {
+                                        name,
+                                        parameter_types,
+                                        parent,
+                                        ..
+                                    } = &*case.borrow()
+                                    {
                                         if !parameter_types.is_empty() {
-                                            let enum_name = parent.0.upgrade().and_then(|p| p.borrow().name().ok()).unwrap_or_default();
+                                            let enum_name = parent
+                                                .0
+                                                .upgrade()
+                                                .and_then(|p| p.borrow().name().ok())
+                                                .unwrap_or_default();
                                             let mut label = name.to_string();
                                             label.push('(');
                                             let mut param_info = Vec::new();
                                             for (i, pt) in parameter_types.iter().enumerate() {
-                                                if i > 0 { label.push_str(", "); }
+                                                if i > 0 {
+                                                    label.push_str(", ");
+                                                }
                                                 let type_str = pt.borrow().to_string();
                                                 label.push_str(&format!("_: {}", type_str));
                                                 param_info.push(json!({"label": format!("_: {}", type_str), "documentation": ""}));
@@ -1481,8 +1694,13 @@ impl LanguageServer {
             let active_param = {
                 let end = character.min(chars.len());
                 if end > paren_pos + 1 {
-                    chars[paren_pos + 1..end].iter().filter(|&&c| c == ',').count() as u64
-                } else { 0 }
+                    chars[paren_pos + 1..end]
+                        .iter()
+                        .filter(|&&c| c == ',')
+                        .count() as u64
+                } else {
+                    0
+                }
             };
             return json!({
                 "jsonrpc": "2.0",
@@ -1492,7 +1710,8 @@ impl LanguageServer {
                     "activeSignature": 0,
                     "activeParameter": active_param
                 }
-            }).to_string();
+            })
+            .to_string();
         }
 
         let symbols = self.lookup_all_symbols_in_scopes(&func_name);
@@ -1504,8 +1723,7 @@ impl LanguageServer {
         for sym in &symbols {
             let sym_borrow = sym.borrow();
             let constructor_sigs: Vec<(String, Vec<Value>)> = match &*sym_borrow {
-                Symbol::Struct { constructors, .. }
-                | Symbol::Class { constructors, .. } => {
+                Symbol::Struct { constructors, .. } | Symbol::Class { constructors, .. } => {
                     let mut sigs = Vec::new();
                     for ctor in constructors {
                         if let Ok(Some(decl)) = ctor.borrow().get_decl() {
@@ -1517,16 +1735,29 @@ impl LanguageServer {
                     }
                     sigs
                 }
-                Symbol::EnumCase { name, parameter_types, parent, .. } if !parameter_types.is_empty() => {
-                    let enum_name = parent.0.upgrade().and_then(|p| p.borrow().name().ok()).unwrap_or_default();
+                Symbol::EnumCase {
+                    name,
+                    parameter_types,
+                    parent,
+                    ..
+                } if !parameter_types.is_empty() => {
+                    let enum_name = parent
+                        .0
+                        .upgrade()
+                        .and_then(|p| p.borrow().name().ok())
+                        .unwrap_or_default();
                     let mut label = name.to_string();
                     label.push('(');
                     let mut param_info = Vec::new();
                     for (i, pt) in parameter_types.iter().enumerate() {
-                        if i > 0 { label.push_str(", "); }
+                        if i > 0 {
+                            label.push_str(", ");
+                        }
                         let type_str = pt.borrow().to_string();
                         label.push_str(&format!("_: {}", type_str));
-                        param_info.push(json!({"label": format!("_: {}", type_str), "documentation": ""}));
+                        param_info.push(
+                            json!({"label": format!("_: {}", type_str), "documentation": ""}),
+                        );
                     }
                     label.push(')');
                     if !enum_name.is_empty() {
@@ -1613,13 +1844,19 @@ impl LanguageServer {
             let chars: Vec<char> = current_line.chars().collect();
             let end = character.min(chars.len());
             let mut word_start = end;
-            while word_start > 0 && (chars[word_start - 1].is_alphanumeric() || chars[word_start - 1] == '_') {
+            while word_start > 0
+                && (chars[word_start - 1].is_alphanumeric() || chars[word_start - 1] == '_')
+            {
                 word_start -= 1;
             }
             if word_start > 0 && chars[word_start - 1] == '.' {
                 let dot_pos = word_start - 1;
                 let mut obj_start = dot_pos;
-                while obj_start > 0 && (chars[obj_start - 1].is_alphanumeric() || chars[obj_start - 1] == '_' || chars[obj_start - 1] == '.') {
+                while obj_start > 0
+                    && (chars[obj_start - 1].is_alphanumeric()
+                        || chars[obj_start - 1] == '_'
+                        || chars[obj_start - 1] == '.')
+                {
                     obj_start -= 1;
                 }
                 let obj_expr: String = chars[obj_start..dot_pos].iter().collect();
@@ -1628,7 +1865,13 @@ impl LanguageServer {
                     if let Some((sym, _)) = self.lookup_symbol_in_scopes(&obj_name) {
                         let sym_borrow = sym.borrow();
                         let members: Vec<Rc<RefCell<Symbol>>> = match &*sym_borrow {
-                            Symbol::Struct { methods, properties, constructors, subscripts, .. } => {
+                            Symbol::Struct {
+                                methods,
+                                properties,
+                                constructors,
+                                subscripts,
+                                ..
+                            } => {
                                 let mut all = Vec::new();
                                 all.extend(methods.iter().cloned());
                                 all.extend(properties.iter().cloned());
@@ -1636,7 +1879,13 @@ impl LanguageServer {
                                 all.extend(subscripts.iter().cloned());
                                 all
                             }
-                            Symbol::Class { methods, properties, constructors, subscripts, .. } => {
+                            Symbol::Class {
+                                methods,
+                                properties,
+                                constructors,
+                                subscripts,
+                                ..
+                            } => {
                                 let mut all = Vec::new();
                                 all.extend(methods.iter().cloned());
                                 all.extend(properties.iter().cloned());
@@ -1650,7 +1899,12 @@ impl LanguageServer {
                                 all.extend(cases.iter().cloned());
                                 all
                             }
-                            Symbol::Protocol { methods, properties, subscripts, .. } => {
+                            Symbol::Protocol {
+                                methods,
+                                properties,
+                                subscripts,
+                                ..
+                            } => {
                                 let mut all = Vec::new();
                                 all.extend(methods.iter().cloned());
                                 all.extend(properties.iter().cloned());
@@ -1667,9 +1921,12 @@ impl LanguageServer {
                                         let token = decl_stmt.token();
                                         let pos = token.position;
                                         let mut decl_file = token.file.as_str().to_string();
-                if decl_file.is_empty() {
+                                        if decl_file.is_empty() {
                                             if let Some(ref stdlib_path) = self.stdlib_path {
-                                                decl_file = format!("file://{}/Sources/Truss/Truss.truss", stdlib_path);
+                                                decl_file = format!(
+                                                    "file://{}/Sources/Truss/Truss.truss",
+                                                    stdlib_path
+                                                );
                                             }
                                         } else if decl_file.starts_with('/') {
                                             decl_file = format!("file://{}", decl_file);
@@ -1804,7 +2061,11 @@ impl LanguageServer {
         .to_string()
     }
 
-    fn collect_folding_ranges(&self, stmts: &[Rc<RefCell<Statement>>], content: &str) -> Vec<Value> {
+    fn collect_folding_ranges(
+        &self,
+        stmts: &[Rc<RefCell<Statement>>],
+        content: &str,
+    ) -> Vec<Value> {
         let mut ranges = Vec::new();
         for stmt_rc in stmts {
             let child_stmts: Vec<Rc<RefCell<Statement>>> = {
@@ -1813,27 +2074,30 @@ impl LanguageServer {
                 let start_line = decl_token.position.line;
                 let start_col = decl_token.position.col;
 
-                if matches!(&*stmt,
+                if matches!(
+                    &*stmt,
                     Statement::FunctionDecl { .. }
-                    | Statement::StructDecl { .. }
-                    | Statement::ClassDecl { .. }
-                    | Statement::EnumDecl { .. }
-                    | Statement::ProtocolDecl { .. }
-                    | Statement::ExtensionDecl { .. }
-                    | Statement::InitDecl { .. }
-                    | Statement::DeinitDecl { .. }
-                    | Statement::SubscriptDecl { .. }
-                    | Statement::ModuleDecl { .. }
-                    | Statement::Loop { .. }
-                    | Statement::While { .. }
-                    | Statement::RepeatWhile { .. }
-                    | Statement::For { .. }
-                    | Statement::Guard { .. }
-                    | Statement::Defer { .. }
-                    | Statement::ConditionalBlock { .. }
-                    | Statement::AsmBlock { .. }
+                        | Statement::StructDecl { .. }
+                        | Statement::ClassDecl { .. }
+                        | Statement::EnumDecl { .. }
+                        | Statement::ProtocolDecl { .. }
+                        | Statement::ExtensionDecl { .. }
+                        | Statement::InitDecl { .. }
+                        | Statement::DeinitDecl { .. }
+                        | Statement::SubscriptDecl { .. }
+                        | Statement::ModuleDecl { .. }
+                        | Statement::Loop { .. }
+                        | Statement::While { .. }
+                        | Statement::RepeatWhile { .. }
+                        | Statement::For { .. }
+                        | Statement::Guard { .. }
+                        | Statement::Defer { .. }
+                        | Statement::ConditionalBlock { .. }
+                        | Statement::AsmBlock { .. }
                 ) {
-                    if let Some((open_line, close_line)) = Self::find_brace_range(content, start_line, start_col) {
+                    if let Some((open_line, close_line)) =
+                        Self::find_brace_range(content, start_line, start_col)
+                    {
                         ranges.push(json!({
                             "startLine": (open_line - 1) as u64,
                             "endLine": (close_line - 1) as u64
@@ -1842,12 +2106,10 @@ impl LanguageServer {
                 }
 
                 match &*stmt {
-                    Statement::FunctionDecl { body, .. } => {
-                        match &*body.borrow() {
-                            FunctionBody::Statements(s) => s.clone(),
-                            _ => vec![],
-                        }
-                    }
+                    Statement::FunctionDecl { body, .. } => match &*body.borrow() {
+                        FunctionBody::Statements(s) => s.clone(),
+                        _ => vec![],
+                    },
                     Statement::StructDecl { body, .. } => body.clone(),
                     Statement::ClassDecl { body, .. } => body.clone(),
                     Statement::EnumDecl { body, .. } => body.clone(),
@@ -1862,18 +2124,14 @@ impl LanguageServer {
                     Statement::ConditionalBlock { clauses } => {
                         clauses.iter().flat_map(|c| c.body.clone()).collect()
                     }
-                    Statement::InitDecl { body, .. } => {
-                        match &*body.borrow() {
-                            FunctionBody::Statements(s) => s.clone(),
-                            _ => vec![],
-                        }
-                    }
-                    Statement::DeinitDecl { body, .. } => {
-                        match &*body.borrow() {
-                            FunctionBody::Statements(s) => s.clone(),
-                            _ => vec![],
-                        }
-                    }
+                    Statement::InitDecl { body, .. } => match &*body.borrow() {
+                        FunctionBody::Statements(s) => s.clone(),
+                        _ => vec![],
+                    },
+                    Statement::DeinitDecl { body, .. } => match &*body.borrow() {
+                        FunctionBody::Statements(s) => s.clone(),
+                        _ => vec![],
+                    },
                     Statement::SubscriptDecl { accessors, .. } => {
                         accessors.iter().flat_map(|a| a.body.clone()).collect()
                     }
@@ -2026,17 +2284,24 @@ impl LanguageServer {
         .to_string()
     }
 
-    fn collect_document_symbols(&self, stmts: &[Rc<RefCell<Statement>>], content: &str) -> Vec<Value> {
-        stmts.iter().filter_map(|stmt_rc| {
-            self.statement_to_document_symbol(&stmt_rc.borrow(), content)
-        }).collect()
+    fn collect_document_symbols(
+        &self,
+        stmts: &[Rc<RefCell<Statement>>],
+        content: &str,
+    ) -> Vec<Value> {
+        stmts
+            .iter()
+            .filter_map(|stmt_rc| self.statement_to_document_symbol(&stmt_rc.borrow(), content))
+            .collect()
     }
 
     fn statement_to_document_symbol(&self, stmt: &Statement, content: &str) -> Option<Value> {
         let (name, kind, children, name_token): (String, u64, Vec<Value>, Token) = match stmt {
             Statement::FunctionDecl { name, body, .. } => {
                 let children = match &*body.borrow() {
-                    FunctionBody::Statements(stmts) => self.collect_document_symbols(stmts, content),
+                    FunctionBody::Statements(stmts) => {
+                        self.collect_document_symbols(stmts, content)
+                    }
                     _ => vec![],
                 };
                 (name.value.clone(), 12, children, (**name).clone())
@@ -2049,7 +2314,9 @@ impl LanguageServer {
                 let children = self.collect_document_symbols(body, content);
                 (name.value.clone(), 5, children, (**name).clone())
             }
-            Statement::EnumDecl { name, body, cases, .. } => {
+            Statement::EnumDecl {
+                name, body, cases, ..
+            } => {
                 let mut children = self.collect_document_symbols(body, content);
                 children.extend(self.collect_enum_cases(cases));
                 (name.value.clone(), 10, children, (**name).clone())
@@ -2058,7 +2325,9 @@ impl LanguageServer {
                 let children = self.collect_protocol_members(members, content);
                 (name.value.clone(), 14, children, (**name).clone())
             }
-            Statement::ExtensionDecl { type_name, body, .. } => {
+            Statement::ExtensionDecl {
+                type_name, body, ..
+            } => {
                 let children = self.collect_document_symbols(body, content);
                 (type_name.value.clone(), 5, children, (**type_name).clone())
             }
@@ -2074,9 +2343,7 @@ impl LanguageServer {
             Statement::VariableDecl { name, .. } => {
                 (name.value.clone(), 13, vec![], (**name).clone())
             }
-            Statement::TypeAlias { name, .. } => {
-                (name.value.clone(), 17, vec![], (**name).clone())
-            }
+            Statement::TypeAlias { name, .. } => (name.value.clone(), 17, vec![], (**name).clone()),
             Statement::OperatorDecl { token, symbol, .. } => {
                 (symbol.clone(), 12, vec![], (**token).clone())
             }
@@ -2087,26 +2354,25 @@ impl LanguageServer {
                 let children = self.collect_document_symbols(body, content);
                 (name.value.clone(), 2, children, (**name).clone())
             }
-            Statement::MacroDecl { name, .. } => {
-                (name.value.clone(), 14, vec![], (**name).clone())
-            }
+            Statement::MacroDecl { name, .. } => (name.value.clone(), 14, vec![], (**name).clone()),
             _ => return None,
         };
         let decl_token = stmt.token();
         let start_pos = decl_token.position;
         let name_pos = name_token.position;
-        let has_brace_body = matches!(stmt,
+        let has_brace_body = matches!(
+            stmt,
             Statement::FunctionDecl { .. }
-            | Statement::StructDecl { .. }
-            | Statement::ClassDecl { .. }
-            | Statement::EnumDecl { .. }
-            | Statement::ProtocolDecl { .. }
-            | Statement::ExtensionDecl { .. }
-            | Statement::ModuleDecl { .. }
-            | Statement::InitDecl { .. }
-            | Statement::DeinitDecl { .. }
-            | Statement::SubscriptDecl { .. }
-            | Statement::MacroDecl { .. }
+                | Statement::StructDecl { .. }
+                | Statement::ClassDecl { .. }
+                | Statement::EnumDecl { .. }
+                | Statement::ProtocolDecl { .. }
+                | Statement::ExtensionDecl { .. }
+                | Statement::ModuleDecl { .. }
+                | Statement::InitDecl { .. }
+                | Statement::DeinitDecl { .. }
+                | Statement::SubscriptDecl { .. }
+                | Statement::MacroDecl { .. }
         );
         let name_end = name_pos.col + name_pos.len;
         let (end_line, end_col) = if has_brace_body {
@@ -2131,129 +2397,139 @@ impl LanguageServer {
     }
 
     fn collect_protocol_members(&self, members: &[ProtocolMember], content: &str) -> Vec<Value> {
-        members.iter().filter_map(|member| match member {
-            ProtocolMember::Method { decl, .. } => {
-                self.statement_to_document_symbol(&decl.borrow(), content)
-            }
-            ProtocolMember::Property { name, .. } => {
-                let pos = name.position;
-                Some(json!({
-                    "name": name.value.clone(),
-                    "kind": 7,
-                    "range": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "selectionRange": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "children": []
-                }))
-            }
-            ProtocolMember::AssociatedType { name, .. } => {
-                let pos = name.position;
-                Some(json!({
-                    "name": name.value.clone(),
-                    "kind": 26,
-                    "range": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "selectionRange": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "children": []
-                }))
-            }
-            ProtocolMember::StaticVar { name, .. } => {
-                let pos = name.position;
-                Some(json!({
-                    "name": name.value.clone(),
-                    "kind": 13,
-                    "range": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "selectionRange": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "children": []
-                }))
-            }
-            ProtocolMember::TypeAlias { name, .. } => {
-                let pos = name.position;
-                Some(json!({
-                    "name": name.value.clone(),
-                    "kind": 17,
-                    "range": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "selectionRange": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "children": []
-                }))
-            }
-            ProtocolMember::Subscript { token, .. } => {
-                let pos = token.position;
-                Some(json!({
-                    "name": "subscript",
-                    "kind": 12,
-                    "range": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "selectionRange": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "children": []
-                }))
-            }
-            ProtocolMember::Init { token, .. } => {
-                let pos = token.position;
-                Some(json!({
-                    "name": "init",
-                    "kind": 12,
-                    "range": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "selectionRange": {
-                        "start": lsp_pos(pos.line, pos.col),
-                        "end": lsp_pos(pos.line, pos.col + pos.len)
-                    },
-                    "children": []
-                }))
-            }
-        }).collect()
+        members
+            .iter()
+            .filter_map(|member| match member {
+                ProtocolMember::Method { decl, .. } => {
+                    self.statement_to_document_symbol(&decl.borrow(), content)
+                }
+                ProtocolMember::Property { name, .. } => {
+                    let pos = name.position;
+                    Some(json!({
+                        "name": name.value.clone(),
+                        "kind": 7,
+                        "range": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "selectionRange": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "children": []
+                    }))
+                }
+                ProtocolMember::AssociatedType { name, .. } => {
+                    let pos = name.position;
+                    Some(json!({
+                        "name": name.value.clone(),
+                        "kind": 26,
+                        "range": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "selectionRange": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "children": []
+                    }))
+                }
+                ProtocolMember::StaticVar { name, .. } => {
+                    let pos = name.position;
+                    Some(json!({
+                        "name": name.value.clone(),
+                        "kind": 13,
+                        "range": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "selectionRange": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "children": []
+                    }))
+                }
+                ProtocolMember::TypeAlias { name, .. } => {
+                    let pos = name.position;
+                    Some(json!({
+                        "name": name.value.clone(),
+                        "kind": 17,
+                        "range": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "selectionRange": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "children": []
+                    }))
+                }
+                ProtocolMember::Subscript { token, .. } => {
+                    let pos = token.position;
+                    Some(json!({
+                        "name": "subscript",
+                        "kind": 12,
+                        "range": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "selectionRange": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "children": []
+                    }))
+                }
+                ProtocolMember::Init { token, .. } => {
+                    let pos = token.position;
+                    Some(json!({
+                        "name": "init",
+                        "kind": 12,
+                        "range": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "selectionRange": {
+                            "start": lsp_pos(pos.line, pos.col),
+                            "end": lsp_pos(pos.line, pos.col + pos.len)
+                        },
+                        "children": []
+                    }))
+                }
+            })
+            .collect()
     }
 
     fn collect_enum_cases(&self, cases: &[crate::ast::statement::EnumCase]) -> Vec<Value> {
-        cases.iter().map(|ec| {
-            let pos = ec.name.position;
-            json!({
-                "name": ec.name.value.clone(),
-                "kind": 22,
-                "range": {
-                    "start": lsp_pos(pos.line, pos.col),
-                    "end": lsp_pos(pos.line, pos.col + pos.len)
-                },
-                "selectionRange": {
-                    "start": lsp_pos(pos.line, pos.col),
-                    "end": lsp_pos(pos.line, pos.col + pos.len)
-                },
-                "children": []
+        cases
+            .iter()
+            .map(|ec| {
+                let pos = ec.name.position;
+                json!({
+                    "name": ec.name.value.clone(),
+                    "kind": 22,
+                    "range": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "selectionRange": {
+                        "start": lsp_pos(pos.line, pos.col),
+                        "end": lsp_pos(pos.line, pos.col + pos.len)
+                    },
+                    "children": []
+                })
             })
-        }).collect()
+            .collect()
     }
 
-    fn find_brace_range(content: &str, start_line: usize, start_col: usize) -> Option<(usize, usize)> {
+    fn find_brace_range(
+        content: &str,
+        start_line: usize,
+        start_col: usize,
+    ) -> Option<(usize, usize)> {
         let mut open_line: Option<usize> = None;
         let mut depth: i32 = 0;
         for (i, line) in content.lines().enumerate() {
@@ -2261,7 +2537,11 @@ impl LanguageServer {
             if line_num < start_line {
                 continue;
             }
-            let col_start = if line_num == start_line { start_col.saturating_sub(1) as usize } else { 0 };
+            let col_start = if line_num == start_line {
+                start_col.saturating_sub(1) as usize
+            } else {
+                0
+            };
             for (j, ch) in line.char_indices() {
                 if line_num == start_line && j < col_start {
                     continue;
@@ -2282,14 +2562,22 @@ impl LanguageServer {
         None
     }
 
-    fn find_brace_end(content: &str, start_line: usize, start_col: usize) -> Option<(usize, usize)> {
+    fn find_brace_end(
+        content: &str,
+        start_line: usize,
+        start_col: usize,
+    ) -> Option<(usize, usize)> {
         let mut depth = 0i32;
         for (i, line) in content.lines().enumerate() {
             let line_num = i + 1;
             if line_num < start_line {
                 continue;
             }
-            let col_start = if line_num == start_line { start_col.saturating_sub(1) as usize } else { 0 };
+            let col_start = if line_num == start_line {
+                start_col.saturating_sub(1) as usize
+            } else {
+                0
+            };
             for (j, ch) in line.char_indices() {
                 if line_num == start_line && j < col_start {
                     continue;
@@ -2576,13 +2864,28 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
     let mut pending_function_params = false;
     let mut inside_function_params = false;
     for token in tokens {
-        let is_hash = matches!(&token.ty, TokenType::Separator { separator: SeparatorType::Hash });
+        let is_hash = matches!(
+            &token.ty,
+            TokenType::Separator {
+                separator: SeparatorType::Hash
+            }
+        );
         if prev_was_hash
-            && matches!(&token.ty, TokenType::Separator { separator: SeparatorType::OpenBracket })
+            && matches!(
+                &token.ty,
+                TokenType::Separator {
+                    separator: SeparatorType::OpenBracket
+                }
+            )
         {
             inside_attribute = true;
         }
-        if matches!(&token.ty, TokenType::Separator { separator: SeparatorType::OpenParen }) {
+        if matches!(
+            &token.ty,
+            TokenType::Separator {
+                separator: SeparatorType::OpenParen
+            }
+        ) {
             if pending_function_params || prev_keyword == Some(KeywordType::Init) {
                 inside_function_params = true;
                 pending_function_params = false;
@@ -2596,8 +2899,16 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
         let is_directive = prev_was_hash
             && matches!(
                 token.value.as_str(),
-                "define" | "undef" | "if" | "ifdef" | "ifndef" | "else" | "elseif" | "endif"
-                    | "error" | "warning"
+                "define"
+                    | "undef"
+                    | "if"
+                    | "ifdef"
+                    | "ifndef"
+                    | "else"
+                    | "elseif"
+                    | "endif"
+                    | "error"
+                    | "warning"
             );
         if let Some((type_idx, modifier_bits)) = semantic_token_info(
             token,
@@ -2627,16 +2938,25 @@ fn encode_semantic_tokens(tokens: &[Token]) -> Vec<u64> {
             prev_was_hash = false;
         }
         if is_directive {
-            pending_macro_identifier = matches!(token.value.as_str(), "define" | "ifdef" | "ifndef");
+            pending_macro_identifier =
+                matches!(token.value.as_str(), "define" | "ifdef" | "ifndef");
         } else {
             pending_macro_identifier = false;
         }
-        if let TokenType::Separator { separator: SeparatorType::CloseBracket } = &token.ty {
+        if let TokenType::Separator {
+            separator: SeparatorType::CloseBracket,
+        } = &token.ty
+        {
             if inside_attribute {
                 inside_attribute = false;
             }
         }
-        if matches!(&token.ty, TokenType::Separator { separator: SeparatorType::CloseParen }) {
+        if matches!(
+            &token.ty,
+            TokenType::Separator {
+                separator: SeparatorType::CloseParen
+            }
+        ) {
             inside_function_params = false;
         }
         if let TokenType::Keyword { keyword } = &token.ty {
