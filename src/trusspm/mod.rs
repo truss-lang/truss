@@ -70,10 +70,6 @@ pub fn parse_std_lib(
                     let mut lexer = Lexer::new(char_stream, file_engine.clone());
                     let tokens = lexer.parse();
                     if file_engine.borrow().has_errors() {
-                        let formatted = file_engine.borrow().format_all_plain(&content);
-                        if !formatted.is_empty() {
-                            println!("{}", formatted);
-                        }
                         engine.borrow_mut().extend(file_engine.take());
                         return (results, sources);
                     }
@@ -81,10 +77,6 @@ pub fn parse_std_lib(
                     let mut parser = Parser::new(file_rc.clone(), tokens, file_engine.clone());
                     let program = parser.parse();
                     if file_engine.borrow().has_errors() {
-                        let formatted = file_engine.borrow().format_all_plain(&content);
-                        if !formatted.is_empty() {
-                            println!("{}", formatted);
-                        }
                         engine.borrow_mut().extend(file_engine.take());
                         return (results, sources);
                     }
@@ -127,10 +119,6 @@ pub fn parse_std_lib(
         let mut lexer = Lexer::new(char_stream, file_engine.clone());
         let tokens = lexer.parse();
         if file_engine.borrow().has_errors() {
-            let formatted = file_engine.borrow().format_all_plain(&content);
-            if !formatted.is_empty() {
-                println!("{}", formatted);
-            }
             engine.borrow_mut().extend(file_engine.take());
             return (results, sources);
         }
@@ -138,10 +126,6 @@ pub fn parse_std_lib(
         let mut parser = Parser::new(file_rc.clone(), tokens, file_engine.clone());
         let program = parser.parse();
         if file_engine.borrow().has_errors() {
-            let formatted = file_engine.borrow().format_all_plain(&content);
-            if !formatted.is_empty() {
-                println!("{}", formatted);
-            }
             engine.borrow_mut().extend(file_engine.take());
             return (results, sources);
         }

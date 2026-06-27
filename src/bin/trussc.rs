@@ -195,10 +195,7 @@ fn main() {
         let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
         packages.insert("Truss".to_string(), truss_pkg.clone());
 
-        let std_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-        let (file_programs, _std_sources) = parse_std_lib(stdlib_path, std_engine.clone());
-
-        let has_std_errors = std_engine.borrow().has_errors();
+        let (file_programs, _std_sources) = parse_std_lib(stdlib_path, engine.clone());
 
         for file_stmts in file_programs {
             for stmt in &file_stmts {
@@ -206,23 +203,20 @@ fn main() {
             }
         }
 
-        if !has_std_errors {
-            let std_prog = Program {
-                file: Rc::new("stdlib".to_string()),
-                statements: stdlib_stmts.clone(),
-            };
-            let mut std_resolver =
-                SymbolResolver::new(packages.clone(), "Truss".to_string(), std_engine.clone());
-            let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
+        let std_prog = Program {
+            file: Rc::new("stdlib".to_string()),
+            statements: stdlib_stmts.clone(),
+        };
+        let mut std_resolver =
+            SymbolResolver::new(packages.clone(), "Truss".to_string(), engine.clone());
+        let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
 
-            let stdlib_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
-            let mut std_type_resolver = TypeResolver::new(
-                packages.clone(),
-                "Truss".to_string(),
-                stdlib_ty_engine.clone(),
-            );
-            std_type_resolver.resolve(&std_prog, std_module);
-        }
+        let mut std_type_resolver = TypeResolver::new(
+            packages.clone(),
+            "Truss".to_string(),
+            engine.clone(),
+        );
+        std_type_resolver.resolve(&std_prog, std_module);
     }
 
     let src_content = source_contents
