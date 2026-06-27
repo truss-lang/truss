@@ -3277,6 +3277,21 @@ impl SymbolResolver {
                 self.resolve_expression(key.clone());
                 self.resolve_expression(value.clone());
             }
+            Expression::Type {
+                name,
+                type_parameters,
+                ..
+            } => {
+                if let Some(scope) = self.current_scope.as_ref() {
+                    let _ = scope.borrow().get_symbol(&name.value);
+                    let _ = scope.borrow().get_type(&name.value);
+                }
+                if let Some(params) = type_parameters {
+                    for param in params {
+                        self.resolve_expression(param.clone());
+                    }
+                }
+            }
             _ => {}
         }
     }
