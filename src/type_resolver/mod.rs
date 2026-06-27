@@ -269,10 +269,6 @@ impl TypeResolver {
                     .borrow_mut()
                     .set_type(name.value.clone(), struct_ty.clone());
 
-                for conformance in conformances.iter() {
-                    self.infer_type(conformance.clone());
-                }
-
                 let prev_owner = self.current_owner.replace(symbol.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
@@ -313,6 +309,9 @@ impl TypeResolver {
                     .unwrap()
                     .borrow_mut()
                     .set_type("Self".to_string(), struct_ty.clone());
+                for conformance in conformances.iter() {
+                    self.infer_type(conformance.clone());
+                }
                 for stmt in body.iter() {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
@@ -405,27 +404,6 @@ impl TypeResolver {
                     .borrow_mut()
                     .set_type(name.value.clone(), class_ty.clone());
 
-                if let Some(superclass_expr) = superclass {
-                    self.infer_type(superclass_expr.clone());
-                    if let Expression::Type {
-                        name: super_name, ..
-                    } = &*superclass_expr.borrow()
-                    {
-                        let super_ty = self
-                            .current_scope
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .get_type(&super_name.value);
-                        if let Some(super_ty) = super_ty {
-                            self.superclass_map.insert(name.value.clone(), super_ty);
-                        }
-                    }
-                }
-                for conformance in conformances.iter() {
-                    self.infer_type(conformance.clone());
-                }
-
                 let prev_owner = self.current_owner.replace(symbol.clone());
                 self.enter_scope(scope.as_ref().unwrap().clone());
                 for gp in generic_parameters {
@@ -466,6 +444,26 @@ impl TypeResolver {
                     .unwrap()
                     .borrow_mut()
                     .set_type("Self".to_string(), class_ty.clone());
+                if let Some(superclass_expr) = superclass {
+                    self.infer_type(superclass_expr.clone());
+                    if let Expression::Type {
+                        name: super_name, ..
+                    } = &*superclass_expr.borrow()
+                    {
+                        let super_ty = self
+                            .current_scope
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .get_type(&super_name.value);
+                        if let Some(super_ty) = super_ty {
+                            self.superclass_map.insert(name.value.clone(), super_ty);
+                        }
+                    }
+                }
+                for conformance in conformances.iter() {
+                    self.infer_type(conformance.clone());
+                }
                 for stmt in body.iter() {
                     let method_info: MethodInfo = {
                         if let Statement::FunctionDecl {
