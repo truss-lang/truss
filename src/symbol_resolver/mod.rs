@@ -52,10 +52,11 @@ impl SymbolResolver {
         current_pkg
             .borrow_mut()
             .modules
-            .insert(module_name, module.clone());
+            .insert(module_name.clone(), module.clone());
         self.current_module = Some(module.clone());
         let scope = self.enter_scope(None);
         self.current_module.as_ref().unwrap().borrow_mut().scope = Some(scope.clone());
+        scope.borrow_mut().module_name = Some(module_name.clone());
 
         let mut entries: Vec<(String, Rc<RefCell<Symbol>>)> = Vec::new();
         let mut type_entries: Vec<(String, Rc<RefCell<Type>>)> = Vec::new();
@@ -2523,7 +2524,7 @@ impl SymbolResolver {
                         self.resolve_where_requirement(req);
                     }
                 }
-                self.enter_scope(scope.clone());
+                *scope = Some(self.enter_scope(None));
                 for member in members {
                     match member {
                         ProtocolMember::Method { decl, .. } => {

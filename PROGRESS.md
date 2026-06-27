@@ -4,6 +4,30 @@
 
 ### Completed
 
+5. ✅ **trussup: redesign update to rebuild current toolchain in-place**
+   - `update` 现在感知当前版本，不再硬编码 `latest`
+   - `nightly`/`latest` → 远程克隆构建；其他版本 → 本地源码重编译
+   - 未激活 toolchain 时报错
+   - 消除了与 `install_from_remote` 的重复，-59 行
+
+4. ✅ **trussup: support install nightly**
+   - `install nightly` clones from GitHub, builds from remote, installs
+   - Extracted shared helpers: `download_stdlib()`, `install_from_local()`, `install_from_remote()`, `finalize_install()`
+   - `cmd_update()` now reuses `download_stdlib()` instead of inline code
+
+3. ✅ **trussup: auto-add installed toolchains to PATH via ~/.trussup/bin/**
+   - `sync_bin_dir()` creates symlinks from `~/.trussup/toolchains/<version>/` to `~/.trussup/bin/`
+   - `install` / `use` / `update` all sync binaries after activation
+   - `remove` cleans up bin symlinks when removing current version
+   - Prints PATH hint when not found in shell config
+
+2. ✅ **trussup: add list-remote command**
+   - New `list-remote` subcommand in `Commands` enum
+   - `cmd_list_remote()` fetches tags from GitHub via `git ls-remote --tags --refs`
+   - Displays versions sorted descending, handles no-tags gracefully
+
+### Completed
+
 1. ✅ **F2: Protocol static var and init constraints**
    - AST: `ProtocolMember::StaticVar` and `ProtocolMember::Init` variants
    - Parser: `static var NAME: TYPE { get set }` and `init(PARAMS) throws?` in protocol bodies

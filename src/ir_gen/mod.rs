@@ -74,10 +74,13 @@ pub struct IRGenerator<'ctx> {
     current_accessor_struct: Rc<RefCell<Option<(String, PointerValue<'ctx>)>>>,
     vtable_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     vtable_globals: Rc<RefCell<HashMap<String, inkwell::values::GlobalValue<'ctx>>>>,
+    vtable_qualified_names: Rc<RefCell<HashMap<String, (String, String)>>>,
     vtable_method_lists: Rc<RefCell<HashMap<String, Vec<(String, String)>>>>,
     protocol_witness_table_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     protocol_witness_tables:
         Rc<RefCell<HashMap<(String, String), inkwell::values::GlobalValue<'ctx>>>>,
+    protocol_wt_qualified_names:
+        Rc<RefCell<HashMap<(String, String), (String, String, String, String)>>>,
     existential_container_types: Rc<RefCell<HashMap<String, inkwell::types::StructType<'ctx>>>>,
     class_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
     container_refs: Rc<RefCell<Vec<PointerValue<'ctx>>>>,
@@ -116,9 +119,11 @@ impl<'ctx> IRGenerator<'ctx> {
             current_accessor_struct: Rc::new(RefCell::new(None)),
             vtable_types: Rc::new(RefCell::new(HashMap::new())),
             vtable_globals: Rc::new(RefCell::new(HashMap::new())),
+            vtable_qualified_names: Rc::new(RefCell::new(HashMap::new())),
             vtable_method_lists: Rc::new(RefCell::new(HashMap::new())),
             protocol_witness_table_types: Rc::new(RefCell::new(HashMap::new())),
             protocol_witness_tables: Rc::new(RefCell::new(HashMap::new())),
+            protocol_wt_qualified_names: Rc::new(RefCell::new(HashMap::new())),
             existential_container_types: Rc::new(RefCell::new(HashMap::new())),
             class_refs: Rc::new(RefCell::new(Vec::new())),
             container_refs: Rc::new(RefCell::new(Vec::new())),
@@ -384,7 +389,9 @@ impl<'ctx> IRGenerator<'ctx> {
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         for (class_name, _) in &vtable_globals_snapshot {
-            let vtable_global_name = format!("__vtable.{}", class_name);
+            let (pkg, mod_name) = self.vtable_qualified_names.borrow().get(class_name).cloned()
+                .unwrap_or((self.package_name.clone(), self.module_name.clone()));
+            let vtable_global_name = Self::mangle_global_name(&pkg, &mod_name, "__vtable", class_name);
             if self.module.get_global(&vtable_global_name).is_none() {
                 if let Some(t) = self.vtable_types.borrow().get(class_name).copied() {
                     let gv =
@@ -406,7 +413,15 @@ impl<'ctx> IRGenerator<'ctx> {
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         for ((protocol_name, type_suffix), old_gv) in &wt_snapshot {
-            let wt_global_name = format!("__protocol_wt.{}.{}", protocol_name, type_suffix);
+            let (pkg1, module1, pkg2, module2) = self.protocol_wt_qualified_names.borrow().get(&(protocol_name.clone(), type_suffix.clone())).cloned()
+                .unwrap_or((self.package_name.clone(), self.module_name.clone(), self.package_name.clone(), self.module_name.clone()));
+            let wt_global_name = if pkg1.is_empty() && module1.is_empty() && pkg2.is_empty() && module2.is_empty() {
+                format!("_T${}$__protocol_wt${}", protocol_name.replace('.', "$"), type_suffix.replace('.', "$"))
+            } else {
+                format!("_T${}${}${}$__protocol_wt${}${}${}",
+                    pkg1, module1, protocol_name.replace('.', "$"),
+                    pkg2, module2, type_suffix.replace('.', "$"))
+            };
             if self.module.get_global(&wt_global_name).is_none() {
                 let wt_type = old_gv.get_value_type().into_struct_type();
                 let gv = self.module.add_global(wt_type, None, &wt_global_name);
@@ -1430,6 +1445,46 @@ impl<'ctx> IRGenerator<'ctx> {
                 types.join("_")
             )
         }
+    }
+
+    fn mangle_global_name(pkg: &str, module: &str, base: &str, name: &str) -> String {
+        let name_mangled = name.replace('.', "$");
+        let pkg_mangled = pkg.replace('.', "$");
+        let module_mangled = module.replace('.', "$");
+        if pkg.is_empty() && module.is_empty() {
+            format!("_T${}${}", base, name_mangled)
+        } else {
+            format!("_T${}${}${}${}", pkg_mangled, module_mangled, base, name_mangled)
+        }
+    }
+
+    fn resolve_qualified_name_from_scope(&self, scope: &Rc<RefCell<TrussScope>>) -> (String, String) {
+        let mut current = Some(scope.clone());
+        while let Some(s) = current {
+            let sb = s.borrow();
+            if let Some(ref mn) = sb.module_name {
+                let pkg = mn.split('.').next().unwrap_or(mn).to_string();
+                return (pkg.replace('.', "$"), mn.replace('.', "$"));
+            }
+            current = sb.parent.clone();
+        }
+        (self.package_name.clone(), self.module_name.clone())
+    }
+
+    fn find_protocol_qualified_name(&self, protocol_name: &str) -> Option<(String, String)> {
+        let scope_borrow = self.program_scope.borrow();
+        let scope_ref = scope_borrow.as_ref()?;
+        let sym = scope_ref.borrow().get_symbol(protocol_name)?;
+        let binding = sym.borrow();
+        if let Symbol::Protocol { decl, .. } = &*binding {
+            let decl_borrow = decl.borrow();
+            if let Statement::ProtocolDecl { scope, .. } = &*decl_borrow {
+                if let Some(s) = scope {
+                    return Some(self.resolve_qualified_name_from_scope(s));
+                }
+            }
+        }
+        None
     }
 
     fn types_compatible(a: &Type, b: &Type) -> bool {
@@ -2685,8 +2740,13 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_vtable_instances(&self, statement: Rc<RefCell<Statement>>) {
-        if let Statement::ClassDecl { name, .. } = &*statement.borrow() {
+        if let Statement::ClassDecl { name, scope, .. } = &*statement.borrow() {
             let class_name = &name.value;
+            let (pkg, mod_name) = scope.as_ref()
+                .map(|s| self.resolve_qualified_name_from_scope(s))
+                .unwrap_or((self.package_name.clone(), self.module_name.clone()));
+            self.vtable_qualified_names.borrow_mut().insert(class_name.clone(), (pkg.clone(), mod_name.clone()));
+
             let method_list = self.compute_vtable_method_list(class_name);
             if method_list.is_empty() {
                 return;
@@ -2695,7 +2755,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 return;
             };
 
-            let vtable_name = format!("__vtable.{}", class_name);
+            let vtable_name = Self::mangle_global_name(&pkg, &mod_name, "__vtable", class_name);
             if self.module.get_global(&vtable_name).is_some() {
                 return;
             }
@@ -3008,34 +3068,34 @@ impl<'ctx> IRGenerator<'ctx> {
     }
 
     fn create_protocol_witness_tables(&self, statement: Rc<RefCell<Statement>>) {
-        let (type_name, type_arguments_opt) =
+        let (type_name, type_arguments_opt, type_scope) =
             if let Statement::ClassDecl {
-                name, conformances, ..
+                name, conformances, scope, ..
             } = &*statement.borrow()
             {
                 if conformances.is_empty() {
                     return;
                 }
-                (name.value.clone(), None)
+                (name.value.clone(), None, scope.clone())
             } else if let Statement::StructDecl {
-                name, conformances, ..
+                name, conformances, scope, ..
             } = &*statement.borrow()
             {
                 if conformances.is_empty() {
                     return;
                 }
-                (name.value.clone(), None)
+                (name.value.clone(), None, scope.clone())
             } else if let Statement::ExtensionDecl {
                 type_name,
                 conformances,
                 type_arguments,
-                ..
+                scope, ..
             } = &*statement.borrow()
             {
                 if conformances.is_empty() {
                     return;
                 }
-                (type_name.value.clone(), type_arguments.clone())
+                (type_name.value.clone(), type_arguments.clone(), scope.clone())
             } else {
                 return;
             };
@@ -3108,7 +3168,22 @@ impl<'ctx> IRGenerator<'ctx> {
             }
 
             let key = (protocol_name.clone(), type_suffix.clone());
-            let wt_global_name = format!("__protocol_wt.{}.{}", protocol_name, type_suffix);
+            let (protocol_pkg, protocol_mod) = self.find_protocol_qualified_name(&protocol_name)
+                .unwrap_or((self.package_name.clone(), self.module_name.clone()));
+            let (type_pkg, type_mod) = type_scope.as_ref()
+                .map(|s| self.resolve_qualified_name_from_scope(s))
+                .unwrap_or((self.package_name.clone(), self.module_name.clone()));
+            self.protocol_wt_qualified_names.borrow_mut().insert(
+                (protocol_name.clone(), type_suffix.clone()),
+                (protocol_pkg.clone(), protocol_mod.clone(), type_pkg.clone(), type_mod.clone()),
+            );
+            let wt_global_name = if protocol_pkg.is_empty() && protocol_mod.is_empty() && type_pkg.is_empty() && type_mod.is_empty() {
+                format!("_T${}$__protocol_wt${}", protocol_name.replace('.', "$"), type_suffix.replace('.', "$"))
+            } else {
+                format!("_T${}${}${}$__protocol_wt${}${}${}",
+                    protocol_pkg, protocol_mod, protocol_name.replace('.', "$"),
+                    type_pkg, type_mod, type_suffix.replace('.', "$"))
+            };
             if self.module.get_global(&wt_global_name).is_some() {
                 continue;
             }
