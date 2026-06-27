@@ -1,4 +1,10 @@
-use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc, time::SystemTime};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    path::Path,
+    rc::Rc,
+    time::SystemTime,
+};
 
 struct CachedBuildFile {
     mtime: SystemTime,
@@ -119,13 +125,10 @@ impl BuildOrchestrator {
                         let stmts = program.statements;
                         if let Ok(meta) = std::fs::metadata(path) {
                             if let Ok(mtime) = meta.modified() {
-                                self.file_cache.insert(
-                                    path_str,
-                                    CachedBuildFile {
-                                        mtime,
-                                        statements: stmts.clone(),
-                                    },
-                                );
+                                self.file_cache.insert(path_str, CachedBuildFile {
+                                    mtime,
+                                    statements: stmts.clone(),
+                                });
                             }
                         }
                         file_programs.push(stmts);
@@ -145,18 +148,20 @@ impl BuildOrchestrator {
                         file: Rc::new("stdlib".to_string()),
                         statements: stdlib_stmts.clone(),
                     };
+                    let std_engine2 = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
                     let mut std_resolver = SymbolResolver::new(
                         self.packages.clone(),
                         "Truss".to_string(),
-                        self.engine.clone(),
+                        std_engine2.clone(),
                     );
                     let std_module = std_resolver.resolve(&std_prog, "Truss".to_string());
 
                     // Type resolve std library
+                    let std_ty_engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
                     let mut std_type_resolver = TypeResolver::new(
                         self.packages.clone(),
                         "Truss".to_string(),
-                        self.engine.clone(),
+                        std_ty_engine.clone(),
                     );
                     std_type_resolver.resolve(&std_prog, std_module);
                 }
@@ -165,6 +170,7 @@ impl BuildOrchestrator {
 
         let pkgs_snapshot: Vec<String> = self.packages.keys().cloned().collect();
 
+
         for pkg_name in &pkgs_snapshot {
             if *pkg_name == self.manifest.name || *pkg_name == "Truss" {
                 continue;
@@ -172,12 +178,7 @@ impl BuildOrchestrator {
             let mut file_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
             let files = {
                 let mut dep_files = Vec::new();
-                if let Some(dep) = self
-                    .manifest
-                    .dependencies
-                    .iter()
-                    .find(|d| d.name == *pkg_name)
-                {
+                if let Some(dep) = self.manifest.dependencies.iter().find(|d| d.name == *pkg_name) {
                     let dep_src_dir = DependencyResolver::dependency_source_dir(dep, project_path);
                     if dep_src_dir.exists() {
                         let mut entries: Vec<_> = match std::fs::read_dir(&dep_src_dir) {
@@ -216,33 +217,24 @@ impl BuildOrchestrator {
                 let mut lexer = Lexer::new(char_stream, self.engine.clone());
                 let tokens = lexer.parse();
                 if self.engine.borrow().has_errors() {
-                    let formatted =
-                        duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
-                    if !formatted.is_empty() {
-                        eprintln!("{}", formatted);
-                    }
+                    let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                    if !formatted.is_empty() { eprintln!("{}", formatted); }
                     return;
                 }
                 let mut parser = Parser::new(file_rc, tokens, self.engine.clone());
                 let program = parser.parse();
                 if self.engine.borrow().has_errors() {
-                    let formatted =
-                        duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
-                    if !formatted.is_empty() {
-                        eprintln!("{}", formatted);
-                    }
+                    let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                    if !formatted.is_empty() { eprintln!("{}", formatted); }
                     return;
                 }
                 let stmts = program.statements;
                 if let Ok(meta) = std::fs::metadata(file) {
                     if let Ok(mtime) = meta.modified() {
-                        self.file_cache.insert(
-                            path_str,
-                            CachedBuildFile {
-                                mtime,
-                                statements: stmts.clone(),
-                            },
-                        );
+                        self.file_cache.insert(path_str, CachedBuildFile {
+                            mtime,
+                            statements: stmts.clone(),
+                        });
                     }
                 }
                 for stmt in stmts {
@@ -274,15 +266,13 @@ impl BuildOrchestrator {
             type_resolver.resolve(&dep_prog, module);
             if self.engine.borrow().has_errors() {
                 let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
-                if !formatted.is_empty() {
-                    eprintln!("{}", formatted);
-                }
+                if !formatted.is_empty() { eprintln!("{}", formatted); }
                 return;
             }
         }
 
         let main_pkg_name = self.manifest.name.clone();
-        if self.packages.get(&main_pkg_name).is_some() {
+        if let Some(pkg) = self.packages.get(&main_pkg_name) {
             let mut file_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
             let files = DependencyResolver::discover_source_files(&main_pkg_name, project_path);
             for file in &files {
@@ -308,33 +298,24 @@ impl BuildOrchestrator {
                 let mut lexer = Lexer::new(char_stream, self.engine.clone());
                 let tokens = lexer.parse();
                 if self.engine.borrow().has_errors() {
-                    let formatted =
-                        duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
-                    if !formatted.is_empty() {
-                        eprintln!("{}", formatted);
-                    }
+                    let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                    if !formatted.is_empty() { eprintln!("{}", formatted); }
                     return;
                 }
                 let mut parser = Parser::new(file_rc, tokens, self.engine.clone());
                 let program = parser.parse();
                 if self.engine.borrow().has_errors() {
-                    let formatted =
-                        duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
-                    if !formatted.is_empty() {
-                        eprintln!("{}", formatted);
-                    }
+                    let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
+                    if !formatted.is_empty() { eprintln!("{}", formatted); }
                     return;
                 }
                 let stmts = program.statements;
                 if let Ok(meta) = std::fs::metadata(file) {
                     if let Ok(mtime) = meta.modified() {
-                        self.file_cache.insert(
-                            path_str,
-                            CachedBuildFile {
-                                mtime,
-                                statements: stmts.clone(),
-                            },
-                        );
+                        self.file_cache.insert(path_str, CachedBuildFile {
+                            mtime,
+                            statements: stmts.clone(),
+                        });
                     }
                 }
                 for stmt in stmts {
@@ -363,9 +344,7 @@ impl BuildOrchestrator {
             type_resolver.resolve(&dummy_program, module);
             if self.engine.borrow().has_errors() {
                 let formatted = duck_diagnostic::format_all_smart(&*self.engine.borrow(), false);
-                if !formatted.is_empty() {
-                    eprintln!("{}", formatted);
-                }
+                if !formatted.is_empty() { eprintln!("{}", formatted); }
                 return;
             }
 
@@ -456,7 +435,11 @@ impl BuildOrchestrator {
                         let mut dep_entries: Vec<_> = match std::fs::read_dir(&dep_src_dir) {
                             Ok(entries) => entries
                                 .filter_map(|e| e.ok())
-                                .filter(|e| e.path().extension().is_some_and(|ext| ext == "truss"))
+                                .filter(|e| {
+                                    e.path()
+                                        .extension()
+                                        .is_some_and(|ext| ext == "truss")
+                                })
                                 .collect(),
                             Err(_) => Vec::new(),
                         };
@@ -464,7 +447,9 @@ impl BuildOrchestrator {
                         for dep_file in dep_entries.into_iter().map(|e| e.path()) {
                             let dep_path = dep_file.to_string_lossy().to_string();
                             if let Some(cached) = self.file_cache.get(&dep_path) {
-                                program.statements.extend(cached.statements.iter().cloned());
+                                program
+                                    .statements
+                                    .extend(cached.statements.iter().cloned());
                             }
                         }
                     }
