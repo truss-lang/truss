@@ -2938,6 +2938,21 @@ impl SymbolResolver {
             }
             Expression::ArrayLiteral { elements, .. } => {
                 for element in elements {
+                    let is_var = matches!(&*element.borrow(), Expression::Variable { .. });
+                    if is_var {
+                        if let Some(scope) = self.current_scope.as_ref() {
+                            let name = match &*element.borrow() {
+                                Expression::Variable { name, .. } => name.value.clone(),
+                                _ => String::new(),
+                            };
+                            if !name.is_empty()
+                                && (scope.borrow().get_type(&name).is_some()
+                                    || scope.borrow().get_symbol(&name).is_some())
+                            {
+                                continue;
+                            }
+                        }
+                    }
                     self.resolve_expression(element.clone());
                 }
             }
