@@ -2802,6 +2802,17 @@ impl TypeResolver {
 
                 let callee_type = callee_type.or_else(|| {
                     if let Expression::Variable { name, .. } = &*callee.borrow() {
+                        if let Some(scope) = self.current_scope.as_ref() {
+                            if let Some(sym) = scope.borrow().get_symbol(&name.value) {
+                                if let Ok(Some(decl)) = sym.borrow().get_decl() {
+                                    if let Statement::FunctionDecl { ty: fn_ty, .. } =
+                                        &*decl.borrow()
+                                    {
+                                        return fn_ty.clone();
+                                    }
+                                }
+                            }
+                        }
                         self.resolve_type_name(&name.value, name.as_ref())
                     } else {
                         None
