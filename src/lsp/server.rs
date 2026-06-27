@@ -122,7 +122,7 @@ pub fn start_server() {
         documents: HashMap::new(),
         exit: false,
         stdlib_path,
-        stdlib_cache: None,
+        truss_module: None,
         project_analyses: HashMap::new(),
         file_cache: HashMap::new(),
         dep_cache: HashMap::new(),
@@ -154,11 +154,6 @@ struct CachedFile {
     statements: Vec<Rc<RefCell<Statement>>>,
 }
 
-struct StdlibCache {
-    statements: Vec<Rc<RefCell<Statement>>>,
-    module: Rc<RefCell<Module>>,
-}
-
 struct DepCache {
     #[allow(dead_code)]
     statements: Vec<Rc<RefCell<Statement>>>,
@@ -169,7 +164,7 @@ struct LanguageServer {
     documents: HashMap<String, String>,
     exit: bool,
     stdlib_path: Option<String>,
-    stdlib_cache: Option<StdlibCache>,
+    truss_module: Option<Rc<RefCell<Module>>>,
     project_analyses: HashMap<String, ProjectAnalysis>,
     file_cache: HashMap<String, CachedFile>,
     dep_cache: HashMap<String, DepCache>,
@@ -399,14 +394,13 @@ impl LanguageServer {
         let main_pkg = Rc::new(RefCell::new(Package::new("main".to_string())));
         packages.insert("main".to_string(), main_pkg.clone());
 
-        if let Some(ref cache) = self.stdlib_cache {
+        if let Some(ref truss_mod) = self.truss_module {
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
-            packages.insert("Truss".to_string(), truss_pkg.clone());
-
             truss_pkg
                 .borrow_mut()
                 .modules
-                .insert("Truss".to_string(), cache.module.clone());
+                .insert("Truss".to_string(), truss_mod.clone());
+            packages.insert("Truss".to_string(), truss_pkg.clone());
         } else if let Some(ref stdlib_path) = self.stdlib_path {
             let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
             packages.insert("Truss".to_string(), truss_pkg.clone());
@@ -739,39 +733,7 @@ impl LanguageServer {
             );
             type_resolver.resolve(&std_prog, module.clone());
 
-            let mut ordered_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
-            let mut ordered: Vec<_> = file_programs
-                .iter()
-                .map(|stmts| {
-                    let name = stmts
-                        .first()
-                        .and_then(|s| {
-                            let file = &*s.borrow().token().file;
-                            std::path::Path::new(file)
-                                .file_stem()
-                                .and_then(|n| n.to_str())
-                                .map(|n| n.to_string())
-                        })
-                        .unwrap_or_default();
-                    let priority = match name.as_str() {
-                        "Truss" => 0,
-                        "Iterator" => 1,
-                        _ => 2,
-                    };
-                    (priority, stmts)
-                })
-                .collect();
-            ordered.sort_by_key(|(p, _)| *p);
-            for (_, stmts) in ordered {
-                for stmt in stmts {
-                    ordered_stmts.push(stmt.clone());
-                }
-            }
-
-            self.stdlib_cache = Some(StdlibCache {
-                statements: ordered_stmts,
-                module: module.clone(),
-            });
+            self.truss_module = Some(module);
         }
     }
 
@@ -1921,14 +1883,7 @@ impl LanguageServer {
                                         let token = decl_stmt.token();
                                         let pos = token.position;
                                         let mut decl_file = token.file.as_str().to_string();
-                                        if decl_file.is_empty() {
-                                            if let Some(ref stdlib_path) = self.stdlib_path {
-                                                decl_file = format!(
-                                                    "file://{}/Sources/Truss/Truss.truss",
-                                                    stdlib_path
-                                                );
-                                            }
-                                        } else if decl_file.starts_with('/') {
+                                        if decl_file.starts_with('/') {
                                             decl_file = format!("file://{}", decl_file);
                                         }
                                         return json!({
@@ -1964,11 +1919,7 @@ impl LanguageServer {
                 let token = stmt.token();
                 let pos = token.position;
                 let mut decl_file = token.file.as_str().to_string();
-                if decl_file == "stdlib" || decl_file.is_empty() {
-                    if let Some(ref stdlib_path) = self.stdlib_path {
-                        decl_file = format!("file://{}/Sources/Truss/Truss.truss", stdlib_path);
-                    }
-                } else if decl_file.starts_with('/') {
+                if decl_file.starts_with('/') {
                     decl_file = format!("file://{}", decl_file);
                 }
                 return json!({
