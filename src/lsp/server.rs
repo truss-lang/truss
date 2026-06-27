@@ -121,7 +121,6 @@ pub fn start_server() {
         documents: HashMap::new(),
         exit: false,
         stdlib_path,
-        stdlib_scope: None,
         stdlib_cache: None,
         project_analyses: HashMap::new(),
         file_cache: HashMap::new(),
@@ -170,7 +169,6 @@ struct LanguageServer {
     documents: HashMap<String, String>,
     exit: bool,
     stdlib_path: Option<String>,
-    stdlib_scope: Option<Rc<RefCell<Scope>>>,
     stdlib_cache: Option<StdlibCache>,
     project_analyses: HashMap<String, ProjectAnalysis>,
     file_cache: HashMap<String, CachedFile>,
@@ -685,8 +683,6 @@ impl LanguageServer {
                 TypeResolver::new(packages.clone(), "Truss".to_string(), stdlib_ty_engine.clone());
             type_resolver.resolve(&std_prog, module.clone());
 
-            self.stdlib_scope = module.borrow().scope.clone();
-
             let mut ordered_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
             let mut ordered: Vec<_> = file_programs.iter().map(|stmts| {
                 let name = stmts.first().and_then(|s| {
@@ -744,11 +740,6 @@ impl LanguageServer {
     }
 
     fn lookup_symbol_in_scopes(&self, name: &str) -> Option<(Rc<RefCell<Symbol>>, String)> {
-        if let Some(ref scope) = self.stdlib_scope {
-            if let Some(sym) = scope.borrow().get_symbol(name) {
-                return Some((sym, "stdlib".to_string()));
-            }
-        }
         for (file_path, analysis) in &self.project_analyses {
             let sb = analysis.scope.borrow();
             if let Some(sym) = sb.get_symbol(name) {
@@ -760,9 +751,6 @@ impl LanguageServer {
 
     fn lookup_all_symbols_in_scopes(&self, name: &str) -> Vec<Rc<RefCell<Symbol>>> {
         let mut result = Vec::new();
-        if let Some(ref scope) = self.stdlib_scope {
-            result.extend(scope.borrow().get_all_symbols(name));
-        }
         for (_, analysis) in &self.project_analyses {
             let sb = analysis.scope.borrow();
             let mut symbols = sb.get_all_symbols(name);
@@ -897,27 +885,6 @@ impl LanguageServer {
     }
 
     fn lookup_type_in_scopes(&self, name: &str) -> Option<(String, String)> {
-        if let Some(ref scope) = self.stdlib_scope {
-            let sb = scope.borrow();
-            if let Some(ty) = sb.get_type(name) {
-                return Some((ty.borrow().to_string(), "stdlib".to_string()));
-            }
-            if sb.overloads.contains_key(name) {
-                let overload_key = format!("{} (overloaded)", name);
-                return Some((overload_key, "stdlib".to_string()));
-            }
-            let check_name_table = |n: &str| -> Option<(String, String)> {
-                if let Some(sym) = sb.name_table.get(n) {
-                    if let Some(desc) = self.symbol_type_string(&sym.borrow()) {
-                        return Some((desc, "stdlib".to_string()));
-                    }
-                }
-                None
-            };
-            if let Some(result) = check_name_table(name) {
-                return Some(result);
-            }
-        }
         for (file_path, analysis) in &self.project_analyses {
             let sb = analysis.scope.borrow();
             if let Some(ty) = sb.get_type(name) {
@@ -1101,35 +1068,6 @@ impl LanguageServer {
         items.push(json!({"label": "rethrows", "kind": 14, "detail": "rethrows keyword", "insertText": "rethrows", "insertTextFormat": 1, "sortText": "2"}));
     }
 
-    fn add_stdlib_completions(&self, items: &mut Vec<Value>) {
-        if let Some(ref scope) = self.stdlib_scope {
-            let sb = scope.borrow();
-            for (name, _) in &sb.type_env {
-                items.push(json!({"label": name, "kind": 22, "detail": "type", "sortText": "3"}));
-            }
-            for (name, symbol) in &sb.name_table {
-                let (kind, detail) = match &*symbol.borrow() {
-                    Symbol::Function { .. } => (3, "function"),
-                    Symbol::Variable { .. } => (6, "variable"),
-                    Symbol::Struct { .. } => (22, "struct"),
-                    Symbol::Class { .. } => (7, "class"),
-                    Symbol::Enum { .. } => (13, "enum"),
-                    Symbol::Protocol { .. } => (8, "protocol"),
-                    Symbol::StructProperty { .. } | Symbol::ClassProperty { .. } => (10, "property"),
-                    Symbol::StructMethod { .. } | Symbol::ClassMethod { .. } => (2, "method"),
-                    Symbol::EnumCase { .. } => (20, "enum case"),
-                    Symbol::Module { .. } => (9, "module"),
-                    Symbol::Macro { .. } => (14, "macro"),
-                    _ => continue,
-                };
-                items.push(json!({"label": name, "kind": kind, "detail": format!("stdlib {}", detail), "sortText": "3"}));
-            }
-            for (name, _) in &sb.overloads {
-                items.push(json!({"label": name, "kind": 3, "detail": "stdlib symbol (overloaded)", "sortText": "3"}));
-            }
-        }
-    }
-
     fn add_scope_completions(&self, items: &mut Vec<Value>, _content: &str, uri: &str) {
         let file_path = uri.strip_prefix("file://").unwrap_or(uri);
         if let Some(analysis) = self.project_analyses.get(file_path) {
@@ -1285,7 +1223,6 @@ impl LanguageServer {
             self.add_member_completions(&mut items, &content, uri, line, character);
         } else {
             self.add_snippet_completions(&mut items);
-            self.add_stdlib_completions(&mut items);
             self.add_scope_completions(&mut items, &content, uri);
         }
 
@@ -1730,7 +1667,7 @@ impl LanguageServer {
                                         let token = decl_stmt.token();
                                         let pos = token.position;
                                         let mut decl_file = token.file.as_str().to_string();
-                                        if decl_file == "stdlib" || decl_file.is_empty() {
+                if decl_file.is_empty() {
                                             if let Some(ref stdlib_path) = self.stdlib_path {
                                                 decl_file = format!("file://{}/Sources/Truss/Truss.truss", stdlib_path);
                                             }
