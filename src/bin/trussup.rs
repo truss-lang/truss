@@ -16,6 +16,7 @@ enum Commands {
     InstallStd,
     UpdateStd,
     List,
+    ListRemote,
     Current,
     Remove { version: String },
     RemoveStd,
@@ -30,6 +31,7 @@ fn main() {
         Commands::InstallStd => cmd_install_std(),
         Commands::UpdateStd => cmd_update_std(),
         Commands::List => cmd_list(),
+        Commands::ListRemote => cmd_list_remote(),
         Commands::Current => cmd_current(),
         Commands::Remove { version } => cmd_remove(&version),
         Commands::RemoveStd => cmd_remove_std(),
@@ -214,6 +216,35 @@ fn cmd_list() {
             println!("{} (current)", name);
         } else {
             println!("{}", name);
+        }
+    }
+}
+
+fn cmd_list_remote() {
+    let url = "https://github.com/truss-lang/truss.git";
+    let output = Command::new("git")
+        .args(["ls-remote", "--tags", "--refs", url])
+        .output();
+    match output {
+        Ok(o) if o.status.success() => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let mut versions: Vec<&str> = stdout
+                .lines()
+                .filter_map(|line| line.split('\t').nth(1))
+                .filter_map(|refname| refname.strip_prefix("refs/tags/"))
+                .collect();
+            if versions.is_empty() {
+                println!("No remote versions available");
+                return;
+            }
+            versions.sort_by(|a, b| b.cmp(a));
+            for v in &versions {
+                println!("{}", v);
+            }
+        }
+        _ => {
+            eprintln!("Error: failed to fetch remote versions");
+            std::process::exit(1);
         }
     }
 }
