@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -69,6 +70,36 @@ fn set_current_version(version: &str) {
     });
 }
 
+fn sync_bin_dir(version: &str) {
+    let bin_dir = get_trussup_dir().join("bin");
+    std::fs::create_dir_all(&bin_dir).ok();
+    let toolchain_dir = get_trussup_dir().join("toolchains").join(version);
+    for bin_name in &["truss", "trussc", "truss-lsp", "trussup"] {
+        let src = toolchain_dir.join(bin_name);
+        if src.exists() {
+            let dst = bin_dir.join(bin_name);
+            let _ = std::fs::remove_file(&dst);
+            if let Err(e) = symlink(&src, &dst) {
+                eprintln!("Warning: failed to symlink {}: {}", bin_name, e);
+            }
+        }
+    }
+    let hint = "$HOME/.trussup/bin";
+    let rc_files = [
+        home_dir().join(".bashrc"),
+        home_dir().join(".zshrc"),
+        home_dir().join(".config/fish/config.fish"),
+    ];
+    let already_in_path = rc_files.iter().any(|rc| {
+        std::fs::read_to_string(rc)
+            .map(|s| s.contains(hint))
+            .unwrap_or(false)
+    });
+    if !already_in_path {
+        println!("Hint: add '{}' to your PATH", hint);
+    }
+}
+
 fn cmd_install(version: &str) {
     let toolchains_dir = get_trussup_dir().join("toolchains").join(version);
 
@@ -118,6 +149,7 @@ fn cmd_install(version: &str) {
 
             println!("Installed toolchain '{}'", version);
             set_current_version(version);
+            sync_bin_dir(version);
         }
         Ok(s) => {
             eprintln!("Error: cargo build failed with status: {}", s);
@@ -274,6 +306,11 @@ fn cmd_remove(version: &str) {
     if get_current_version().as_deref() == Some(version) {
         let current_file = get_trussup_dir().join("current.txt");
         let _ = std::fs::remove_file(&current_file);
+        let bin_dir = get_trussup_dir().join("bin");
+        for bin_name in &["truss", "trussc", "truss-lsp", "trussup"] {
+            let dst = bin_dir.join(bin_name);
+            let _ = std::fs::remove_file(&dst);
+        }
     }
 
     println!("Removed toolchain '{}'", version);
@@ -287,6 +324,7 @@ fn cmd_use(version: &str) {
     }
 
     set_current_version(version);
+    sync_bin_dir(version);
     println!("Using toolchain '{}'", version);
 }
 
@@ -380,6 +418,7 @@ fn cmd_update() {
     }
 
     set_current_version(version);
+    sync_bin_dir(version);
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 
