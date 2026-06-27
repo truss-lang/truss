@@ -6900,10 +6900,15 @@ impl TypeResolver {
             | BinaryOperator::LessEqual
             | BinaryOperator::Greater
             | BinaryOperator::GreaterEqual => {
-                if matches!(&*left.borrow(), Type::GenericParam(_)) {
-                    return None;
-                }
-                if left.borrow().clone() != right.borrow().clone() {
+                let left_ty = left.borrow().clone();
+                let right_ty = right.borrow().clone();
+                let compatible = match (&left_ty, &right_ty) {
+                    (Type::GenericParam(l), Type::GenericParam(r)) => l == r,
+                    (Type::Protocol(..), Type::GenericParam(..)) => true,
+                    (Type::GenericParam(..), Type::Protocol(..)) => true,
+                    _ => left_ty == right_ty,
+                };
+                if !compatible {
                     return None;
                 }
                 Some(Rc::new(RefCell::new(Type::Struct(
