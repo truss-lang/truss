@@ -8082,6 +8082,9 @@ impl TypeResolver {
         let mut unlabeled_indices: Vec<usize> = Vec::new();
 
         for (i, dp) in decl_params.iter().enumerate() {
+            if dp.borrow().variadic_kind == VariadicKind::BareVariadic {
+                continue;
+            }
             match Self::get_effective_label(&dp.borrow()) {
                 Some(label) => {
                     label_to_idx.entry(label).or_insert(i);
@@ -8165,6 +8168,9 @@ impl TypeResolver {
 
         for (i, dp) in decl_params.iter().enumerate() {
             if !matched[i] {
+                if dp.borrow().variadic_kind == VariadicKind::BareVariadic {
+                    continue;
+                }
                 if let Some(default_value) = &dp.borrow().default_value {
                     new_params[i] = Some(CallParameter {
                         label: None,
