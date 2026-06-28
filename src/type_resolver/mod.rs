@@ -921,46 +921,6 @@ impl TypeResolver {
                                 ..
                             } = &mut *decl.borrow_mut()
                             {
-                                let ret_type = if let Some(return_type_expr) = return_type {
-                                    self.infer_type(return_type_expr.clone())
-                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
-                                } else {
-                                    Rc::new(RefCell::new(Type::Void))
-                                };
-
-                                let mut parameter_types = Vec::new();
-                                let mut is_vararg = false;
-                                for param in parameters.iter() {
-                                    if param.borrow().variadic_kind == VariadicKind::BareVariadic {
-                                        is_vararg = true;
-                                        continue;
-                                    }
-                                    let param_type =
-                                        self.infer_type(param.borrow().type_expression.clone());
-                                    if let Some(ref param_type) = param_type {
-                                        param.borrow_mut().ty = Some(param_type.clone());
-                                        parameter_types.push(param_type.clone());
-                                    }
-                                    if param.borrow().variadic_kind != VariadicKind::NotVariadic {
-                                        is_vararg = true;
-                                    }
-                                }
-
-                                let throws_ty = throws_types.as_ref().map(|types| {
-                                    types
-                                        .iter()
-                                        .filter_map(|t| self.infer_type(t.clone()))
-                                        .collect()
-                                });
-
-                                let fn_type = Rc::new(RefCell::new(Type::Function(
-                                    parameter_types,
-                                    ret_type,
-                                    is_vararg,
-                                    throws_ty,
-                                )));
-                                *ty = Some(fn_type.clone());
-
                                 self.enter_scope(fn_scope.as_ref().unwrap().clone());
                                 let self_ty = Rc::new(RefCell::new(Type::Protocol(
                                     name.value.clone(),
@@ -1005,6 +965,46 @@ impl TypeResolver {
                                         self.infer_type(default_value.clone());
                                     }
                                 }
+
+                                let ret_type = if let Some(return_type_expr) = return_type {
+                                    self.infer_type(return_type_expr.clone())
+                                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                                } else {
+                                    Rc::new(RefCell::new(Type::Void))
+                                };
+
+                                let mut parameter_types = Vec::new();
+                                let mut is_vararg = false;
+                                for param in parameters.iter() {
+                                    if param.borrow().variadic_kind == VariadicKind::BareVariadic {
+                                        is_vararg = true;
+                                        continue;
+                                    }
+                                    let param_type =
+                                        self.infer_type(param.borrow().type_expression.clone());
+                                    if let Some(ref param_type) = param_type {
+                                        param.borrow_mut().ty = Some(param_type.clone());
+                                        parameter_types.push(param_type.clone());
+                                    }
+                                    if param.borrow().variadic_kind != VariadicKind::NotVariadic {
+                                        is_vararg = true;
+                                    }
+                                }
+
+                                let throws_ty = throws_types.as_ref().map(|types| {
+                                    types
+                                        .iter()
+                                        .filter_map(|t| self.infer_type(t.clone()))
+                                        .collect()
+                                });
+
+                                let fn_type = Rc::new(RefCell::new(Type::Function(
+                                    parameter_types,
+                                    ret_type,
+                                    is_vararg,
+                                    throws_ty,
+                                )));
+                                *ty = Some(fn_type.clone());
                                 match &*body.borrow() {
                                     FunctionBody::Statements(stmts) => {
                                         for s in stmts {
