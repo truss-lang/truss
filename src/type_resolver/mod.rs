@@ -1733,8 +1733,17 @@ impl TypeResolver {
                 body,
                 conformances,
                 scope,
+                generic_parameters,
                 ..
             } => {
+                for gp in generic_parameters {
+                    if let GenericParameterKind::Type { constraints } = &gp.kind {
+                        if !constraints.is_empty() {
+                            self.generic_param_constraint_exprs
+                                .insert(gp.name.value.clone(), constraints.clone());
+                        }
+                    }
+                }
                 let Some(symbol) = self
                     .current_scope
                     .as_ref()
@@ -1764,8 +1773,17 @@ impl TypeResolver {
                 body,
                 conformances,
                 scope,
+                generic_parameters,
                 ..
             } => {
+                for gp in generic_parameters {
+                    if let GenericParameterKind::Type { constraints } = &gp.kind {
+                        if !constraints.is_empty() {
+                            self.generic_param_constraint_exprs
+                                .insert(gp.name.value.clone(), constraints.clone());
+                        }
+                    }
+                }
                 let Some(symbol) = self
                     .current_scope
                     .as_ref()
@@ -3555,6 +3573,46 @@ impl TypeResolver {
                             self.infer_expression_type(param.expression.clone(), expected_ty);
                         }
                         ret_ty.clone()
+                    }
+                    Type::GenericParam(name) => {
+                        let constraint_exprs: Vec<_> = self
+                            .generic_param_constraint_exprs
+                            .get(name)
+                            .map(|v| v.clone())
+                            .unwrap_or_default();
+                        for constraint_expr in &constraint_exprs {
+                            if let Some(constraint_ty) =
+                                self.infer_type(constraint_expr.clone())
+                            {
+                                if let Type::Function(
+                                    param_tys,
+                                    ret_ty,
+                                    is_vararg,
+                                    _,
+                                ) = &*constraint_ty.borrow()
+                                {
+                                    if parameters.len() == param_tys.len() || *is_vararg {
+                                        for (i, param) in parameters.iter().enumerate() {
+                                            if i < param_tys.len() {
+                                                let expected_ty = param_tys[i].clone();
+                                                self.infer_expression_type(
+                                                    param.expression.clone(),
+                                                    expected_ty,
+                                                );
+                                            }
+                                        }
+                                        *call_ty = Some(ret_ty.clone());
+                                        return Some(ret_ty.clone());
+                                    }
+                                }
+                            }
+                        }
+                        self.emit_error(
+                            TrussDiagnosticCode::CallingNonFunction,
+                            format!("Cannot call non-function type {}", callee_type.borrow()),
+                            &callee.borrow().token(),
+                        );
+                        return None;
                     }
                     _ => {
                         if let Some(ret_ty) = self.try_resolve_dynamic_callable(
