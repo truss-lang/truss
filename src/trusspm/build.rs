@@ -7,7 +7,7 @@ struct CachedBuildFile {
 
 use crate::{
     ast::{node::Program, statement::Statement},
-    condition_eval::TargetTriple,
+    condition_eval::{flatten_program, predefined_symbols, TargetTriple},
     diag::TrussDiagnosticEngine,
     ir_gen::{IRGenerator, IRModules, emit},
     krate::Package,
@@ -116,7 +116,11 @@ impl BuildOrchestrator {
                             continue;
                         }
                         self.engine.borrow_mut().extend(file_engine.take());
-                        let stmts = program.statements;
+                        let mut stmts = program.statements;
+                        // Flatten conditional blocks (e.g. #if os(linux))
+                        let triple = TargetTriple::host();
+                        let mut symbols = predefined_symbols(&path_str);
+                        flatten_program(&mut stmts, &triple, &mut symbols);
                         if let Ok(meta) = std::fs::metadata(path) {
                             if let Ok(mtime) = meta.modified() {
                                 self.file_cache.insert(
