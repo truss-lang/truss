@@ -33,8 +33,6 @@ struct Cli {
     #[arg(long)]
     target: Option<String>,
     #[arg(long)]
-    stdlib_path: Option<String>,
-    #[arg(long)]
     shared: bool,
     #[arg(long)]
     r#static: bool,
@@ -187,10 +185,7 @@ fn main() {
     let engine = Rc::new(RefCell::new(TrussDiagnosticEngine::new()));
 
     let mut stdlib_stmts: Vec<Rc<RefCell<Statement>>> = Vec::new();
-    let stdlib_path = cli
-        .stdlib_path
-        .clone()
-        .or_else(truss::trusspm::find_stdlib_path);
+    let stdlib_path = truss::trusspm::find_stdlib_path();
     if let Some(ref stdlib_path) = stdlib_path {
         let truss_pkg = Rc::new(RefCell::new(Package::new("Truss".to_string())));
         packages.insert("Truss".to_string(), truss_pkg.clone());
