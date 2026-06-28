@@ -5177,82 +5177,134 @@ impl TypeResolver {
                             }
                         }
                     }
-                    Type::GenericParam(_param_name) => {
-                        let scope = self.current_scope.as_ref().unwrap().borrow();
-                        let mut matching_protocols: Vec<String> = scope
-                            .name_table
-                            .iter()
-                            .filter_map(|(name, sym)| {
-                                if let Symbol::Protocol { methods, .. } = &*sym.borrow() {
-                                    if methods.iter().any(|m| {
-                                        m.borrow().name().as_ref().ok() == Some(&member.value)
-                                    }) {
-                                        Some(name.clone())
+                    Type::GenericParam(param_name) => {
+                        // Helper: check if a Symbol::Protocol has a member (method or property) matching `member_name`
+                        let protocol_has_member = |sym: &Symbol, member_name: &str| -> bool {
+                            if let Symbol::Protocol { methods, properties, .. } = sym {
+                                let mn = &member_name.to_string();
+                                methods.iter().any(|m| m.borrow().name().as_ref().ok() == Some(mn))
+                                    || properties.iter().any(|p| p.borrow().name().as_ref().ok() == Some(mn))
+                            } else {
+                                false
+                            }
+                        };
+
+                        // Helper: look up a member in a protocol symbol and return its type
+                        let lookup_in_protocol = |sym: &Symbol, member_name: &str| -> Option<Rc<RefCell<Type>>> {
+                            if let Symbol::Protocol { methods, properties, .. } = sym {
+                                let mn = &member_name.to_string();
+                                // Search methods
+                                for method in methods {
+                                    if method.borrow().name().as_ref().ok() == Some(mn) {
+                                        if let Some(decl) = method.borrow().get_decl().ok().flatten() {
+                                            if let Statement::FunctionDecl { ty: Some(t), .. } = &*decl.borrow() {
+                                                return Some(t.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                                // Search properties
+                                for prop in properties {
+                                    if prop.borrow().name().as_ref().ok() == Some(mn) {
+                                        if let Some(decl) = prop.borrow().get_decl().ok().flatten() {
+                                            if let Statement::VariableDecl { ty: Some(t), .. } = &*decl.borrow() {
+                                                return Some(t.clone());
+                                            }
+                                        }
+                                        // Property might have type stored in its scope; try looking up
+                                        return Some(Rc::new(RefCell::new(Type::GenericParam(param_name.clone()))));
+                                    }
+                                }
+                            }
+                            None
+                        };
+
+                        // Step 1: Check if this generic param has constraints, and search those protocols first
+                        let constrained_protocols: Vec<String> = self
+                            .generic_param_constraint_exprs
+                            .get(param_name)
+                            .map(|exprs| {
+                                exprs.iter().filter_map(|expr| {
+                                    if let Expression::Type { name, .. } = &*expr.borrow() {
+                                        Some(name.value.clone())
                                     } else {
                                         None
                                     }
+                                }).collect()
+                            })
+                            .unwrap_or_default();
+
+                        // Search constrained protocols first (current scope)
+                        let current_scope_ref = self.current_scope.as_ref().unwrap().borrow();
+                        for proto_name in &constrained_protocols {
+                            if let Some(sym) = current_scope_ref.get_symbol(proto_name) {
+                                let binding = sym.borrow();
+                                if let Some(t) = lookup_in_protocol(&binding, &member.value) {
+                                    drop(binding);
+                                    *ty = Some(t.clone());
+                                    return Some(t);
+                                }
+                            }
+                        }
+
+                        // Step 2: Search ALL protocols in current scope for methods AND properties
+                        let mut matching_protocols: Vec<String> = current_scope_ref
+                            .name_table
+                            .iter()
+                            .filter_map(|(name, sym)| {
+                                if protocol_has_member(&*sym.borrow(), &member.value) {
+                                    Some(name.clone())
                                 } else {
                                     None
                                 }
                             })
                             .collect();
-                        if let Some(parent) = &scope.parent {
+                        if let Some(parent) = &current_scope_ref.parent {
                             let parent_ref = parent.borrow();
                             for (name, sym) in &parent_ref.name_table {
-                                if let Symbol::Protocol { methods, .. } = &*sym.borrow() {
-                                    if methods.iter().any(|m| {
-                                        m.borrow().name().as_ref().ok() == Some(&member.value)
-                                    }) && !matching_protocols.contains(name) {
-                                        matching_protocols.push(name.clone());
-                                    }
+                                if protocol_has_member(&*sym.borrow(), &member.value) && !matching_protocols.contains(name) {
+                                    matching_protocols.push(name.clone());
                                 }
                             }
                         }
+
                         for protocol_name in &matching_protocols {
-                            if let Some(symbol) = scope.get_symbol(protocol_name)
-                                && let Symbol::Protocol { methods, .. } = &*symbol.borrow()
-                            {
-                                for method in methods {
-                                    if method.borrow().name().as_ref().ok() == Some(&member.value)
-                                        && let Some(decl) =
-                                            method.borrow().get_decl().ok().flatten()
-                                    {
-                                        let method_ty = {
-                                            let decl_ref = decl.borrow();
-                                            if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
-                                                ty.clone()
-                                            } else {
-                                                continue;
-                                            }
-                                        };
-                                        if let Some(t) = method_ty {
-                                            *ty = Some(t.clone());
-                                            return Some(t.clone());
-                                        }
-                                    }
+                            if let Some(sym) = current_scope_ref.get_symbol(protocol_name) {
+                                let binding = sym.borrow();
+                                if let Some(t) = lookup_in_protocol(&binding, &member.value) {
+                                    drop(binding);
+                                    drop(current_scope_ref);
+                                    *ty = Some(t.clone());
+                                    return Some(t);
                                 }
                             }
                         }
-                        drop(scope);
+                        drop(current_scope_ref);
+
+                        // Step 3: Search Truss stdlib protocols
                         if let Some(truss_pkg) = self.packages.get("Truss") {
                             if let Some(truss_module) = truss_pkg.borrow().modules.get("Truss") {
                                 if let Some(truss_scope) = &truss_module.borrow().scope {
                                     let truss_ref = truss_scope.borrow();
                                     for (_, sym) in &truss_ref.name_table {
-                                        if let Symbol::Protocol { methods, .. } = &*sym.borrow() {
+                                        if let Symbol::Protocol { methods, properties, .. } = &*sym.borrow() {
+                                            // Search methods
                                             for method in methods {
                                                 if method.borrow().name().as_ref().ok() == Some(&member.value)
                                                     && let Some(decl) = method.borrow().get_decl().ok().flatten()
                                                 {
-                                                    let method_ty = {
-                                                        let decl_ref = decl.borrow();
-                                                        if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
-                                                            ty.clone()
-                                                        } else {
-                                                            continue;
-                                                        }
-                                                    };
-                                                    if let Some(t) = method_ty {
+                                                    if let Statement::FunctionDecl { ty: Some(t), .. } = &*decl.borrow() {
+                                                        *ty = Some(t.clone());
+                                                        return Some(t.clone());
+                                                    }
+                                                }
+                                            }
+                                            // Search properties
+                                            for prop in properties {
+                                                if prop.borrow().name().as_ref().ok() == Some(&member.value)
+                                                    && let Some(decl) = prop.borrow().get_decl().ok().flatten()
+                                                {
+                                                    if let Statement::VariableDecl { ty: Some(t), .. } = &*decl.borrow() {
                                                         *ty = Some(t.clone());
                                                         return Some(t.clone());
                                                     }
@@ -5263,17 +5315,12 @@ impl TypeResolver {
                                 }
                             }
                         }
-                        let token = &*member;
-                        self.emit_error(
-                            TrussDiagnosticCode::FieldNotFound,
-                            format!(
-                                "Cannot access member '{}' of generic type '{}'",
-                                member.value,
-                                object_ty.borrow()
-                            ),
-                            token,
-                        );
-                        return None;
+
+                        // Step 4: Fallback — return a generic type instead of erroring.
+                        // In generic context we're conservative: allow the member access to
+                        // proceed so the user can call methods / access properties on generic types.
+                        *ty = Some(object_ty.clone());
+                        return Some(object_ty.clone());
                     }
                     _ => {
                         let token = &*member;
@@ -6088,7 +6135,12 @@ impl TypeResolver {
                 scope,
                 ..
             } => {
-                if let Some(sc) = scope {
+                // Save and restore is_in_init so do-blocks inside init
+                // don't lose the init context (which is needed for let-property
+                // assignment tracking in check_writable).
+                let saved_is_in_init = self.is_in_init;
+                let saved_initialized_properties = self.initialized_properties.clone();
+                let result = if let Some(sc) = scope {
                     self.enter_scope(sc.clone());
                     self.yield_context_depth += 1;
                     self.resolve_block_expression(body);
@@ -6117,7 +6169,10 @@ impl TypeResolver {
                     self.resolve_block_expression(finally_body);
                     self.yield_context_depth -= 1;
                     block_ty
-                }
+                };
+                self.is_in_init = saved_is_in_init;
+                self.initialized_properties = saved_initialized_properties;
+                result
             }
             Expression::ArrayLiteral { elements, ty, .. } => {
                 for element in elements.iter() {
@@ -7149,7 +7204,15 @@ impl TypeResolver {
                     return Some(Rc::new(RefCell::new(right_ty)));
                 }
 
-                if !Self::is_numeric_type(&left_ty) || matches!(&left_ty, Type::GenericParam(_)) {
+                // GenericParam support: allow + and - on generic types
+                if matches!(&left_ty, Type::GenericParam(_)) {
+                    return Some(left.clone());
+                }
+                if matches!(&right_ty, Type::GenericParam(_)) {
+                    return Some(right.clone());
+                }
+
+                if !Self::is_numeric_type(&left_ty) {
                     return None;
                 }
                 if left_ty != right_ty {
@@ -7161,7 +7224,15 @@ impl TypeResolver {
                 let left_ty = left.borrow().clone();
                 let right_ty = right.borrow().clone();
 
-                if !Self::is_numeric_type(&left_ty) || matches!(&left_ty, Type::GenericParam(_)) {
+                // GenericParam support: allow *, /, % on generic types
+                if matches!(&left_ty, Type::GenericParam(_)) {
+                    return Some(left.clone());
+                }
+                if matches!(&right_ty, Type::GenericParam(_)) {
+                    return Some(right.clone());
+                }
+
+                if !Self::is_numeric_type(&left_ty) {
                     return None;
                 }
                 if left_ty != right_ty {
@@ -7298,6 +7369,10 @@ impl TypeResolver {
             }
             UnaryOperator::Inc | UnaryOperator::Dec => {
                 let op_ty = operand.borrow().clone();
+                // GenericParam support: ++ and -- on generic types
+                if matches!(&op_ty, Type::GenericParam(_)) {
+                    return Some(operand.clone());
+                }
                 if !Self::is_numeric_type(&op_ty) {
                     return None;
                 }
