@@ -475,7 +475,7 @@ impl BuildOrchestrator {
                 }
 
                 let file_ir_gen = IRGenerator::new(&context, ir_engine.clone())
-                    .with_namespace(&pkg_name, &pkg_name);
+                    .with_namespace(&pkg_name, "");
                 let file_modules_result =
                     file_ir_gen.generate_with_stdlib(&program, &stdlib_stmts, main_scope.clone());
                 if stdlib_to_emit.is_none() {
@@ -497,7 +497,7 @@ impl BuildOrchestrator {
 
             let combined_module = if file_modules.is_empty() {
                 let single_ir_gen = IRGenerator::new(&context, ir_engine.clone())
-                    .with_namespace(&pkg_name, &pkg_name);
+                    .with_namespace(&pkg_name, "");
                 let modules = single_ir_gen.generate_with_stdlib(&prog, &stdlib_stmts, main_scope);
                 if ir_engine.borrow().has_errors() {
                     let formatted = duck_diagnostic::format_all_smart(&*ir_engine.borrow(), false);
@@ -538,7 +538,7 @@ impl BuildOrchestrator {
                 .map(|p| p.product_type)
                 .unwrap_or(ProductType::Executable);
 
-            let build_dir = project_path.join("build");
+            let build_dir = project_path.join("Build");
             std::fs::create_dir_all(&build_dir).ok();
 
             let output_name = match kind {
