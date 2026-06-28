@@ -6034,6 +6034,22 @@ impl TypeResolver {
                                     matched_ret_type
                                 })
                             }
+                            Type::Pointer(inner) | Type::NonNullPointer(inner) => {
+                                if !parameters.is_empty() {
+                                    let index_ty = self.infer_type(parameters[0].expression.clone());
+                                    if let Some(ref idx_ty) = index_ty {
+                                        if !Self::is_integer_type(&*idx_ty.borrow()) {
+                                            self.emit_error(
+                                                TrussDiagnosticCode::TypeMismatch,
+                                                "Subscript index must be an integer type",
+                                                &parameters[0].expression.borrow().token(),
+                                            );
+                                            return None;
+                                        }
+                                    }
+                                }
+                                Some(inner.clone())
+                            }
                             _ => None,
                         };
                         if let Some(ret_type) = lookup_result {
@@ -10131,6 +10147,10 @@ impl TypeResolver {
             Expression::SubscriptAccess { object, .. } => {
                 let object_ty = self.infer_type(object.clone());
                 if let Some(object_ty) = object_ty {
+                    // Pointer subscript is always writable
+                    if matches!(&*object_ty.borrow(), Type::Pointer(_) | Type::NonNullPointer(_)) {
+                        return;
+                    }
                     let type_name = match &*object_ty.borrow() {
                         Type::Struct(n, ..) | Type::Class(n, ..) => Some(n.clone()),
                         _ => None,
