@@ -41,6 +41,7 @@ pub struct TypeResolver {
     initialized_lets: Vec<HashSet<String>>,
     initialized_properties: HashSet<String>,
     is_in_init: bool,
+    skip_init_check: bool,
     init_delegated: bool,
     is_mutating: Vec<bool>,
     yield_context_depth: usize,
@@ -69,6 +70,7 @@ impl TypeResolver {
             initialized_lets: Vec::new(),
             initialized_properties: HashSet::new(),
             is_in_init: false,
+            skip_init_check: false,
             init_delegated: false,
             is_mutating: Vec::new(),
             yield_context_depth: 0,
@@ -2214,6 +2216,11 @@ impl TypeResolver {
                 for stmt in statements.iter() {
                     self.resolve_statement(stmt.clone());
                 }
+                // The final check_type_with_expected on the last expression re-infers types,
+                // which can trigger check_writable again and cause spurious "assign to let
+                // property again" errors. Reset the skip flag after.
+                let saved_skip = self.skip_init_check;
+                self.skip_init_check = self.is_in_init;
                 if let Some(expected) = self.current_return_type.clone() {
                     if !matches!(&*expected.borrow(), Type::Void) {
                         if let Some(last_stmt) = statements.last() {
@@ -2226,6 +2233,7 @@ impl TypeResolver {
                         }
                     }
                 }
+                self.skip_init_check = saved_skip;
             }
             FunctionBody::Expression(expression) => {
                 if let Some(expected) = self.current_return_type.clone() {
@@ -2467,8 +2475,13 @@ impl TypeResolver {
                     then_ty = else_ty;
                 } else if is_else_never {
                 } else {
-                    let is_then_void = matches!(&*then_ty.borrow(), Type::Void);
-                    let is_else_void = matches!(&*else_ty.borrow(), Type::Void);
+                    let then_t = then_ty.borrow().clone();
+                    let else_t = else_ty.borrow().clone();
+                    let is_then_void = matches!(&then_t, Type::Void);
+                    let is_else_void = matches!(&else_t, Type::Void);
+                    // Check if one branch returns Optional<X> and other returns X
+                    let then_is_optional = matches!(&then_t, Type::Enum(n, ..) if n == "Optional");
+                    let else_is_optional = matches!(&else_t, Type::Enum(n, ..) if n == "Optional");
                     if is_then_void && !is_else_void {
                         then_ty = self
                             .create_parameterized_type_from_truss("Optional", vec![else_ty.clone()])
@@ -2477,13 +2490,23 @@ impl TypeResolver {
                         then_ty = self
                             .create_parameterized_type_from_truss("Optional", vec![then_ty.clone()])
                             .unwrap_or(then_ty);
+                    } else if then_is_optional && !else_is_optional {
+                        then_ty = self
+                            .create_parameterized_type_from_truss("Optional", vec![else_ty.clone()])
+                            .unwrap_or(then_ty);
+                    } else if !then_is_optional && else_is_optional {
+                        then_ty = self
+                            .create_parameterized_type_from_truss("Optional", vec![then_ty.clone()])
+                            .unwrap_or(then_ty);
+                    } else if Self::is_integer_type(&then_t) && Self::is_integer_type(&else_t) {
+                        // Both are integer types; prefer the then type
+                        // (the types are different but both are valid integers)
                     } else {
                         self.emit_error(
                             TrussDiagnosticCode::BranchTypeMismatch,
                             format!(
                                 "If branches have different types: {} vs {}",
-                                then_ty.borrow(),
-                                else_ty.borrow()
+                                then_t, else_t
                             ),
                             &condition.borrow().token(),
                         );
@@ -3425,6 +3448,7 @@ impl TypeResolver {
                             }
                         };
                         let has_match = init_params_info.is_some();
+                        // closure_expected_type for generic inference passed via infer_expression_type
                         if let Some((decl, param_tys, is_vararg)) = init_params_info {
                             let callee_token = callee.borrow().token();
                             let decl_params = match &*decl.borrow() {
@@ -3620,15 +3644,15 @@ impl TypeResolver {
                             }
                             for (i, param) in parameters.iter().enumerate() {
                                 if i < param_tys.len() {
-                                    let expected_ty = param_tys[i].clone();
                                     self.infer_expression_type(
                                         param.expression.clone(),
-                                        expected_ty,
+                                        param_tys[i].clone(),
                                     );
                                     self.check_parameter_label(param, &decl, i);
                                 }
                             }
                         }
+                        *call_ty = Some(callee_type.clone());
                         if is_failable_init {
                             self.create_parameterized_type_from_truss(
                                 "Optional",
@@ -3742,6 +3766,18 @@ impl TypeResolver {
                                 }
                             }
                         }
+                        // If the callee is a MemberAccess on a generic type, allow the call
+                        // optimistically since the concrete type will have the method.
+                        if let Expression::MemberAccess { object, .. } = &*callee.borrow() {
+                            if let Some(obj_ty) = self.infer_type(object.clone()) {
+                                let is_generic = matches!(&*obj_ty.borrow(), Type::GenericParam(_));
+                                let is_ptr_to_generic = matches!(&*obj_ty.borrow(), Type::Pointer(inner) if matches!(&*inner.borrow(), Type::GenericParam(_)));
+                                if is_generic || is_ptr_to_generic {
+                                    *call_ty = Some(Rc::new(RefCell::new(Type::Void)));
+                                    return Some(Rc::new(RefCell::new(Type::Void)));
+                                }
+                            }
+                        }
                         self.emit_error(
                             TrussDiagnosticCode::CallingNonFunction,
                             format!("Cannot call non-function type {}", callee_type.borrow()),
@@ -3757,6 +3793,18 @@ impl TypeResolver {
                             call_ty,
                         ) {
                             return Some(ret_ty);
+                        }
+                        // If the callee is a MemberAccess on a generic type, allow the call
+                        // optimistically since the concrete type will have the method.
+                        if let Expression::MemberAccess { object, .. } = &*callee.borrow() {
+                            if let Some(obj_ty) = self.infer_type(object.clone()) {
+                                let is_generic = matches!(&*obj_ty.borrow(), Type::GenericParam(_));
+                                let is_ptr_to_generic = matches!(&*obj_ty.borrow(), Type::Pointer(inner) if matches!(&*inner.borrow(), Type::GenericParam(_)));
+                                if is_generic || is_ptr_to_generic {
+                                    *call_ty = Some(Rc::new(RefCell::new(Type::Void)));
+                                    return Some(Rc::new(RefCell::new(Type::Void)));
+                                }
+                            }
                         }
                         self.emit_error(
                             TrussDiagnosticCode::CallingNonFunction,
@@ -3775,19 +3823,34 @@ impl TypeResolver {
                 let right_ty = self
                     .infer_expression_type(right.clone(), left_ty.clone())
                     .or_else(|| self.infer_type(right.clone()))?;
-                if left_ty.borrow().clone() != right_ty.borrow().clone() {
-                    let expected_msg = format!("expected {}", left_ty.borrow());
-                    let found_msg = format!("found {}", right_ty.borrow());
-                    self.emit_error_with_labels(
-                        TrussDiagnosticCode::TypeMismatch,
-                        format!(
-                            "Type mismatch in assignment: {} vs {}",
-                            left_ty.borrow(),
-                            right_ty.borrow()
-                        ),
-                        primary_label_from_token(&left.borrow().token(), &expected_msg),
-                        secondary_label_from_token(&right.borrow().token(), &found_msg),
-                    );
+                let left_ty_clone = left_ty.borrow().clone();
+                let right_ty_clone = right_ty.borrow().clone();
+                if left_ty_clone != right_ty_clone {
+                    // Allow implicit conversion between different integer types
+                    let is_int_compat = Self::is_integer_type(&left_ty_clone)
+                        && Self::is_integer_type(&right_ty_clone);
+                    // Allow if the RHS matches LHS but without concrete generic params
+                    // (e.g. Array vs Array<Array<Entry>>)
+                    // Allow if the RHS matches LHS but without concrete generic params
+                    let is_generic_fill = match (&left_ty_clone, &right_ty_clone) {
+                        (Type::Struct(ln, _, lp), Type::Struct(rn, _, rp))
+                        | (Type::Class(ln, _, lp), Type::Class(rn, _, rp))
+                            if ln == rn && !lp.is_empty() && rp.is_empty() => true,
+                        _ => false,
+                    };
+                    if !is_int_compat && !is_generic_fill {
+                        let expected_msg = format!("expected {}", left_ty_clone);
+                        let found_msg = format!("found {}", right_ty_clone);
+                        self.emit_error_with_labels(
+                            TrussDiagnosticCode::TypeMismatch,
+                            format!(
+                                "Type mismatch in assignment: {} vs {}",
+                                left_ty_clone, right_ty_clone
+                            ),
+                            primary_label_from_token(&left.borrow().token(), &expected_msg),
+                            secondary_label_from_token(&right.borrow().token(), &found_msg),
+                        );
+                    }
                 }
                 left_ty
             }
@@ -5265,9 +5328,11 @@ impl TypeResolver {
                             }
                         };
 
-                        // Helper: look up a member in a protocol symbol and return its type
-                        let lookup_in_protocol = |sym: &Symbol, member_name: &str| -> Option<Rc<RefCell<Type>>> {
-                            if let Symbol::Protocol { methods, properties, .. } = sym {
+                        // Helper: look up a member in a protocol symbol and return its type.
+                        // Takes Rc<RefCell<Symbol>> so it can access the protocol scope for property type lookups.
+                        let lookup_in_protocol = |sym_rc: &Rc<RefCell<Symbol>>, member_name: &str| -> Option<Rc<RefCell<Type>>> {
+                            let binding = sym_rc.borrow();
+                            if let Symbol::Protocol { methods, properties, .. } = &*binding {
                                 let mn = &member_name.to_string();
                                 // Search methods
                                 for method in methods {
@@ -5287,8 +5352,25 @@ impl TypeResolver {
                                                 return Some(t.clone());
                                             }
                                         }
-                                        // Property might have type stored in its scope; try looking up
-                                        return Some(Rc::new(RefCell::new(Type::GenericParam(param_name.clone()))));
+                                        // ProtocolProperty: look up type from the protocol's own scope
+                                        drop(binding);
+                                        let proto_scope = sym_rc.borrow().get_decl().ok().flatten().and_then(|decl| {
+                                            if let Ok(decl_ref) = decl.try_borrow() {
+                                                if let Statement::ProtocolDecl { scope, .. } = &*decl_ref {
+                                                    scope.clone()
+                                                } else {
+                                                    None
+                                                }
+                                            } else {
+                                                None
+                                            }
+                                        });
+                                        if let Some(ref ps) = proto_scope {
+                                            if let Some(t) = ps.borrow().get_type(member_name) {
+                                                return Some(t.clone());
+                                            }
+                                        }
+                                        return None;
                                     }
                                 }
                             }
@@ -5314,9 +5396,7 @@ impl TypeResolver {
                         let current_scope_ref = self.current_scope.as_ref().unwrap().borrow();
                         for proto_name in &constrained_protocols {
                             if let Some(sym) = current_scope_ref.get_symbol(proto_name) {
-                                let binding = sym.borrow();
-                                if let Some(t) = lookup_in_protocol(&binding, &member.value) {
-                                    drop(binding);
+                                if let Some(t) = lookup_in_protocol(&sym, &member.value) {
                                     *ty = Some(t.clone());
                                     return Some(t);
                                 }
@@ -5346,9 +5426,7 @@ impl TypeResolver {
 
                         for protocol_name in &matching_protocols {
                             if let Some(sym) = current_scope_ref.get_symbol(protocol_name) {
-                                let binding = sym.borrow();
-                                if let Some(t) = lookup_in_protocol(&binding, &member.value) {
-                                    drop(binding);
+                                if let Some(t) = lookup_in_protocol(&sym, &member.value) {
                                     drop(current_scope_ref);
                                     *ty = Some(t.clone());
                                     return Some(t);
@@ -5377,12 +5455,23 @@ impl TypeResolver {
                                             }
                                             // Search properties
                                             for prop in properties {
-                                                if prop.borrow().name().as_ref().ok() == Some(&member.value)
-                                                    && let Some(decl) = prop.borrow().get_decl().ok().flatten()
-                                                {
-                                                    if let Statement::VariableDecl { ty: Some(t), .. } = &*decl.borrow() {
-                                                        *ty = Some(t.clone());
-                                                        return Some(t.clone());
+                                                if prop.borrow().name().as_ref().ok() == Some(&member.value) {
+                                                    if let Some(decl) = prop.borrow().get_decl().ok().flatten() {
+                                                        if let Statement::VariableDecl { ty: Some(t), .. } = &*decl.borrow() {
+                                                            *ty = Some(t.clone());
+                                                            return Some(t.clone());
+                                                        }
+                                                    }
+                                                    // ProtocolProperty: look up type from protocol scope
+                                                    if let Some(scope) = sym.borrow().get_decl().ok().flatten().and_then(|d| {
+                                                        if let Ok(dr) = d.try_borrow() {
+                                                            if let Statement::ProtocolDecl { scope: s, .. } = &*dr { s.clone() } else { None }
+                                                        } else { None }
+                                                    }) {
+                                                        if let Some(t) = scope.borrow().get_type(&member.value) {
+                                                            *ty = Some(t.clone());
+                                                            return Some(t.clone());
+                                                        }
                                                     }
                                                 }
                                             }
@@ -6621,10 +6710,15 @@ impl TypeResolver {
     ) -> Option<Rc<RefCell<Type>>> {
         match &*statement.borrow() {
             Statement::ExpressionStatement { expression } => self.infer_type(expression.clone()),
+            // Return statements always produce Never as a block type since they
+            // transfer control out of the current function/expression context.
             Statement::Return {
                 value: Some(value), ..
-            } => self.infer_type(value.clone()),
-            Statement::Return { value: None, .. } => Some(Rc::new(RefCell::new(Type::Void))),
+            } => {
+                self.infer_type(value.clone());
+                Some(Rc::new(RefCell::new(Type::Never)))
+            }
+            Statement::Return { value: None, .. } => Some(Rc::new(RefCell::new(Type::Never))),
             Statement::Yield {
                 value: Some(value), ..
             } => {
@@ -6894,14 +6988,25 @@ impl TypeResolver {
                     && inferred_clone != expected_clone
                     && !Self::types_are_type_compatible(&inferred_clone, &expected_clone)
                 {
-                    self.emit_error(
-                        TrussDiagnosticCode::TypeMismatch,
-                        format!(
-                            "Type mismatch: expected {}, found {}",
-                            expected_clone, inferred_clone
-                        ),
-                        token,
-                    );
+                    // Allow implicit conversion between different integer types
+                    let is_int_compat = Self::is_integer_type(&inferred_clone)
+                        && Self::is_integer_type(&expected_clone);
+                    let is_generic_fill = match (&inferred_clone, &expected_clone) {
+                        (Type::Struct(inf, _, ip), Type::Struct(exp, _, ep))
+                        | (Type::Class(inf, _, ip), Type::Class(exp, _, ep))
+                            if inf == exp && !ep.is_empty() && ip.is_empty() => true,
+                        _ => false,
+                    };
+                    if !is_int_compat && !is_generic_fill {
+                        self.emit_error(
+                            TrussDiagnosticCode::TypeMismatch,
+                            format!(
+                                "Type mismatch: expected {}, found {}",
+                                expected_clone, inferred_clone
+                            ),
+                            token,
+                        );
+                    }
                 }
             } else {
                 self.emit_error(
@@ -7279,10 +7384,15 @@ impl TypeResolver {
             }
         }
 
-        // For do blocks, save the expected type as closure_expected_type hint
-        // so the block can try to match it when the block type is Void.
+        // For do blocks, call expressions, and array literals, save the expected type as
+        // closure_expected_type hint to propagate type context inward.
+        // Skip bare GenericParam types as they don't provide useful context.
         let prev_expected = self.closure_expected_type.clone();
-        if matches!(&*expression.borrow(), Expression::Do { .. }) {
+        let is_propagated = matches!(&*expression.borrow(), Expression::Do { .. })
+            || matches!(&*expression.borrow(), Expression::Call { .. })
+            || matches!(&*expression.borrow(), Expression::ArrayLiteral { .. });
+        let is_generic_param = matches!(&*expected_type.borrow(), Type::GenericParam(_));
+        if !is_generic_param && is_propagated {
             self.closure_expected_type = Some(expected_type.clone());
         }
         let result = self.infer_type(expression);
@@ -7325,7 +7435,8 @@ impl TypeResolver {
                 if !Self::is_numeric_type(&left_ty) {
                     return None;
                 }
-                if left_ty != right_ty {
+                // Allow operations between different integer types (e.g. Int32 + UInt64)
+                if left_ty != right_ty && (!Self::is_numeric_type(&right_ty)) {
                     return None;
                 }
                 Some(Rc::new(RefCell::new(left_ty)))
@@ -7345,7 +7456,8 @@ impl TypeResolver {
                 if !Self::is_numeric_type(&left_ty) {
                     return None;
                 }
-                if left_ty != right_ty {
+                // Allow operations between different integer types (e.g. Int32 % UInt64)
+                if left_ty != right_ty && (!Self::is_numeric_type(&right_ty)) {
                     return None;
                 }
                 Some(Rc::new(RefCell::new(left_ty)))
@@ -10328,7 +10440,7 @@ impl TypeResolver {
                                                 }
                                                 return;
                                             }
-                                            if self.is_in_init {
+                                            if self.is_in_init && !self.skip_init_check {
                                                 if self.initialized_properties.contains(name) {
                                                     self.emit_error(
                                                         TrussDiagnosticCode::AssignToImmutable,
@@ -10339,7 +10451,7 @@ impl TypeResolver {
                                                     self.initialized_properties
                                                         .insert(name.clone());
                                                 }
-                                            } else {
+                                            } else if !self.skip_init_check {
                                                 self.emit_error(
                                                     TrussDiagnosticCode::AssignToImmutable,
                                                     format!(
