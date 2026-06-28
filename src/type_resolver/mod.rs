@@ -2360,26 +2360,33 @@ impl TypeResolver {
                 ElseBranch::If(if_expr) => self.infer_if_type(if_expr)?,
             };
             if then_ty.borrow().clone() != else_ty.borrow().clone() {
-                let is_then_void = matches!(&*then_ty.borrow(), Type::Void);
-                let is_else_void = matches!(&*else_ty.borrow(), Type::Void);
-                if is_then_void && !is_else_void {
-                    then_ty = self
-                        .create_parameterized_type_from_truss("Optional", vec![else_ty.clone()])
-                        .unwrap_or(then_ty);
-                } else if !is_then_void && is_else_void {
-                    then_ty = self
-                        .create_parameterized_type_from_truss("Optional", vec![then_ty.clone()])
-                        .unwrap_or(then_ty);
+                let is_then_never = matches!(&*then_ty.borrow(), Type::Never);
+                let is_else_never = matches!(&*else_ty.borrow(), Type::Never);
+                if is_then_never {
+                    then_ty = else_ty;
+                } else if is_else_never {
                 } else {
-                    self.emit_error(
-                        TrussDiagnosticCode::BranchTypeMismatch,
-                        format!(
-                            "If branches have different types: {} vs {}",
-                            then_ty.borrow(),
-                            else_ty.borrow()
-                        ),
-                        &condition.borrow().token(),
-                    );
+                    let is_then_void = matches!(&*then_ty.borrow(), Type::Void);
+                    let is_else_void = matches!(&*else_ty.borrow(), Type::Void);
+                    if is_then_void && !is_else_void {
+                        then_ty = self
+                            .create_parameterized_type_from_truss("Optional", vec![else_ty.clone()])
+                            .unwrap_or(then_ty);
+                    } else if !is_then_void && is_else_void {
+                        then_ty = self
+                            .create_parameterized_type_from_truss("Optional", vec![then_ty.clone()])
+                            .unwrap_or(then_ty);
+                    } else {
+                        self.emit_error(
+                            TrussDiagnosticCode::BranchTypeMismatch,
+                            format!(
+                                "If branches have different types: {} vs {}",
+                                then_ty.borrow(),
+                                else_ty.borrow()
+                            ),
+                            &condition.borrow().token(),
+                        );
+                    }
                 }
             }
         }
