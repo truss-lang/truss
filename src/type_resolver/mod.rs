@@ -737,10 +737,19 @@ impl TypeResolver {
                 ..
             } => {
                 let ret_type = if *is_failable {
-                    self.current_scope
+                    let self_type = self
+                        .current_scope
                         .as_ref()
-                        .and_then(|s| s.borrow().get_type("Optional"))
-                        .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                        .and_then(|s| s.borrow().get_type("self"));
+                    if let Some(st) = self_type {
+                        self.create_parameterized_type_from_truss("Optional", vec![st])
+                            .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                    } else {
+                        self.current_scope
+                            .as_ref()
+                            .and_then(|s| s.borrow().get_type("Optional"))
+                            .unwrap_or_else(|| Rc::new(RefCell::new(Type::Void)))
+                    }
                 } else {
                     Rc::new(RefCell::new(Type::Void))
                 };
@@ -3475,10 +3484,11 @@ impl TypeResolver {
                             );
                         }
                         if is_failable_init {
-                            self.current_scope
-                                .as_ref()
-                                .and_then(|s| s.borrow().get_type("Optional"))
-                                .unwrap_or(callee_type.clone())
+                            self.create_parameterized_type_from_truss(
+                                "Optional",
+                                vec![callee_type.clone()],
+                            )
+                            .unwrap_or(callee_type.clone())
                         } else {
                             callee_type.clone()
                         }
@@ -3594,10 +3604,11 @@ impl TypeResolver {
                             }
                         }
                         if is_failable_init {
-                            self.current_scope
-                                .as_ref()
-                                .and_then(|s| s.borrow().get_type("Optional"))
-                                .unwrap_or(callee_type.clone())
+                            self.create_parameterized_type_from_truss(
+                                "Optional",
+                                vec![callee_type.clone()],
+                            )
+                            .unwrap_or(callee_type.clone())
                         } else {
                             callee_type.clone()
                         }
@@ -8284,22 +8295,14 @@ impl TypeResolver {
                     owner.borrow().name().ok() == container.borrow().name().ok()
                 }),
             AccessModifier::Package => {
-                let file_str = decl_file.to_string();
-                let expected_prefix = format!("Sources/{}/", self.current_package);
-                if file_str.contains(&expected_prefix) {
-                    true
-                } else if file_str.contains(".trussup/toolchains/") {
-                    // stdlib paths are treated as the "Truss" package
-                    self.current_package == "Truss"
-                } else {
-                    // Check if the file path indicates the same package
-                    if let Some(file_pkg) = file_str.split("/Sources/").nth(1) {
-                        let file_pkg = file_pkg.split('/').next().unwrap_or("");
-                        file_pkg == self.current_package
-                    } else {
-                        false
-                    }
-                }
+                let container_pkg = match &*container.borrow() {
+                    Symbol::Struct { package, .. }
+                    | Symbol::Class { package, .. }
+                    | Symbol::Enum { package, .. }
+                    | Symbol::Protocol { package, .. } => Some(package.clone()),
+                    _ => None,
+                };
+                container_pkg.map_or(true, |pkg| pkg == self.current_package)
             }
         }
     }
@@ -8348,28 +8351,17 @@ impl TypeResolver {
                         })
             }
             AccessModifier::Package => {
-                let symbol = member.borrow();
-                if let Some(decl) = symbol.get_decl().ok().flatten() {
-                    let file = decl.borrow().token().file.clone();
-                    let file_str = file.to_string();
-                    let expected_prefix = format!("Sources/{}/", self.current_package);
-                    if file_str.contains(&expected_prefix) {
-                        true
-                    } else if file_str.contains(".trussup/toolchains/") {
-                        // stdlib paths are treated as the "Truss" package
-                        self.current_package == "Truss"
-                    } else {
-                        // Check if the file path indicates the same package
-                        if let Some(file_pkg) = file_str.split("/Sources/").nth(1) {
-                            let file_pkg = file_pkg.split('/').next().unwrap_or("");
-                            file_pkg == self.current_package
-                        } else {
-                            false
-                        }
-                    }
-                } else {
-                    true
-                }
+                let parent = member.borrow().parent();
+                parent.map_or(true, |p| {
+                    let parent_pkg = match &*p.borrow() {
+                        Symbol::Struct { package, .. }
+                        | Symbol::Class { package, .. }
+                        | Symbol::Enum { package, .. }
+                        | Symbol::Protocol { package, .. } => Some(package.clone()),
+                        _ => None,
+                    };
+                    parent_pkg.map_or(true, |pkg| pkg == self.current_package)
+                })
             }
         }
     }

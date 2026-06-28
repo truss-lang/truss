@@ -184,6 +184,7 @@ impl SymbolResolver {
                 let has_dcl = attributes.iter().any(|a| a.name == "dynamicCallable");
                 let struct_symbol = Rc::new(RefCell::new(Symbol::Struct {
                     name: name.value.clone(),
+                    package: self.current_package.clone(),
                     decl: stmt.clone(),
                     is_builtin_type: is_builtin,
                     has_dynamic_member_lookup: has_dml,
@@ -433,6 +434,7 @@ impl SymbolResolver {
                 let has_dcl = attributes.iter().any(|a| a.name == "dynamicCallable");
                 let class_symbol = Rc::new(RefCell::new(Symbol::Class {
                     name: name.value.clone(),
+                    package: self.current_package.clone(),
                     decl: stmt.clone(),
                     has_dynamic_member_lookup: has_dml,
                     has_dynamic_callable: has_dcl,
@@ -715,6 +717,7 @@ impl SymbolResolver {
                 let has_dcl = attributes.iter().any(|a| a.name == "dynamicCallable");
                 let enum_symbol = Rc::new(RefCell::new(Symbol::Enum {
                     name: name.value.clone(),
+                    package: self.current_package.clone(),
                     decl: stmt.clone(),
                     has_dynamic_member_lookup: has_dml,
                     has_dynamic_callable: has_dcl,
@@ -831,6 +834,7 @@ impl SymbolResolver {
                 });
                 let protocol_symbol = Rc::new(RefCell::new(Symbol::Protocol {
                     name: name.value.clone(),
+                    package: self.current_package.clone(),
                     decl: stmt.clone(),
                     methods: vec![],
                     properties: vec![],
