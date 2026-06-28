@@ -9,6 +9,7 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 
 use crate::{
     ast::statement::Statement,
+    condition_eval::{flatten_program, predefined_symbols, TargetTriple},
     diag::TrussDiagnosticEngine,
     lexer::{CharStream, Lexer},
     parser::Parser,
@@ -75,13 +76,18 @@ pub fn parse_std_lib(
                     }
 
                     let mut parser = Parser::new(file_rc.clone(), tokens, file_engine.clone());
-                    let program = parser.parse();
+                    let mut program = parser.parse();
                     if file_engine.borrow().has_errors() {
                         engine.borrow_mut().extend(file_engine.take());
                         return (results, sources);
                     }
 
                     engine.borrow_mut().extend(file_engine.take());
+
+                    let triple = TargetTriple::host();
+                    let mut symbols = predefined_symbols(&file_path);
+                    flatten_program(&mut program.statements, &triple, &mut symbols);
+
                     results.push(program.statements);
                     sources.push((file_path, content));
                 }
@@ -124,13 +130,18 @@ pub fn parse_std_lib(
         }
 
         let mut parser = Parser::new(file_rc.clone(), tokens, file_engine.clone());
-        let program = parser.parse();
+        let mut program = parser.parse();
         if file_engine.borrow().has_errors() {
             engine.borrow_mut().extend(file_engine.take());
             return (results, sources);
         }
 
         engine.borrow_mut().extend(file_engine.take());
+
+        let triple = TargetTriple::host();
+        let mut symbols = predefined_symbols(&file_path);
+        flatten_program(&mut program.statements, &triple, &mut symbols);
+
         results.push(program.statements);
         sources.push((file_path, content));
     }
