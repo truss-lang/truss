@@ -6336,23 +6336,8 @@ impl TypeResolver {
                     bt
                 };
                 self.is_in_init = saved_is_in_init;
-                // If the block type is Void but we have an expected type from context
-                // (e.g. from assignment to a typed variable), use the expected type.
-                let effective_ty = if matches!(&*block_ty.borrow(), Type::Void) {
-                    if let Some(expected) = &self.closure_expected_type {
-                        if !matches!(&*expected.borrow(), Type::Void) {
-                            expected.clone()
-                        } else {
-                            block_ty.clone()
-                        }
-                    } else {
-                        block_ty.clone()
-                    }
-                } else {
-                    block_ty.clone()
-                };
-                *ty = Some(effective_ty.clone());
-                effective_ty
+                *ty = Some(block_ty.clone());
+                block_ty
             }
             Expression::ArrayLiteral { elements, ty, .. } => {
                 for element in elements.iter() {
@@ -7384,12 +7369,11 @@ impl TypeResolver {
             }
         }
 
-        // For do blocks, call expressions, and array literals, save the expected type as
+        // For call expressions and array literals, save the expected type as
         // closure_expected_type hint to propagate type context inward.
         // Skip bare GenericParam types as they don't provide useful context.
         let prev_expected = self.closure_expected_type.clone();
-        let is_propagated = matches!(&*expression.borrow(), Expression::Do { .. })
-            || matches!(&*expression.borrow(), Expression::Call { .. })
+        let is_propagated = matches!(&*expression.borrow(), Expression::Call { .. })
             || matches!(&*expression.borrow(), Expression::ArrayLiteral { .. });
         let is_generic_param = matches!(&*expected_type.borrow(), Type::GenericParam(_));
         if !is_generic_param && is_propagated {
