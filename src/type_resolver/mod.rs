@@ -2498,6 +2498,7 @@ impl TypeResolver {
                         Type::Struct(n, _, _) | Type::Class(n, _, _) | Type::Enum(n, _, _) => {
                             n.clone()
                         }
+                        Type::Protocol(n, _, _) => n.clone(),
                         _ => return None,
                     };
                     let scope = self.current_scope.as_ref()?;
@@ -2518,6 +2519,11 @@ impl TypeResolver {
                             ..
                         } => (properties.clone(), methods.clone(), constructors.clone()),
                         Symbol::Enum { methods, .. } => (vec![], methods.clone(), vec![]),
+                        Symbol::Protocol {
+                            methods,
+                            properties,
+                            ..
+                        } => (properties.clone(), methods.clone(), vec![]),
                         _ => return None,
                     };
                     drop(binding);
