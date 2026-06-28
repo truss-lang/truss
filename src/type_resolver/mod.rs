@@ -4795,56 +4795,10 @@ impl TypeResolver {
                         );
                         return None;
                     }
-                    Type::Protocol(protocol_name, ..) => {
+                    Type::Protocol(protocol_name, _, type_params) => {
                         let scope = self.current_scope.as_ref().unwrap().borrow();
                         let protocol_name = protocol_name.clone();
-                        if let Some(symbol) = scope.get_symbol(&protocol_name)
-                            && let Symbol::Protocol {
-                                methods,
-                                properties,
-                                ..
-                            } = &*symbol.borrow()
-                        {
-                            for method in methods {
-                                if method.borrow().name().as_ref().ok() == Some(&member.value)
-                                    && let Some(decl) = method.borrow().get_decl().ok().flatten()
-                                {
-                                    let method_ty = {
-                                        let decl_ref = decl.borrow();
-                                        if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
-                                            ty.clone()
-                                        } else {
-                                            continue;
-                                        }
-                                    };
-                                    if let Some(t) = method_ty {
-                                        *ty = Some(t.clone());
-                                        return Some(t.clone());
-                                    }
-                                }
-                            }
-                            for prop in properties {
-                                if prop.borrow().name().as_ref().ok() == Some(&member.value)
-                                    && let Some(decl) = prop.borrow().get_decl().ok().flatten()
-                                    && let Statement::VariableDecl { ty: prop_ty, .. } =
-                                        &*decl.borrow()
-                                    && let Some(t) = prop_ty
-                                {
-                                    *ty = Some(t.clone());
-                                    return Some(t.clone());
-                                }
-                            }
-                            let token = &*member;
-                            self.emit_error(
-                                TrussDiagnosticCode::FieldNotFound,
-                                format!(
-                                    "Member '{}' not found on protocol '{}'",
-                                    member.value, protocol_name
-                                ),
-                                token,
-                            );
-                            return None;
-                        } else {
+                        let Some(symbol) = scope.get_symbol(&protocol_name) else {
                             let token = &*member;
                             self.emit_error(
                                 TrussDiagnosticCode::FieldNotFound,
@@ -4852,7 +4806,146 @@ impl TypeResolver {
                                 token,
                             );
                             return None;
+                        };
+                        // Clone vectors to avoid holding a Ref borrow across nested borrows
+                        let (methods, properties) = {
+                            let binding = symbol.borrow();
+                            let Symbol::Protocol {
+                                methods,
+                                properties,
+                                ..
+                            } = &*binding
+                            else {
+                                let token = &*member;
+                                self.emit_error(
+                                    TrussDiagnosticCode::FieldNotFound,
+                                    format!(
+                                        "Protocol '{}' has unexpected symbol type",
+                                        protocol_name
+                                    ),
+                                    token,
+                                );
+                                return None;
+                            };
+                            (methods.clone(), properties.clone())
+                        };
+                        // Get protocol's own scope for property type lookup.
+                        // ProtocolProperty symbols have decl: None; the property
+                        // type is stored in the protocol's own scope during
+                        // ProtocolDecl type resolution.
+                        // Use try_borrow because the decl may be mutably borrowed
+                        // during protocol method body processing.
+                        let proto_scope = symbol
+                            .borrow()
+                            .get_decl()
+                            .ok()
+                            .flatten()
+                            .and_then(|decl| {
+                                if let Ok(decl_ref) = decl.try_borrow() {
+                                    if let Statement::ProtocolDecl { scope, .. } = &*decl_ref {
+                                        scope.clone()
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            });
+                        let gp_names: Vec<String> = {
+                            let sym_ref = symbol.borrow();
+                            if let Ok(Some(pd)) = sym_ref.get_decl() {
+                                if let Ok(pd_ref) = pd.try_borrow() {
+                                    if let Statement::ProtocolDecl {
+                                        generic_parameters, ..
+                                    } = &*pd_ref
+                                    {
+                                        generic_parameters
+                                            .iter()
+                                            .map(|gp| gp.name.value.clone())
+                                            .collect()
+                                    } else {
+                                        vec![]
+                                    }
+                                } else {
+                                    vec![]
+                                }
+                            } else {
+                                vec![]
+                            }
+                        };
+                        let apply_subst = |t: Rc<RefCell<Type>>| -> Rc<RefCell<Type>> {
+                            if type_params.is_empty()
+                                || gp_names.is_empty()
+                                || gp_names.len() != type_params.len()
+                            {
+                                return t;
+                            }
+                            let mapping: HashMap<String, Rc<RefCell<Type>>> = gp_names
+                                .iter()
+                                .zip(type_params.iter())
+                                .map(|(n, ty)| (n.clone(), ty.clone()))
+                                .collect();
+                            Self::substitute_generic_params(t, &mapping)
+                        };
+
+                        for method in methods {
+                            if method.borrow().name().as_ref().ok() == Some(&member.value)
+                                && let Some(decl) = method.borrow().get_decl().ok().flatten()
+                            {
+                                let method_ty = {
+                                    let decl_ref = decl.borrow();
+                                    if let Statement::FunctionDecl { ty, .. } = &*decl_ref {
+                                        ty.clone()
+                                    } else {
+                                        continue;
+                                    }
+                                };
+                                if let Some(t) = method_ty {
+                                    let result = apply_subst(t);
+                                    *ty = Some(result.clone());
+                                    return Some(result);
+                                }
+                            }
                         }
+                        for prop in properties {
+                            if prop.borrow().name().as_ref().ok() == Some(&member.value) {
+                                let prop_type = match &*prop.borrow() {
+                                    Symbol::ProtocolProperty { .. } => {
+                                        // ProtocolProperty has decl: None, look up type
+                                        // from the protocol's own scope instead.
+                                        proto_scope.as_ref().and_then(|ps| {
+                                            ps.borrow().get_type(&member.value)
+                                        })
+                                    }
+                                    _ => {
+                                        if let Some(decl) =
+                                            prop.borrow().get_decl().ok().flatten()
+                                            && let Statement::VariableDecl { ty: prop_ty, .. } =
+                                                &*decl.borrow()
+                                        {
+                                            prop_ty.clone()
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                };
+                                if let Some(t) = prop_type {
+                                    let result = apply_subst(t);
+                                    *ty = Some(result.clone());
+                                    return Some(result);
+                                }
+                            }
+                        }
+                        let token = &*member;
+                        self.emit_error(
+                            TrussDiagnosticCode::FieldNotFound,
+                            format!(
+                                "Member '{}' not found on protocol '{}'",
+                                member.value, protocol_name
+                            ),
+                            token,
+                        );
+                        return None;
                     }
                     Type::Compound(types) => {
                         let protocol_names: Vec<String> = types
