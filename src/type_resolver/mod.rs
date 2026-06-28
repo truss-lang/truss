@@ -2297,6 +2297,49 @@ impl TypeResolver {
         None
     }
 
+    /// Recursively find `Case` (if-let) bindings in compound conditions and
+    /// set them in the current scope before the condition is type-checked.
+    /// This makes let-bound variables (e.g. `end` in `let end = self.end`)
+    /// available in the rest of the condition expression (e.g. `current >= end`).
+    fn set_bindings_in_condition(&mut self, condition: &Rc<RefCell<Expression>>) {
+        let cond = condition.borrow();
+        match &*cond {
+            Expression::Case {
+                enum_type,
+                case_name,
+                bindings,
+                expression,
+                ..
+            } => {
+                if bindings.is_empty() {
+                    return;
+                }
+                let param_types = if let Some(type_name) = enum_type.as_ref() {
+                    self.get_enum_case_parameter_types(&type_name.value, &case_name.value)
+                } else if let Some(expr_ty) = self.infer_type(expression.clone()) {
+                    self.resolve_enum_case_from_type(&expr_ty, None, case_name, bindings)
+                } else {
+                    None
+                };
+                if let Some(ref param_types) = param_types {
+                    if let Some(scope) = self.current_scope.clone() {
+                        Self::set_binding_types(bindings, param_types, &scope);
+                    }
+                }
+            }
+            Expression::Binary {
+                left,
+                operator: BinaryOperator::And | BinaryOperator::Or,
+                right,
+                ..
+            } => {
+                self.set_bindings_in_condition(left);
+                self.set_bindings_in_condition(right);
+            }
+            _ => {}
+        }
+    }
+
     fn infer_if_type(&mut self, expression: Rc<RefCell<Expression>>) -> Option<Rc<RefCell<Type>>> {
         let condition;
         let then: Vec<Rc<RefCell<Statement>>>;
@@ -2316,6 +2359,11 @@ impl TypeResolver {
             then = t.clone();
             else_ = e.clone();
         }
+
+        // Set if-let bindings in compound conditions BEFORE type inference,
+        // so bound variables (e.g. `end` in `let end = self.end`) are
+        // available when type-checking the rest of the condition expression.
+        self.set_bindings_in_condition(&condition);
 
         let cond_ty = self.infer_type(condition.clone())?;
 
@@ -7057,11 +7105,32 @@ impl TypeResolver {
         right: Rc<RefCell<Type>>,
     ) -> Option<Rc<RefCell<Type>>> {
         match operator {
-            BinaryOperator::Plus
-            | BinaryOperator::Minus
-            | BinaryOperator::Multiply
-            | BinaryOperator::Divide
-            | BinaryOperator::Modulus => {
+            BinaryOperator::Plus | BinaryOperator::Minus => {
+                let left_ty = left.borrow().clone();
+                let right_ty = right.borrow().clone();
+
+                // Pointer arithmetic: T* +- c → T*
+                if matches!(&left_ty, Type::Pointer(_) | Type::NonNullPointer(_))
+                    && Self::is_integer_type(&right_ty)
+                {
+                    return Some(Rc::new(RefCell::new(left_ty)));
+                }
+                // Pointer arithmetic: c +- T* → T*
+                if Self::is_integer_type(&left_ty)
+                    && matches!(&right_ty, Type::Pointer(_) | Type::NonNullPointer(_))
+                {
+                    return Some(Rc::new(RefCell::new(right_ty)));
+                }
+
+                if !Self::is_numeric_type(&left_ty) || matches!(&left_ty, Type::GenericParam(_)) {
+                    return None;
+                }
+                if left_ty != right_ty {
+                    return None;
+                }
+                Some(Rc::new(RefCell::new(left_ty)))
+            }
+            BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulus => {
                 let left_ty = left.borrow().clone();
                 let right_ty = right.borrow().clone();
 
@@ -7085,6 +7154,7 @@ impl TypeResolver {
                     (Type::GenericParam(l), Type::GenericParam(r)) => l == r,
                     (Type::Protocol(..), Type::GenericParam(..)) => true,
                     (Type::GenericParam(..), Type::Protocol(..)) => true,
+                    (Type::Protocol(n1, ..), Type::Protocol(n2, ..)) if n1 == n2 => true,
                     _ => left_ty == right_ty,
                 };
                 if !compatible {
@@ -7242,6 +7312,10 @@ impl TypeResolver {
                     }
                     _ => None,
                 }
+            }
+            UnaryOperator::AddressOf => {
+                let op_ty = operand.borrow().clone();
+                Some(Rc::new(RefCell::new(Type::Pointer(Rc::new(RefCell::new(op_ty))))))
             }
             _ => None,
         }
@@ -8210,8 +8284,22 @@ impl TypeResolver {
                     owner.borrow().name().ok() == container.borrow().name().ok()
                 }),
             AccessModifier::Package => {
-                // TODO: implement package access check
-                true
+                let file_str = decl_file.to_string();
+                let expected_prefix = format!("Sources/{}/", self.current_package);
+                if file_str.contains(&expected_prefix) {
+                    true
+                } else if file_str.contains(".trussup/toolchains/") {
+                    // stdlib paths are treated as the "Truss" package
+                    self.current_package == "Truss"
+                } else {
+                    // Check if the file path indicates the same package
+                    if let Some(file_pkg) = file_str.split("/Sources/").nth(1) {
+                        let file_pkg = file_pkg.split('/').next().unwrap_or("");
+                        file_pkg == self.current_package
+                    } else {
+                        false
+                    }
+                }
             }
         }
     }
@@ -8260,8 +8348,28 @@ impl TypeResolver {
                         })
             }
             AccessModifier::Package => {
-                // TODO: implement package access check
-                true
+                let symbol = member.borrow();
+                if let Some(decl) = symbol.get_decl().ok().flatten() {
+                    let file = decl.borrow().token().file.clone();
+                    let file_str = file.to_string();
+                    let expected_prefix = format!("Sources/{}/", self.current_package);
+                    if file_str.contains(&expected_prefix) {
+                        true
+                    } else if file_str.contains(".trussup/toolchains/") {
+                        // stdlib paths are treated as the "Truss" package
+                        self.current_package == "Truss"
+                    } else {
+                        // Check if the file path indicates the same package
+                        if let Some(file_pkg) = file_str.split("/Sources/").nth(1) {
+                            let file_pkg = file_pkg.split('/').next().unwrap_or("");
+                            file_pkg == self.current_package
+                        } else {
+                            false
+                        }
+                    }
+                } else {
+                    true
+                }
             }
         }
     }
