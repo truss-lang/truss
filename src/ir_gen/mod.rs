@@ -365,7 +365,11 @@ impl<'ctx> IRGenerator<'ctx> {
         let stdlib_mod = self.context.create_module("stdlib");
         let main_mod = std::mem::replace(&mut self.module, stdlib_mod);
         *self.program_scope.borrow_mut() = Some(scope.clone());
+        let saved_pkg = std::mem::replace(&mut self.package_name, "Truss".to_string());
+        let saved_mod = std::mem::replace(&mut self.module_name, String::new());
         self.run_all_passes(stdlib_stmts);
+        self.package_name = saved_pkg;
+        self.module_name = saved_mod;
         let _ = self.module.verify();
         let compiled_stdlib = std::mem::replace(&mut self.module, main_mod);
         let compiled_stdlib_rc = Rc::new(compiled_stdlib);
