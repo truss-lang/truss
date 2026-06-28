@@ -9810,6 +9810,15 @@ impl TypeResolver {
                                                         return;
                                                     }
                                                 }
+                                                // Class is a reference type: methods can always modify self
+                                                // Only struct requires `mutating` keyword for self property mutation
+                                                if matches!(
+                                                    &*object.borrow(),
+                                                    Expression::SelfKeyword { .. }
+                                                ) && matches!(&*object_ty.borrow(), Type::Class(..))
+                                                {
+                                                    return;
+                                                }
                                                 if !self.is_in_init
                                                     && !is_enclosing_mutating
                                                     && matches!(
