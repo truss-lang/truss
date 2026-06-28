@@ -1745,14 +1745,6 @@ impl TypeResolver {
                 generic_parameters,
                 ..
             } => {
-                for gp in generic_parameters {
-                    if let GenericParameterKind::Type { constraints } = &gp.kind {
-                        if !constraints.is_empty() {
-                            self.generic_param_constraint_exprs
-                                .insert(gp.name.value.clone(), constraints.clone());
-                        }
-                    }
-                }
                 let Some(symbol) = self
                     .current_scope
                     .as_ref()
@@ -1766,6 +1758,27 @@ impl TypeResolver {
                 let prev_owner = self.current_owner.replace(symbol.clone());
                 if let Some(s) = scope.as_ref() {
                     self.enter_scope(s.clone());
+                    // Register generic params in scope and pre-resolve their constraint types
+                    for gp in generic_parameters {
+                        if let GenericParameterKind::Type { constraints } = &gp.kind {
+                            if !constraints.is_empty() {
+                                self.generic_param_constraint_exprs
+                                    .insert(gp.name.value.clone(), constraints.clone());
+                                // Pre-resolve constraint types now that generic params are in scope
+                                let resolved: Vec<Rc<RefCell<Type>>> = constraints
+                                    .iter()
+                                    .filter_map(|c| self.infer_type(c.clone()))
+                                    .collect();
+                                if !resolved.is_empty() {
+                                    self.generic_param_constraints
+                                        .insert(gp.name.value.clone(), resolved);
+                                }
+                            }
+                            // Register GenericParam type in scope
+                            let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                            s.borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                        }
+                    }
                     for stmt in body {
                         self.resolve_statement(stmt.clone());
                     }
@@ -1785,14 +1798,6 @@ impl TypeResolver {
                 generic_parameters,
                 ..
             } => {
-                for gp in generic_parameters {
-                    if let GenericParameterKind::Type { constraints } = &gp.kind {
-                        if !constraints.is_empty() {
-                            self.generic_param_constraint_exprs
-                                .insert(gp.name.value.clone(), constraints.clone());
-                        }
-                    }
-                }
                 let Some(symbol) = self
                     .current_scope
                     .as_ref()
@@ -1806,6 +1811,27 @@ impl TypeResolver {
                 let prev_owner = self.current_owner.replace(symbol.clone());
                 if let Some(s) = scope.as_ref() {
                     self.enter_scope(s.clone());
+                    // Register generic params in scope and pre-resolve their constraint types
+                    for gp in generic_parameters {
+                        if let GenericParameterKind::Type { constraints } = &gp.kind {
+                            if !constraints.is_empty() {
+                                self.generic_param_constraint_exprs
+                                    .insert(gp.name.value.clone(), constraints.clone());
+                                // Pre-resolve constraint types now that generic params are in scope
+                                let resolved: Vec<Rc<RefCell<Type>>> = constraints
+                                    .iter()
+                                    .filter_map(|c| self.infer_type(c.clone()))
+                                    .collect();
+                                if !resolved.is_empty() {
+                                    self.generic_param_constraints
+                                        .insert(gp.name.value.clone(), resolved);
+                                }
+                            }
+                            // Register GenericParam type in scope
+                            let gp_type = Rc::new(RefCell::new(Type::GenericParam(gp.name.value.clone())));
+                            s.borrow_mut().set_type(gp.name.value.clone(), gp_type);
+                        }
+                    }
                     for stmt in body {
                         self.resolve_statement(stmt.clone());
                     }
@@ -3634,6 +3660,59 @@ impl TypeResolver {
                         ret_ty.clone()
                     }
                     Type::GenericParam(name) => {
+                        // Try to resolve via scope type first - the generic param might
+                        // have a function type constraint stored in the scope's type table
+                        if let Some(gp_scope_ty) = self
+                            .current_scope
+                            .as_ref()
+                            .and_then(|s| s.borrow().get_type(name))
+                        {
+                            let st_borrow = gp_scope_ty.borrow();
+                            let (param_tys, ret_ty, is_vararg) = match &*st_borrow {
+                                Type::Function(pt, rt, iv, _) => (pt.clone(), rt.clone(), *iv),
+                                Type::Closure(pt, rt, _) => (pt.clone(), rt.clone(), false),
+                                _ => (vec![], Rc::new(RefCell::new(Type::Never)), false),
+                            };
+                            if !param_tys.is_empty() && (parameters.len() == param_tys.len() || is_vararg) {
+                                for (i, param) in parameters.iter().enumerate() {
+                                    if i < param_tys.len() {
+                                        self.infer_expression_type(
+                                            param.expression.clone(),
+                                            param_tys[i].clone(),
+                                        );
+                                    }
+                                }
+                                *call_ty = Some(ret_ty.clone());
+                                return Some(ret_ty);
+                            }
+                        }
+                        // Fallback: try pre-resolved constraint types
+                        let resolved_types: Vec<Rc<RefCell<Type>>> = self
+                            .generic_param_constraints
+                            .get(name)
+                            .cloned()
+                            .unwrap_or_default();
+                        for constraint_ty in &resolved_types {
+                            let ct_borrow = constraint_ty.borrow();
+                            let (param_tys, ret_ty, is_vararg) = match &*ct_borrow {
+                                Type::Function(pt, rt, iv, _) => (pt.clone(), rt.clone(), *iv),
+                                Type::Closure(pt, rt, _) => (pt.clone(), rt.clone(), false),
+                                _ => continue,
+                            };
+                            if parameters.len() == param_tys.len() || is_vararg {
+                                for (i, param) in parameters.iter().enumerate() {
+                                    if i < param_tys.len() {
+                                        self.infer_expression_type(
+                                            param.expression.clone(),
+                                            param_tys[i].clone(),
+                                        );
+                                    }
+                                }
+                                *call_ty = Some(ret_ty.clone());
+                                return Some(ret_ty.clone());
+                            }
+                        }
+                        // Final fallback: try constraint expressions stored during generic param setup
                         let constraint_exprs: Vec<_> = self
                             .generic_param_constraint_exprs
                             .get(name)
@@ -3643,26 +3722,23 @@ impl TypeResolver {
                             if let Some(constraint_ty) =
                                 self.infer_type(constraint_expr.clone())
                             {
-                                if let Type::Function(
-                                    param_tys,
-                                    ret_ty,
-                                    is_vararg,
-                                    _,
-                                ) = &*constraint_ty.borrow()
-                                {
-                                    if parameters.len() == param_tys.len() || *is_vararg {
-                                        for (i, param) in parameters.iter().enumerate() {
-                                            if i < param_tys.len() {
-                                                let expected_ty = param_tys[i].clone();
-                                                self.infer_expression_type(
-                                                    param.expression.clone(),
-                                                    expected_ty,
-                                                );
-                                            }
+                                let ct_borrow = constraint_ty.borrow();
+                                let (param_tys, ret_ty, is_vararg) = match &*ct_borrow {
+                                    Type::Function(pt, rt, iv, _) => (pt.clone(), rt.clone(), *iv),
+                                    Type::Closure(pt, rt, _) => (pt.clone(), rt.clone(), false),
+                                    _ => continue,
+                                };
+                                if parameters.len() == param_tys.len() || is_vararg {
+                                    for (i, param) in parameters.iter().enumerate() {
+                                        if i < param_tys.len() {
+                                            self.infer_expression_type(
+                                                param.expression.clone(),
+                                                param_tys[i].clone(),
+                                            );
                                         }
-                                        *call_ty = Some(ret_ty.clone());
-                                        return Some(ret_ty.clone());
                                     }
+                                    *call_ty = Some(ret_ty.clone());
+                                    return Some(ret_ty);
                                 }
                             }
                         }
@@ -6138,9 +6214,11 @@ impl TypeResolver {
                 // Save and restore is_in_init so do-blocks inside init
                 // don't lose the init context (which is needed for let-property
                 // assignment tracking in check_writable).
+                // Note: initialized_properties is NOT saved/restored here
+                // because let property assignments inside do-blocks must
+                // persist (e.g. self._length = do { ... } inside init).
                 let saved_is_in_init = self.is_in_init;
-                let saved_initialized_properties = self.initialized_properties.clone();
-                let result = if let Some(sc) = scope {
+                let block_ty = if let Some(sc) = scope {
                     self.enter_scope(sc.clone());
                     self.yield_context_depth += 1;
                     self.resolve_block_expression(body);
@@ -6151,15 +6229,13 @@ impl TypeResolver {
                         self.resolve_block_expression(&clause.body);
                     }
                     self.resolve_block_expression(finally_body);
-                    let block_ty = self.get_block_type(body)?;
-                    *ty = Some(block_ty.clone());
+                    let bt = self.get_block_type(body)?;
                     self.yield_context_depth -= 1;
                     self.leave_scope();
-                    block_ty
+                    bt
                 } else {
                     self.yield_context_depth += 1;
-                    let block_ty = self.get_block_type(body)?;
-                    *ty = Some(block_ty.clone());
+                    let bt = self.get_block_type(body)?;
                     for clause in catch_clauses {
                         if let Some(guard) = &clause.guard {
                             self.infer_type(guard.clone());
@@ -6168,11 +6244,26 @@ impl TypeResolver {
                     }
                     self.resolve_block_expression(finally_body);
                     self.yield_context_depth -= 1;
-                    block_ty
+                    bt
                 };
                 self.is_in_init = saved_is_in_init;
-                self.initialized_properties = saved_initialized_properties;
-                result
+                // If the block type is Void but we have an expected type from context
+                // (e.g. from assignment to a typed variable), use the expected type.
+                let effective_ty = if matches!(&*block_ty.borrow(), Type::Void) {
+                    if let Some(expected) = &self.closure_expected_type {
+                        if !matches!(&*expected.borrow(), Type::Void) {
+                            expected.clone()
+                        } else {
+                            block_ty.clone()
+                        }
+                    } else {
+                        block_ty.clone()
+                    }
+                } else {
+                    block_ty.clone()
+                };
+                *ty = Some(effective_ty.clone());
+                effective_ty
             }
             Expression::ArrayLiteral { elements, ty, .. } => {
                 for element in elements.iter() {
@@ -6181,7 +6272,7 @@ impl TypeResolver {
                 if let Some(t) = ty.as_ref() {
                     t.clone()
                 } else if let Some(current_scope) = &self.current_scope {
-                    // Infer element type from the first element
+                    // Infer element type from the first element, or from closure_expected_type for empty arrays
                     let element_type = elements.first().and_then(|e| {
                         let e_borrow = e.borrow();
                         match &*e_borrow {
@@ -6199,7 +6290,18 @@ impl TypeResolver {
                     });
                     if let Some(t) = current_scope.borrow().get_type("Array") {
                         let tb = t.borrow();
-                        let array_ty = match (&*tb, element_type) {
+                        // For empty arrays, try to infer element type from closure_expected_type
+                        let effective_element_type = element_type.or_else(|| {
+                            self.closure_expected_type.as_ref().and_then(|expected| {
+                                match &*expected.borrow() {
+                                    Type::Struct(_, _, params) | Type::Class(_, _, params) => {
+                                        params.first().cloned()
+                                    }
+                                    _ => None,
+                                }
+                            })
+                        });
+                        let array_ty = match (&*tb, effective_element_type) {
                             (Type::Class(name, sym, _), Some(et)) => {
                                 Rc::new(RefCell::new(Type::Class(
                                     name.clone(),
@@ -7177,7 +7279,15 @@ impl TypeResolver {
             }
         }
 
-        self.infer_type(expression)
+        // For do blocks, save the expected type as closure_expected_type hint
+        // so the block can try to match it when the block type is Void.
+        let prev_expected = self.closure_expected_type.clone();
+        if matches!(&*expression.borrow(), Expression::Do { .. }) {
+            self.closure_expected_type = Some(expected_type.clone());
+        }
+        let result = self.infer_type(expression);
+        self.closure_expected_type = prev_expected;
+        result
     }
 
     fn check_binary(
@@ -7240,6 +7350,30 @@ impl TypeResolver {
                 }
                 Some(Rc::new(RefCell::new(left_ty)))
             }
+            BinaryOperator::BitAnd
+            | BinaryOperator::BitOr
+            | BinaryOperator::BitXor
+            | BinaryOperator::LeftShift
+            | BinaryOperator::RightShift => {
+                let left_ty = left.borrow().clone();
+                let right_ty = right.borrow().clone();
+
+                // GenericParam support: allow bitwise ops on generic types
+                if matches!(&left_ty, Type::GenericParam(_)) {
+                    return Some(left.clone());
+                }
+                if matches!(&right_ty, Type::GenericParam(_)) {
+                    return Some(right.clone());
+                }
+
+                if !Self::is_integer_type(&left_ty) {
+                    return None;
+                }
+                if !Self::is_integer_type(&right_ty) {
+                    return None;
+                }
+                Some(left.clone())
+            }
             BinaryOperator::Equal
             | BinaryOperator::NotEqual
             | BinaryOperator::Less
@@ -7250,9 +7384,10 @@ impl TypeResolver {
                 let right_ty = right.borrow().clone();
                 let compatible = match (&left_ty, &right_ty) {
                     (Type::GenericParam(l), Type::GenericParam(r)) => l == r,
-                    (Type::Protocol(..), Type::GenericParam(..)) => true,
-                    (Type::GenericParam(..), Type::Protocol(..)) => true,
+                    (Type::GenericParam(..), _) => true,
+                    (_, Type::GenericParam(..)) => true,
                     (Type::Protocol(n1, ..), Type::Protocol(n2, ..)) if n1 == n2 => true,
+                    (l, r) if Self::is_integer_type(l) && Self::is_integer_type(r) => true,
                     _ => left_ty == right_ty,
                 };
                 if !compatible {
@@ -7362,6 +7497,10 @@ impl TypeResolver {
         match operator {
             UnaryOperator::Plus | UnaryOperator::Minus => {
                 let op_ty = operand.borrow().clone();
+                // GenericParam support: allow +/- on generic types (e.g. -value for AdditiveArithmetic)
+                if matches!(&op_ty, Type::GenericParam(_)) {
+                    return Some(operand.clone());
+                }
                 if !Self::is_numeric_type(&op_ty) {
                     return None;
                 }
