@@ -647,7 +647,7 @@ impl UnaryOperator {
             UnaryOperator::Inc => "++",
             UnaryOperator::Dec => "--",
             UnaryOperator::Not => "!",
-            UnaryOperator::NotNullAssertation => "!!",
+            UnaryOperator::NotNullAssertation => "!",
             UnaryOperator::OpenRange => "...",
             UnaryOperator::BitNot => "~",
             UnaryOperator::Deref => "*",
