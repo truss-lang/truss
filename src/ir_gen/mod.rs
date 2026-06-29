@@ -1467,8 +1467,13 @@ impl<'ctx> IRGenerator<'ctx> {
         while let Some(s) = current {
             let sb = s.borrow();
             if let Some(ref mn) = sb.module_name {
-                let pkg = mn.split('.').next().unwrap_or(mn).to_string();
-                return (pkg.replace('.', "$"), mn.replace('.', "$"));
+                if let Some(dot) = mn.find('.') {
+                    let pkg = mn[..dot].replace('.', "$");
+                    let module = mn[dot+1..].replace('.', "$");
+                    return (pkg, module);
+                } else {
+                    return (mn.replace('.', "$"), String::new());
+                }
             }
             current = sb.parent.clone();
         }
