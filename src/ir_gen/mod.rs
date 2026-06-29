@@ -92,7 +92,7 @@ pub struct IRGenerator<'ctx> {
     loop_break_targets: Rc<RefCell<Vec<BasicBlock<'ctx>>>>,
     loop_continue_targets: Rc<RefCell<Vec<BasicBlock<'ctx>>>>,
     package_name: String,
-    module_name: String,
+    module_name: Rc<RefCell<String>>,
     extern_fn_c_names: Rc<RefCell<HashMap<String, String>>>,
     mangled_fn_names: Rc<RefCell<HashMap<String, String>>>,
     stdlib_module: Option<Rc<Module<'ctx>>>,
@@ -135,7 +135,7 @@ impl<'ctx> IRGenerator<'ctx> {
             loop_break_targets: Rc::new(RefCell::new(Vec::new())),
             loop_continue_targets: Rc::new(RefCell::new(Vec::new())),
             package_name: String::new(),
-            module_name: String::new(),
+            module_name: Rc::new(RefCell::new(String::new())),
             extern_fn_c_names: Rc::new(RefCell::new(HashMap::new())),
             mangled_fn_names: Rc::new(RefCell::new(HashMap::new())),
             stdlib_module: None,
@@ -145,7 +145,7 @@ impl<'ctx> IRGenerator<'ctx> {
 
     pub fn with_namespace(mut self, package: &str, module: &str) -> Self {
         self.package_name = package.to_string();
-        self.module_name = module.to_string();
+        *self.module_name.borrow_mut() = module.to_string();
         self
     }
 
@@ -366,10 +366,10 @@ impl<'ctx> IRGenerator<'ctx> {
         let main_mod = std::mem::replace(&mut self.module, stdlib_mod);
         *self.program_scope.borrow_mut() = Some(scope.clone());
         let saved_pkg = std::mem::replace(&mut self.package_name, "Truss".to_string());
-        let saved_mod = std::mem::replace(&mut self.module_name, String::new());
+        let saved_mod = std::mem::replace(&mut *self.module_name.borrow_mut(), String::new());
         self.run_all_passes(stdlib_stmts);
         self.package_name = saved_pkg;
-        self.module_name = saved_mod;
+        *self.module_name.borrow_mut() = saved_mod;
         let _ = self.module.verify();
         let compiled_stdlib = std::mem::replace(&mut self.module, main_mod);
         let compiled_stdlib_rc = Rc::new(compiled_stdlib);
@@ -394,7 +394,7 @@ impl<'ctx> IRGenerator<'ctx> {
             .collect();
         for (class_name, _) in &vtable_globals_snapshot {
             let (pkg, mod_name) = self.vtable_qualified_names.borrow().get(class_name).cloned()
-                .unwrap_or((self.package_name.clone(), self.module_name.clone()));
+                .unwrap_or((self.package_name.clone(), self.module_name.borrow().clone()));
             let vtable_global_name = Self::mangle_global_name(&pkg, &mod_name, "__vtable", class_name);
             if self.module.get_global(&vtable_global_name).is_none() {
                 if let Some(t) = self.vtable_types.borrow().get(class_name).copied() {
@@ -418,7 +418,7 @@ impl<'ctx> IRGenerator<'ctx> {
             .collect();
         for ((protocol_name, type_suffix), old_gv) in &wt_snapshot {
             let (pkg1, module1, pkg2, module2) = self.protocol_wt_qualified_names.borrow().get(&(protocol_name.clone(), type_suffix.clone())).cloned()
-                .unwrap_or((self.package_name.clone(), self.module_name.clone(), self.package_name.clone(), self.module_name.clone()));
+                .unwrap_or((self.package_name.clone(), self.module_name.borrow().clone(), self.package_name.clone(), self.module_name.borrow().clone()));
             let wt_global_name = if pkg1.is_empty() && module1.is_empty() && pkg2.is_empty() && module2.is_empty() {
                 format!("_T${}$__protocol_wt${}", protocol_name.replace('.', "$"), type_suffix.replace('.', "$"))
             } else {
@@ -536,7 +536,7 @@ impl<'ctx> IRGenerator<'ctx> {
             let struct_name = &name.value;
             if !self.struct_types.borrow().contains_key(struct_name) {
                 let mangled =
-                    Self::mangle_type_name("S", &self.package_name, &self.module_name, struct_name);
+                    Self::mangle_type_name("S", &self.package_name, &*self.module_name.borrow(), struct_name);
                 let struct_type = self.context.opaque_struct_type(&mangled);
                 self.struct_types
                     .borrow_mut()
@@ -548,10 +548,17 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.declare_struct_types(stmt.clone());
                 }
             }
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.declare_struct_types(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -609,10 +616,17 @@ impl<'ctx> IRGenerator<'ctx> {
                     self.create_struct_type_bodies(stmt.clone());
                 }
             }
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_struct_type_bodies(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -627,16 +641,23 @@ impl<'ctx> IRGenerator<'ctx> {
             let class_name = &name.value;
             if !self.class_types.borrow().contains_key(class_name) {
                 let mangled =
-                    Self::mangle_type_name("C", &self.package_name, &self.module_name, class_name);
+                    Self::mangle_type_name("C", &self.package_name, &*self.module_name.borrow(), class_name);
                 let class_type = self.context.opaque_struct_type(&mangled);
                 self.class_types
                     .borrow_mut()
                     .insert(class_name.clone(), class_type);
             }
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.declare_class_types(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -659,10 +680,17 @@ impl<'ctx> IRGenerator<'ctx> {
 
                 class_type.set_body(&field_types, false);
             }
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_class_type_bodies(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -904,7 +932,7 @@ impl<'ctx> IRGenerator<'ctx> {
             let enum_name = &name.value;
             if !self.enum_types.borrow().contains_key(enum_name) {
                 let mangled =
-                    Self::mangle_type_name("E", &self.package_name, &self.module_name, enum_name);
+                    Self::mangle_type_name("E", &self.package_name, &*self.module_name.borrow(), enum_name);
                 let enum_type = self.context.opaque_struct_type(&mangled);
                 self.enum_types
                     .borrow_mut()
@@ -913,7 +941,7 @@ impl<'ctx> IRGenerator<'ctx> {
                 let mangled_payloads = Self::mangle_type_name(
                     "E",
                     &self.package_name,
-                    &self.module_name,
+                    &*self.module_name.borrow(),
                     &format!("{}.payloads", enum_name),
                 );
                 let payload_type = self.context.opaque_struct_type(&mangled_payloads);
@@ -921,10 +949,17 @@ impl<'ctx> IRGenerator<'ctx> {
                     .borrow_mut()
                     .insert(enum_name.clone(), payload_type);
             }
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.declare_enum_types(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -1000,10 +1035,17 @@ impl<'ctx> IRGenerator<'ctx> {
                     enum_type.set_body(&field_types, false);
                 }
             }
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_enum_type_bodies(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -1437,13 +1479,14 @@ impl<'ctx> IRGenerator<'ctx> {
             })
             .collect();
         let base = base_name.replace('.', "$");
-        if self.package_name.is_empty() && self.module_name.is_empty() {
+        let module_name = self.module_name.borrow().clone();
+        if self.package_name.is_empty() && module_name.is_empty() {
             format!("_T${}${}${}", base, labels.join("_"), types.join("_"))
         } else {
             format!(
                 "_T${}${}${}${}${}",
                 self.package_name,
-                self.module_name,
+                module_name,
                 base,
                 labels.join("_"),
                 types.join("_")
@@ -1477,7 +1520,7 @@ impl<'ctx> IRGenerator<'ctx> {
             }
             current = sb.parent.clone();
         }
-        (self.package_name.clone(), self.module_name.clone())
+        (self.package_name.clone(), self.module_name.borrow().clone())
     }
 
     fn find_protocol_qualified_name(&self, protocol_name: &str) -> Option<(String, String)> {
@@ -1626,10 +1669,10 @@ impl<'ctx> IRGenerator<'ctx> {
                         *c += 1;
                         val
                     };
-                    let mangled = if self.package_name.is_empty() && self.module_name.is_empty() {
+                    let mangled = if self.package_name.is_empty() && self.module_name.borrow().is_empty() {
                         format!("_T$CC${}", counter)
                     } else {
-                        format!("_T${}${}$CC${}", self.package_name, self.module_name, counter)
+                        format!("_T${}${}$CC${}", self.package_name, self.module_name.borrow(), counter)
                     };
                     if let Type::Function(param_types, return_type, is_vararg, throws_types) =
                         &*ty.borrow()
@@ -2343,10 +2386,17 @@ impl<'ctx> IRGenerator<'ctx> {
                 }
             }
         }
-        if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_function_declarations(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         }
         if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
@@ -2696,10 +2746,17 @@ impl<'ctx> IRGenerator<'ctx> {
             self.vtable_types
                 .borrow_mut()
                 .insert(class_name.clone(), vtable_type);
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_vtable_types(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -2753,7 +2810,7 @@ impl<'ctx> IRGenerator<'ctx> {
             let class_name = &name.value;
             let (pkg, mod_name) = scope.as_ref()
                 .map(|s| self.resolve_qualified_name_from_scope(s))
-                .unwrap_or((self.package_name.clone(), self.module_name.clone()));
+                .unwrap_or((self.package_name.clone(), self.module_name.borrow().clone()));
             self.vtable_qualified_names.borrow_mut().insert(class_name.clone(), (pkg.clone(), mod_name.clone()));
 
             let method_list = self.compute_vtable_method_list(class_name);
@@ -2804,10 +2861,17 @@ impl<'ctx> IRGenerator<'ctx> {
             self.vtable_globals
                 .borrow_mut()
                 .insert(class_name.clone(), global);
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_vtable_instances(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -3000,10 +3064,17 @@ impl<'ctx> IRGenerator<'ctx> {
             self.protocol_witness_table_types
                 .borrow_mut()
                 .insert(protocol_name.clone(), wt_type);
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_protocol_witness_table_types(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -3031,10 +3102,17 @@ impl<'ctx> IRGenerator<'ctx> {
             self.existential_container_types
                 .borrow_mut()
                 .insert(protocol_name.clone(), container_type);
-        } else if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        } else if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_existential_container_types(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         } else if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
                 for stmt in &clause.body {
@@ -3178,10 +3256,10 @@ impl<'ctx> IRGenerator<'ctx> {
 
             let key = (protocol_name.clone(), type_suffix.clone());
             let (protocol_pkg, protocol_mod) = self.find_protocol_qualified_name(&protocol_name)
-                .unwrap_or((self.package_name.clone(), self.module_name.clone()));
+                .unwrap_or((self.package_name.clone(), self.module_name.borrow().clone()));
             let (type_pkg, type_mod) = type_scope.as_ref()
                 .map(|s| self.resolve_qualified_name_from_scope(s))
-                .unwrap_or((self.package_name.clone(), self.module_name.clone()));
+                .unwrap_or((self.package_name.clone(), self.module_name.borrow().clone()));
             self.protocol_wt_qualified_names.borrow_mut().insert(
                 (protocol_name.clone(), type_suffix.clone()),
                 (protocol_pkg.clone(), protocol_mod.clone(), type_pkg.clone(), type_mod.clone()),
@@ -3264,10 +3342,17 @@ impl<'ctx> IRGenerator<'ctx> {
                 .borrow_mut()
                 .insert(key, global);
         }
-        if let Statement::ModuleDecl { body, .. } = &*statement.borrow() {
+        if let Statement::ModuleDecl { body, name, .. } = &*statement.borrow() {
+            let saved_mod = self.module_name.borrow().clone();
+            *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                name.value.clone()
+            } else {
+                format!("{}${}", saved_mod, name.value)
+            };
             for stmt in body {
                 self.create_protocol_witness_tables(stmt.clone());
             }
+            *self.module_name.borrow_mut() = saved_mod;
         }
         if let Statement::ConditionalBlock { clauses } = &*statement.borrow() {
             for clause in clauses {
@@ -5324,10 +5409,17 @@ impl<'ctx> IRGenerator<'ctx> {
                     .push(body.clone());
                 Ok(false)
             }
-            Statement::ModuleDecl { body, .. } => {
+            Statement::ModuleDecl { body, name, .. } => {
+                let saved_mod = self.module_name.borrow().clone();
+                *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                    name.value.clone()
+                } else {
+                    format!("{}${}", saved_mod, name.value)
+                };
                 for stmt in body {
                     self.resolve_statement(stmt.clone())?;
                 }
+                *self.module_name.borrow_mut() = saved_mod;
                 Ok(false)
             }
             Statement::MacroDecl { .. } => Ok(false),
@@ -11787,10 +11879,10 @@ impl<'ctx> IRGenerator<'ctx> {
                     *c += 1;
                     val
                 };
-                let fn_name = if self.package_name.is_empty() && self.module_name.is_empty() {
+                let fn_name = if self.package_name.is_empty() && self.module_name.borrow().is_empty() {
                     format!("_T$CC${}", counter)
                 } else {
-                    format!("_T${}${}$CC${}", self.package_name, self.module_name, counter)
+                    format!("_T${}${}$CC${}", self.package_name, self.module_name.borrow(), counter)
                 };
 
                 let ret_type = return_type
@@ -13230,14 +13322,22 @@ impl<'ctx> IRGenerator<'ctx> {
                     None
                 }
             }
-            Statement::ModuleDecl { body, .. } => {
+            Statement::ModuleDecl { body, name, .. } => {
+                let saved_mod = self.module_name.borrow().clone();
+                *self.module_name.borrow_mut() = if saved_mod.is_empty() {
+                    name.value.clone()
+                } else {
+                    format!("{}${}", saved_mod, name.value)
+                };
+                let mut result = None;
                 for child in body {
-                    let result = self.find_main_in_stmt(child);
+                    result = self.find_main_in_stmt(child);
                     if result.is_some() {
-                        return result;
+                        break;
                     }
                 }
-                None
+                *self.module_name.borrow_mut() = saved_mod;
+                result
             }
             _ => None,
         }

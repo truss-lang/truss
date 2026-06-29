@@ -7423,3 +7423,29 @@ fn test_irgen_panic_backtrace() {
         llvm_ir
     );
 }
+
+#[test]
+fn test_irgen_math_module_symbol_mangling() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "module Math { func max(_ a: Int32, _ b: Int32) -> Int32 { if a >= b { a } else { b } } }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        llvm_ir.contains("$Math$max$"),
+        "Expected $Math$max$ in IR symbol, got:\n{}",
+        llvm_ir
+    );
+}
+
+#[test]
+fn test_irgen_nested_module_symbol_mangling() {
+    let (llvm_ir, engine) = run_ir_gen(
+        "module A { module B { func foo() -> Int32 { 42 } } }",
+    );
+    assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
+    assert!(
+        llvm_ir.contains("$A$B$foo$"),
+        "Expected $A$B$foo$ in IR symbol, got:\n{}",
+        llvm_ir
+    );
+}
