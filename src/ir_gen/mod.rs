@@ -10063,12 +10063,14 @@ impl<'ctx> IRGenerator<'ctx> {
                             }
                         } else if self.module.get_function(&name).is_some()
                             || self.mangled_fn_names.borrow().contains_key(&name)
+                            || self.extern_fn_c_names.borrow().contains_key(&name)
                         {
                             let mangled = self
                                 .mangled_fn_names
                                 .borrow()
                                 .get(&name)
                                 .cloned()
+                                .or_else(|| self.extern_fn_c_names.borrow().get(&name).cloned())
                                 .unwrap_or(name);
                             (mangled, false)
                         } else if let Some(mangled) = self.try_declare_function_from_scope(&name) {
@@ -10089,12 +10091,14 @@ impl<'ctx> IRGenerator<'ctx> {
                             let fn_name = member.value.clone();
                             if self.module.get_function(&fn_name).is_some()
                                 || self.mangled_fn_names.borrow().contains_key(&fn_name)
+                                || self.extern_fn_c_names.borrow().contains_key(&fn_name)
                             {
                                 let mangled = self
                                     .mangled_fn_names
                                     .borrow()
                                     .get(&fn_name)
                                     .cloned()
+                                    .or_else(|| self.extern_fn_c_names.borrow().get(&fn_name).cloned())
                                     .unwrap_or(fn_name);
                                 (mangled, false)
                             } else if let Some(mangled) = self.try_declare_function_from_scope(&fn_name) {
