@@ -5416,11 +5416,14 @@ impl<'ctx> IRGenerator<'ctx> {
                 } else {
                     format!("{}${}", saved_mod, name.value)
                 };
-                for stmt in body {
-                    self.resolve_statement(stmt.clone())?;
-                }
+                let result = (|| -> Result<bool> {
+                    for stmt in body {
+                        self.resolve_statement(stmt.clone())?;
+                    }
+                    Ok(false)
+                })();
                 *self.module_name.borrow_mut() = saved_mod;
-                Ok(false)
+                result
             }
             Statement::MacroDecl { .. } => Ok(false),
             Statement::ConditionalBlock { clauses } => {
