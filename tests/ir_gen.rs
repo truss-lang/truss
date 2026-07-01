@@ -1349,12 +1349,12 @@ fn test_irgen_class_vtable_global() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Animal"),
+        llvm_ir.contains("_T$test$$__vtable$Animal"),
         "Expected vtable type in IR:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Animal"),
+        llvm_ir.contains("_T$test$$__vtable$Animal"),
         "Expected vtable global in IR:\n{}",
         llvm_ir
     );
@@ -1401,12 +1401,12 @@ fn test_irgen_class_vtable_method_call_is_indirect() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Greeter"),
+        llvm_ir.contains("_T$test$$__vtable$Greeter"),
         "Expected vtable type:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Greeter"),
+        llvm_ir.contains("_T$test$$__vtable$Greeter"),
         "Expected vtable global:\n{}",
         llvm_ir
     );
@@ -1456,22 +1456,22 @@ fn test_irgen_class_inheritance_vtable_inherited_methods() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Animal"),
+        llvm_ir.contains("_T$test$$__vtable$Animal"),
         "Expected vtable.Animal:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Dog"),
+        llvm_ir.contains("_T$test$$__vtable$Dog"),
         "Expected vtable.Dog:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Animal"),
+        llvm_ir.contains("_T$test$$__vtable$Animal"),
         "Expected vtable for Animal:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Dog"),
+        llvm_ir.contains("_T$test$$__vtable$Dog"),
         "Expected vtable for Dog:\n{}",
         llvm_ir
     );
@@ -2294,7 +2294,7 @@ fn test_irgen_protocol_witness_table_for_class() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$test$test$Drawable$__protocol_wt$test$test$Circle"),
+        llvm_ir.contains("_T$test$$Drawable$__protocol_wt$test$$Circle"),
         "Witness table for (Drawable, Circle) should exist:\n{}",
         llvm_ir
     );
@@ -2346,7 +2346,7 @@ fn test_irgen_protocol_witness_table_for_struct() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$test$test$Drawable$__protocol_wt$test$test$Circle"),
+        llvm_ir.contains("_T$test$$Drawable$__protocol_wt$test$$Circle"),
         "Witness table for (Drawable, Circle) struct should exist:\n{}",
         llvm_ir
     );
@@ -2408,12 +2408,12 @@ fn test_irgen_compound_protocol_existential_dispatch() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$Drawable$__protocol_wt$test$test$Circle"),
+        llvm_ir.contains("_T$test$$Drawable$__protocol_wt$test$$Circle"),
         "Witness table for (Drawable, Circle) should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$Resettable$__protocol_wt$test$test$Circle"),
+        llvm_ir.contains("_T$test$$Resettable$__protocol_wt$test$$Circle"),
         "Witness table for (Resettable, Circle) should exist:\n{}",
         llvm_ir
     );
@@ -2498,7 +2498,7 @@ fn test_irgen_some_type_return_function() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$Drawable$__protocol_wt$test$test$Circle"),
+        llvm_ir.contains("_T$test$$Drawable$__protocol_wt$test$$Circle"),
         "Witness table for (Drawable, Circle) should exist:\n{}",
         llvm_ir
     );
@@ -2538,12 +2538,12 @@ fn test_irgen_class_computed_property_getter_in_vtable() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-llvm_ir.contains("_T$test$test$__vtable$ViewModel"),
+llvm_ir.contains("_T$test$$__vtable$ViewModel"),
         "vtable type should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$ViewModel"),
+        llvm_ir.contains("_T$test$$__vtable$ViewModel"),
         "vtable global should exist:\n{}",
         llvm_ir
     );
@@ -2590,7 +2590,7 @@ fn test_irgen_class_computed_property_setter_in_vtable() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$ViewModel"),
+        llvm_ir.contains("_T$test$$__vtable$ViewModel"),
         "vtable type should exist:\n{}",
         llvm_ir
     );
@@ -2644,22 +2644,22 @@ fn test_irgen_class_computed_property_inheritance_override() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Base"),
+        llvm_ir.contains("_T$test$$__vtable$Base"),
         "vtable.Base should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Derived"),
+        llvm_ir.contains("_T$test$$__vtable$Derived"),
         "vtable.Derived should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Base"),
+        llvm_ir.contains("_T$test$$__vtable$Base"),
         "vtable for Base should exist:\n{}",
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Derived"),
+        llvm_ir.contains("_T$test$$__vtable$Derived"),
         "vtable for Derived should exist:\n{}",
         llvm_ir
     );
@@ -2706,7 +2706,7 @@ fn test_irgen_class_stored_property_auto_getter_setter() {
     let llvm_ir = module.print_to_string().to_string();
 
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Data"),
+        llvm_ir.contains("_T$test$$__vtable$Data"),
         "vtable should exist:\n{}",
         llvm_ir
     );
@@ -3112,7 +3112,7 @@ fn test_irgen_extension_protocol_witness_table() {
         llvm_ir
     );
     assert!(
-        llvm_ir.contains("_T$test$test$P$__protocol_wt$$$Foo"),
+        llvm_ir.contains("_T$test$$P$__protocol_wt$$$Foo"),
         "protocol witness table for P+Foo should exist:\n{}",
         llvm_ir
     );
@@ -4105,6 +4105,7 @@ fn test_irgen_import_wildcard_call() {
         "Expected 'bar' function in IR, got:\n{}",
         llvm_ir
     );
+    eprintln!("{:?}", engine.borrow().get_errors());
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -4120,6 +4121,7 @@ fn test_irgen_import_member_call() {
         "Expected 'baz' function in IR, got:\n{}",
         llvm_ir
     );
+    eprintln!("{:?}", engine.borrow().get_errors());
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -4135,6 +4137,7 @@ fn test_irgen_import_nested_module_call() {
         "Expected 'baz' function in IR, got:\n{}",
         llvm_ir
     );
+    eprintln!("{:?}", engine.borrow().get_errors());
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -4150,6 +4153,7 @@ fn test_irgen_import_package_module_call() {
         "Expected 'bar' function in IR, got:\n{}",
         llvm_ir
     );
+    eprintln!("{:?}", engine.borrow().get_errors());
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -4165,6 +4169,7 @@ fn test_irgen_import_package_member_call() {
         "Expected 'baz' function in IR, got:\n{}",
         llvm_ir
     );
+    eprintln!("{:?}", engine.borrow().get_errors());
     assert_eq!(engine.borrow().get_errors().len(), 0, "no errors expected");
 }
 
@@ -6668,7 +6673,7 @@ fn test_irgen_final_class_static_dispatch() {
 
     // Final class should still have vtable (for dynamic dispatch through base type)
     assert!(
-        llvm_ir.contains("_T$test$test$__vtable$Dog"),
+        llvm_ir.contains("_T$test$$__vtable$Dog"),
         "Expected vtable.Dog type:\n{}",
         llvm_ir
     );
